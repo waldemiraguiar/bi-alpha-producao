@@ -1,4 +1,4 @@
-data/*.enc
+*.enc
 __pycache__/
 *.pyc
 .netlify/
