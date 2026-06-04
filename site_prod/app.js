@@ -121,7 +121,7 @@ function renderActive(){
       <div class="card"><h3>Amostras em processo <span class="tag">nº registro · paciente · entrada</span></h3>
         <div class="scroll">${(x.exames||[]).map(e=>`
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
-            <div><div class="pac">${esc(e.paciente)}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)}${e.dono?' · '+esc(e.dono):''}</div></div>
+            <div><div class="pac">${esc(e.paciente)}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
             <span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div>`).join('')||'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>'}
         </div>
       </div>

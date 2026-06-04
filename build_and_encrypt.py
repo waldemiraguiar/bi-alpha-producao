@@ -89,9 +89,10 @@ def build():
     for r in abertos_det:
         if r["cod"] in JUNK or r["cod"] not in cat: continue
         s=sla(r["cod"]); dias=r["dias"] or 0; atras=dias>s
+        lim = (r["entrada"]+datetime.timedelta(days=s)).isoformat() if r["entrada"] else None
         item={"registro":r["registro"],"paciente":(r["paciente"] or "").strip() or "—",
               "dono":(r["dono"] or "").strip(),"exame":r["exame"],
-              "entrada":str(r["entrada"]) if r["entrada"] else None,
+              "entrada":str(r["entrada"]) if r["entrada"] else None,"limite":lim,
               "dias":dias,"sla":s,"atrasado":atras,"atraso":max(0,dias-s)}
         lst=cat[r["cod"]]["exames"]
         if len(lst)<CAP: lst.append(item)
