@@ -22,6 +22,16 @@ function onContentClick(ev){const b=ev.target.closest('.urgbtn'); if(!b)return;
   toggleUrg(b.dataset.reg,b.dataset.pac,b.dataset.exm, manual.has(String(b.dataset.reg)));}
 const escA=s=>esc(s).replace(/"/g,'&quot;');
 const isPetlove=s=>/pet\s*love/i.test(String(s||''));
+let searchTerm='';
+function filterWL(){const t=searchTerm.trim().toLowerCase();
+  document.querySelectorAll('#content .wl').forEach(row=>{
+    const reg=(row.querySelector('.reg')?.textContent||'').toLowerCase();
+    const pac=(row.querySelector('.pac')?.textContent||'').toLowerCase();
+    row.style.display=(!t||reg.includes(t)||pac.includes(t))?'':'none';});}
+function onSearch(ev){if(ev.target.id!=='wlsearch')return;
+  searchTerm=ev.target.value; pinned=true; if(ROT)clearInterval(ROT);
+  const rc=document.getElementById('rotctl'); if(rc){rc.classList.add('pinned');rc.textContent='⏸ fixado · clique p/ girar';}
+  filterWL();}
 // ORDEM das abas (nomes/trechos na ordem desejada; vazio = ordem padrão por gravidade).
 // EXAMES URGENTES é sempre a 1ª. Preencher conforme o usuário definir.
 const ORDER=['hematologia','bioquimica','uroanalise','parasito','citopatologia','especializados','molecular','imunologia','bacteriologia','necropsia'];
@@ -42,6 +52,7 @@ function buildSpecial(list,pred,opts){
 }
 function buildUrgentCat(list){return buildSpecial(list,e=>e.urgente||manual.has(String(e.registro)),{cod:'__URG__',nome:'EXAMES URGENTES',kind:'urg'});}
 function buildPetCat(list){return buildSpecial(list,e=>isPetlove(e.paciente),{cod:'__PET__',nome:'PET LOVE',kind:'pet'});}
+function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR__',nome:'ATRASADOS',kind:'atras'});}
 
 async function decrypt(pwd){
   ENC=await fetch('data/producao.enc?_='+Date.now()).then(r=>{if(!r.ok)throw new Error('sem dados');return r.json();});
@@ -72,7 +83,7 @@ function cats(){
   let list=(DATA.categorias||[]).filter(x=>x.em_processo>0 || (x.derivacoes&&x.derivacoes.length));
   if(ORDER.length){ const idx=c=>{const i=ORDER.findIndex(o=>slug(c.categoria).includes(slug(o)));return i<0?99:i;};
     list=[...list].sort((a,b)=>idx(a)-idx(b)); }
-  return [buildUrgentCat(list), buildPetCat(list), ...list];   // URGENTES e PET LOVE sempre 1ª e 2ª
+  return [buildUrgentCat(list), buildPetCat(list), buildAtrasCat(list), ...list];   // 3 abas especiais primeiro
 }
 function resolveLock(list){
   const h=decodeURIComponent((location.hash||'').replace('#','')).trim();
@@ -89,6 +100,7 @@ async function boot(D){
   buildTabs(); active=0; renderActive(); startRotation();
   if(!window.__wired){window.__wired=true;
     document.getElementById('content').addEventListener('click',onContentClick);
+    document.getElementById('content').addEventListener('input',onSearch);
     window.addEventListener('hashchange',()=>{locked=resolveLock(cats());active=0;buildTabs();renderActive();startRotation();});
   }
   if(REFRESH)clearInterval(REFRESH);
@@ -109,12 +121,13 @@ function buildTabs(){
   }
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
-  tabsEl.innerHTML=list.map((x,i)=>`
-    <div class="tab ${i===active?'on':''} ${x.special?(x.kind==='pet'?'pettab':'urgtab'):''}" data-i="${i}">
-      <span class="tn">${x.special?((x.kind==='pet'?'💗 ':'🚨 ')+esc(x.categoria)):esc(x.categoria)}</span>
-      <span class="tb ${x.special?(x.kind==='pet'?'petb':'urgb'):(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
+  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
+  tabsEl.innerHTML=list.map((x,i)=>{const k=x.special?KT[x.kind]:null;return `
+    <div class="tab ${i===active?'on':''} ${k?k.t:''}" data-i="${i}">
+      <span class="tn">${k?k.i+' '+esc(x.categoria):esc(x.categoria)}</span>
+      <span class="tb ${k?k.b:(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
       <span class="prog"></span>
-    </div>`).join('')
+    </div>`;}).join('')
     + `<div class="rotctl ${pinned?'pinned':''}" id="rotctl">${pinned?'⏸ fixado · clique p/ girar':'🔄 girando 15s'}</div>`;
   [...tabsEl.querySelectorAll('.tab')].forEach(t=>t.addEventListener('click',()=>{
     active=+t.dataset.i; pinned=true; if(ROT)clearInterval(ROT); buildTabs(); renderActive();}));
@@ -142,8 +155,12 @@ function renderActive(){
   const x = locked || list[active] || list[0];
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
   const special=!!x.special;
-  const isPet=x.kind==='pet';
-  const col=special?(isPet?C.petlove:C.amber):ringColor(x.pct_no_prazo);
+  const KIND={
+    urg:{c:C.amber,ic:'🚨',sub:'urgentes de todas as categorias',ring:'urgentes',m1l:'Urgentes na fila',work:'Amostras urgentes',m3l:'Marcados pela equipe (★)'},
+    pet:{c:C.petlove,ic:'💗',sub:'pacientes Pet Love — todas as categorias',ring:'pacientes',m1l:'Pacientes Pet Love',work:'Pacientes Pet Love',m3l:'Urgentes entre os Pet Love'},
+    atras:{c:C.red,ic:'⏰',sub:'atrasados de todas as categorias',ring:'atrasados',m1l:'Atrasados na fila',work:'Amostras atrasadas',m3l:'Atraso máximo (dias)'}};
+  const K=special?KIND[x.kind]:null;
+  const col=special?K.c:ringColor(x.pct_no_prazo);
   const ders=(x.derivacoes||[]).slice(0,18);
   const manualHere=(x.exames||[]).filter(e=>manual.has(String(e.registro))&&!e.urgente);
   const urgCount=x.urgentes+(special?0:manualHere.length);
@@ -158,17 +175,17 @@ function renderActive(){
   document.getElementById('content').innerHTML=banner+`
     <div class="cgrid">
     <div class="hero">
-      <div class="hcat ${special?(isPet?'petcat':'urgcat'):''}"><div class="nm">${special?(isPet?'💗 ':'🚨 '):''}${esc(x.categoria)}</div><span class="sla">${special?(isPet?'pacientes Pet Love — todas as categorias':'urgentes de todas as categorias'):'prazo de liberação: '+x.sla+(x.sla>1?' dias':' dia')}</span></div>
+      <div class="hcat ${special?x.kind+'cat':''}"><div class="nm">${special?K.ic+' ':''}${esc(x.categoria)}</div><span class="sla">${special?K.sub:'prazo de liberação: '+x.sla+(x.sla>1?' dias':' dia')}</span></div>
       <div class="ringwrap">
-        <div class="ring" style="background:conic-gradient(${col} ${x.pct_no_prazo}%, rgba(255,255,255,.07) 0)">
-          <div class="rv"><div class="big" style="color:${col}">${special?num(x.em_processo):x.pct_no_prazo+'%'}</div><div class="lb">${special?(isPet?'pacientes':'urgentes'):'no prazo'}</div></div>
+        <div class="ring" style="background:conic-gradient(${col} ${special?100:x.pct_no_prazo}%, rgba(255,255,255,.07) 0)">
+          <div class="rv"><div class="big" style="color:${col}">${special?num(x.em_processo):x.pct_no_prazo+'%'}</div><div class="lb">${special?K.ring:'no prazo'}</div></div>
         </div>
       </div>
       <div class="minis">
-        <div class="mini proc"><div class="v">${num(x.em_processo)}</div><div class="l">${special?(isPet?'Pacientes Pet Love':'Urgentes na fila'):'Em processo'}</div></div>
+        <div class="mini proc"><div class="v">${num(x.em_processo)}</div><div class="l">${special?K.m1l:'Em processo'}</div></div>
         <div class="mini late"><div class="v" style="color:${x.atrasado>0?C.red:C.ink}">${num(x.atrasado)}</div><div class="l">Atrasados</div></div>
         ${special
-          ? `<div class="mini" style="grid-column:1/3"><div class="v">${isPet?num((x.exames||[]).filter(e=>e._urg).length):num(manualCount)}</div><div class="l">${isPet?'Urgentes entre os Pet Love':'Marcados pela equipe (★)'}</div></div>`
+          ? `<div class="mini" style="grid-column:1/3"><div class="v">${x.kind==='urg'?num(manualCount):x.kind==='pet'?num((x.exames||[]).filter(e=>e._urg).length):num(Math.max(0,...(x.exames||[]).map(e=>e.dias||0)))}</div><div class="l">${K.m3l}</div></div>`
           : `<div class="mini tat" style="grid-column:1/3"><div class="v">${x.tat_medio!=null?x.tat_medio+'<span style="font-size:16px"> dias</span>':'—'}</div><div class="l">Tempo real médio de liberação</div></div>`}
       </div>
     </div>
@@ -182,7 +199,7 @@ function renderActive(){
             <div class="bar"><div class="ok" style="width:${okp}%"></div><div class="bad" style="width:${lp}%"></div></div>
           </div>`;}).join('')||'<div style="color:var(--mut)">—</div>'}</div>
       </div>
-      <div class="card"><h3>${special?(isPet?'Pacientes Pet Love':'Amostras urgentes'):'Amostras em processo'} <span class="tag">${special?'categoria · ':''}nº registro · paciente · entrada</span></h3>
+      <div class="card"><h3><span>${special?K.work:'Amostras em processo'} <span class="tag">${special?'categoria · ':''}nº registro · paciente</span></span><input id="wlsearch" class="wlsearch" placeholder="🔍 buscar nº registro / paciente" value="${escA(searchTerm)}"></h3>
         <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
             <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
@@ -190,6 +207,7 @@ function renderActive(){
         </div>
       </div>
     </div></div>`;
+  if(searchTerm) filterWL();
 }
 function fmtD(d){if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}`:d;}
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
