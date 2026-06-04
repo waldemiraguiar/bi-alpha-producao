@@ -169,6 +169,42 @@ def build():
         u["qtd"]+=x["qtd"]; u["fat"]+=x["fat"] or 0; u["clientes"]+=x["clientes"]
     D["uf"]=[{"uf":u["uf"],"qtd":u["qtd"],"fat":round(u["fat"],2),"clientes":u["clientes"]} for u in sorted(ufd.values(),key=lambda x:-x["fat"])][:15]
 
+    # ---------- TIERS de clientes + acompanhamento semanal (semana vs média das 4 anteriores) ----------
+    def yw3(d): iso=d.isocalendar(); return iso[0]*100+iso[1]
+    hoje=datetime.date.today()
+    semchaves=[yw3(hoje-datetime.timedelta(days=7*(i+1))) for i in range(5)]  # [última completa, -2,-3,-4,-5]
+    sem=q(f"""SELECT r.CodCliente cod, YEARWEEK(s.DataExame,3) wk, SUM(s.ValorExame) fat
+        FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+        WHERE s.DataExame>=DATE_SUB(CURDATE(),INTERVAL 60 DAY) AND s.DataExame<=CURDATE()
+        GROUP BY r.CodCliente, wk""")
+    semmap={}
+    for r in sem: semmap.setdefault(r["cod"],{})[int(r["wk"])]=float(r["fat"] or 0)
+    def tier_of(m): return ("AAA" if m>=10000 else "A" if m>=5000 else "B" if m>=2000 else "C" if m>=800 else "D" if m>=300 else "E")
+    tiers=[]; radar=[]
+    for cl0 in cli:
+        fat12=float(cl0["fat"] or 0)
+        if fat12<=0: continue
+        mensal=fat12/12.0; t=tier_of(mensal); wk=semmap.get(cl0["cod"],{})
+        semanas=[round(wk.get(k,0.0),2) for k in semchaves]   # [atual,-2,-3,-4,-5]
+        atual=semanas[0]; base=sum(semanas[1:5])/4.0
+        delta=round(100*(atual-base)/base,1) if base>0 else (100.0 if atual>0 else 0.0)
+        flag="up" if delta>=10 else "down" if delta<=-10 else None
+        item={"cod":cl0["cod"],"nome":cl0["nome"],"cidade":cl0["Cidade"],"uf":cl0["Uf"],"tier":t,
+              "fat12m":round(fat12,2),"mensal":round(mensal,2),"semanas":list(reversed(semanas)),
+              "atual":round(atual,2),"base":round(base,2),"delta":delta,"flag":flag}
+        tiers.append(item)
+        if flag and t!="E": radar.append(item)
+    tiers.sort(key=lambda x:-x["fat12m"])
+    ordem={"AAA":0,"A":1,"B":2,"C":3,"D":4}
+    radar.sort(key=lambda x:(ordem.get(x["tier"],9), -abs(x["delta"])))
+    D["tiers_resumo"]={t:{"clientes":sum(1 for x in tiers if x["tier"]==t),
+        "fat12m":round(sum(x["fat12m"] for x in tiers if x["tier"]==t),2),
+        "subiram":sum(1 for x in tiers if x["tier"]==t and x["flag"]=="up"),
+        "cairam":sum(1 for x in tiers if x["tier"]==t and x["flag"]=="down")} for t in ["AAA","A","B","C","D","E"]}
+    D["radar"]=radar[:50]
+    D["tiers"]=[x for x in tiers if x["tier"]!="E"]+[x for x in tiers if x["tier"]=="E"][:40]
+    D["meta"]["tiers_faixas"]={"AAA":10000,"A":5000,"B":2000,"C":800,"D":300,"E":0}
+
     conn.close()
     return D
 

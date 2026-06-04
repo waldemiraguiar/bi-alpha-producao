@@ -11,7 +11,7 @@
 :root{
   --navy:#0A1628; --navy2:#0F2138; --card:#10243d; --line:rgba(0,212,255,.18);
   --ink:#F5F7FA; --mut:#8aa2bd; --cyan:#00D4FF; --green:#00E5A0; --amber:#FFB020;
-  --red:#FF5470; --purple:#A78BFA; --grid:rgba(255,255,255,.05);
+  --red:#FF5470; --purple:#A78BFA; --azul:#4D9DFF; --grid:rgba(255,255,255,.05);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:
@@ -62,6 +62,34 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .mini .m .v{font-size:20px;font-weight:700} .mini .m .l{font-size:11px;color:var(--mut)}
 footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:var(--mut);font-size:11.5px;text-align:center}
 .loading{text-align:center;padding:80px;color:var(--mut)}
+/* abas do financeiro */
+.ftabs{display:flex;gap:9px;margin:18px 0 6px;flex-wrap:wrap}
+.ftab{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 18px;cursor:pointer;font-weight:700;font-size:14px;color:var(--mut)}
+.ftab:hover{background:var(--card2,#13294a)}
+.ftab.on{color:var(--cyan);border-color:rgba(0,212,255,.5);background:rgba(0,212,255,.08)}
+/* radar de movimentações */
+.radar{background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:18px}
+.radar h3{font-size:15px;font-weight:700;margin-bottom:12px}
+.radar .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.rad{display:flex;align-items:center;gap:10px;background:var(--card2,#13294a);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.rad .tb{font-size:10px;font-weight:900;border-radius:5px;padding:1px 6px;background:rgba(255,255,255,.1)}
+.rad .nm{flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* tiers */
+.tier-sec{margin-bottom:20px}
+.tier-head{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:2px solid var(--line);margin-bottom:10px}
+.tier-badge{font-size:15px;font-weight:900;color:var(--navy);border-radius:7px;padding:3px 11px}
+.tier-AAA .tier-badge{background:#FFD23F}.tier-A .tier-badge{background:var(--cyan)}.tier-B .tier-badge{background:var(--green)}
+.tier-C .tier-badge{background:var(--purple);color:#fff}.tier-D .tier-badge{background:#7C8DB0;color:#fff}.tier-E .tier-badge{background:#3a4a63;color:var(--mut)}
+.tier-head .info{font-size:13px;color:var(--mut);font-weight:600}
+.tier-head .mov{margin-left:auto;font-size:12.5px;font-weight:700}
+.tier-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:9px}
+.cli-row{display:flex;align-items:center;gap:12px;background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:10px;padding:9px 13px}
+.cli-info{flex:1;min-width:0}.cli-nome{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cli-sub{font-size:11.5px;color:var(--mut)}
+.spark{flex-shrink:0}
+.cli-delta{font-size:13px;font-weight:800;min-width:64px;text-align:right;color:var(--mut)}
+.cli-delta.up{color:var(--azul)} .cli-delta.down{color:var(--red)}
+.movup{color:var(--azul)} .movdown{color:var(--red)}
 #gate{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(900px 500px at 50% 0,rgba(0,212,255,.1),transparent 60%),var(--navy)}
 .gate-card{width:340px;max-width:90vw;background:linear-gradient(180deg,var(--card),var(--navy2));
@@ -110,7 +138,13 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 
   <div class="note-fin" id="noteFin"></div>
 
+  <div class="ftabs">
+    <div class="ftab on" data-v="geral">📊 Visão Geral</div>
+    <div class="ftab" data-v="clientes">⭐ Clientes · Tiers</div>
+  </div>
+
   <div id="app"><div class="loading">Carregando dados…</div></div>
+  <div id="clientes" style="display:none"></div>
 
   <footer id="foot"></footer>
 </div>

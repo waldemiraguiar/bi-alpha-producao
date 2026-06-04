@@ -213,6 +213,65 @@ function render(D){
     <div class="m"><div class="v" style="color:${C.green}">${num(op.exames_terceirizados)}</div><div class="l">exames terceirizados (${op.pct_terceirizado}%)</div></div>
   </div>`;
   app.appendChild(go);
+
+  renderClientes(D);
+  wireFTabs();
+}
+
+/* ===================== ABA CLIENTES · TIERS ===================== */
+const AZUL='#4D9DFF';
+const TIERINFO={AAA:'≥ R$10k/mês',A:'R$5–10k/mês',B:'R$2–5k/mês',C:'R$800–2k/mês',D:'R$300–800/mês',E:'< R$300/mês'};
+function spark(vals,color){
+  const w=88,h=26,mx=Math.max(...vals,1),n=vals.length;
+  if(n<2) return '';
+  const pts=vals.map((v,i)=>`${(i/(n-1)*w).toFixed(1)},${(h-(v/mx)*(h-5)-2.5).toFixed(1)}`).join(' ');
+  const lastx=w, lasty=(h-(vals[n-1]/mx)*(h-5)-2.5).toFixed(1);
+  return `<svg width="${w}" height="${h}" class="spark"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/><circle cx="${lastx}" cy="${lasty}" r="2.5" fill="${color}"/></svg>`;
+}
+function deltaTxt(e){
+  if(e.flag==='up') return `<div class="cli-delta up">▲ ${Math.abs(e.delta)}%</div>`;
+  if(e.flag==='down') return `<div class="cli-delta down">▼ ${Math.abs(e.delta)}%</div>`;
+  return `<div class="cli-delta">${e.delta>0?'+':''}${e.delta}%</div>`;
+}
+function cliRow(e){
+  const col=e.flag==='down'?C.red:e.flag==='up'?AZUL:C.mut;
+  return `<div class="cli-row">
+    <div class="cli-info"><div class="cli-nome">${esc(e.nome||'#'+e.cod)}</div>
+      <div class="cli-sub">${esc(e.cidade||'—')} · ${brl(e.mensal)}/mês · 12m ${brlk(e.fat12m)}</div></div>
+    ${spark(e.semanas||[],col)}
+    ${deltaTxt(e)}</div>`;
+}
+function renderClientes(D){
+  const wrap=document.getElementById('clientes'); if(!wrap) return;
+  const rs=D.tiers_resumo||{}, tiers=D.tiers||[], radar=D.radar||[];
+  let html='';
+  // radar de movimentações
+  if(radar.length){
+    html+=`<div class="radar"><h3>📡 Radar da semana — variações ≥10% <span style="color:var(--mut);font-weight:400;font-size:12px">(semana vs média das 4 anteriores · <span class="movup">▲ alta</span> / <span class="movdown">▼ queda</span>)</span></h3>
+      <div class="grid">${radar.map(e=>`<div class="rad"><span class="tb">${e.tier}</span><span class="nm">${esc(e.nome||'#'+e.cod)}</span>${spark(e.semanas||[],e.flag==='down'?C.red:AZUL)}<span class="cli-delta ${e.flag}">${e.flag==='up'?'▲':'▼'} ${Math.abs(e.delta)}%</span></div>`).join('')}</div></div>`;
+  } else html+=`<div class="radar"><h3>📡 Radar da semana</h3><div style="color:var(--green)">✓ Nenhuma variação ≥10% nesta semana.</div></div>`;
+  // seções por tier
+  ['AAA','A','B','C','D','E'].forEach(t=>{
+    const grp=tiers.filter(x=>x.tier===t); const r=rs[t]||{clientes:0,fat12m:0,subiram:0,cairam:0};
+    const parcial = (t==='E' && r.clientes>grp.length);
+    html+=`<div class="tier-sec tier-${t}">
+      <div class="tier-head"><span class="tier-badge">${t}</span>
+        <span class="info">${r.clientes} clientes · ${brlk(r.fat12m)}/ano · ${TIERINFO[t]}</span>
+        <span class="mov"><span class="movup">▲${r.subiram}</span> &nbsp; <span class="movdown">▼${r.cairam}</span></span></div>
+      <div class="tier-grid">${grp.map(cliRow).join('')||'<div style="color:var(--mut)">—</div>'}</div>
+      ${parcial?`<div style="color:var(--mut);font-size:11.5px;margin-top:8px">mostrando ${grp.length} de ${r.clientes} (cauda longa)</div>`:''}
+    </div>`;
+  });
+  wrap.innerHTML=html;
+}
+function wireFTabs(){
+  const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
+  tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
+    tabs.forEach(o=>o.classList.toggle('on',o===t));
+    const v=t.dataset.v;
+    document.getElementById('app').style.display=v==='geral'?'':'none';
+    document.getElementById('clientes').style.display=v==='clientes'?'':'none';
+  });});
 }
 
 /* ---------- helpers de tabela ---------- */
