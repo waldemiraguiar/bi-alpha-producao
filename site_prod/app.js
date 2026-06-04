@@ -63,12 +63,23 @@ function render(D){
     </div>`;
   }).join('') || '<div style="color:var(--mut);padding:20px">Sem fila no momento.</div>';
 
-  document.getElementById('late').innerHTML=D.atrasados.length? D.atrasados.map(a=>
-    `<div class="late-it">
-      <div class="late-badge">${a.dias}d<small>aberto</small></div>
-      <div><div class="late-ex">${esc(a.exame||'—')}</div><div class="late-cat">${esc(a.categoria)}</div></div>
-      <div class="late-sla">prazo ${a.sla}d<br><span style="color:var(--red)">+${a.atraso}d</span></div>
-    </div>`).join('') : '<div style="color:var(--green);padding:20px">✓ Nada atrasado.</div>';
+  // worklist: por categoria, exames em processo com nº de registro + paciente
+  const grupos=D.categorias.filter(x=>x.exames&&x.exames.length);
+  document.getElementById('late').innerHTML = grupos.length ? grupos.map(x=>{
+    const rows=x.exames.map(e=>`
+      <div class="wl">
+        <span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
+        <div class="info"><div class="pac">${esc(e.paciente)}</div><div class="exm">${esc(e.exame||'—')}${e.dono?' · '+esc(e.dono):''}</div></div>
+        <span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span>
+      </div>`).join('');
+    const resto = x.em_processo - x.exames.length;
+    return `<div class="grp">
+      <div class="grphead"><span class="gn">${esc(x.categoria)}</span>
+        <span class="gm">prazo ${x.sla}d · ${num(x.em_processo)} em proc.${x.atrasado?` · <b class="late">${num(x.atrasado)} atrasados</b>`:''}</span></div>
+      ${rows}
+      ${resto>0?`<div style="font-size:11px;color:var(--mut);padding:6px 0 2px 4px">+${num(resto)} exames nesta categoria…</div>`:''}
+    </div>`;
+  }).join('') : '<div style="color:var(--green);padding:20px">✓ Sem exames em processo.</div>';
 }
 function rgba(h,a){const x=h.replace('#','');return`rgba(${parseInt(x.slice(0,2),16)},${parseInt(x.slice(2,4),16)},${parseInt(x.slice(4,6),16)},${a})`;}
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}

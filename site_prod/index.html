@@ -61,6 +61,20 @@ body{font-family:'Inter',sans-serif;background:
 .late-ex{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .late-cat{font-size:11px;color:var(--mut)}
 .late-sla{font-size:11px;color:var(--amber);text-align:right;white-space:nowrap}
+/* worklist por categoria (registro + paciente) */
+.grp{margin-bottom:14px}
+.grphead{display:flex;justify-content:space-between;align-items:baseline;position:sticky;top:0;background:linear-gradient(180deg,var(--card),var(--card));padding:6px 0 5px;border-bottom:2px solid var(--line);z-index:1}
+.grphead .gn{font-size:14px;font-weight:800;letter-spacing:.01em}
+.grphead .gm{font-size:11px;color:var(--mut);font-weight:600}
+.grphead .gm b.late{color:var(--red)}
+.wl{display:grid;grid-template-columns:auto 1fr auto;gap:11px;align-items:center;padding:6px 0 6px 4px;border-bottom:1px solid rgba(255,255,255,.045)}
+.wl .reg{font-size:12.5px;font-weight:800;color:var(--cyan);font-variant-numeric:tabular-nums;white-space:nowrap}
+.wl .info{min-width:0}
+.wl .pac{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl .exm{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl .db{font-size:12px;font-weight:800;border-radius:7px;padding:3px 8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.wl .db.ok{background:rgba(0,229,160,.13);color:var(--green)}
+.wl .db.late{background:rgba(255,84,112,.14);color:var(--red)}
 /* gate */
 #gate{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(900px 500px at 50% 0,rgba(0,212,255,.1),transparent 60%),var(--navy)}
 .gate-card{width:360px;max-width:90vw;background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:18px;padding:40px 32px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.5)}
@@ -99,7 +113,7 @@ body{font-family:'Inter',sans-serif;background:
     <div class="kpis" id="kpis"></div>
     <div class="card"><h3>Fila por categoria <span class="tag">em processo · no prazo / atrasado</span></h3>
       <div class="scroll" id="cats"></div></div>
-    <div class="card"><h3>Prioridade — atrasados <span class="tag">passaram do prazo</span></h3>
+    <div class="card"><h3>Exames em processo <span class="tag">nº registro · paciente · por categoria</span></h3>
       <div class="scroll" id="late"></div></div>
   </div>
 </div>

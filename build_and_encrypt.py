@@ -42,12 +42,13 @@ def build():
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
         WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)
         GROUP BY s.CodCategoria, dias""")
-    # --- ATRASADOS detalhados (abertos, ordenados por dias) ---
-    abertos_det = q(f"""SELECT s.CodCategoria cod, s.Exame exame, r.DataEntrada entrada,
+    # --- DETALHE dos abertos (com paciente + nº de registro) p/ a equipe rastrear ---
+    abertos_det = q(f"""SELECT s.CodCategoria cod, s.Exame exame,
+        r.NumeroSequencial registro, r.Animal paciente, r.Proprietario dono,
         DATEDIFF(CURDATE(), r.DataEntrada) dias
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
         WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)
-        ORDER BY dias DESC LIMIT 250""")
+        ORDER BY dias DESC LIMIT 500""")
     # --- SAINDO (concluídos na última data) por categoria + turnaround ---
     saindo = q(f"""SELECT s.CodCategoria cod, DATEDIFF(s.DataExame, r.DataEntrada) tat, COUNT(*) n
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
@@ -91,15 +92,21 @@ def build():
     categorias = sorted(cat.values(), key=lambda x:-(x["atrasado"]*1000+x["em_processo"]))
     for x in categorias:
         tot=x["em_processo"]; x["pct_no_prazo"]=round(100*x["no_prazo"]/tot) if tot else 100
+        x["exames"]=[]   # lista detalhada com paciente + registro (preenchida abaixo)
 
+    # exames em processo por categoria (com paciente + nº de registro) — atrasados primeiro
+    CAP=30
     atrasados=[]
     for r in abertos_det:
-        if r["cod"] in JUNK: continue
-        s=sla(r["cod"]); dias=r["dias"] or 0
-        if dias>s:
-            atrasados.append({"categoria":nome(r["cod"]),"exame":r["exame"],
-                              "dias":dias,"sla":s,"atraso":dias-s,
-                              "entrada":str(r["entrada"]) if r["entrada"] else None})
+        if r["cod"] in JUNK or r["cod"] not in cat: continue
+        s=sla(r["cod"]); dias=r["dias"] or 0; atras=dias>s
+        item={"registro":r["registro"],"paciente":(r["paciente"] or "").strip() or "—",
+              "dono":(r["dono"] or "").strip(),"exame":r["exame"],
+              "dias":dias,"sla":s,"atrasado":atras,"atraso":max(0,dias-s)}
+        lst=cat[r["cod"]]["exames"]
+        if len(lst)<CAP: lst.append(item)
+        if atras:
+            atrasados.append({**item,"categoria":nome(r["cod"])})
     atrasados.sort(key=lambda a:-a["atraso"]); atrasados=atrasados[:40]
 
     resumo={"em_processo":sum(x["em_processo"] for x in categorias),
