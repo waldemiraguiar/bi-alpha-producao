@@ -32,7 +32,14 @@ jobs:
           BI_PWD:     ${{ secrets.BI_PWD }}
           CRM_PWD:    ${{ secrets.CRM_PWD }}
         run: python build_crm.py
+      - name: Config + dependências da função (follow-up)
+        env:
+          CRM_PWD: ${{ secrets.CRM_PWD }}
+        run: |
+          node -e "require('fs').writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\n')"
+          cd site_crm/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
+
       - name: Publicar no Netlify (Agente CRM)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: npx --yes netlify-cli@26 deploy --prod --dir=site_crm --site=${{ secrets.CRM_SITE_ID }}
+        run: npx --yes netlify-cli@26 deploy --prod --dir=site_crm --functions=site_crm/functions --site=${{ secrets.CRM_SITE_ID }}

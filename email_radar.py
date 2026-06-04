@@ -85,7 +85,11 @@ crm_html = f"""<div style='font-family:Arial;max-width:760px;margin:auto;color:#
 {crm_tab('▲ Em alta — fortalecer', sobe)}
 {crm_lista('⛔ Clientes parados (priorizar contato)', sumidos, lambda x: f"{x['dias_inativo']}d sem envio")}
 {crm_lista('🌱 Novos esfriando — reativar (novo que parou)', esfri, lambda x: f"{x['dias_inativo']}d sem envio · novo há {x['dias_cad']}d", '#FFB020')}
-<p style='color:#888;font-size:12px;margin-top:20px'>Relatório automático semanal para o time de CRM. Sem valores financeiros.</p></div>"""
+<div style='margin-top:22px;text-align:center'>
+  <a href='https://agente-crm-matriz.netlify.app' style='display:inline-block;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#0A1628;font-weight:800;font-size:14px;text-decoration:none;border-radius:10px;padding:12px 22px'>🎯 Abrir o Agente CRM — Matriz</a>
+  <div style='color:#888;font-size:12px;margin-top:8px'>Painel ao vivo com radar de reativação, abas e follow-up · senha do time CRM.</div>
+</div>
+<p style='color:#888;font-size:12px;margin-top:18px'>Relatório automático semanal para o time de CRM. Sem valores financeiros. — Agentes de IA Alpha.</p></div>"""
 
 GU, GP = os.environ["GMAIL_USER"], os.environ["GMAIL_APP_PASSWORD"].replace(" ", "")
 ADMIN_TO = os.environ.get("EMAIL_TO", GU)

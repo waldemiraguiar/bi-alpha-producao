@@ -3,7 +3,19 @@
    Painel de movimentação de clientes (sem R$). Skin BI Alpha.
    Abas com rotação tipo TV + radar de reativação + worklists acionáveis.
    ============================================================ */
-let DATA = null, ACTIVE = "reativar", pinned = false, rotTimer = null, search = "";
+let DATA = null, ACTIVE = "reativar", pinned = false, rotTimer = null, search = "", locked = null;
+
+/* deep-link por visão: #reativar / #em_queda / #parados / ... trava a tela numa visão
+   (igual ao #setor da Produção). Sem hash = visão completa rotativa da equipe. */
+const HASH_ALIAS = {queda:"em_queda", "em-queda":"em_queda", parado:"parados",
+  alta:"em_alta", "em-alta":"em_alta", novos:"novos_esfriando", esfriando:"novos_esfriando",
+  reativacao:"reativar", "reativação":"reativar"};
+function resolveLock(){
+  const h = decodeURIComponent((location.hash||"").replace("#","")).trim().toLowerCase();
+  if(!h) return null;
+  const k = HASH_ALIAS[h] || h;
+  return TABS.some(t=>t.k===k) ? k : null;
+}
 
 const TABS = [
   {k:"reativar",        ic:"🎯", nm:"Reativar",        cls:"urgtab",   bcls:"urgb"},
@@ -14,6 +26,30 @@ const TABS = [
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
 ];
 const ROT_MS = 15000;
+
+/* ---------- follow-up compartilhado (Netlify Function + Blobs) ---------- */
+const FU_API = "/api/followup";
+let FOLLOWED = new Map();   // cod(string) -> {cod,nome,por,nota,ts}
+function syncFollowups(arr){ FOLLOWED = new Map((arr||[]).map(f=>[String(f.cod), f])); }
+async function loadFollowups(){
+  try{ const r = await fetch(FU_API); if(r.ok){ const j = await r.json(); syncFollowups(j.followups||[]); } }catch(e){}
+}
+function quem(){
+  let q = localStorage.getItem("crm_quem");
+  if(!q){ q = (prompt("Seu nome/iniciais (aparece no follow-up):")||"").trim(); if(!q) return null; localStorage.setItem("crm_quem", q); }
+  return q;
+}
+async function toggleFollowup(cod, nome){
+  const codS = String(cod), has = FOLLOWED.has(codS);
+  let por = "equipe";
+  if(!has){ por = quem(); if(por===null) return; }
+  try{
+    const r = await fetch(FU_API, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({cod:codS, nome, por, acao: has?"remove":"add", senha: window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); return; }
+    const j = await r.json(); syncFollowups(j.followups||[]); renderTab();
+  }catch(e){ console.warn(e); alert("Não foi possível salvar o follow-up (função indisponível)."); }
+}
 
 /* ---------- helpers ---------- */
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -49,6 +85,13 @@ function ring(pct, color, label){
     <div class="rv"><div class="big">${pct}%</div><div class="lb">${label}</div></div></div>`;
 }
 
+/* botão de follow-up (toggle compartilhado) */
+function fubtn(x){
+  const f = FOLLOWED.get(String(x.cod));
+  if(f) return `<button class="fubtn on" data-cod="${esc(x.cod)}" data-nome="${esc(x.nome)}" title="em follow-up por ${esc(f.por)}">✓ ${esc(f.por)}</button>`;
+  return `<button class="fubtn" data-cod="${esc(x.cod)}" data-nome="${esc(x.nome)}">＋ Follow-up</button>`;
+}
+
 /* linha de cliente (worklist) */
 function crow(x, i, opts){
   opts = opts || {};
@@ -56,21 +99,24 @@ function crow(x, i, opts){
   const di = x.dias_inativo!=null ? `${x.dias_inativo}d sem enviar` : "";
   const dc = x.dias_cad!=null ? `novo há ${x.dias_cad}d` : "";
   const meta = [esc(x.cidade)+(x.uf?"/"+esc(x.uf):""), di, dc].filter(Boolean).join(" · ");
-  let right = "";
+  const parts = [];
   if(opts.acao){
     const hot = (x.motivo==="parado"||x.motivo==="queda_forte");
-    right = `<div class="acao ${hot?"hot":""}">${esc(x.acao)}</div>`;
+    parts.push(`<div class="acao ${hot?"hot":""}">${esc(x.acao)}</div>`);
   } else if(opts.badge){
     const cls = opts.badge==="sit" ? (x.situacao||"estável") : x.motivo;
     const txt = opts.badge==="sit" ? (x.situacao||"estável") : (x.prioridade||x.motivo||"");
-    right = `<span class="pr ${cls==="parado"&&opts.badge==="sit"?"parado-sit":cls}">${esc(txt)}</span>`;
+    parts.push(`<span class="pr ${cls==="parado"&&opts.badge==="sit"?"parado-sit":cls}">${esc(txt)}</span>`);
   }
+  if(opts.fu) parts.push(fubtn(x));
+  const right = parts.length ? `<div class="rcell">${parts.join("")}</div>` : "<div></div>";
   const rank = opts.rank ? `<div class="rk">${i+1}</div>` : `<div class="rk" style="color:var(--line)">•</div>`;
-  return `<div class="crow">
+  const done = opts.fu && FOLLOWED.has(String(x.cod)) ? " done" : "";
+  return `<div class="crow${done}">
     ${rank}
     <div><div class="nm">${esc(x.nome)}</div><div class="ci">${meta}</div></div>
     <div class="mid">${spark(x.spark, col)}${deltaHtml(x.delta)}</div>
-    ${right || "<div></div>"}
+    ${right}
   </div>`;
 }
 
@@ -105,7 +151,7 @@ function renderTab(){
         ${kpi("a", r.novos_esfriando||0, "Novos esfriando", "pararam após início")}
       </div>
       <div class="seclabel">🔴 Fila de reativação — priorizada</div>
-      ${list(arr, {acao:true, rank:true})}`;
+      ${list(arr, {acao:true, rank:true, fu:true})}`;
     return;
   }
 
@@ -133,7 +179,7 @@ function renderTab(){
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
       <div class="seclabel">⛔ Parados — priorizar contato (recência primeiro)</div>
-      ${list(arr, {acao:false, badge:"motivo", rank:true})}`;
+      ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
     return;
   }
 
@@ -185,17 +231,18 @@ function renderTab(){
 /* ---------- abas ---------- */
 function renderTabs(){
   const D = DATA, r = D.resumo||{}, t = document.getElementById("tabs");
-  t.innerHTML = TABS.map(tb=>{
+  const shown = locked ? TABS.filter(tb=>tb.k===locked) : TABS;
+  t.innerHTML = shown.map(tb=>{
     const n = r[tb.k] || 0;
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
     return `<div class="tab ${tb.cls} ${on?"on":""}" data-k="${tb.k}">
       <span class="tn">${tb.ic} ${tb.nm}</span>
       <span class="tb ${tb.bcls||bcls}">${n}</span>
-      ${on && !pinned ? '<span class="prog" id="prog"></span>' : ''}
+      ${on && !pinned && !locked ? '<span class="prog" id="prog"></span>' : ''}
     </div>`;
-  }).join("");
-  t.querySelectorAll(".tab").forEach(el=>el.addEventListener("click", ()=>{
+  }).join("") + (locked ? '<span class="rotctl pinned" style="cursor:default">🔒 Tela fixa</span>' : '');
+  if(!locked) t.querySelectorAll(".tab").forEach(el=>el.addEventListener("click", ()=>{
     ACTIVE = el.dataset.k; pinned = true; setPin(); search=""; renderAll();
   }));
   animProg();
@@ -233,13 +280,30 @@ function footer(){
 
 /* ---------- ciclo ---------- */
 function renderAll(){ renderTabs(); renderTab(); }
+function applyLock(){
+  locked = resolveLock();
+  const rc = document.getElementById("rotctl");
+  if(locked){ ACTIVE = locked; pinned = true; rc.style.display="none"; }
+  else { rc.style.display=""; }
+}
 function render(D){
   DATA = D;
   document.getElementById("app").style.display="block";
+  applyLock();
   footer(); renderAll();
+  if(!window.__fuwired){
+    window.__fuwired = true;
+    document.getElementById("content").addEventListener("click", e=>{
+      const b = e.target.closest(".fubtn"); if(b) toggleFollowup(b.dataset.cod, b.dataset.nome);
+    });
+    loadFollowups().then(()=>renderTab());
+    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join(); await loadFollowups();
+      if(a!==[...FOLLOWED.keys()].sort().join()) renderTab(); }, 45000);
+  }
 }
+window.addEventListener("hashchange", ()=>{ if(DATA){ applyLock(); search=""; renderAll(); } });
 
-document.getElementById("rotctl").addEventListener("click", ()=>{ pinned=!pinned; setPin(); if(!pinned){search="";} renderAll(); });
+document.getElementById("rotctl").addEventListener("click", ()=>{ if(locked) return; pinned=!pinned; setPin(); if(!pinned){search="";} renderAll(); });
 setInterval(clock, 1000); clock();
 setInterval(()=>{ if(DATA) rotate(); }, ROT_MS);
 
