@@ -145,7 +145,7 @@ function renderTab(){
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
       <div class="kgrid">
-        ${kpi("r", r.parados||0, "Parados", "≥35d sem enviar")}
+        ${kpi("r", r.parados||0, "Parados", "≥21d sem enviar")}
         ${kpi("r", r.queda_forte||0, "Queda forte", "≤ -40%")}
         ${kpi("a", r.em_queda||0, "Em queda", "≤ -10% na semana")}
         ${kpi("a", r.novos_esfriando||0, "Novos esfriando", "pararam após início")}
@@ -174,7 +174,7 @@ function renderTab(){
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "parados")}
         <div class="kgrid" style="margin:0">
-          ${kpi("r", arr.length, "Clientes parados", "≥35 dias sem enviar")}
+          ${kpi("r", arr.length, "Clientes parados", "≥21 dias sem enviar")}
           ${kpi("a", (arr[0]&&arr[0].dias_inativo)||0, "Mais antigo", "dias sem enviar")}
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
