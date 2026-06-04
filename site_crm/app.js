@@ -24,6 +24,7 @@ const TABS = [
   {k:"novos_esfriando", ic:"🌱", nm:"Novos Esfriando", cls:"",         bcls:""},
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
+  {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
 ];
 const ROT_MS = 15000;
 
@@ -49,6 +50,143 @@ async function toggleFollowup(cod, nome){
     if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); return; }
     const j = await r.json(); syncFollowups(j.followups||[]); renderTab();
   }catch(e){ console.warn(e); alert("Não foi possível salvar o follow-up (função indisponível)."); }
+}
+
+/* ---------- registro de contatos (interações) + BI ---------- */
+const INTER_API = "/api/interacoes";
+let INTER = [], CHARTS = [];
+const RESULT = {
+  positivo:    {lbl:"Positivo",      ic:"✅", col:"#00E5A0"},
+  negociacao:  {lbl:"Em negociação", ic:"🔄", col:"#00D4FF"},
+  sem_resposta:{lbl:"Sem resposta",  ic:"⚠️", col:"#FFB020"},
+  negativo:    {lbl:"Negativo",      ic:"❌", col:"#FF5470"},
+};
+const CANAIS = ["Ligação","WhatsApp","E-mail","Visita"];
+const MOTIVOS = ["Preço","Concorrente","Qualidade","Fechou","Sem demanda","Outro"];
+function syncInter(arr){ INTER = (arr||[]).slice().sort((a,b)=>b.ts-a.ts); }
+async function loadInter(){ try{ const r=await fetch(INTER_API); if(r.ok) syncInter((await r.json()).interacoes); }catch(e){} }
+function interOf(cod){ const c=String(cod); return INTER.filter(x=>String(x.cod)===c); }
+function lastInter(cod){ return interOf(cod)[0]||null; }
+function diasAtras(ts){ const d=Math.floor((Date.now()-ts)/864e5); return d<=0?"hoje":d===1?"ontem":`há ${d}d`; }
+function findClient(cod){
+  const c=String(cod), D=DATA||{};
+  for(const k of ["reativar","parados","em_queda","queda_forte","novos_esfriando","em_alta","carteira"]){
+    const hit=(D[k]||[]).find(x=>String(x.cod)===c); if(hit) return hit;
+  }
+  return null;
+}
+function snapOf(cod){
+  const x=findClient(cod)||{};
+  const sit = x.motivo || x.situacao || (x.flag==="up"?"alta":x.flag==="down"?"queda":"");
+  return {dias_inativo:x.dias_inativo??null, delta:x.delta??null, situacao:sit};
+}
+
+/* ---- modal de registro ---- */
+let M_COD=null, M_RES="positivo", M_CANAL="Ligação", M_MOTIVO="";
+function rbadge(h){ const r=RESULT[h.resultado]||RESULT.sem_resposta; return r; }
+function openReg(cod){
+  M_COD=String(cod); M_RES="positivo"; M_CANAL="Ligação"; M_MOTIVO="";
+  const cli=findClient(cod)||{}, nome=cli.nome||("#"+cod), hist=interOf(cod);
+  const histHtml = hist.length ? hist.map(h=>{ const r=rbadge(h);
+    return `<div class="hist-row"><span class="hi-ic">${r.ic}</span>
+      <div class="hi-body"><div class="hi-top"><b>${esc(r.lbl)}</b> <span class="t-mut">· ${esc(h.canal||"—")} · ${esc(diasAtras(h.ts))} · ${esc(h.por)}</span>${h.motivo?` · <span class="t-red">${esc(h.motivo)}</span>`:""}</div>
+      ${h.nota?`<div class="hi-nota">"${esc(h.nota)}"</div>`:""}${h.proximo_passo?`<div class="hi-next">↻ retorno: ${esc(h.proximo_passo)}</div>`:""}</div>
+      <button class="hi-del" data-del="${esc(h.id)}" title="remover">✕</button></div>`;
+  }).join("") : `<div class="t-mut" style="font-size:13px;padding:6px 0">Sem contatos registrados ainda.</div>`;
+  document.getElementById("modalBody").innerHTML = `
+    <div class="m-head"><div><div class="m-cli">${esc(nome)}</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">${esc(cli.cidade||"")}${cli.dias_inativo!=null?` · ${cli.dias_inativo}d sem enviar`:""}</div></div>
+      <button class="m-x" id="mClose">✕</button></div>
+    <div class="m-sec">Histórico de contatos</div><div class="m-hist">${histHtml}</div>
+    <div class="m-sec">Registrar novo contato</div>
+    <div class="m-lbl">Canal</div><div class="m-opts" id="mCanal">${CANAIS.map(c=>`<button class="opt${c===M_CANAL?" on":""}" data-canal="${c}">${c}</button>`).join("")}</div>
+    <div class="m-lbl">Resultado</div><div class="m-opts" id="mRes">${Object.entries(RESULT).map(([k,v])=>`<button class="opt res-${k}${k===M_RES?" on":""}" data-res="${k}">${v.ic} ${v.lbl}</button>`).join("")}</div>
+    <div id="mMotivoWrap" style="display:none"><div class="m-lbl">Motivo da perda</div><div class="m-opts" id="mMotivo">${MOTIVOS.map(m=>`<button class="opt" data-motivo="${m}">${m}</button>`).join("")}</div></div>
+    <div class="m-lbl">Nota / relatório</div><textarea id="mNota" class="m-ta" placeholder="O que foi conversado, combinado, objeções…"></textarea>
+    <div class="m-lbl">Próximo passo (retorno)</div><input id="mNext" type="date" class="m-date">
+    <button class="m-save" id="mSave">Salvar contato</button>`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("mCanal").onclick=e=>{const b=e.target.closest("[data-canal]");if(b){M_CANAL=b.dataset.canal;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
+  document.getElementById("mRes").onclick=e=>{const b=e.target.closest("[data-res]");if(b){M_RES=b.dataset.res;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));document.getElementById("mMotivoWrap").style.display=M_RES==="negativo"?"block":"none";}};
+  const mm=document.getElementById("mMotivo"); if(mm) mm.onclick=e=>{const b=e.target.closest("[data-motivo]");if(b){M_MOTIVO=b.dataset.motivo;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
+  document.getElementById("mSave").onclick=submitReg;
+  document.querySelectorAll(".hi-del").forEach(b=>b.onclick=()=>removeInter(b.dataset.del));
+}
+function closeModal(){ document.getElementById("modal").style.display="none"; }
+async function submitReg(){
+  const por=quem(); if(por===null) return;
+  const nota=document.getElementById("mNota").value.trim(), next=document.getElementById("mNext").value;
+  const cli=findClient(M_COD)||{}, btn=document.getElementById("mSave");
+  btn.disabled=true; btn.textContent="Salvando…";
+  try{
+    const r=await fetch(INTER_API,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({acao:"add",cod:M_COD,cliente:cli.nome||"",por,canal:M_CANAL,resultado:M_RES,
+        motivo:M_RES==="negativo"?M_MOTIVO:"",nota,proximo_passo:next,snapshot:snapOf(M_COD),senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); btn.disabled=false; btn.textContent="Salvar contato"; return; }
+    syncInter((await r.json()).interacoes); closeModal(); renderAll();
+  }catch(e){ console.warn(e); alert("Não foi possível salvar (função indisponível)."); btn.disabled=false; btn.textContent="Salvar contato"; }
+}
+async function removeInter(id){
+  try{ const r=await fetch(INTER_API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({acao:"remove",id,senha:window.__pwd})});
+    if(r.ok){ syncInter((await r.json()).interacoes); openReg(M_COD); renderAll(); } }catch(e){}
+}
+function regbtn(x){ return `<button class="regbtn" data-reg="${esc(x.cod)}">📞 Registrar</button>`; }
+
+/* ---- BI: estatísticas + gráficos ---- */
+function biStats(){
+  const D=DATA||{};
+  const paradosSet=new Set((D.parados||[]).map(x=>String(x.cod)));
+  const quedaSet=new Set([...(D.em_queda||[]),...(D.queda_forte||[])].map(x=>String(x.cod)));
+  const wk=Date.now()-7*864e5, mo=Date.now()-30*864e5;
+  const byRes={positivo:0,negociacao:0,sem_resposta:0,negativo:0};
+  INTER.forEach(x=>{ if(byRes[x.resultado]!=null) byRes[x.resultado]++; });
+  const porPessoa={}; INTER.forEach(x=>{const p=x.por||"equipe"; (porPessoa[p]=porPessoa[p]||{n:0,pos:0}); porPessoa[p].n++; if(x.resultado==="positivo")porPessoa[p].pos++;});
+  const contatados=new Set(INTER.map(x=>String(x.cod)));
+  let reativados=0;
+  contatados.forEach(cod=>{ const ruim=interOf(cod).some(h=>{const s=h.snapshot||{}; return (s.dias_inativo!=null&&s.dias_inativo>=21)||(s.delta!=null&&s.delta<=-10)||["parado","queda","queda_forte"].includes(s.situacao);});
+    if(ruim && !paradosSet.has(cod) && !quedaSet.has(cod)) reativados++; });
+  const motivos={}; INTER.filter(x=>x.resultado==="negativo"&&x.motivo).forEach(x=>{motivos[x.motivo]=(motivos[x.motivo]||0)+1;});
+  const weeks=[]; for(let i=7;i>=0;i--){const end=Date.now()-i*7*864e5,start=end-7*864e5; weeks.push({lbl:i===0?"agora":`-${i}s`,c:INTER.filter(x=>x.ts>=start&&x.ts<end).length});}
+  const total=INTER.length, topP=Object.entries(porPessoa).sort((a,b)=>b[1].n-a[1].n)[0];
+  return {total,sem:INTER.filter(x=>x.ts>=wk).length,mes:INTER.filter(x=>x.ts>=mo).length,byRes,porPessoa,
+    reativados,motivos,weeks,contatados:contatados.size,pctPos:total?Math.round(100*byRes.positivo/total):0,
+    topPessoa:topP?topP[0]:"—",alvos:(D.parados||[]).length+(D.em_queda||[]).length};
+}
+function funil(s){
+  const steps=[["Alvos (parados + em queda)",s.alvos,"#FF5470"],["Contatados",s.contatados,"#FFB020"],
+    ["Responderam",s.byRes.positivo+s.byRes.negociacao+s.byRes.negativo,"#00D4FF"],["Reativados ✅",s.reativados,"#00E5A0"]];
+  const max=Math.max(1,...steps.map(x=>x[1]));
+  return `<div class="funil">${steps.map(([l,v,c])=>`<div class="fstep"><div class="fl">${l}</div><div class="fbar"><div style="width:${Math.max(3,Math.round(100*v/max))}%;background:${c}"></div></div><div class="fv">${v}</div></div>`).join("")}</div>`;
+}
+function feed(){
+  if(!INTER.length) return `<div class="empty">Nenhum contato registrado ainda. Use <b>📞 Registrar</b> nas abas Reativar / Parados.</div>`;
+  return INTER.slice(0,14).map(h=>{const r=rbadge(h);
+    return `<div class="feedrow"><span class="fi">${r.ic}</span>
+      <div class="hi-body"><div><b>${esc(h.cliente||("#"+h.cod))}</b> <span class="t-mut">· ${esc(h.canal||"")} · ${esc(diasAtras(h.ts))} · ${esc(h.por)}</span></div>
+      ${h.nota?`<div class="hi-nota">"${esc(h.nota)}"</div>`:""}</div>
+      <span class="pr" style="background:${r.col}22;color:${r.col}">${esc(r.lbl)}</span></div>`;}).join("");
+}
+function drawCharts(s){
+  if(typeof Chart==="undefined") return;
+  CHARTS.forEach(c=>{try{c.destroy();}catch(e){}}); CHARTS=[];
+  Chart.defaults.color="#8aa2bd"; Chart.defaults.font.family="Inter";
+  const res=Object.keys(RESULT), g=id=>document.getElementById(id);
+  if(g("cRes")) CHARTS.push(new Chart(g("cRes"),{type:"doughnut",data:{labels:res.map(k=>RESULT[k].lbl),
+    datasets:[{data:res.map(k=>s.byRes[k]),backgroundColor:res.map(k=>RESULT[k].col),borderColor:"#0A1628",borderWidth:3}]},
+    options:{plugins:{legend:{position:"right",labels:{boxWidth:12}}},animation:false,cutout:"60%"}}));
+  const pess=Object.entries(s.porPessoa).sort((a,b)=>b[1].n-a[1].n).slice(0,8);
+  if(g("cPess")) CHARTS.push(new Chart(g("cPess"),{type:"bar",data:{labels:pess.map(p=>p[0]),
+    datasets:[{label:"contatos",data:pess.map(p=>p[1].n),backgroundColor:"#00D4FF"},{label:"positivos",data:pess.map(p=>p[1].pos),backgroundColor:"#00E5A0"}]},
+    options:{animation:false,scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}},plugins:{legend:{labels:{boxWidth:12}}}}}));
+  if(g("cSem")) CHARTS.push(new Chart(g("cSem"),{type:"line",data:{labels:s.weeks.map(w=>w.lbl),
+    datasets:[{data:s.weeks.map(w=>w.c),borderColor:"#00D4FF",backgroundColor:"rgba(0,212,255,.15)",fill:true,tension:.35,pointRadius:3}]},
+    options:{animation:false,scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}},plugins:{legend:{display:false}}}}));
+  const mot=Object.entries(s.motivos).sort((a,b)=>b[1]-a[1]);
+  if(g("cMot")) CHARTS.push(new Chart(g("cMot"),{type:"bar",data:{labels:mot.length?mot.map(m=>m[0]):["sem perdas"],
+    datasets:[{data:mot.length?mot.map(m=>m[1]):[0],backgroundColor:"#FF5470"}]},
+    options:{indexAxis:"y",animation:false,scales:{x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}}));
 }
 
 /* ---------- helpers ---------- */
@@ -108,13 +246,15 @@ function crow(x, i, opts){
     const txt = opts.badge==="sit" ? (x.situacao||"estável") : (x.prioridade||x.motivo||"");
     parts.push(`<span class="pr ${cls==="parado"&&opts.badge==="sit"?"parado-sit":cls}">${esc(txt)}</span>`);
   }
-  if(opts.fu) parts.push(fubtn(x));
+  if(opts.fu){ parts.push(fubtn(x)); parts.push(regbtn(x)); }
   const right = parts.length ? `<div class="rcell">${parts.join("")}</div>` : "<div></div>";
   const rank = opts.rank ? `<div class="rk">${i+1}</div>` : `<div class="rk" style="color:var(--line)">•</div>`;
   const done = opts.fu && FOLLOWED.has(String(x.cod)) ? " done" : "";
+  const li = opts.fu ? lastInter(x.cod) : null;
+  const liHtml = li ? `<div class="lastint" data-reg="${esc(x.cod)}">${rbadge(li).ic} <b>${esc(rbadge(li).lbl)}</b> <span class="t-mut">· ${esc(diasAtras(li.ts))} · ${esc(li.por)}</span></div>` : "";
   return `<div class="crow${done}">
     ${rank}
-    <div><div class="nm">${esc(x.nome)}</div><div class="ci">${meta}</div></div>
+    <div><div class="nm">${esc(x.nome)}</div><div class="ci">${meta}</div>${liHtml}</div>
     <div class="mid">${spark(x.spark, col)}${deltaHtml(x.delta)}</div>
     ${right}
   </div>`;
@@ -210,6 +350,29 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="resultados"){
+    const s=biStats();
+    c.innerHTML = `
+      <div class="kgrid">
+        ${kpi("", s.sem, "Contatos na semana", `${s.mes} no mês · ${s.total} no total`)}
+        ${kpi("g", s.pctPos+"%", "Taxa de sucesso", "contatos com resultado positivo")}
+        ${kpi("g", s.reativados, "Clientes reativados", "estavam ruins e voltaram a enviar")}
+        ${kpi("a", s.topPessoa, "Mais ativo", "colaborador com mais contatos")}
+      </div>
+      <div class="bigrid">
+        <div class="card"><h3>Resultados dos contatos</h3><div class="cwrap"><canvas id="cRes"></canvas></div></div>
+        <div class="card"><h3>Contatos por colaborador</h3><div class="cwrap"><canvas id="cPess"></canvas></div></div>
+      </div>
+      <div class="bigrid">
+        <div class="card"><h3>Evolução semanal <span class="tag">últimas 8 semanas</span></h3><div class="cwrap"><canvas id="cSem"></canvas></div></div>
+        <div class="card"><h3>Motivos de perda</h3><div class="cwrap"><canvas id="cMot"></canvas></div></div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3>Funil de reativação</h3>${funil(s)}</div>
+      <div class="seclabel">🕑 Últimos contatos registrados</div>${feed()}`;
+    drawCharts(s);
+    return;
+  }
+
   if(ACTIVE==="carteira"){
     const all = D.carteira||[];
     const q = search.trim().toLowerCase();
@@ -233,7 +396,7 @@ function renderTabs(){
   const D = DATA, r = D.resumo||{}, t = document.getElementById("tabs");
   const shown = locked ? TABS.filter(tb=>tb.k===locked) : TABS;
   t.innerHTML = shown.map(tb=>{
-    const n = r[tb.k] || 0;
+    const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length : (r[tb.k] || 0);
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
     return `<div class="tab ${tb.cls} ${on?"on":""}" data-k="${tb.k}">
@@ -259,6 +422,7 @@ function setPin(){
 }
 function rotate(){
   if(pinned) return;
+  const m=document.getElementById("modal"); if(m && m.style.display==="flex") return;
   const i = TABS.findIndex(t=>t.k===ACTIVE);
   ACTIVE = TABS[(i+1)%TABS.length].k;
   renderAll();
@@ -294,11 +458,15 @@ function render(D){
   if(!window.__fuwired){
     window.__fuwired = true;
     document.getElementById("content").addEventListener("click", e=>{
-      const b = e.target.closest(".fubtn"); if(b) toggleFollowup(b.dataset.cod, b.dataset.nome);
+      const fb = e.target.closest(".fubtn"); if(fb){ toggleFollowup(fb.dataset.cod, fb.dataset.nome); return; }
+      const rb = e.target.closest("[data-reg]"); if(rb){ openReg(rb.dataset.reg); return; }
     });
-    loadFollowups().then(()=>renderTab());
-    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join(); await loadFollowups();
-      if(a!==[...FOLLOWED.keys()].sort().join()) renderTab(); }, 45000);
+    const modal=document.getElementById("modal");
+    if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
+    Promise.all([loadFollowups(), loadInter()]).then(()=>renderAll());
+    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join()+"|"+INTER.length;
+      await Promise.all([loadFollowups(), loadInter()]);
+      if(a!==[...FOLLOWED.keys()].sort().join()+"|"+INTER.length) renderTab(); }, 45000);
   }
 }
 window.addEventListener("hashchange", ()=>{ if(DATA){ applyLock(); search=""; renderAll(); } });
