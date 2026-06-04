@@ -2,7 +2,7 @@ name: E-mail semanal do radar de clientes
 
 on:
   schedule:
-    - cron: '0 11 * * 1'   # segundas 11:00 UTC (08:00 BRT)
+    - cron: '0 11 * * 5'   # sextas 11:00 UTC (08:00 BRT)
   workflow_dispatch:
 
 env:
