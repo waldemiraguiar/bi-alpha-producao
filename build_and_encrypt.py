@@ -34,11 +34,11 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
-    # --- FILA EM ABERTO (DataExame NULL) por categoria x dias-em-aberto (entrada últimos 60d) ---
-    abertos = q(f"""SELECT s.CodCategoria cod, DATEDIFF(CURDATE(), r.DataEntrada) dias, COUNT(*) n
+    # --- FILA EM ABERTO (DataExame NULL) por categoria x EXAME(derivação) x dias-em-aberto ---
+    abertos = q(f"""SELECT s.CodCategoria cod, s.Exame exame, DATEDIFF(CURDATE(), r.DataEntrada) dias, COUNT(*) n
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
         WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 10 DAY)
-        GROUP BY s.CodCategoria, dias""")
+        GROUP BY s.CodCategoria, s.Exame, dias""")
     # --- DETALHE dos abertos (com paciente + nº de registro) p/ a equipe rastrear ---
     abertos_det = q(f"""SELECT s.CodCategoria cod, s.Exame exame,
         r.NumeroSequencial registro, r.Animal paciente, r.Proprietario dono,
@@ -57,14 +57,18 @@ def build():
     def C(cod):
         if cod not in cat:
             cat[cod]={"cod":cod,"categoria":nome(cod),"sla":sla(cod),
-                      "em_processo":0,"no_prazo":0,"atrasado":0,"tat_medio":None}
+                      "em_processo":0,"no_prazo":0,"atrasado":0,"tat_medio":None,"_der":{}}
         return cat[cod]
     for r in abertos:
         if r["cod"] in JUNK: continue
-        x=C(r["cod"]); dias=r["dias"] or 0; n=r["n"]
+        x=C(r["cod"]); dias=r["dias"] or 0; n=r["n"]; exm=(r["exame"] or "—").strip() or "—"
+        late = dias > x["sla"]
         x["em_processo"]+=n
-        if dias > x["sla"]: x["atrasado"]+=n
+        if late: x["atrasado"]+=n
         else: x["no_prazo"]+=n
+        d=x["_der"].setdefault(exm,{"exame":exm,"em_processo":0,"atrasado":0})
+        d["em_processo"]+=n
+        if late: d["atrasado"]+=n
     for r in tatmed:
         if r["cod"] in JUNK: continue
         C(r["cod"])["tat_medio"]=float(r["tat"]) if r["tat"] is not None else None
@@ -73,6 +77,11 @@ def build():
     for x in categorias:
         tot=x["em_processo"]; x["pct_no_prazo"]=round(100*x["no_prazo"]/tot) if tot else 100
         x["exames"]=[]   # lista detalhada com paciente + registro (preenchida abaixo)
+        ders=sorted(x["_der"].values(), key=lambda d:-d["em_processo"])
+        for d in ders:
+            d["no_prazo"]=d["em_processo"]-d["atrasado"]
+            d["pct"]=round(100*d["no_prazo"]/d["em_processo"]) if d["em_processo"] else 100
+        x["derivacoes"]=ders; del x["_der"]
 
     # exames em processo por categoria (com paciente + nº de registro) — atrasados primeiro
     CAP=30
