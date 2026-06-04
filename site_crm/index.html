@@ -61,6 +61,14 @@
   .pr.parado-sit{background:rgba(255,84,112,.18);color:#ffb3c0}
   .pr.estável{background:rgba(138,162,189,.16);color:var(--mut)}
   .spk{display:block}
+  /* botão de follow-up (toggle compartilhado pela equipe) */
+  .rcell{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+  .fubtn{font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;
+    border-radius:8px;padding:7px 11px;background:transparent;border:1px solid rgba(0,212,255,.45);color:var(--cyan)}
+  .fubtn:hover{background:rgba(0,212,255,.1)}
+  .fubtn.on{background:var(--green);border-color:var(--green);color:var(--navy)}
+  .crow.done{opacity:.62;border-color:rgba(0,229,160,.4)}
+  .crow.done .acao{opacity:.5}
   .seclabel{font-size:12px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 10px;display:flex;align-items:center;gap:10px}
   .seclabel::after{content:"";flex:1;height:1px;background:var(--line)}
   .empty{color:var(--mut);font-size:14px;padding:30px;text-align:center;border:1px dashed var(--line);border-radius:12px}
