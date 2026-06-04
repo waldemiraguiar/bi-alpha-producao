@@ -43,6 +43,14 @@ Foco: **movimentação de clientes para o time comercial — sem nenhum valor R$
 - Escrita exige a **senha do time** (secret `CRM_PWD`, injetado em `secret.mjs` no deploy). Cada aparelho lembra o nome de quem marca (`localStorage`).
 - Deploy: o workflow instala `@netlify/blobs` e injeta `secret.mjs` antes de `netlify deploy --functions=site_crm/functions` (mesmo padrão da função de urgentes da Produção).
 
+## Registro de contatos + BI "Resultados"
+Arquitetura: **dado vivo (MySQL, read-only) × registro humano (evento imutável)**, cruzados na hora.
+- **Botão 📞 Registrar** por cliente (além do Follow-up): modal com **canal · resultado · motivo (se negativo) · nota · próximo passo** + **histórico** (timeline) do cliente. Cada registro carimba um **snapshot** do estado do cliente no momento (`dias_inativo`, `delta`, `situacao`) — assim o histórico conta a verdade mesmo quando os dados de movimentação mudam.
+- Resultados: `positivo · negociacao · sem_resposta · negativo`. Último resultado aparece na linha do cliente.
+- Função `site_crm/functions/interacoes.mjs` (`/api/interacoes`) + Blobs (`crm-interacoes`): GET log / POST add|remove (senha CRM_PWD). Expira 365d. Mesmo deploy/secret da função de follow-up (nada novo no workflow).
+- **Aba 📋 Resultados** (Chart.js via CDN): KPIs (contatos na semana/mês, **% de sucesso**, **clientes reativados**, colaborador mais ativo), rosca de resultados, barras por colaborador, evolução semanal (8 sem), motivos de perda, **funil de reativação** (alvos→contatados→responderam→reativados) e feed dos últimos contatos.
+- **Reativado** = cliente cujo snapshot de algum contato estava ruim (≥21d parado, ou ≤-10%, ou situação parado/queda) e que **hoje não está** em `parados` nem `em_queda`. Métrica que prova o trabalho do time.
+
 ## Arquivos
 - `build_crm.py` — robô (transform `crm_from` + `encrypt`). **Sem R$ na saída.**
 - `seed_demo_crm.py` — gera `crm.enc` de DEMONSTRAÇÃO (sem MySQL) p/ subida imediata.
