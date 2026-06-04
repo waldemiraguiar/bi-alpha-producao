@@ -53,6 +53,9 @@ Valores = faturamento (valor cobrado). E-mail automático semanal.</p></div>"""
 
 # ---------- versão CRM (SEM valores R$ e SEM tier — só % e nome) ----------
 sumidos = (D.get("perdidos", {}) or {}).get("sumidos", [])
+_nv = D.get("novos", {}) or {}
+esfri = sorted([x for x in (_nv.get("recem", []) + _nv.get("maturando", [])) if x.get("esfriando")],
+               key=lambda x: -x.get("dias_inativo", 0))
 def crm_linha(x):
     cor = "#E03131" if x["flag"] == "down" else "#1C7ED6"; seta = "▼" if x["flag"] == "down" else "▲"
     return (f"<tr><td style='padding:6px 10px'>{x['nome'] or ('#'+str(x['cod']))}</td>"
@@ -65,11 +68,11 @@ def crm_tab(titulo, lst):
             f"<table style='border-collapse:collapse;font-family:Arial;font-size:13px;width:100%'>"
             f"<tr style='background:#0A1628;color:#fff'><th style='padding:6px 10px;text-align:left'>Cliente</th>"
             f"<th style='padding:6px 10px;text-align:left'>Cidade</th><th style='padding:6px 10px;text-align:right'>Variação</th></tr>{rows}</table>")
-def crm_parados(lst):
+def crm_lista(titulo, lst, sitfn, cor="#E03131"):
     if not lst: return ""
     rows = "".join(f"<tr><td style='padding:6px 10px'>{x['nome']}</td><td style='padding:6px 10px;color:#666'>{x.get('cidade') or '—'}</td>"
-                   f"<td style='padding:6px 10px;text-align:right;font-weight:800;color:#E03131'>{x['dias_inativo']}d sem envio</td></tr>" for x in lst)
-    return ("<h3 style='font-family:Arial;margin:18px 0 6px'>⛔ Clientes parados (priorizar contato)</h3>"
+                   f"<td style='padding:6px 10px;text-align:right;font-weight:800;color:{cor}'>{sitfn(x)}</td></tr>" for x in lst)
+    return (f"<h3 style='font-family:Arial;margin:18px 0 6px'>{titulo}</h3>"
             "<table style='border-collapse:collapse;font-family:Arial;font-size:13px;width:100%'>"
             "<tr style='background:#0A1628;color:#fff'><th style='padding:6px 10px;text-align:left'>Cliente</th>"
             "<th style='padding:6px 10px;text-align:left'>Cidade</th><th style='padding:6px 10px;text-align:right'>Situação</th></tr>"+rows+"</table>")
@@ -77,10 +80,11 @@ crm_html = f"""<div style='font-family:Arial;max-width:760px;margin:auto;color:#
 <div style='background:#0A1628;color:#fff;padding:18px 22px;border-radius:10px'>
   <h2 style='margin:0'>📈 Movimentações de clientes — CRM</h2>
   <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>{hoje} · variação da última semana (±10%) · ação comercial</div></div>
-<p style='font-size:14px'><b>{len(cai)}</b> em <span style='color:#E03131'>queda</span> · <b>{len(sobe)}</b> em <span style='color:#1C7ED6'>alta</span> · <b>{len(sumidos)}</b> parados.</p>
+<p style='font-size:14px'><b>{len(cai)}</b> em <span style='color:#E03131'>queda</span> · <b>{len(sobe)}</b> em <span style='color:#1C7ED6'>alta</span> · <b>{len(sumidos)}</b> parados · <b>{len(esfri)}</b> novos esfriando.</p>
 {crm_tab('▼ Em queda — reativar', cai)}
 {crm_tab('▲ Em alta — fortalecer', sobe)}
-{crm_parados(sumidos)}
+{crm_lista('⛔ Clientes parados (priorizar contato)', sumidos, lambda x: f"{x['dias_inativo']}d sem envio")}
+{crm_lista('🌱 Novos esfriando — reativar (novo que parou)', esfri, lambda x: f"{x['dias_inativo']}d sem envio · novo há {x['dias_cad']}d", '#FFB020')}
 <p style='color:#888;font-size:12px;margin-top:20px'>Relatório automático semanal para o time de CRM. Sem valores financeiros.</p></div>"""
 
 GU, GP = os.environ["GMAIL_USER"], os.environ["GMAIL_APP_PASSWORD"].replace(" ", "")
