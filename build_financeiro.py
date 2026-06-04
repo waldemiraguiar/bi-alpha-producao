@@ -13,7 +13,8 @@ OUT_ENC = os.path.join(ROOT, "site", "data", "dashboard.enc")
 ITER = 250_000
 SRC = dict(host=os.environ["MYSQL_HOST"], user=os.environ["MYSQL_USER"],
            password=os.environ["MYSQL_PWD"], database=os.environ.get("MYSQL_DB","bi_alpha"),
-           connect_timeout=20, read_timeout=400, charset="utf8mb4")
+           connect_timeout=30, read_timeout=900, write_timeout=900, charset="utf8mb4",
+           init_command="SET SESSION net_write_timeout=3600, net_read_timeout=3600")
 BI_PWD = os.environ["BI_PWD"]
 
 def load():
