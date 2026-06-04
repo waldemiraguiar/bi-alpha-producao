@@ -59,12 +59,12 @@ def load():
                "WHERE DataExame>='2014-01-01' AND DataExame<='2026-12-31' GROUP BY ym")
     mc.executemany("INSERT INTO histmensal VALUES(?,?,?,?)",c2.fetchall())
     # scan 4: vida do cliente (primeira/última/fat recente) — para novos e churn
+    # LEVE: só na tabela de requisições (615k), sem JOIN na de 3M. Usa DataEntrada/ValorRequisiçao.
     d548 = (datetime.date.today()-datetime.timedelta(days=548)).isoformat()
-    c2.execute("SELECT r.CodCliente, MIN(s.DataExame), MAX(s.DataExame), "
-               "SUM(CASE WHEN s.DataExame>=%s THEN s.ValorExame ELSE 0 END) "
-               "FROM TabExameNumeroSolicitado s JOIN `TabExameNumeroRequisiçao` r "
-               "ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-               "WHERE s.DataExame>='2014-01-01' AND s.DataExame<='2026-12-31' GROUP BY r.CodCliente",(d548,))
+    c2.execute("SELECT CodCliente, MIN(DataEntrada), MAX(DataEntrada), "
+               "SUM(CASE WHEN DataEntrada>=%s THEN ValorRequisiçao ELSE 0 END) "
+               "FROM `TabExameNumeroRequisiçao` "
+               "WHERE DataEntrada>='2014-01-01' AND DataEntrada<='2026-12-31' GROUP BY CodCliente",(d548,))
     mc.executemany("INSERT INTO clientelife VALUES(?,?,?,?)",
                    [(r[0],str(r[1]) if r[1] else None,str(r[2]) if r[2] else None,r[3] or 0) for r in c2.fetchall()])
     mem.commit()
@@ -200,4 +200,12 @@ def encrypt(D):
     print(f"OK -> dashboard.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · fat_l12={D['kpis']['faturamento_l12']:.0f} · clientes={D['kpis']['clientes_ativos_l12']}")
 
 if __name__=="__main__":
-    encrypt(build(load()))
+    import time
+    last=None
+    for attempt in range(1,4):
+        try:
+            encrypt(build(load())); break
+        except pymysql.err.OperationalError as e:
+            last=e; print(f"tentativa {attempt} falhou ({e}); retry em 15s"); time.sleep(15)
+    else:
+        raise last

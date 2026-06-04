@@ -153,6 +153,12 @@ def encrypt(D):
     print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · hoje={D['meta']['hoje']} · exames_hoje={D['live']['exames_hoje']} · mes={D['live']['exames_mes']}")
 
 if __name__ == "__main__":
-    mem = load_memory()
-    D = build(mem)
-    encrypt(D)
+    import time
+    last = None
+    for attempt in range(1, 4):
+        try:
+            encrypt(build(load_memory())); break
+        except pymysql.err.OperationalError as e:
+            last = e; print(f"tentativa {attempt} falhou ({e}); retry em 15s"); time.sleep(15)
+    else:
+        raise last
