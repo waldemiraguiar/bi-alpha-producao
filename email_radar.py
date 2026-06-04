@@ -51,10 +51,47 @@ html = f"""<div style='font-family:Arial;max-width:760px;margin:auto;color:#1a1a
 <p style='color:#888;font-size:12px;margin-top:20px'>Painel completo: https://bi-alpha-waldemir.netlify.app (aba Clientes · Tiers).<br>
 Valores = faturamento (valor cobrado). E-mail automático semanal.</p></div>"""
 
-GU, GP, TO = os.environ["GMAIL_USER"], os.environ["GMAIL_APP_PASSWORD"], os.environ.get("EMAIL_TO", os.environ["GMAIL_USER"])
-msg = MIMEText(html, "html", "utf-8")
-msg["Subject"] = f"📊 Radar de clientes — {len(cai)} quedas / {len(sobe)} altas ({hoje})"
-msg["From"] = GU; msg["To"] = TO
+# ---------- versão CRM (SEM valores R$ e SEM tier — só % e nome) ----------
+sumidos = (D.get("perdidos", {}) or {}).get("sumidos", [])
+def crm_linha(x):
+    cor = "#E03131" if x["flag"] == "down" else "#1C7ED6"; seta = "▼" if x["flag"] == "down" else "▲"
+    return (f"<tr><td style='padding:6px 10px'>{x['nome'] or ('#'+str(x['cod']))}</td>"
+            f"<td style='padding:6px 10px;color:#666'>{x.get('cidade') or '—'}</td>"
+            f"<td style='padding:6px 10px;text-align:right;font-weight:800;color:{cor}'>{seta} {abs(x['delta'])}%</td></tr>")
+def crm_tab(titulo, lst):
+    if not lst: return ""
+    rows = "".join(crm_linha(x) for x in lst)
+    return (f"<h3 style='font-family:Arial;margin:18px 0 6px'>{titulo}</h3>"
+            f"<table style='border-collapse:collapse;font-family:Arial;font-size:13px;width:100%'>"
+            f"<tr style='background:#0A1628;color:#fff'><th style='padding:6px 10px;text-align:left'>Cliente</th>"
+            f"<th style='padding:6px 10px;text-align:left'>Cidade</th><th style='padding:6px 10px;text-align:right'>Variação</th></tr>{rows}</table>")
+def crm_parados(lst):
+    if not lst: return ""
+    rows = "".join(f"<tr><td style='padding:6px 10px'>{x['nome']}</td><td style='padding:6px 10px;color:#666'>{x.get('cidade') or '—'}</td>"
+                   f"<td style='padding:6px 10px;text-align:right;font-weight:800;color:#E03131'>{x['dias_inativo']}d sem envio</td></tr>" for x in lst)
+    return ("<h3 style='font-family:Arial;margin:18px 0 6px'>⛔ Clientes parados (priorizar contato)</h3>"
+            "<table style='border-collapse:collapse;font-family:Arial;font-size:13px;width:100%'>"
+            "<tr style='background:#0A1628;color:#fff'><th style='padding:6px 10px;text-align:left'>Cliente</th>"
+            "<th style='padding:6px 10px;text-align:left'>Cidade</th><th style='padding:6px 10px;text-align:right'>Situação</th></tr>"+rows+"</table>")
+crm_html = f"""<div style='font-family:Arial;max-width:760px;margin:auto;color:#1a1a1a'>
+<div style='background:#0A1628;color:#fff;padding:18px 22px;border-radius:10px'>
+  <h2 style='margin:0'>📈 Movimentações de clientes — CRM</h2>
+  <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>{hoje} · variação da última semana (±10%) · ação comercial</div></div>
+<p style='font-size:14px'><b>{len(cai)}</b> em <span style='color:#E03131'>queda</span> · <b>{len(sobe)}</b> em <span style='color:#1C7ED6'>alta</span> · <b>{len(sumidos)}</b> parados.</p>
+{crm_tab('▼ Em queda — reativar', cai)}
+{crm_tab('▲ Em alta — fortalecer', sobe)}
+{crm_parados(sumidos)}
+<p style='color:#888;font-size:12px;margin-top:20px'>Relatório automático semanal para o time de CRM. Sem valores financeiros.</p></div>"""
+
+GU, GP = os.environ["GMAIL_USER"], os.environ["GMAIL_APP_PASSWORD"].replace(" ", "")
+ADMIN_TO = os.environ.get("EMAIL_TO", GU)
+CRM_TO = os.environ.get("CRM_TO", "").strip()
+def enviar(s, html, assunto, to):
+    msg = MIMEText(html, "html", "utf-8"); msg["Subject"] = assunto; msg["From"] = GU; msg["To"] = to
+    s.sendmail(GU, [t.strip() for t in to.split(",") if t.strip()], msg.as_string())
 with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as s:
-    s.login(GU, GP.replace(" ", "")); s.sendmail(GU, [t.strip() for t in TO.split(",")], msg.as_string())
-print(f"E-mail enviado p/ {TO}: {len(cai)} quedas, {len(sobe)} altas.")
+    s.login(GU, GP)
+    enviar(s, html, f"📊 Radar de clientes — {len(cai)} quedas / {len(sobe)} altas ({hoje})", ADMIN_TO)
+    if CRM_TO:
+        enviar(s, crm_html, f"📈 Movimentações de clientes (CRM) — {hoje}", CRM_TO)
+print(f"Admin -> {ADMIN_TO} | CRM -> {CRM_TO or '(não configurado)'} | {len(cai)} quedas, {len(sobe)} altas, {len(sumidos)} parados.")
