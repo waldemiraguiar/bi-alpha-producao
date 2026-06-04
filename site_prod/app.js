@@ -6,20 +6,26 @@ const LS='bi_prod_pwd', ROTATE=15000; // 15s por categoria
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let ENC=null,REFRESH=null,ROT=null,DATA=null,active=0,locked=null,pinned=false;
 const URG_API='/api/urgentes';
-let manual=new Set();
-async function loadManual(){
-  try{const r=await fetch(URG_API+'?_='+Date.now());
-    if(r.ok){const j=await r.json(); manual=new Set((j.urgentes||[]).map(u=>String(u.registro)));}}catch(e){}
-}
-async function toggleUrg(reg,pac,exm,isOn){
+let manual=new Set(), baixados=new Set();
+function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro)));}
+async function loadManual(){ try{const r=await fetch(URG_API+'?_='+Date.now()); if(r.ok) setOverlays(await r.json());}catch(e){} }
+// urgente de verdade = (sistema OU manual) E NÃO baixado
+const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
+async function post(payload,errMsg){
   try{const r=await fetch(URG_API,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({registro:reg,paciente:pac,exame:exm,acao:isOn?'remove':'add',senha:window.__pwd})});
-    if(!r.ok){alert('Não foi possível marcar (autorização/conexão).');return;}
-    const j=await r.json(); manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); renderActive();
-  }catch(e){alert('Erro de conexão ao marcar urgência.');}
+    body:JSON.stringify({...payload,senha:window.__pwd})});
+    if(!r.ok){alert(errMsg);return;} setOverlays(await r.json()); renderActive();
+  }catch(e){alert('Erro de conexão.');}
 }
-function onContentClick(ev){const b=ev.target.closest('.urgbtn'); if(!b)return;
-  toggleUrg(b.dataset.reg,b.dataset.pac,b.dataset.exm, manual.has(String(b.dataset.reg)));}
+function toggleUrg(reg,pac,exm,isOn){post({tipo:'urgente',registro:reg,paciente:pac,exame:exm,acao:isOn?'remove':'add'},'Não foi possível marcar.');}
+function darBaixa(reg,pac,exm,isManual){
+  if(!confirm('Dar baixa neste urgente? Ele sai do alerta de urgência (continua na fila normal até o sistema concluir).'))return;
+  if(isManual) post({tipo:'urgente',registro:reg,paciente:pac,exame:exm,acao:'remove'},'Não foi possível dar baixa.');
+  else post({tipo:'baixa',registro:reg,paciente:pac,exame:exm,acao:'add'},'Não foi possível dar baixa.');
+}
+function onContentClick(ev){
+  const u=ev.target.closest('.urgbtn'); if(u){toggleUrg(u.dataset.reg,u.dataset.pac,u.dataset.exm,manual.has(String(u.dataset.reg)));return;}
+  const b=ev.target.closest('.baixabtn'); if(b){darBaixa(b.dataset.reg,b.dataset.pac,b.dataset.exm,b.dataset.manual==='1');return;}}
 const escA=s=>esc(s).replace(/"/g,'&quot;');
 const isPetlove=s=>/pet\s*love/i.test(String(s||''));
 let searchTerm='';
@@ -39,7 +45,7 @@ function catOrderIdx(name){const i=ORDER.findIndex(o=>slug(name).includes(slug(o
 function buildSpecial(list,pred,opts){
   const items=[];
   list.forEach(c=>(c.exames||[]).forEach(e=>{
-    if(pred(e,c)) items.push({...e,categoria:c.categoria,_urg:e.urgente||manual.has(String(e.registro)),_manual:manual.has(String(e.registro))&&!e.urgente});
+    if(pred(e,c)) items.push({...e,categoria:c.categoria,_urg:urgentOf(e),_manual:manual.has(String(e.registro))&&!e.urgente&&!baixados.has(String(e.registro))});
   }));
   items.sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
   const byCat={}; items.forEach(e=>{const k=e.categoria;(byCat[k]=byCat[k]||{exame:k,em_processo:0,atrasado:0});byCat[k].em_processo++;if(e.atrasado)byCat[k].atrasado++;});
@@ -50,7 +56,7 @@ function buildSpecial(list,pred,opts){
     tat_medio:null,urgentes:items.filter(e=>e._urg).length,urgentes_list:items.filter(e=>e._urg).slice(0,10),exames:items,
     derivacoes:Object.values(byCat).map(d=>({...d,pct:d.em_processo?Math.round(100*(d.em_processo-d.atrasado)/d.em_processo):100})).sort((a,b)=>catOrderIdx(a.exame)-catOrderIdx(b.exame))};
 }
-function buildUrgentCat(list){return buildSpecial(list,e=>e.urgente||manual.has(String(e.registro)),{cod:'__URG__',nome:'EXAMES URGENTES',kind:'urg'});}
+function buildUrgentCat(list){return buildSpecial(list,e=>urgentOf(e),{cod:'__URG__',nome:'EXAMES URGENTES',kind:'urg'});}
 function buildPetCat(list){return buildSpecial(list,e=>isPetlove(e.paciente),{cod:'__PET__',nome:'PET LOVE',kind:'pet'});}
 function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR__',nome:'ATRASADOS',kind:'atras'});}
 
@@ -162,15 +168,14 @@ function renderActive(){
   const K=special?KIND[x.kind]:null;
   const col=special?K.c:ringColor(x.pct_no_prazo);
   const ders=(x.derivacoes||[]).slice(0,18);
-  const manualHere=(x.exames||[]).filter(e=>manual.has(String(e.registro))&&!e.urgente);
-  const urgCount=x.urgentes+(special?0:manualHere.length);
-  const urgList=[...manualHere.map(e=>({registro:e.registro,paciente:e.paciente,exame:e.exame,dias:e.dias})),...(x.urgentes_list||[])];
-  const manualCount=(x.exames||[]).filter(e=>special?e._manual:(manual.has(String(e.registro))&&!e.urgente)).length;
-  const wlItems=(x.exames||[]).map(e=>({...e,_urg:special?true:(e.urgente||manual.has(String(e.registro))),_manual:special?e._manual:(manual.has(String(e.registro))&&!e.urgente)}))
+  const wlItems=(x.exames||[]).map(e=>({...e,_urg:urgentOf(e),_manual:manual.has(String(e.registro))&&!e.urgente&&!baixados.has(String(e.registro))}))
     .sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
+  const urgItems=wlItems.filter(e=>e._urg);
+  const urgCount=urgItems.length;
+  const manualCount=wlItems.filter(e=>e._manual).length;
   const banner = (!special && urgCount>0) ? `<div class="urgbanner"><span class="ico">🚨</span>
       <span class="ttl">${num(urgCount)} URGENTE${urgCount>1?'S':''}</span>
-      <div class="ul">${urgList.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
+      <div class="ul">${urgItems.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
     </div>` : '';
   document.getElementById('content').innerHTML=banner+`
     <div class="cgrid">
@@ -203,7 +208,9 @@ function renderActive(){
         <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
             <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
-            <div class="wlact">${e.urgente?'':`<button class="urgbtn ${e._manual?'on':''}" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="${e._manual?'remover urgência':'marcar como urgente'}">${e._manual?'★':'🚨'}</button>`}<span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
+            <div class="wlact">${e._urg
+              ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" data-manual="${e._manual?'1':'0'}" title="dar baixa (resolver urgência)">✓ baixa</button>`
+              : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
         </div>
       </div>
     </div></div>`;
