@@ -134,6 +134,19 @@ async function removeInter(id){
 }
 function regbtn(x){ return `<button class="regbtn" data-reg="${esc(x.cod)}">📞 Registrar</button>`; }
 
+/* retorno agendado (próximo_passo do contato mais recente do cliente) */
+function retorno(cod){
+  const ints=interOf(cod).filter(x=>x.proximo_passo);
+  if(!ints.length) return null;
+  const dt=new Date(ints[0].proximo_passo+"T00:00:00"); if(isNaN(dt)) return null;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const dias=Math.round((dt-today)/864e5);
+  return {date:ints[0].proximo_passo, dias, status: dias<0?"atrasado":dias===0?"hoje":"futuro"};
+}
+function dueRank(cod){ const r=retorno(cod); if(!r) return 3; return r.status==="atrasado"?0:r.status==="hoje"?1:(r.dias<=3?2:3); }
+function bumpDue(arr){ return arr.map((x,i)=>[x,i]).sort((a,b)=>(dueRank(a[0].cod)-dueRank(b[0].cod))||(a[1]-b[1])).map(p=>p[0]); }
+function dueCount(){ return [...new Set(INTER.map(x=>String(x.cod)))].filter(cod=>{const r=retorno(cod);return r&&(r.status==="hoje"||r.status==="atrasado");}).length; }
+
 /* ---- BI: estatísticas + gráficos ---- */
 function biStats(){
   const D=DATA||{};
@@ -252,9 +265,15 @@ function crow(x, i, opts){
   const done = opts.fu && FOLLOWED.has(String(x.cod)) ? " done" : "";
   const li = opts.fu ? lastInter(x.cod) : null;
   const liHtml = li ? `<div class="lastint" data-reg="${esc(x.cod)}">${rbadge(li).ic} <b>${esc(rbadge(li).lbl)}</b> <span class="t-mut">· ${esc(diasAtras(li.ts))} · ${esc(li.por)}</span></div>` : "";
-  return `<div class="crow${done}">
+  const rt = opts.fu ? retorno(x.cod) : null;
+  const rtHtml = !rt ? "" :
+    rt.status==="atrasado" ? `<div class="rtbadge atrasado" data-reg="${esc(x.cod)}">↻ Retorno atrasado ${Math.abs(rt.dias)}d</div>` :
+    rt.status==="hoje"     ? `<div class="rtbadge hoje" data-reg="${esc(x.cod)}">↻ Retornar hoje</div>` :
+    rt.dias<=3             ? `<div class="rtbadge fut" data-reg="${esc(x.cod)}">↻ retorno em ${rt.dias}d</div>` : "";
+  const due = rt && (rt.status==="atrasado"||rt.status==="hoje") ? " due" : "";
+  return `<div class="crow${done}${due}">
     ${rank}
-    <div><div class="nm">${esc(x.nome)}</div><div class="ci">${meta}</div>${liHtml}</div>
+    <div><div class="nm">${esc(x.nome)}</div><div class="ci">${meta}</div>${liHtml}${rtHtml}</div>
     <div class="mid">${spark(x.spark, col)}${deltaHtml(x.delta)}</div>
     ${right}
   </div>`;
@@ -271,8 +290,8 @@ function renderTab(){
   const ativos = r.ativos || r.carteira || 0;
 
   if(ACTIVE==="reativar"){
-    const arr = D.reativar||[];
-    const calm = arr.length===0;
+    const arr = bumpDue(D.reativar||[]);
+    const calm = arr.length===0; const dc = dueCount();
     const riscoPct = ativos ? 100*arr.length/ativos : 0;
     c.innerHTML = `
       <div class="radar ${calm?"calm":""}">
@@ -280,7 +299,7 @@ function renderTab(){
         <div><div class="big">${arr.length}</div></div>
         <div style="flex:1">
           <div class="lbl">${calm?"Carteira saudável — nada para reativar agora":"CLIENTES PARA REATIVAR — ação comercial"}</div>
-          <div class="sub">${r.parados||0} parados · ${r.queda_forte||0} em queda forte · ${r.em_queda||0} em queda · ${r.novos_esfriando||0} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa</div>
+          <div class="sub">${r.parados||0} parados · ${r.queda_forte||0} em queda forte · ${r.em_queda||0} em queda · ${r.novos_esfriando||0} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
@@ -310,7 +329,7 @@ function renderTab(){
   }
 
   if(ACTIVE==="parados"){
-    const arr = D.parados||[];
+    const arr = bumpDue(D.parados||[]);
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "parados")}
         <div class="kgrid" style="margin:0">

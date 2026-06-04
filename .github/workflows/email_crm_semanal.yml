@@ -1,0 +1,29 @@
+name: E-mail semanal de produtividade do CRM
+
+on:
+  schedule:
+    - cron: '30 11 * * 1'    # segunda 11:30 UTC (~8:30 BRT) — melhor esforço do GitHub
+  workflow_dispatch:          # gatilho confiável (cron-job.org) / manual
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: pip install --quiet cryptography
+      - name: Enviar relatório do CRM
+        env:
+          CRM_PWD: ${{ secrets.CRM_PWD }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          CRM_TO: ${{ secrets.CRM_TO }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python email_crm_semanal.py
