@@ -9,7 +9,7 @@ const MAXAGE = 3 * 864e5; // 3 dias
 export default async (req) => {
   const store = getStore("urgentes-manuais");
   const load = async () => {
-    const raw = (await store.get("lista", { type: "json" })) || [];
+    const raw = (await store.get("lista", { type: "json", consistency: "strong" })) || [];
     const cut = Date.now() - MAXAGE;
     return raw.filter((x) => x && x.ts > cut);
   };
