@@ -19,7 +19,7 @@ Foco: **movimentação de clientes para o time comercial — sem nenhum valor R$
 
 ## Lógica de movimentação (herdada do radar financeiro)
 - **Variação:** última semana ISO vs **média das 4 anteriores** (±10% = alta/queda).
-- **Parado:** relevante (filtro interno ≥R$300/mês, não exposto) e ≥35d sem enviar.
+- **Parado:** relevante (filtro interno ≥R$300/mês, não exposto) e **≥21d sem enviar** (régua compartilhada em `build_financeiro`, vale também p/ Financeiro e e-mail).
 - **Queda forte:** ≤ -40%.
 - **Novo esfriando:** 1ª atividade ≤90d e parou ≥14d.
 - **Fila Reativar:** união dedupada por cliente, prioridade `parado > queda_forte > queda > novo_esfriando`,
@@ -30,6 +30,18 @@ Foco: **movimentação de clientes para o time comercial — sem nenhum valor R$
 - Hero **RADAR DE REATIVAÇÃO** pulsante (laranja↔vermelho) + anel "% em risco".
 - Worklist acionável: cliente · cidade · dias sem enviar · **sparkline** · ▲▼% · ação.
 - **Lupa** na aba Carteira (busca por cliente/cidade).
+
+## Link de equipe + deep-link por visão (paridade com Produção)
+- **Link da equipe (visibilidade total):** https://agente-crm-matriz.netlify.app — login persistente, todas as abas em rotação. Mesma lógica de senha compartilhada da TV de Produção.
+- **Deep-link/lock por visão** (igual `#setor` da Produção): adicione `#<visão>` para **travar a tela** numa visão (sem rotação, só aquela aba — ideal p/ mural/telão dedicado):
+  - `#reativar` · `#em_queda` · `#parados` · `#novos_esfriando` · `#em_alta` · `#carteira`
+  - aceita apelidos: `#queda`, `#parado`, `#alta`, `#novos`. Sem hash = visão completa rotativa.
+
+## Follow-up por cliente (compartilhado entre telas)
+- Botão **＋ Follow-up** por cliente nas abas **Reativar** e **Parados**. Marcado → fica **✓ <nome>** verde e a linha esmaece (a equipe vê o que já está sendo cuidado).
+- Estado **compartilhado** via Netlify Function `site_crm/functions/followup.mjs` (`/api/followup`) + **Netlify Blobs**; propaga entre telas em ~45s; auto-expira em **30 dias**.
+- Escrita exige a **senha do time** (secret `CRM_PWD`, injetado em `secret.mjs` no deploy). Cada aparelho lembra o nome de quem marca (`localStorage`).
+- Deploy: o workflow instala `@netlify/blobs` e injeta `secret.mjs` antes de `netlify deploy --functions=site_crm/functions` (mesmo padrão da função de urgentes da Produção).
 
 ## Arquivos
 - `build_crm.py` — robô (transform `crm_from` + `encrypt`). **Sem R$ na saída.**
