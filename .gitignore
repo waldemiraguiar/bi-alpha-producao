@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 .netlify/
+node_modules/
+site_prod/functions/package*.json

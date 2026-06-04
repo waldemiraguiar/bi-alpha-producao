@@ -35,6 +35,9 @@ jobs:
           PROD_PWD:   ${{ secrets.PROD_PWD }}
         run: python build_and_encrypt.py
 
+      - name: Dependências da função (Blobs)
+        run: cd site_prod/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "blobs instalado"
+
       - name: Publicar no Netlify
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
