@@ -24,7 +24,7 @@ const escA=s=>esc(s).replace(/"/g,'&quot;');
 const isPetlove=s=>/pet\s*love/i.test(String(s||''));
 // ORDEM das abas (nomes/trechos na ordem desejada; vazio = ordem padrão por gravidade).
 // EXAMES URGENTES é sempre a 1ª. Preencher conforme o usuário definir.
-const ORDER=[];
+const ORDER=['hematologia','bioquimica','uroanalise','parasito','citopatologia','especializados','molecular','imunologia','bacteriologia','necropsia'];
 function buildUrgentCat(list){
   const items=[];
   list.forEach(c=>(c.exames||[]).forEach(e=>{
