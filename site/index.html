@@ -90,6 +90,11 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 .cli-delta{font-size:13px;font-weight:800;min-width:64px;text-align:right;color:var(--mut)}
 .cli-delta.up{color:var(--azul)} .cli-delta.down{color:var(--red)}
 .movup{color:var(--azul)} .movdown{color:var(--red)}
+.cli-badge{font-size:10px;font-weight:800;border-radius:6px;padding:2px 8px;min-width:64px;text-align:center}
+.cli-badge.warn{background:rgba(255,176,32,.16);color:var(--amber)} .cli-badge.ok{background:rgba(0,229,160,.14);color:var(--green)}
+.cli-badge.lost{background:rgba(255,84,112,.16);color:var(--red)}
+.fbanner{display:flex;gap:24px;flex-wrap:wrap;background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-bottom:18px}
+.fbanner .b{min-width:120px}.fbanner .b .v{font-size:26px;font-weight:900}.fbanner .b .l{font-size:11.5px;color:var(--mut)}
 #gate{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(900px 500px at 50% 0,rgba(0,212,255,.1),transparent 60%),var(--navy)}
 .gate-card{width:340px;max-width:90vw;background:linear-gradient(180deg,var(--card),var(--navy2));
@@ -141,10 +146,14 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
   <div class="ftabs">
     <div class="ftab on" data-v="geral">📊 Visão Geral</div>
     <div class="ftab" data-v="clientes">⭐ Clientes · Tiers</div>
+    <div class="ftab" data-v="novos">🌱 Novos (90d)</div>
+    <div class="ftab" data-v="perdidos">🔻 Perdidos / Risco</div>
   </div>
 
   <div id="app"><div class="loading">Carregando dados…</div></div>
   <div id="clientes" style="display:none"></div>
+  <div id="novos" style="display:none"></div>
+  <div id="perdidos" style="display:none"></div>
 
   <footer id="foot"></footer>
 </div>

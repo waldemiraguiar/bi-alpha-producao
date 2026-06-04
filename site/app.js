@@ -215,6 +215,8 @@ function render(D){
   app.appendChild(go);
 
   renderClientes(D);
+  renderNovos(D);
+  renderPerdidos(D);
   wireFTabs();
 }
 
@@ -266,12 +268,60 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
+  const map={geral:'app',clientes:'clientes',novos:'novos',perdidos:'perdidos'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
-    document.getElementById('app').style.display=v==='geral'?'':'none';
-    document.getElementById('clientes').style.display=v==='clientes'?'':'none';
+    Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id); if(el)el.style.display=(k===v)?'':'none';});
   });});
+}
+
+/* ===================== ABA NOVOS (maturação) ===================== */
+function novoRow(e){
+  const col=e.esfriando?C.amber:C.green;
+  return `<div class="cli-row">
+    <div class="cli-info"><div class="cli-nome">${esc(e.nome||'#'+e.cod)}</div>
+      <div class="cli-sub">${esc(e.cidade||'—')} · ${e.dias_cad}d de cadastro · acum. ${brl(e.fat)}</div></div>
+    ${spark(e.semanas||[],col)}
+    <div class="cli-badge ${e.esfriando?'warn':'ok'}">${e.esfriando?'esfriando '+e.dias_inativo+'d':'ativo'}</div></div>`;
+}
+function renderNovos(D){
+  const wrap=document.getElementById('novos'); if(!wrap) return;
+  const nv=D.novos||{recem:[],maturando:[],esfriando:0,total:0};
+  let html=`<div class="fbanner">
+    <div class="b"><div class="v">${nv.total}</div><div class="l">novos (≤90 dias)</div></div>
+    <div class="b"><div class="v" style="color:var(--cyan)">${nv.recem.length}</div><div class="l">recém (0–30d)</div></div>
+    <div class="b"><div class="v" style="color:var(--green)">${nv.maturando.length}</div><div class="l">maturando (31–90d)</div></div>
+    <div class="b"><div class="v" style="color:var(--amber)">${nv.esfriando}</div><div class="l">⚠ esfriando (14d+ sem envio)</div></div></div>`;
+  const sec=(t,lst)=>`<div class="tier-sec"><div class="tier-head"><span class="tier-badge" style="background:var(--cyan);color:var(--navy)">${t.split(' ')[0]}</span><span class="info">${t} · ${lst.length} clientes</span></div><div class="tier-grid">${lst.map(novoRow).join('')||'<div style="color:var(--mut)">—</div>'}</div></div>`;
+  html+=sec('Recém-chegados (0–30 dias)',nv.recem);
+  html+=sec('Em maturação (31–90 dias)',nv.maturando);
+  wrap.innerHTML=html;
+}
+
+/* ===================== ABA PERDIDOS / RISCO ===================== */
+function perdidoRow(e){
+  const sub = e.motivo==='sumido'
+    ? `${esc(e.cidade||'—')} · ${brl(e.mensal)}/mês · última ${e.ultima?e.ultima.split('-').reverse().slice(0,2).join('/'):'—'}`
+    : `${esc(e.cidade||'—')} · ${brl(e.mensal)}/mês · queda ${e.delta}%`;
+  const badge = e.motivo==='sumido'
+    ? `<div class="cli-badge lost">${e.dias_inativo}d sem envio</div>`
+    : `<div class="cli-delta down">▼ ${Math.abs(e.delta)}%</div>`;
+  return `<div class="cli-row">
+    <div class="cli-info"><div class="cli-nome">${esc(e.nome||'#'+e.cod)}</div><div class="cli-sub">${sub}</div></div>
+    ${spark(e.semanas||[],C.red)} ${badge}</div>`;
+}
+function renderPerdidos(D){
+  const wrap=document.getElementById('perdidos'); if(!wrap) return;
+  const pe=D.perdidos||{sumidos:[],queda:[],fat_em_risco:0};
+  let html=`<div class="fbanner">
+    <div class="b"><div class="v" style="color:var(--red)">${brlk(pe.fat_em_risco)}</div><div class="l">faturamento/ano em risco</div></div>
+    <div class="b"><div class="v">${pe.sumidos.length}</div><div class="l">sumidos (35d+ sem envio)</div></div>
+    <div class="b"><div class="v">${pe.queda.length}</div><div class="l">queda forte (≥40%)</div></div></div>`;
+  const sec=(t,lst,bg)=>`<div class="tier-sec"><div class="tier-head"><span class="tier-badge" style="background:${bg};color:#fff">!</span><span class="info">${t} · ${lst.length} clientes (relevantes ≥R$300/mês)</span></div><div class="tier-grid">${lst.map(perdidoRow).join('')||'<div style="color:var(--green)">✓ Nenhum.</div>'}</div></div>`;
+  html+=sec('🔴 Sumidos — era relevante e parou',pe.sumidos,'#E03131');
+  html+=sec('🟠 Em risco — queda forte na semana',pe.queda,'#FF8A00');
+  wrap.innerHTML=html;
 }
 
 /* ---------- helpers de tabela ---------- */

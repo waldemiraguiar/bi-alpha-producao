@@ -205,6 +205,50 @@ def build():
     D["tiers"]=[x for x in tiers if x["tier"]!="E"]+[x for x in tiers if x["tier"]=="E"][:40]
     D["meta"]["tiers_faixas"]={"AAA":10000,"A":5000,"B":2000,"C":800,"D":300,"E":0}
 
+    # ---------- NOVOS (maturação: 1ª atividade <= 90 dias) ----------
+    climap={c["cod"]:c for c in cli}
+    def semanas_de(cod):
+        wk=semmap.get(cod,{}); return [round(wk.get(k,0.0),2) for k in semchaves][::-1]  # cronológico
+    novos=[]
+    for L in life:
+        if not L["primeira"]: continue
+        dias=(hoje-L["primeira"]).days
+        if dias<0 or dias>90: continue
+        c=climap.get(L["cod"]); info=names.get(L["cod"],{})
+        fat=float((c or {}).get("fat") or 0); ult=L["ultima"]; di=(hoje-ult).days if ult else dias
+        novos.append({"cod":L["cod"],"nome":(c or {}).get("nome") or info.get("nome"),
+            "cidade":(c or {}).get("Cidade") or info.get("Cidade"),"primeira":str(L["primeira"]),
+            "dias_cad":dias,"dias_inativo":di,"fat":round(fat,2),
+            "mensal":round(fat/max(1,dias)*30,2),"semanas":semanas_de(L["cod"]),
+            "grupo":"recem" if dias<=30 else "maturando","esfriando":di>=14})
+    novos.sort(key=lambda x:-x["fat"])
+    D["novos"]={"recem":[x for x in novos if x["grupo"]=="recem"],
+                "maturando":[x for x in novos if x["grupo"]=="maturando"],
+                "esfriando":sum(1 for x in novos if x["esfriando"]),"total":len(novos)}
+    D["meta"]["novos_periodo"]=90
+
+    # ---------- PERDIDOS / RISCO (era relevante: >=R$300/mês) ----------
+    perdidos=[]
+    for L in life:
+        c=climap.get(L["cod"])
+        if not c: continue
+        fat12=float(c["fat"] or 0); mensal=fat12/12.0
+        if mensal<300: continue
+        if L["primeira"] and (hoje-L["primeira"]).days<=90: continue   # novo, não perdido
+        ult=L["ultima"]; di=(hoje-ult).days if ult else 999
+        sem=semmap.get(L["cod"],{}); semanas=[round(sem.get(k,0.0),2) for k in semchaves]
+        atual=semanas[0]; base=sum(semanas[1:5])/4.0
+        delta=round(100*(atual-base)/base,1) if base>0 else (0.0 if atual==0 else 100.0)
+        motivo="sumido" if di>=35 else ("queda" if delta<=-40 else None)
+        if not motivo: continue
+        perdidos.append({"cod":L["cod"],"nome":c["nome"],"cidade":c["Cidade"],"fat12m":round(fat12,2),
+            "mensal":round(mensal,2),"ultima":str(ult) if ult else None,"dias_inativo":di,
+            "delta":delta,"semanas":semanas[::-1],"motivo":motivo})
+    perdidos.sort(key=lambda x:-x["fat12m"])
+    D["perdidos"]={"sumidos":[x for x in perdidos if x["motivo"]=="sumido"][:60],
+                   "queda":[x for x in perdidos if x["motivo"]=="queda"][:40],
+                   "fat_em_risco":round(sum(x["fat12m"] for x in perdidos),2)}
+
     conn.close()
     return D
 
