@@ -21,6 +21,25 @@ async function toggleUrg(reg,pac,exm,isOn){
 function onContentClick(ev){const b=ev.target.closest('.urgbtn'); if(!b)return;
   toggleUrg(b.dataset.reg,b.dataset.pac,b.dataset.exm, manual.has(String(b.dataset.reg)));}
 const escA=s=>esc(s).replace(/"/g,'&quot;');
+const isPetlove=s=>/pet\s*love/i.test(String(s||''));
+// ORDEM das abas (nomes/trechos na ordem desejada; vazio = ordem padrão por gravidade).
+// EXAMES URGENTES é sempre a 1ª. Preencher conforme o usuário definir.
+const ORDER=[];
+function buildUrgentCat(list){
+  const items=[];
+  list.forEach(c=>(c.exames||[]).forEach(e=>{
+    if(e.urgente||manual.has(String(e.registro)))
+      items.push({...e,categoria:c.categoria,_urg:true,_manual:manual.has(String(e.registro))&&!e.urgente});
+  }));
+  items.sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
+  const byCat={}; items.forEach(e=>{const k=e.categoria;(byCat[k]=byCat[k]||{exame:k,em_processo:0,atrasado:0});byCat[k].em_processo++;if(e.atrasado)byCat[k].atrasado++;});
+  const atras=items.filter(e=>e.atrasado).length;
+  return {cod:'__URG__',categoria:'EXAMES URGENTES',special:true,sla:null,
+    em_processo:items.length,atrasado:atras,no_prazo:items.length-atras,
+    pct_no_prazo:items.length?Math.round(100*(items.length-atras)/items.length):100,
+    tat_medio:null,urgentes:items.length,urgentes_list:items.slice(0,10),exames:items,
+    derivacoes:Object.values(byCat).map(d=>({...d,pct:d.em_processo?Math.round(100*(d.em_processo-d.atrasado)/d.em_processo):100})).sort((a,b)=>b.em_processo-a.em_processo)};
+}
 
 async function decrypt(pwd){
   ENC=await fetch('data/producao.enc?_='+Date.now()).then(r=>{if(!r.ok)throw new Error('sem dados');return r.json();});
@@ -47,7 +66,12 @@ const slug=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a
   const s=localStorage.getItem(LS); if(s) unlock(s,true);
 })();
 
-function cats(){ return (DATA.categorias||[]).filter(x=>x.em_processo>0 || (x.derivacoes&&x.derivacoes.length)); }
+function cats(){
+  let list=(DATA.categorias||[]).filter(x=>x.em_processo>0 || (x.derivacoes&&x.derivacoes.length));
+  if(ORDER.length){ const idx=c=>{const i=ORDER.findIndex(o=>slug(c.categoria).includes(slug(o)));return i<0?99:i;};
+    list=[...list].sort((a,b)=>idx(a)-idx(b)); }
+  return [buildUrgentCat(list), ...list];   // EXAMES URGENTES sempre 1ª
+}
 function resolveLock(list){
   const h=decodeURIComponent((location.hash||'').replace('#','')).trim();
   if(!h) return null;
@@ -84,9 +108,9 @@ function buildTabs(){
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
   tabsEl.innerHTML=list.map((x,i)=>`
-    <div class="tab ${i===active?'on':''}" data-i="${i}">
-      <span class="tn">${esc(x.categoria)}</span>
-      <span class="tb ${x.atrasado>0?'late':''}">${x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo)}</span>
+    <div class="tab ${i===active?'on':''} ${x.special?'urgtab':''}" data-i="${i}">
+      <span class="tn">${x.special?'🚨 '+esc(x.categoria):esc(x.categoria)}</span>
+      <span class="tb ${x.special?'urgb':(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
       <span class="prog"></span>
     </div>`).join('')
     + `<div class="rotctl ${pinned?'pinned':''}" id="rotctl">${pinned?'⏸ fixado · clique p/ girar':'🔄 girando 15s'}</div>`;
@@ -115,35 +139,38 @@ function renderActive(){
   const list=cats(); if(!list.length){document.getElementById('content').innerHTML='<div style="padding:40px;color:var(--mut)">Sem fila no momento.</div>';return;}
   const x = locked || list[active] || list[0];
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
-  const col=ringColor(x.pct_no_prazo);
+  const special=!!x.special;
+  const col=special?C.amber:ringColor(x.pct_no_prazo);
   const ders=(x.derivacoes||[]).slice(0,18);
-  // mescla urgentes do SISTEMA (e.urgente) com os MANUAIS (marcados no app)
   const manualHere=(x.exames||[]).filter(e=>manual.has(String(e.registro))&&!e.urgente);
-  const urgCount=x.urgentes+manualHere.length;
+  const urgCount=x.urgentes+(special?0:manualHere.length);
   const urgList=[...manualHere.map(e=>({registro:e.registro,paciente:e.paciente,exame:e.exame,dias:e.dias})),...(x.urgentes_list||[])];
-  const wlItems=(x.exames||[]).map(e=>({...e,_urg:e.urgente||manual.has(String(e.registro)),_manual:manual.has(String(e.registro))&&!e.urgente}))
+  const manualCount=(x.exames||[]).filter(e=>special?e._manual:(manual.has(String(e.registro))&&!e.urgente)).length;
+  const wlItems=(x.exames||[]).map(e=>({...e,_urg:special?true:(e.urgente||manual.has(String(e.registro))),_manual:special?e._manual:(manual.has(String(e.registro))&&!e.urgente)}))
     .sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
-  const banner = (urgCount>0) ? `<div class="urgbanner"><span class="ico">🚨</span>
+  const banner = (!special && urgCount>0) ? `<div class="urgbanner"><span class="ico">🚨</span>
       <span class="ttl">${num(urgCount)} URGENTE${urgCount>1?'S':''}</span>
       <div class="ul">${urgList.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
     </div>` : '';
   document.getElementById('content').innerHTML=banner+`
     <div class="cgrid">
     <div class="hero">
-      <div class="hcat"><div class="nm">${esc(x.categoria)}</div><span class="sla">prazo de liberação: ${x.sla} ${x.sla>1?'dias':'dia'}</span></div>
+      <div class="hcat ${special?'urgcat':''}"><div class="nm">${special?'🚨 ':''}${esc(x.categoria)}</div><span class="sla">${special?'urgentes de todas as categorias':'prazo de liberação: '+x.sla+(x.sla>1?' dias':' dia')}</span></div>
       <div class="ringwrap">
         <div class="ring" style="background:conic-gradient(${col} ${x.pct_no_prazo}%, rgba(255,255,255,.07) 0)">
-          <div class="rv"><div class="big" style="color:${col}">${x.pct_no_prazo}%</div><div class="lb">no prazo</div></div>
+          <div class="rv"><div class="big" style="color:${col}">${special?num(x.em_processo):x.pct_no_prazo+'%'}</div><div class="lb">${special?'urgentes':'no prazo'}</div></div>
         </div>
       </div>
       <div class="minis">
-        <div class="mini proc"><div class="v">${num(x.em_processo)}</div><div class="l">Em processo</div></div>
+        <div class="mini proc"><div class="v">${num(x.em_processo)}</div><div class="l">${special?'Urgentes na fila':'Em processo'}</div></div>
         <div class="mini late"><div class="v" style="color:${x.atrasado>0?C.red:C.ink}">${num(x.atrasado)}</div><div class="l">Atrasados</div></div>
-        <div class="mini tat" style="grid-column:1/3"><div class="v">${x.tat_medio!=null?x.tat_medio+'<span style="font-size:16px"> dias</span>':'—'}</div><div class="l">Tempo real médio de liberação</div></div>
+        ${special
+          ? `<div class="mini" style="grid-column:1/3"><div class="v">${num(manualCount)}</div><div class="l">Marcados pela equipe (★)</div></div>`
+          : `<div class="mini tat" style="grid-column:1/3"><div class="v">${x.tat_medio!=null?x.tat_medio+'<span style="font-size:16px"> dias</span>':'—'}</div><div class="l">Tempo real médio de liberação</div></div>`}
       </div>
     </div>
     <div class="right">
-      <div class="card"><h3>Derivações <span class="tag">${ders.length} tipos · em processo / atrasado</span></h3>
+      <div class="card"><h3>${special?'Por categoria':'Derivações'} <span class="tag">${ders.length} ${special?'categorias':'tipos'} · em processo / atrasado</span></h3>
         <div class="ders">${ders.map(d=>{
           const okp=100*(d.em_processo-d.atrasado)/(d.em_processo||1), lp=100-okp;
           return `<div class="der"><div class="de">${esc(d.exame)}</div>
@@ -152,11 +179,11 @@ function renderActive(){
             <div class="bar"><div class="ok" style="width:${okp}%"></div><div class="bad" style="width:${lp}%"></div></div>
           </div>`;}).join('')||'<div style="color:var(--mut)">—</div>'}</div>
       </div>
-      <div class="card"><h3>Amostras em processo <span class="tag">nº registro · paciente · entrada</span></h3>
-        <div class="scroll">${wlItems.map(e=>`
+      <div class="card"><h3>${special?'Amostras urgentes':'Amostras em processo'} <span class="tag">${special?'categoria · ':''}nº registro · paciente · entrada</span></h3>
+        <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
-            <div><div class="pac">${esc(e.paciente)}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
-            <div class="wlact">${e.urgente?'':`<button class="urgbtn ${e._manual?'on':''}" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="${e._manual?'remover urgência':'marcar como urgente'}">${e._manual?'★':'🚨'}</button>`}<span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`).join('')||'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>'}
+            <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
+            <div class="wlact">${e.urgente?'':`<button class="urgbtn ${e._manual?'on':''}" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="${e._manual?'remover urgência':'marcar como urgente'}">${e._manual?'★':'🚨'}</button>`}<span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
         </div>
       </div>
     </div></div>`;
