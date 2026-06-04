@@ -4,3 +4,4 @@ __pycache__/
 .netlify/
 node_modules/
 site_prod/functions/package*.json
+site_prod/functions/secret.mjs

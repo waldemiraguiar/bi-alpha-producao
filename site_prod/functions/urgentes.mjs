@@ -1,14 +1,13 @@
 /* Função serverless: urgentes MANUAIS (marcados no app, sem tocar no operacional).
    Armazenados em Netlify Blobs. GET lista · POST adiciona/remove (exige senha da equipe).
-   Auto-expira em 3 dias (a amostra já deve ter saído). */
+   O segredo é injetado no deploy (secret.mjs, gerado em CI a partir do GitHub Secret). */
 import { getStore } from "@netlify/blobs";
+import { SECRET } from "./secret.mjs";
 
-const SECRET = process.env.URG_SECRET || "";
 const MAXAGE = 3 * 864e5; // 3 dias
 
 export default async (req) => {
-  const store = getStore({ name: "urgentes-manuais",
-    siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN });
+  const store = getStore("urgentes-manuais");
   const load = async () => {
     const raw = (await store.get("lista", { type: "json" })) || [];
     const cut = Date.now() - MAXAGE;
@@ -19,23 +18,20 @@ export default async (req) => {
   if (req.method === "OPTIONS") return new Response("", { headers: cors });
 
   if (req.method === "GET") {
-    const lista = await load();
-    return Response.json({ urgentes: lista }, { headers: cors });
+    return Response.json({ urgentes: await load() }, { headers: cors });
   }
 
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
-      return new Response(JSON.stringify({ erro: "nao autorizado", dbg_secLen: SECRET ? SECRET.length : 0, dbg_gotLen: body.senha ? String(body.senha).length : -1 }), { status: 401, headers: cors });
+      return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
     if (!body.registro)
       return new Response(JSON.stringify({ erro: "sem registro" }), { status: 400, headers: cors });
     let lista = await load();
     const reg = String(body.registro);
-    lista = lista.filter((x) => String(x.registro) !== reg);          // remove duplicata
-    if (body.acao !== "remove") {
-      lista.push({ registro: reg, paciente: body.paciente || "", exame: body.exame || "",
-                   por: body.por || "equipe", ts: Date.now() });
-    }
+    lista = lista.filter((x) => String(x.registro) !== reg);
+    if (body.acao !== "remove")
+      lista.push({ registro: reg, paciente: body.paciente || "", exame: body.exame || "", por: body.por || "equipe", ts: Date.now() });
     await store.setJSON("lista", lista);
     return Response.json({ ok: true, urgentes: lista }, { headers: cors });
   }

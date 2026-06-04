@@ -35,8 +35,12 @@ jobs:
           PROD_PWD:   ${{ secrets.PROD_PWD }}
         run: python build_and_encrypt.py
 
-      - name: Dependências da função (Blobs)
-        run: cd site_prod/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "blobs instalado"
+      - name: Config + dependências da função
+        env:
+          PROD_PWD: ${{ secrets.PROD_PWD }}
+        run: |
+          node -e "require('fs').writeFileSync('site_prod/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.PROD_PWD||'')+';\n')"
+          cd site_prod/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
 
       - name: Publicar no Netlify
         env:
