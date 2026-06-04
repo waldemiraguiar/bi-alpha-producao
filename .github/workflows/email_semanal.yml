@@ -1,9 +1,7 @@
 name: E-mail semanal do radar de clientes
 
 on:
-  schedule:
-    - cron: '0 11 * * 5'   # sextas 11:00 UTC (08:00 BRT)
-  workflow_dispatch:
+  workflow_dispatch:        # disparado pelo cron-job.org toda sexta 08:00 BRT (gatilho confiável)
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
