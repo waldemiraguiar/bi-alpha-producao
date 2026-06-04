@@ -26,7 +26,7 @@ export default async (req) => {
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
-      return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
+      return new Response(JSON.stringify({ erro: "nao autorizado", dbg_secLen: SECRET ? SECRET.length : 0, dbg_gotLen: body.senha ? String(body.senha).length : -1 }), { status: 401, headers: cors });
     if (!body.registro)
       return new Response(JSON.stringify({ erro: "sem registro" }), { status: 400, headers: cors });
     let lista = await load();
