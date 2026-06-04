@@ -34,29 +34,18 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
-    ref_ent = str(q1(f"SELECT MAX(DataEntrada) m FROM {RQ}") or datetime.date.today())
-    ref_sai = str(q1(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=CURDATE()") or datetime.date.today())
-
     # --- FILA EM ABERTO (DataExame NULL) por categoria x dias-em-aberto (entrada últimos 60d) ---
     abertos = q(f"""SELECT s.CodCategoria cod, DATEDIFF(CURDATE(), r.DataEntrada) dias, COUNT(*) n
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-        WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)
+        WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 10 DAY)
         GROUP BY s.CodCategoria, dias""")
     # --- DETALHE dos abertos (com paciente + nº de registro) p/ a equipe rastrear ---
     abertos_det = q(f"""SELECT s.CodCategoria cod, s.Exame exame,
         r.NumeroSequencial registro, r.Animal paciente, r.Proprietario dono,
         r.DataEntrada entrada, DATEDIFF(CURDATE(), r.DataEntrada) dias
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-        WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)
+        WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 10 DAY)
         ORDER BY dias DESC LIMIT 500""")
-    # --- SAINDO (concluídos na última data) por categoria + turnaround ---
-    saindo = q(f"""SELECT s.CodCategoria cod, DATEDIFF(s.DataExame, r.DataEntrada) tat, COUNT(*) n
-        FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-        WHERE s.DataExame=%s GROUP BY s.CodCategoria, tat""",(ref_sai,))
-    # --- ENTRANDO (última data de entrada) por categoria ---
-    entrando = q(f"""SELECT s.CodCategoria cod, COUNT(*) n
-        FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-        WHERE r.DataEntrada=%s GROUP BY s.CodCategoria""",(ref_ent,))
     # --- TAT médio dos concluídos recentes (qualidade operacional, 30d) ---
     tatmed = q(f"""SELECT s.CodCategoria cod, ROUND(AVG(DATEDIFF(s.DataExame,r.DataEntrada)),1) tat
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
@@ -68,8 +57,7 @@ def build():
     def C(cod):
         if cod not in cat:
             cat[cod]={"cod":cod,"categoria":nome(cod),"sla":sla(cod),
-                      "em_processo":0,"no_prazo":0,"atrasado":0,"entrando":0,"saindo":0,
-                      "saiu_no_prazo":0,"saiu_atrasado":0,"tat_medio":None}
+                      "em_processo":0,"no_prazo":0,"atrasado":0,"tat_medio":None}
         return cat[cod]
     for r in abertos:
         if r["cod"] in JUNK: continue
@@ -77,14 +65,6 @@ def build():
         x["em_processo"]+=n
         if dias > x["sla"]: x["atrasado"]+=n
         else: x["no_prazo"]+=n
-    for r in saindo:
-        if r["cod"] in JUNK: continue
-        x=C(r["cod"]); tat=r["tat"]; n=r["n"]; x["saindo"]+=n
-        if tat is not None and tat>x["sla"]: x["saiu_atrasado"]+=n
-        else: x["saiu_no_prazo"]+=n
-    for r in entrando:
-        if r["cod"] in JUNK: continue
-        C(r["cod"])["entrando"]+=r["n"]
     for r in tatmed:
         if r["cod"] in JUNK: continue
         C(r["cod"])["tat_medio"]=float(r["tat"]) if r["tat"] is not None else None
@@ -112,14 +92,11 @@ def build():
 
     resumo={"em_processo":sum(x["em_processo"] for x in categorias),
             "no_prazo":sum(x["no_prazo"] for x in categorias),
-            "atrasado":sum(x["atrasado"] for x in categorias),
-            "entrando":sum(x["entrando"] for x in categorias),
-            "saindo":sum(x["saindo"] for x in categorias)}
+            "atrasado":sum(x["atrasado"] for x in categorias)}
     resumo["pct_no_prazo"]=round(100*resumo["no_prazo"]/resumo["em_processo"]) if resumo["em_processo"] else 100
 
     D={"meta":{"gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
-               "ref_entrada":ref_ent,"ref_saida":ref_sai,
-               "obs":"Painel operacional — fila, prazos e fluxo. Sem valores e sem volumes acumulados."},
+               "obs":"Painel operacional — fila e prazos (últimos 10 dias). Sem valores e sem volumes."},
        "resumo":resumo,"categorias":categorias,"atrasados":atrasados}
     conn.close()
     return D

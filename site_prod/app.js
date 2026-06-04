@@ -45,7 +45,6 @@ function render(D){
     {l:'No prazo',v:num(R.no_prazo),s:'dentro do prazo',c:'gr'},
     {l:'Atrasado',v:num(R.atrasado),s:'passou do prazo',c:'rd'},
     {l:'% no prazo',v:R.pct_no_prazo+'%',s:'da fila atual',c:R.pct_no_prazo>=70?'gr':R.pct_no_prazo>=40?'am':'rd'},
-    {l:'Movimento',v:'↓'+num(R.entrando)+' ↑'+num(R.saindo),s:'entrando / saindo',c:'pp'},
   ];
   document.getElementById('kpis').innerHTML=kpis.map(k=>
     `<div class="kpi ${k.c}"><div class="l">${k.l}</div><div class="v">${k.v}</div><div class="s">${k.s}</div></div>`).join('');
@@ -58,8 +57,7 @@ function render(D){
         <div class="barwrap" style="margin-top:7px"><div class="ok" style="width:${okp}%"></div><div class="late" style="width:${latep}%"></div></div></div>
       <div class="catopen">${num(x.em_processo)}<small>em proc.</small></div>
       <div style="text-align:right"><span class="pctpill" style="background:${rgba(pc,.14)};color:${pc}">${x.pct_no_prazo}% no prazo</span>
-        <div class="catflow" style="margin-top:6px">${x.atrasado>0?`<b style="color:${C.red}">${num(x.atrasado)} atrasados</b> · `:''}TAT ${x.tat_medio!=null?x.tat_medio+'d':'—'}</div></div>
-      <div class="catflow">↓ <b>${num(x.entrando)}</b><br>↑ <b>${num(x.saindo)}</b></div>
+        <div class="catflow" style="margin-top:6px">${x.atrasado>0?`<b style="color:${C.red}">${num(x.atrasado)} atrasados</b> · `:''}TAT real ${x.tat_medio!=null?x.tat_medio+'d':'—'}</div></div>
     </div>`;
   }).join('') || '<div style="color:var(--mut);padding:20px">Sem fila no momento.</div>';
 
