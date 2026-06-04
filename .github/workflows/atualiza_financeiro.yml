@@ -1,0 +1,37 @@
+name: Atualiza Painel Financeiro
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # a cada 30 minutos (UTC; melhor esforço do GitHub)
+  workflow_dispatch:
+
+concurrency:
+  group: atualiza-financeiro
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  atualiza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: pip install --quiet pymysql cryptography
+      - name: Gerar e cifrar dados financeiros
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          BI_PWD:     ${{ secrets.BI_PWD }}
+        run: python build_financeiro.py
+      - name: Publicar no Netlify (site admin)
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: npx --yes netlify-cli@26 deploy --prod --dir=site --site=${{ secrets.FIN_SITE_ID }}
