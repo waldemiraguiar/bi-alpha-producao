@@ -45,7 +45,7 @@ def build():
     # --- DETALHE dos abertos (com paciente + nº de registro) p/ a equipe rastrear ---
     abertos_det = q(f"""SELECT s.CodCategoria cod, s.Exame exame,
         r.NumeroSequencial registro, r.Animal paciente, r.Proprietario dono,
-        DATEDIFF(CURDATE(), r.DataEntrada) dias
+        r.DataEntrada entrada, DATEDIFF(CURDATE(), r.DataEntrada) dias
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
         WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)
         ORDER BY dias DESC LIMIT 500""")
@@ -102,6 +102,7 @@ def build():
         s=sla(r["cod"]); dias=r["dias"] or 0; atras=dias>s
         item={"registro":r["registro"],"paciente":(r["paciente"] or "").strip() or "—",
               "dono":(r["dono"] or "").strip(),"exame":r["exame"],
+              "entrada":str(r["entrada"]) if r["entrada"] else None,
               "dias":dias,"sla":s,"atrasado":atras,"atraso":max(0,dias-s)}
         lst=cat[r["cod"]]["exames"]
         if len(lst)<CAP: lst.append(item)

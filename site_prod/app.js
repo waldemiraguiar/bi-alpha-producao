@@ -69,7 +69,7 @@ function render(D){
     const rows=x.exames.map(e=>`
       <div class="wl">
         <span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
-        <div class="info"><div class="pac">${esc(e.paciente)}</div><div class="exm">${esc(e.exame||'—')}${e.dono?' · '+esc(e.dono):''}</div></div>
+        <div class="info"><div class="pac">${esc(e.paciente)}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)}${e.dono?' · '+esc(e.dono):''}</div></div>
         <span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span>
       </div>`).join('');
     const resto = x.em_processo - x.exames.length;
@@ -81,5 +81,6 @@ function render(D){
     </div>`;
   }).join('') : '<div style="color:var(--green);padding:20px">✓ Sem exames em processo.</div>';
 }
+function fmtD(d){if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}`:d;}
 function rgba(h,a){const x=h.replace('#','');return`rgba(${parseInt(x.slice(0,2),16)},${parseInt(x.slice(2,4),16)},${parseInt(x.slice(4,6),16)},${a})`;}
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
