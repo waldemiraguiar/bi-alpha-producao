@@ -6,8 +6,8 @@ const LS='bi_prod_pwd', ROTATE=15000; // 15s por categoria
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let ENC=null,REFRESH=null,ROT=null,DATA=null,active=0,locked=null,pinned=false;
 const URG_API='/api/urgentes';
-let manual=new Set(), baixados=new Set();
-function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro)));}
+let manual=new Set(), baixados=new Set(), baixasInfo=[];
+function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
 async function loadManual(){ try{const r=await fetch(URG_API+'?_='+Date.now()); if(r.ok) setOverlays(await r.json());}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
@@ -25,7 +25,8 @@ function darBaixa(reg,pac,exm,isManual){
 }
 function onContentClick(ev){
   const u=ev.target.closest('.urgbtn'); if(u){toggleUrg(u.dataset.reg,u.dataset.pac,u.dataset.exm,manual.has(String(u.dataset.reg)));return;}
-  const b=ev.target.closest('.baixabtn'); if(b){darBaixa(b.dataset.reg,b.dataset.pac,b.dataset.exm,b.dataset.manual==='1');return;}}
+  const b=ev.target.closest('.baixabtn'); if(b){darBaixa(b.dataset.reg,b.dataset.pac,b.dataset.exm,b.dataset.manual==='1');return;}
+  const d=ev.target.closest('.desfazbtn'); if(d){post({tipo:'baixa',registro:d.dataset.reg,acao:'remove'},'Não foi possível desfazer.');return;}}
 const escA=s=>esc(s).replace(/"/g,'&quot;');
 const isPetlove=s=>/pet\s*love/i.test(String(s||''));
 let searchTerm='';
@@ -193,6 +194,7 @@ function renderActive(){
           ? `<div class="mini" style="grid-column:1/3"><div class="v">${x.kind==='urg'?num(manualCount):x.kind==='pet'?num((x.exames||[]).filter(e=>e._urg).length):num(Math.max(0,...(x.exames||[]).map(e=>e.dias||0)))}</div><div class="l">${K.m3l}</div></div>`
           : `<div class="mini tat" style="grid-column:1/3"><div class="v">${x.tat_medio!=null?x.tat_medio+'<span style="font-size:16px"> dias</span>':'—'}</div><div class="l">Tempo real médio de liberação</div></div>`}
       </div>
+      ${(special&&x.kind==='urg'&&baixasInfo.length)?`<div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column"><h3>↩ Baixados <span class="tag">${baixasInfo.length} · desfazer</span></h3><div class="scroll">${baixasInfo.map(b=>`<div class="wl"><span class="reg">#${esc(b.registro)}</span><div class="cli-x"><div class="pac" style="font-size:13px">${esc(b.paciente||'—')}</div><div class="exm">baixa dada pela equipe</div></div><button class="desfazbtn" data-reg="${esc(b.registro)}">↩ desfazer</button></div>`).join('')}</div></div>`:''}
     </div>
     <div class="right">
       <div class="card"><h3>${special?'Por categoria':'Derivações'} <span class="tag">${ders.length} ${special?'categorias':'tipos'} · em processo / atrasado</span></h3>
