@@ -38,4 +38,4 @@ jobs:
       - name: Publicar no Netlify
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: npx --yes netlify-cli@26 deploy --prod --dir=site_prod --site=${{ secrets.PROD_SITE_ID }}
+        run: npx --yes netlify-cli@26 deploy --prod --dir=site_prod --functions=site_prod/functions --site=${{ secrets.PROD_SITE_ID }}

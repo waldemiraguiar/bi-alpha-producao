@@ -4,7 +4,23 @@ const C={navy:'#0A1628',cyan:'#00D4FF',green:'#00E5A0',amber:'#FFB020',red:'#FF5
 const num=n=>Math.round(n||0).toLocaleString('pt-BR');
 const LS='bi_prod_pwd', ROTATE=15000; // 15s por categoria
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-let ENC=null,REFRESH=null,ROT=null,DATA=null,active=0,locked=null;
+let ENC=null,REFRESH=null,ROT=null,DATA=null,active=0,locked=null,pinned=false;
+const URG_API='/api/urgentes';
+let manual=new Set();
+async function loadManual(){
+  try{const r=await fetch(URG_API+'?_='+Date.now());
+    if(r.ok){const j=await r.json(); manual=new Set((j.urgentes||[]).map(u=>String(u.registro)));}}catch(e){}
+}
+async function toggleUrg(reg,pac,exm,isOn){
+  try{const r=await fetch(URG_API,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({registro:reg,paciente:pac,exame:exm,acao:isOn?'remove':'add',senha:window.__pwd})});
+    if(!r.ok){alert('Não foi possível marcar (autorização/conexão).');return;}
+    const j=await r.json(); manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); renderActive();
+  }catch(e){alert('Erro de conexão ao marcar urgência.');}
+}
+function onContentClick(ev){const b=ev.target.closest('.urgbtn'); if(!b)return;
+  toggleUrg(b.dataset.reg,b.dataset.pac,b.dataset.exm, manual.has(String(b.dataset.reg)));}
+const escA=s=>esc(s).replace(/"/g,'&quot;');
 
 async function decrypt(pwd){
   ENC=await fetch('data/producao.enc?_='+Date.now()).then(r=>{if(!r.ok)throw new Error('sem dados');return r.json();});
@@ -40,15 +56,20 @@ function resolveLock(list){
   return c||null;
 }
 
-function boot(D){
+async function boot(D){
   DATA=D;
+  await loadManual();
   locked=resolveLock(cats());
-  buildTabs();
-  active=0; renderActive();
-  startRotation();
+  buildTabs(); active=0; renderActive(); startRotation();
+  if(!window.__wired){window.__wired=true;
+    document.getElementById('content').addEventListener('click',onContentClick);
+    window.addEventListener('hashchange',()=>{locked=resolveLock(cats());active=0;buildTabs();renderActive();startRotation();});
+  }
   if(REFRESH)clearInterval(REFRESH);
-  REFRESH=setInterval(async()=>{try{DATA=await decrypt(window.__pwd);buildTabs();renderActive();}catch(e){console.warn(e);}},10*60*1000);
-  window.addEventListener('hashchange',()=>{locked=resolveLock(cats());active=0;buildTabs();renderActive();startRotation();});
+  REFRESH=setInterval(async()=>{try{DATA=await decrypt(window.__pwd);await loadManual();buildTabs();renderActive();}catch(e){console.warn(e);}},10*60*1000);
+  // urgentes manuais propagam entre TVs em ~45s
+  if(window.__muref)clearInterval(window.__muref);
+  window.__muref=setInterval(async()=>{const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},45000);
 }
 
 function buildTabs(){
@@ -67,17 +88,19 @@ function buildTabs(){
       <span class="tn">${esc(x.categoria)}</span>
       <span class="tb ${x.atrasado>0?'late':''}">${x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo)}</span>
       <span class="prog"></span>
-    </div>`).join('');
-  [...tabsEl.querySelectorAll('.tab')].forEach(t=>t.addEventListener('click',()=>{active=+t.dataset.i;renderActive();startRotation(true);}));
+    </div>`).join('')
+    + `<div class="rotctl ${pinned?'pinned':''}" id="rotctl">${pinned?'⏸ fixado · clique p/ girar':'🔄 girando 15s'}</div>`;
+  [...tabsEl.querySelectorAll('.tab')].forEach(t=>t.addEventListener('click',()=>{
+    active=+t.dataset.i; pinned=true; if(ROT)clearInterval(ROT); buildTabs(); renderActive();}));
+  document.getElementById('rotctl').addEventListener('click',()=>{
+    pinned=!pinned; if(pinned){if(ROT)clearInterval(ROT);} else {active=(active+1)%cats().length; startRotation();} buildTabs(); renderActive();});
 }
 
-function startRotation(manual){
+function startRotation(){
   if(ROT)clearInterval(ROT);
-  if(locked) return;
+  if(locked||pinned) return;
   const list=cats(); if(list.length<=1) return;
-  const begin=()=>{ROT=setInterval(()=>{active=(active+1)%list.length;renderActive();},ROTATE);};
-  // pausa maior após clique manual
-  if(manual){setTimeout(begin, 60000);} else begin();
+  ROT=setInterval(()=>{active=(active+1)%list.length;renderActive();},ROTATE);
   animateProg();
 }
 function animateProg(){
@@ -94,9 +117,15 @@ function renderActive(){
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
   const col=ringColor(x.pct_no_prazo);
   const ders=(x.derivacoes||[]).slice(0,18);
-  const banner = (x.urgentes>0) ? `<div class="urgbanner"><span class="ico">⚠️</span>
-      <span class="ttl">${num(x.urgentes)} URGENTE${x.urgentes>1?'S':''}</span>
-      <div class="ul">${(x.urgentes_list||[]).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
+  // mescla urgentes do SISTEMA (e.urgente) com os MANUAIS (marcados no app)
+  const manualHere=(x.exames||[]).filter(e=>manual.has(String(e.registro))&&!e.urgente);
+  const urgCount=x.urgentes+manualHere.length;
+  const urgList=[...manualHere.map(e=>({registro:e.registro,paciente:e.paciente,exame:e.exame,dias:e.dias})),...(x.urgentes_list||[])];
+  const wlItems=(x.exames||[]).map(e=>({...e,_urg:e.urgente||manual.has(String(e.registro)),_manual:manual.has(String(e.registro))&&!e.urgente}))
+    .sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
+  const banner = (urgCount>0) ? `<div class="urgbanner"><span class="ico">🚨</span>
+      <span class="ttl">${num(urgCount)} URGENTE${urgCount>1?'S':''}</span>
+      <div class="ul">${urgList.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
     </div>` : '';
   document.getElementById('content').innerHTML=banner+`
     <div class="cgrid">
@@ -124,10 +153,10 @@ function renderActive(){
           </div>`;}).join('')||'<div style="color:var(--mut)">—</div>'}</div>
       </div>
       <div class="card"><h3>Amostras em processo <span class="tag">nº registro · paciente · entrada</span></h3>
-        <div class="scroll">${(x.exames||[]).map(e=>`
+        <div class="scroll">${wlItems.map(e=>`
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
-            <div><div class="pac">${esc(e.paciente)}${e.urgente?'<span class="urg">URGENTE</span>':''}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
-            <span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div>`).join('')||'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>'}
+            <div><div class="pac">${esc(e.paciente)}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
+            <div class="wlact">${e.urgente?'':`<button class="urgbtn ${e._manual?'on':''}" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="${e._manual?'remover urgência':'marcar como urgente'}">${e._manual?'★':'🚨'}</button>`}<span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`).join('')||'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>'}
         </div>
       </div>
     </div></div>`;
