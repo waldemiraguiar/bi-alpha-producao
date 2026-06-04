@@ -145,9 +145,9 @@ function renderTab(){
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
       <div class="kgrid">
-        ${kpi("r", r.parados||0, "Parados", "≥21d sem enviar")}
-        ${kpi("r", r.queda_forte||0, "Queda forte", "≤ -40%")}
-        ${kpi("a", r.em_queda||0, "Em queda", "≤ -10% na semana")}
+        ${kpi("r", r.parados||0, "Parados", "21+ dias sem enviar")}
+        ${kpi("r", r.queda_forte||0, "Queda forte", "40%+ abaixo do normal")}
+        ${kpi("a", r.em_queda||0, "Em queda", "10%+ abaixo do normal")}
         ${kpi("a", r.novos_esfriando||0, "Novos esfriando", "pararam após início")}
       </div>
       <div class="seclabel">🔴 Fila de reativação — priorizada</div>
@@ -160,8 +160,8 @@ function renderTab(){
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "em queda")}
         <div class="kgrid" style="margin:0">
-          ${kpi("r", arr.length, "Clientes em queda", "≤ -10% vs média 4 sem")}
-          ${kpi("a", D.queda_forte? (D.queda_forte.length):0, "Quedas fortes", "≤ -40%")}
+          ${kpi("r", arr.length, "Clientes em queda", "10%+ abaixo do normal")}
+          ${kpi("a", D.queda_forte? (D.queda_forte.length):0, "Quedas fortes", "40%+ abaixo do normal")}
           ${kpi("", ativos, "Carteira ativa", "clientes com envio recente")}
         </div></div>
       <div class="seclabel">▼ Em queda — acompanhar de perto</div>
@@ -174,7 +174,7 @@ function renderTab(){
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "parados")}
         <div class="kgrid" style="margin:0">
-          ${kpi("r", arr.length, "Clientes parados", "≥21 dias sem enviar")}
+          ${kpi("r", arr.length, "Clientes parados", "21+ dias sem enviar")}
           ${kpi("a", (arr[0]&&arr[0].dias_inativo)||0, "Mais antigo", "dias sem enviar")}
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
@@ -187,7 +187,7 @@ function renderTab(){
     const esf = D.novos_esfriando||[], ok = D.novos||[];
     c.innerHTML = `
       <div class="kgrid">
-        ${kpi("a", esf.length, "Novos esfriando", "pararam ≥14d após início")}
+        ${kpi("a", esf.length, "Novos esfriando", "pararam após início")}
         ${kpi("g", ok.length, "Novos aquecendo", "engajando bem")}
       </div>
       <div class="seclabel">🌱 Novos esfriando — recuperar antes de perder</div>
@@ -202,7 +202,7 @@ function renderTab(){
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#4D9DFF", "em alta")}
         <div class="kgrid" style="margin:0">
-          ${kpi("", arr.length, "Clientes em alta", "≥ +10% vs média 4 sem")}
+          ${kpi("", arr.length, "Clientes em alta", "10%+ acima do normal")}
           ${kpi("g", ativos, "Carteira ativa", "")}
         </div></div>
       <div class="seclabel">▲ Em alta — fortalecer relacionamento</div>
