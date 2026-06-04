@@ -239,7 +239,7 @@ def build():
         sem=semmap.get(L["cod"],{}); semanas=[round(sem.get(k,0.0),2) for k in semchaves]
         atual=semanas[0]; base=sum(semanas[1:5])/4.0
         delta=round(100*(atual-base)/base,1) if base>0 else (0.0 if atual==0 else 100.0)
-        motivo="sumido" if di>=35 else ("queda" if delta<=-40 else None)
+        motivo="sumido" if di>=21 else ("queda" if delta<=-40 else None)
         if not motivo: continue
         perdidos.append({"cod":L["cod"],"nome":c["nome"],"cidade":c["Cidade"],"fat12m":round(fat12,2),
             "mensal":round(mensal,2),"ultima":str(ult) if ult else None,"dias_inativo":di,
