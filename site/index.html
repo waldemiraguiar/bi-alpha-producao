@@ -21,8 +21,7 @@ body{font-family:'Inter',sans-serif;background:
 .wrap{max-width:1320px;margin:0 auto;padding:32px 24px 80px}
 header.top{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:8px}
 .brand{display:flex;align-items:center;gap:14px}
-.logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--cyan),var(--green));
-  display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--navy);font-size:20px;box-shadow:0 6px 24px rgba(0,212,255,.35)}
+.logo{height:46px;width:auto;object-fit:contain;display:block}
 h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
 .sub{color:var(--mut);font-size:13px;font-weight:400}
 .period{text-align:right;font-size:12px;color:var(--mut)}
@@ -87,7 +86,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 <body>
 <div id="gate">
   <div class="gate-card">
-    <div class="gate-logo">α</div>
+    <img src="logo-full.png" alt="Alpha Labs" style="width:150px;margin:0 auto 14px;display:block">
     <h2>BI Alpha</h2>
     <p>Painel restrito · acesso privado</p>
     <form id="gateForm" autocomplete="off">
@@ -100,7 +99,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 <div class="wrap" id="dash" style="display:none">
   <header class="top">
     <div class="brand">
-      <div class="logo">α</div>
+      <img src="logo.png" alt="Alpha Labs" class="logo">
       <div>
         <h1>BI Alpha · Produção & Faturamento</h1>
         <div class="sub">Inteligência sobre exames e receita do laboratório</div>
