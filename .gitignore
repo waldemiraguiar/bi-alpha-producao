@@ -1,0 +1,4 @@
+data/*.enc
+__pycache__/
+*.pyc
+.netlify/

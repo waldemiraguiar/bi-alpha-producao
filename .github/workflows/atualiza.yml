@@ -1,0 +1,38 @@
+name: Atualiza Painel de Produção
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # a cada 10 minutos (UTC; melhor esforço do GitHub)
+  workflow_dispatch:           # permite rodar manualmente pelo botão "Run workflow"
+
+concurrency:
+  group: atualiza-producao
+  cancel-in-progress: false
+
+jobs:
+  atualiza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: pip install --quiet pymysql cryptography
+
+      - name: Gerar e cifrar dados de produção
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          PROD_PWD:   ${{ secrets.PROD_PWD }}
+        run: python build_and_encrypt.py
+
+      - name: Publicar no Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: npx --yes netlify-cli@26 deploy --prod --dir=site_prod --site=${{ secrets.PROD_SITE_ID }}
