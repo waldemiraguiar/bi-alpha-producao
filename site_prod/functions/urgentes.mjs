@@ -7,7 +7,8 @@ const SECRET = process.env.URG_SECRET || "";
 const MAXAGE = 3 * 864e5; // 3 dias
 
 export default async (req) => {
-  const store = getStore("urgentes-manuais");
+  const store = getStore({ name: "urgentes-manuais",
+    siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN });
   const load = async () => {
     const raw = (await store.get("lista", { type: "json" })) || [];
     const cut = Date.now() - MAXAGE;
