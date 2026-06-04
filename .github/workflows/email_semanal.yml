@@ -1,0 +1,32 @@
+name: E-mail semanal do radar de clientes
+
+on:
+  schedule:
+    - cron: '0 11 * * 1'   # segundas 11:00 UTC (08:00 BRT)
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: pip install --quiet pymysql cryptography
+      - name: Enviar radar por e-mail
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          BI_PWD:     ${{ secrets.BI_PWD }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:   ${{ secrets.EMAIL_TO }}
+        run: python email_radar.py
