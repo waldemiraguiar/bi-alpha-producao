@@ -94,7 +94,12 @@ function renderActive(){
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
   const col=ringColor(x.pct_no_prazo);
   const ders=(x.derivacoes||[]).slice(0,18);
-  document.getElementById('content').innerHTML=`
+  const banner = (x.urgentes>0) ? `<div class="urgbanner"><span class="ico">⚠️</span>
+      <span class="ttl">${num(x.urgentes)} URGENTE${x.urgentes>1?'S':''}</span>
+      <div class="ul">${(x.urgentes_list||[]).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
+    </div>` : '';
+  document.getElementById('content').innerHTML=banner+`
+    <div class="cgrid">
     <div class="hero">
       <div class="hcat"><div class="nm">${esc(x.categoria)}</div><span class="sla">prazo de liberação: ${x.sla} ${x.sla>1?'dias':'dia'}</span></div>
       <div class="ringwrap">
@@ -121,11 +126,11 @@ function renderActive(){
       <div class="card"><h3>Amostras em processo <span class="tag">nº registro · paciente · entrada</span></h3>
         <div class="scroll">${(x.exames||[]).map(e=>`
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
-            <div><div class="pac">${esc(e.paciente)}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
+            <div><div class="pac">${esc(e.paciente)}${e.urgente?'<span class="urg">URGENTE</span>':''}</div><div class="exm">${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
             <span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div>`).join('')||'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>'}
         </div>
       </div>
-    </div>`;
+    </div></div>`;
 }
 function fmtD(d){if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}`:d;}
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}

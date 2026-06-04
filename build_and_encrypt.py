@@ -41,11 +41,17 @@ def build():
         GROUP BY s.CodCategoria, s.Exame, dias""")
     # --- DETALHE dos abertos (com paciente + nº de registro) p/ a equipe rastrear ---
     abertos_det = q(f"""SELECT s.CodCategoria cod, s.Exame exame,
-        r.NumeroSequencial registro, r.Animal paciente, r.Proprietario dono,
+        r.NumeroSequencial registro, r.Animal paciente, r.Proprietario dono, s.Urgencia urg,
         r.DataEntrada entrada, DATEDIFF(CURDATE(), r.DataEntrada) dias
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
         WHERE s.DataExame IS NULL AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 10 DAY)
-        ORDER BY dias DESC LIMIT 500""")
+        ORDER BY (s.Urgencia=1) DESC, dias DESC LIMIT 500""")
+    # --- URGENTES em processo (marcados pelo operacional) — todos, p/ o alerta ---
+    urg_det = q(f"""SELECT s.CodCategoria cod, s.Exame exame, r.NumeroSequencial registro,
+        r.Animal paciente, DATEDIFF(CURDATE(), r.DataEntrada) dias
+        FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+        WHERE s.DataExame IS NULL AND s.Urgencia=1 AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 10 DAY)
+        ORDER BY dias DESC""")
     # --- TAT médio dos concluídos recentes (qualidade operacional, 30d) ---
     tatmed = q(f"""SELECT s.CodCategoria cod, ROUND(AVG(DATEDIFF(s.DataExame,r.DataEntrada)),1) tat
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
@@ -57,7 +63,8 @@ def build():
     def C(cod):
         if cod not in cat:
             cat[cod]={"cod":cod,"categoria":nome(cod),"sla":sla(cod),
-                      "em_processo":0,"no_prazo":0,"atrasado":0,"tat_medio":None,"_der":{}}
+                      "em_processo":0,"no_prazo":0,"atrasado":0,"tat_medio":None,
+                      "urgentes":0,"urgentes_list":[],"_der":{}}
         return cat[cod]
     for r in abertos:
         if r["cod"] in JUNK: continue
@@ -69,6 +76,12 @@ def build():
         d=x["_der"].setdefault(exm,{"exame":exm,"em_processo":0,"atrasado":0})
         d["em_processo"]+=n
         if late: d["atrasado"]+=n
+    for r in urg_det:
+        if r["cod"] in JUNK: continue
+        x=C(r["cod"]); x["urgentes"]+=1
+        if len(x["urgentes_list"])<10:
+            x["urgentes_list"].append({"registro":r["registro"],
+                "paciente":(r["paciente"] or "").strip() or "—","exame":r["exame"],"dias":r["dias"] or 0})
     for r in tatmed:
         if r["cod"] in JUNK: continue
         C(r["cod"])["tat_medio"]=float(r["tat"]) if r["tat"] is not None else None
@@ -93,6 +106,7 @@ def build():
         item={"registro":r["registro"],"paciente":(r["paciente"] or "").strip() or "—",
               "dono":(r["dono"] or "").strip(),"exame":r["exame"],
               "entrada":str(r["entrada"]) if r["entrada"] else None,"limite":lim,
+              "urgente":(r["urg"]==1),
               "dias":dias,"sla":s,"atrasado":atras,"atraso":max(0,dias-s)}
         lst=cat[r["cod"]]["exames"]
         if len(lst)<CAP: lst.append(item)
