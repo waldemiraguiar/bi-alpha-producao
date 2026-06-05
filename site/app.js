@@ -177,6 +177,20 @@ function render(D){
         <span class="it t-mut">Total: <span class="big" style="color:var(--ink);margin-left:6px">${brlk(totRev12)}</span></span>
       </div>`;
     rc.appendChild(inner); app.appendChild(rc);
+
+    // participação % da Pet Love no faturamento, mês a mês
+    const plRows=D.mensal.filter(x=>(x.petlove||0)>0);
+    if(plRows.length){
+      const startYm=plRows[0].ym, endYm=plRows[plRows.length-1].ym, ser=D.mensal.filter(x=>x.ym>=startYm&&x.ym<=endYm);
+      const labels=ser.map(x=>fmtYM(x.ym));
+      const pctSer=ser.map(x=>{const t=(x.fat||0)+(x.petlove||0); return t>0?+(100*(x.petlove||0)/t).toFixed(1):0;});
+      const pc=card('Participação da Pet Love no faturamento · % mês a mês','quanto a Pet Love representou do total a cada mês (desde a 1ª competência)');
+      pc.style.marginBottom='8px'; const pcv=canvasIn(pc,'chartbox sm'); app.appendChild(pc);
+      new Chart(pcv,{type:'line',data:{labels,datasets:[{label:'% Pet Love',data:pctSer,borderColor:C.petlove,
+        backgroundColor:ctx=>gradient(ctx.chart.ctx,ctx.chart.chartArea,hex2rgb(C.petlove)),fill:true,tension:.3,borderWidth:2,pointRadius:2,pointBackgroundColor:C.petlove}]},
+        options:{...baseOpts(),plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw.toFixed(1)+'% do faturamento do mês'}}},
+          scales:{x:{...noGrid,ticks:{maxTicksLimit:12}},y:{grid:GRID,ticks:{callback:v=>v+'%'}}}}});
+    }
   }
 
   /* ===================== CRESCIMENTO ===================== */
