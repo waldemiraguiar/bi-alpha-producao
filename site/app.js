@@ -161,6 +161,24 @@ function render(D){
     e.innerHTML=`<div class="ic">${d.ic}</div><div><div class="h">${d.h}</div><div class="t">${d.t}</div></div>`; ins.appendChild(e); });
   app.appendChild(ins);
 
+  /* ---------- Composição do faturamento: exames normais × Pet Love ---------- */
+  if(plL12>0){
+    const sysPct=100*k.faturamento_l12/totRev12, plPct=100*plL12/totRev12;
+    const rc=card('Composição do faturamento · últimos 12 meses','exames normais (sistema) × Pet Love (receita externa)');
+    rc.classList.add('revsplit');
+    const inner=el('div'); inner.innerHTML=`
+      <div class="split-bar">
+        <div style="width:${sysPct.toFixed(2)}%;background:${C.cyan};color:${C.navy}">${sysPct>=12?'Exames normais':''}</div>
+        <div style="width:${plPct.toFixed(2)}%;background:${C.petlove};color:#fff">${plPct>=12?'Pet Love':''}</div>
+      </div>
+      <div class="split-legend">
+        <span class="it"><span class="dot" style="background:${C.cyan}"></span><span><b>Exames normais</b> (sistema): <span class="big">${brlk(k.faturamento_l12)}</span> · <span class="pc" style="color:${C.cyan}">${sysPct.toFixed(1)}%</span></span></span>
+        <span class="it"><span class="dot" style="background:${C.petlove}"></span><span><b>Pet Love</b> (externo): <span class="big">${brlk(plL12)}</span> · <span class="pc" style="color:${C.petlove}">${plPct.toFixed(1)}%</span></span></span>
+        <span class="it t-mut">Total: <span class="big" style="color:var(--ink);margin-left:6px">${brlk(totRev12)}</span></span>
+      </div>`;
+    rc.appendChild(inner); app.appendChild(rc);
+  }
+
   /* ===================== CRESCIMENTO ===================== */
   app.appendChild(section('Crescimento & Tendência','produção e faturamento mês a mês'));
   const g1 = el('div','grid g2');
@@ -473,7 +491,7 @@ function renderProjecao(D){
   PROJ={fc,hist,anual,p26,p27,plOf,pl2026,pl2027,hasPL,plByYear:(D.petlove&&D.petlove.por_ano)||{},drawn:false};
   const pf=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
   const kHead = hasPL ? 'Projeção 2026 · TOTAL' : 'Projeção 2026 · ano cheio';
-  const kSub  = hasPL ? `sistema ${brlk(p26)} + Pet Love ${brlk(pl2026)}` : `vs 2025 ${brlk(fat2025)}`;
+  const kSub  = hasPL ? `sistema ${brlk(p26)} (${(100*p26/totP26).toFixed(0)}%) + Pet Love ${brlk(pl2026)} (${(100*pl2026/totP26).toFixed(0)}%)` : `vs 2025 ${brlk(fat2025)}`;
   wrap.innerHTML=`
   <div class="kpis" style="margin-top:18px">
     <div class="kpi"><div class="lbl">${kHead}</div><div class="krow"><div class="val">${brlk(totP26)}</div>${chip(d26tot)}</div><div class="delta">${kSub}</div></div>
