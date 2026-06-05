@@ -21,6 +21,17 @@ BI_PWD = os.environ["BI_PWD"]
 EX = "TabExameNumeroSolicitado"
 RQ = "`TabExameNumeroRequisiçao`"
 
+# ---- Receita EXTERNA Pet Love (não entra pelo HF) ----
+# O HF conta os exames Pet Love (volume correto) mas zera o VALOR. Aqui entram os R$
+# reais por competência (Contas Médicas + Recurso de Glosa). Atualizar mês a mês.
+PETLOVE = {
+    "2025-01": "REMOVIDO", "2025-02": "REMOVIDO", "2025-03": "REMOVIDO", "2025-04": "REMOVIDO",
+    "2025-05": "REMOVIDO", "2025-06": "REMOVIDO", "2025-07": "REMOVIDO", "2025-08": "REMOVIDO",
+    "2025-09": "REMOVIDO", "2025-10": "REMOVIDO", "2025-11": "REMOVIDO", "2025-12": "REMOVIDO",
+    "2026-01": "REMOVIDO", "2026-02": "REMOVIDO", "2026-03": "REMOVIDO", "2026-04": "REMOVIDO",
+    "2026-05": "REMOVIDO",
+}
+
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
@@ -43,7 +54,8 @@ def build():
     hist = q(f"SELECT DATE_FORMAT(DataExame,'%%Y-%%m') ym, COUNT(*) qtd, SUM(ValorExame) fat, "
              f"COUNT(DISTINCT CodNumeroSequencialTela) reqs FROM {EX} "
              f"WHERE DataExame>='2014-01-01' AND DataExame<='2026-12-31' GROUP BY ym ORDER BY ym")
-    D["mensal"] = [{"ym":h["ym"],"qtd":h["qtd"],"fat":round(h["fat"] or 0,2),"reqs":h["reqs"]} for h in hist if h["ym"]>='2019-01']
+    D["mensal"] = [{"ym":h["ym"],"qtd":h["qtd"],"fat":round(h["fat"] or 0,2),"reqs":h["reqs"],
+                    "petlove":round(PETLOVE.get(h["ym"],0.0),2)} for h in hist if h["ym"]>='2019-01']
     # anual + yoy / sazonalidade / totais a partir do histórico
     agg={}; tot_fat=0.0; tot_ex=0
     for h in hist:
@@ -248,6 +260,17 @@ def build():
     D["perdidos"]={"sumidos":[x for x in perdidos if x["motivo"]=="sumido"][:60],
                    "queda":[x for x in perdidos if x["motivo"]=="queda"][:40],
                    "fat_em_risco":round(sum(x["fat12m"] for x in perdidos),2)}
+
+    # ---- Pet Love: resumo da fonte externa (fluxo separado do sistema) ----
+    pl_by_year = {}
+    for ym, v in PETLOVE.items():
+        pl_by_year[ym[:4]] = round(pl_by_year.get(ym[:4], 0.0) + v, 2)
+    D["petlove"] = {"mensal": PETLOVE, "por_ano": pl_by_year,
+                    "total": round(sum(PETLOVE.values()), 2),
+                    "desde": min(PETLOVE) if PETLOVE else None,
+                    "obs": "Receita externa Pet Love: o HF conta os exames mas zera o valor. "
+                           "Valores reais (Contas Médicas + Recurso de Glosa) informados manualmente por competência. "
+                           "Some no faturamento TOTAL; não é rateada nas quebras por cliente/exame."}
 
     conn.close()
     return D

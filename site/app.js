@@ -1,5 +1,5 @@
 /* BI Alpha — dashboard de produção e faturamento */
-const C = {navy:'#0A1628',cyan:'#00D4FF',green:'#00E5A0',amber:'#FFB020',red:'#FF5470',purple:'#A78BFA',mut:'#8aa2bd'};
+const C = {navy:'#0A1628',cyan:'#00D4FF',green:'#00E5A0',amber:'#FFB020',red:'#FF5470',purple:'#A78BFA',mut:'#8aa2bd',petlove:'#FF6AD5'};
 const PAL = [C.cyan,C.green,C.amber,C.purple,C.red,'#5B8DEF','#4ECDC4','#F472B6','#FBBF24','#34D399','#818CF8','#FB7185'];
 const brl = n => 'R$ '+Math.round(n).toLocaleString('pt-BR');
 const brlk = n => n>=1e6 ? 'R$ '+(n/1e6).toFixed(2)+'M' : n>=1e3 ? 'R$ '+(n/1e3).toFixed(0)+'k' : 'R$ '+Math.round(n);
@@ -146,13 +146,18 @@ function render(D){
   /* ---------- Destaques executivos ---------- */
   const conc=D.concentracao||{}, pe=D.perdidos||{}, nvres=D.novos||{};
   const yoyTxt = f12.yoy!=null ? `<b>${f12.yoy>=0?'▲ ':'▼ '}${Math.abs(f12.yoy).toFixed(1)}%</b> vs 12m anterior` : 'janela em produção';
-  const ins = el('div','insights');
-  [
-    {ic:'💰', cls:(f12.yoy>=0?'good':'warn'), h:brlk(k.faturamento_l12), t:`Receita dos últimos 12 meses · ${yoyTxt}`},
+  const plL12 = _mmS.slice(-12).reduce((a,x)=>a+(x.petlove||0),0);
+  const totRev12 = k.faturamento_l12 + plL12;
+  const insArr=[{ic:'💰', cls:'good', h:brlk(totRev12),
+    t: plL12>0 ? `<b>Receita total 12m</b> (sistema + Pet Love) · orgânico ${yoyTxt}` : `Receita dos últimos 12 meses · ${yoyTxt}`}];
+  if(plL12>0) insArr.push({ic:'🐾', cls:'', h:brlk(plL12),
+    t:`<b>Pet Love</b> (receita externa) · exames contados pelo HF mas com valor zerado · incluído desde Jan/25`});
+  insArr.push(
     {ic:'🎯', cls:'', h:(conc.top10_pct!=null?conc.top10_pct+'%':'—'), t:`da receita vem dos <b>Top 10 clientes</b> · Top 50 = ${conc.top50_pct||'—'}%`},
     {ic:'⚠️', cls:'warn', h:brlk(pe.fat_em_risco||0), t:`/ano <b>em risco</b> · ${(pe.sumidos||[]).length} sumidos + ${(pe.queda||[]).length} em queda forte`},
-    {ic:'🌱', cls:'good', h:num(nvres.total||0), t:`novos clientes (90d) · <b>${nvres.esfriando||0} esfriando</b> precisam de atenção`},
-  ].forEach(d=>{ const e=el('div','insight'+(d.cls?' '+d.cls:''));
+    {ic:'🌱', cls:'good', h:num(nvres.total||0), t:`novos clientes (90d) · <b>${nvres.esfriando||0} esfriando</b> precisam de atenção`});
+  const ins = el('div','insights');
+  insArr.forEach(d=>{ const e=el('div','insight'+(d.cls?' '+d.cls:''));
     e.innerHTML=`<div class="ic">${d.ic}</div><div><div class="h">${d.h}</div><div class="t">${d.t}</div></div>`; ins.appendChild(e); });
   app.appendChild(ins);
 
@@ -168,12 +173,17 @@ function render(D){
   app.appendChild(g1);
 
   const mm = D.mensal;
-  new Chart(cv1,{data:{labels:mm.map(x=>fmtYM(x.ym)),datasets:[
-    {type:'bar',label:'Faturamento',data:mm.map(x=>x.fat),yAxisID:'y',
-      backgroundColor:(c)=>gradient(c.chart.ctx,c.chart.chartArea,hex2rgb(C.cyan),.85,.25),borderRadius:3,order:2},
+  const hasPL = mm.some(x=>x.petlove);
+  const cv1ds=[
+    {type:'bar',label:'Faturamento',data:mm.map(x=>x.fat),yAxisID:'y',stack:'fat',
+      backgroundColor:(c)=>gradient(c.chart.ctx,c.chart.chartArea,hex2rgb(C.cyan),.85,.25),borderRadius:hasPL?0:4,order:2},
     {type:'line',label:'Exames',data:mm.map(x=>x.qtd),yAxisID:'y1',borderColor:C.green,
       backgroundColor:C.green,tension:.35,borderWidth:2,pointRadius:0,order:1}
-  ]},options:dualOpts()});
+  ];
+  if(hasPL) cv1ds.splice(1,0,{type:'bar',label:'Pet Love (externo)',data:mm.map(x=>x.petlove||0),yAxisID:'y',stack:'fat',
+    backgroundColor:hex2rgb(C.petlove).replace('rgb','rgba').replace(')',',.9)'),borderRadius:3,order:2});
+  const o1=dualOpts(); o1.scales.x.stacked=true; o1.scales.y.stacked=true;
+  new Chart(cv1,{data:{labels:mm.map(x=>fmtYM(x.ym)),datasets:cv1ds},options:o1});
 
   const an = D.anual.filter(a=>a.ano>='2016');
   new Chart(cv2,{type:'bar',data:{labels:an.map(a=>a.ano+(a.ano==='2026'?'*':'')),datasets:[
@@ -444,29 +454,43 @@ function renderProjecao(D){
     if(byYm[ym])s+=byYm[ym][key]; else{const py='2025-'+String(mo).padStart(2,'0'); s+=(byYm[py]?byYm[py][key]:0)*(1+g);}}return s;};
   const p26=total26(gB,'fat'), q26=total26(gQtd,'qtd'), c26=total26(gC,'fat'), o26=total26(gO,'fat');
   const fat2025=S(hist.filter(x=>x.ym>='2025-01'&&x.ym<='2025-12').map(x=>x.fat));
-  const d26=fat2025>0?100*(p26-fat2025)/fat2025:null;
   const anual=(D.anual||[]).filter(a=>a.ano>='2019'&&a.ano<='2025');
   const a25=anual.find(a=>a.ano==='2025'), a22=anual.find(a=>a.ano==='2022');
   const cagr=(a25&&a22&&a22.fat>0)?Math.pow(a25.fat/a22.fat,1/3)-1:gFat;
   const p27=p26*(1+cagr);
-  PROJ={fc,hist,anual,p26,p27,drawn:false};
+  // ---- Pet Love (fonte externa): real + projeção pela run-rate (últimos 3 meses) ----
+  const PL=(D.petlove&&D.petlove.mensal)||{}; const plYms=Object.keys(PL).sort();
+  const plM=plYms.map(k=>PL[k]); const plFwd=plM.length?plM.slice(-3).reduce((a,b)=>a+b,0)/Math.min(3,plM.length):0;
+  const firstPL=plYms[0]||'2026-01'; const plOf=ym=>(PL[ym]!=null?PL[ym]:(ym>=firstPL?plFwd:0));
+  let plReal26=0, plProj26=0;
+  for(let mo=1;mo<=12;mo++){ const ym='2026-'+String(mo).padStart(2,'0'); if(PL[ym]!=null) plReal26+=PL[ym]; else plProj26+=plFwd; }
+  const pl2026=plReal26+plProj26, pl2027=plFwd*12;
+  const pl2025=plYms.filter(k=>k.startsWith('2025')).reduce((a,k)=>a+PL[k],0);
+  let pl12=0; for(let i=1;i<=12;i++) pl12+=plOf(addM(lastYm,i));
+  const hasPL=plM.length>0;
+  const totP26=p26+pl2026, totNext12=next12+pl12, tot2025=fat2025+pl2025;
+  const d26tot=tot2025>0?100*(totP26-tot2025)/tot2025:null;
+  PROJ={fc,hist,anual,p26,p27,plOf,pl2026,pl2027,hasPL,plByYear:(D.petlove&&D.petlove.por_ano)||{},drawn:false};
   const pf=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
+  const kHead = hasPL ? 'Projeção 2026 · TOTAL' : 'Projeção 2026 · ano cheio';
+  const kSub  = hasPL ? `sistema ${brlk(p26)} + Pet Love ${brlk(pl2026)}` : `vs 2025 ${brlk(fat2025)}`;
   wrap.innerHTML=`
   <div class="kpis" style="margin-top:18px">
-    <div class="kpi"><div class="lbl">Projeção 2026 · ano cheio</div><div class="krow"><div class="val">${brlk(p26)}</div>${chip(d26)}</div><div class="delta">vs 2025 ${brlk(fat2025)} · realizado + projetado</div></div>
-    <div class="kpi g"><div class="lbl">Próximos 12 meses</div><div class="krow"><div class="val">${brlk(next12)}</div></div><div class="delta">ritmo atual projetado mês a mês</div></div>
-    <div class="kpi a"><div class="lbl">Crescimento base aplicado</div><div class="krow"><div class="val">${pf(gFat)}</div></div><div class="delta">faturamento 12m vs 12m anteriores</div></div>
+    <div class="kpi"><div class="lbl">${kHead}</div><div class="krow"><div class="val">${brlk(totP26)}</div>${chip(d26tot)}</div><div class="delta">${kSub}</div></div>
+    <div class="kpi g"><div class="lbl">Próximos 12 meses</div><div class="krow"><div class="val">${brlk(totNext12)}</div></div><div class="delta">${hasPL?'sistema + Pet Love (run-rate)':'ritmo atual projetado'}</div></div>
+    <div class="kpi a"><div class="lbl">Crescimento orgânico</div><div class="krow"><div class="val">${pf(gFat)}</div></div><div class="delta">sistema · 12m vs 12m (sem Pet Love)</div></div>
+    ${hasPL?`<div class="kpi" style="--pl"><div class="lbl">🐾 Pet Love 2026</div><div class="krow"><div class="val">${brlk(pl2026)}</div></div><div class="delta">real ${brlk(plReal26)} + proj ${brlk(plProj26)}</div></div>`:''}
     <div class="kpi p"><div class="lbl">Exames projetados 2026</div><div class="krow"><div class="val">${num(q26)}</div>${chip(gQtd*100)}</div><div class="delta">volume · vs 2025</div></div>
   </div>
   <div class="note-fin" style="border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.06);color:#bfe9ff">
-    <b>ℹ Como é calculado:</b> cada mês futuro = o <b>mesmo mês do ano anterior</b> (sua sazonalidade real) × o <b>crescimento atual</b> (${pf(gFat)}). Cenários: <b>conservador</b> (×0,6), <b>base</b> e <b>otimista</b> (×1,4). É projeção estatística do seu track record, não garantia — recalcula a cada atualização.
+    <b>ℹ Como é calculado:</b> <b>sistema</b> — cada mês futuro = o mesmo mês do ano anterior (sazonalidade real) × o crescimento orgânico (${pf(gFat)}); cenários conservador (×0,6) / base / otimista (×1,4).${hasPL?` <b>Pet Love</b> (externa, fora do HF) — real até ${plYms[plYms.length-1]||'—'}, depois projetada pela <b>run-rate</b> (~${brlk(plFwd)}/mês, média dos últimos 3 meses, pois 2025 foi rampa de contrato).`:''} Projeção do track record, não garantia.
   </div>`;
-  wrap.appendChild(section('Projeção mensal','histórico + próximos 12 meses · banda conservador↔otimista'));
+  wrap.appendChild(section('Projeção mensal',`histórico + próximos 12 meses · banda conservador↔otimista${hasPL?' · linha rosa = com Pet Love':''}`));
   const c1=card('Faturamento mensal — realizado e projetado',''); const b1=el('div','chartbox lg'); b1.innerHTML='<canvas id="projMensal"></canvas>'; c1.appendChild(b1); wrap.appendChild(c1);
   wrap.appendChild(section('Projeção anual','realizado + 2026 / 2027 projetados'));
   const g2=el('div','grid g2');
-  const c2=card('Faturamento anual',`CAGR 3 anos: ${pf(cagr)} ao ano`); const b2=el('div','chartbox lg'); b2.innerHTML='<canvas id="projAnual"></canvas>'; c2.appendChild(b2); g2.appendChild(c2);
-  const c3=card('Cenários para 2026','faturamento do ano cheio'); c3.appendChild(scenBox(c26,p26,o26,fat2025)); g2.appendChild(c3);
+  const c2=card('Faturamento anual',`CAGR sistema 3 anos: ${pf(cagr)} ao ano${hasPL?' · Pet Love empilhada':''}`); const b2=el('div','chartbox lg'); b2.innerHTML='<canvas id="projAnual"></canvas>'; c2.appendChild(b2); g2.appendChild(c2);
+  const c3=card('Cenários para 2026',hasPL?'total (sistema + Pet Love)':'faturamento do ano cheio'); c3.appendChild(scenBox(c26+pl2026,p26+pl2026,o26+pl2026,tot2025)); g2.appendChild(c3);
   wrap.appendChild(g2);
 }
 function scenBox(c,b,o,base){
@@ -477,30 +501,38 @@ function scenBox(c,b,o,base){
 }
 function drawProjCharts(){
   if(!PROJ||PROJ.drawn||typeof Chart==='undefined') return; PROJ.drawn=true;
-  const {fc,hist,anual,p26,p27}=PROJ;
+  const {fc,hist,anual,p26,p27,plOf,pl2026,pl2027,hasPL,plByYear}=PROJ;
   const tail=hist.slice(-18), N=tail.length;
   const labels=tail.map(x=>fmtYM(x.ym)).concat(fc.map(x=>fmtYM(x.ym)));
+  const ymsAll=tail.map(x=>x.ym).concat(fc.map(x=>x.ym));
   const actual=tail.map(x=>x.fat).concat(Array(12).fill(null));
   const pad=Array(N-1).fill(null), lastF=tail[N-1].fat;
   const mk=key=>pad.concat([lastF], fc.map(x=>x[key]));
-  const cv=document.getElementById('projMensal');
-  if(cv) new Chart(cv,{data:{labels,datasets:[
+  const sysCont=tail.map(x=>x.fat).concat(fc.map(x=>x.base));
+  const datasets=[
     {type:'line',label:'Realizado',data:actual,borderColor:C.cyan,backgroundColor:ctx=>gradient(ctx.chart.ctx,ctx.chart.chartArea,hex2rgb(C.cyan)),fill:true,tension:.3,borderWidth:2.6,pointRadius:0},
     {type:'line',label:'cons',data:mk('cons'),borderColor:'rgba(0,0,0,0)',pointRadius:0,tension:.3,fill:false},
     {type:'line',label:'otim',data:mk('otim'),borderColor:'rgba(0,0,0,0)',pointRadius:0,tension:.3,backgroundColor:'rgba(0,212,255,.12)',fill:'-1'},
     {type:'line',label:'Projeção (base)',data:mk('base'),borderColor:C.cyan,borderDash:[6,4],pointRadius:0,tension:.3,borderWidth:2,fill:false},
-  ]},options:{...baseOpts(),interaction:{mode:'index',intersect:false},
-    plugins:{legend:{labels:{boxWidth:12,padding:12,filter:i=>i.text==='Realizado'||i.text==='Projeção (base)'}},
+  ];
+  if(hasPL) datasets.push({type:'line',label:'Com Pet Love',data:sysCont.map((v,i)=>v+(plOf(ymsAll[i])||0)),borderColor:C.petlove,borderWidth:2,pointRadius:0,tension:.3,fill:false});
+  const cv=document.getElementById('projMensal');
+  if(cv) new Chart(cv,{data:{labels,datasets},options:{...baseOpts(),interaction:{mode:'index',intersect:false},
+    plugins:{legend:{labels:{boxWidth:12,padding:12,filter:i=>['Realizado','Projeção (base)','Com Pet Love'].includes(i.text)}},
       tooltip:{...bt(),filter:c=>c.dataset.label!=='cons'&&c.dataset.label!=='otim'&&c.raw!=null,callbacks:{label:c=>' '+c.dataset.label+': '+brl(c.raw)}}},
     scales:{x:{...noGrid,ticks:{maxTicksLimit:12}},y:{grid:GRID,ticks:{callback:v=>brlk(v)}}}}});
+  // anual empilhado: sistema + Pet Love
   const aLabels=anual.map(a=>a.ano).concat(['2026 *','2027 *']);
-  const aData=anual.map(a=>a.fat).concat([p26,p27]);
-  const cyR=hex2rgb(C.cyan).replace('rgb','rgba').replace(')',',.85)');
-  const amR=hex2rgb(C.amber).replace('rgb','rgba').replace(')',',.85)'), amR2=hex2rgb(C.amber).replace('rgb','rgba').replace(')',',.5)');
-  const aCol=anual.map(()=>cyR).concat([amR,amR2]);
+  const sysData=anual.map(a=>a.fat).concat([p26,p27]);
+  const cyR=hex2rgb(C.cyan).replace('rgb','rgba').replace(')',',.85)'), amR=hex2rgb(C.amber).replace('rgb','rgba').replace(')',',.85)');
+  const sysCol=anual.map(()=>cyR).concat([amR,amR]);
+  const aDs=[{label:'Sistema',data:sysData,backgroundColor:sysCol,borderRadius:hasPL?0:5,stack:'a'}];
+  if(hasPL){ const plData=anual.map(a=>plByYear[a.ano]||0).concat([pl2026,pl2027]);
+    aDs.push({label:'Pet Love',data:plData,backgroundColor:hex2rgb(C.petlove).replace('rgb','rgba').replace(')',',.85)'),borderRadius:5,stack:'a'}); }
   const cv2=document.getElementById('projAnual');
-  if(cv2) new Chart(cv2,{type:'bar',data:{labels:aLabels,datasets:[{data:aData,backgroundColor:aCol,borderRadius:5}]},
-    options:{...baseOpts(),plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.raw)+(c.dataIndex>=anual.length?' · projeção':'')}}},scales:{x:noGrid,y:{grid:GRID,ticks:{callback:v=>brlk(v)}}}}});
+  if(cv2) new Chart(cv2,{type:'bar',data:{labels:aLabels,datasets:aDs},
+    options:{...baseOpts(),plugins:{legend:{display:hasPL,labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+brl(c.raw)+(c.dataIndex>=anual.length?' (proj)':'')}}},
+      scales:{x:{...noGrid,stacked:true},y:{grid:GRID,stacked:true,ticks:{callback:v=>brlk(v)}}}}});
 }
 
 /* ---------- helpers de tabela ---------- */
