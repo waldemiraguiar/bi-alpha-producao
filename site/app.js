@@ -28,6 +28,30 @@ function section(title, sub){ const s=el('div','sec-title'); s.innerHTML=`<span 
 function card(title, cap){ const c=el('div','card'); if(title)c.appendChild(el('h3',null,title)); if(cap)c.appendChild(el('div','cap',cap)); return c; }
 function canvasIn(parent, h='chartbox'){ const b=el('div',h); const cv=document.createElement('canvas'); b.appendChild(cv); parent.appendChild(b); return cv; }
 
+/* --- KPIs executivos: variação 12-sobre-12, chip e sparkline --- */
+function last12prev12(arr, key){
+  const v=(arr||[]).map(x=>x[key]||0), n=v.length;
+  const cur=v.slice(Math.max(0,n-12)).reduce((a,b)=>a+b,0);
+  const pv=v.slice(Math.max(0,n-24),Math.max(0,n-12)).reduce((a,b)=>a+b,0);
+  return {yoy: pv>0 ? 100*(cur-pv)/pv : null, spark: v.slice(Math.max(0,n-12))};
+}
+function chip(yoy){
+  if(yoy==null) return '';
+  return `<span class="chip ${yoy>=0?'up':'down'}">${yoy>=0?'▲':'▼'} ${Math.abs(yoy).toFixed(1)}%</span>`;
+}
+let _sid=0;
+function kspark(vals, color){
+  if(!vals || vals.length<2) return '';
+  const w=100,h=30,mx=Math.max(...vals),mn=Math.min(...vals,0),rng=(mx-mn)||1,n=vals.length;
+  const pts=vals.map((v,i)=>`${(i/(n-1)*w).toFixed(1)},${(h-2-((v-mn)/rng)*(h-4)).toFixed(1)}`).join(' ');
+  const id='ks'+(++_sid);
+  return `<div class="kspark"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${color}" stop-opacity=".4"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    <polygon points="0,${h} ${pts} ${w},${h}" fill="url(#${id})"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg></div>`;
+}
+
 /* ---------- Portão de acesso (AES-256-GCM + PBKDF2 via Web Crypto) ---------- */
 const b64dec = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
 let ENC = null; // envelope cifrado, carregado sob demanda
@@ -72,18 +96,40 @@ function render(D){
 
   const app = document.getElementById('app'); app.innerHTML='';
 
-  /* ---------- KPIs ---------- */
+  /* ---------- KPIs executivos ---------- */
+  const f12 = last12prev12(D.mensal,'fat'), e12 = last12prev12(D.mensal,'qtd');
+  // tira o mês corrente (parcial) das sparklines de 12m pra não mostrar um falso "abismo"
+  const _partial = D.mensal && D.mensal.length && D.mensal[D.mensal.length-1].ym===(m.max_data||'').slice(0,7);
+  const _mmS = _partial ? D.mensal.slice(0,-1) : (D.mensal||[]);
+  f12.spark=_mmS.slice(-12).map(x=>x.fat); e12.spark=_mmS.slice(-12).map(x=>x.qtd);
+  const an2025 = (D.anual||[]).find(a=>a.ano==='2025')||{};
+  const spark2025 = (D.mensal||[]).filter(x=>x.ym>='2025-01'&&x.ym<='2025-12').map(x=>x.fat);
   const kpis = el('div','kpis');
   const kdata = [
-    ['Faturamento · últ. 12m', brlk(k.faturamento_l12), `${num(k.exames_l12)} exames`, ''],
-    ['Faturamento 2025', brlk(k.faturamento_2025), `${num(k.exames_2025)} exames`, 'g'],
-    ['Ticket médio / exame', brl(k.ticket_medio_exame), `${k.exames_por_req_l12} exames por requisição`, ''],
-    ['Ticket médio / requisição', brl(k.ticket_medio_req_l12), `${num(k.requisicoes_l12)} requisições · 12m`, 'g'],
-    ['Clientes ativos · 12m', num(k.clientes_ativos_l12), `de ${num(k.clientes_total)} cadastrados`, 'p'],
-    ['Faturamento histórico', brlk(k.total_faturamento), `desde 2014 · ${num(k.total_exames)} exames`, 'a'],
+    {l:'Faturamento · últ. 12m', v:brlk(k.faturamento_l12), d:`${num(k.exames_l12)} exames · vs 12m anterior`, c:'',  yoy:f12.yoy, spark:f12.spark, col:C.cyan},
+    {l:'Exames · últ. 12m',      v:num(k.exames_l12),       d:`${k.exames_por_req_l12} por requisição · vs 12m anterior`, c:'g', yoy:e12.yoy, spark:e12.spark, col:C.green},
+    {l:'Faturamento 2025',       v:brlk(k.faturamento_2025),d:`${num(k.exames_2025)} exames · vs 2024`, c:'',  yoy:an2025.yoy_fat, spark:spark2025, col:C.cyan},
+    {l:'Ticket médio / exame',   v:brl(k.ticket_medio_exame), d:`requisição: ${brl(k.ticket_medio_req_l12)} · 12m`, c:'a'},
+    {l:'Clientes ativos · 12m',  v:num(k.clientes_ativos_l12), d:`de ${num(k.clientes_total)} cadastrados`, c:'p'},
+    {l:'Faturamento histórico',  v:brlk(k.total_faturamento), d:`desde 2014 · ${num(k.total_exames)} exames`, c:'a'},
   ];
-  kdata.forEach(([l,v,d,c])=>{ const e=el('div','kpi'+(c?' '+c:'')); e.innerHTML=`<div class="lbl">${l}</div><div class="val">${v}</div><div class="delta">${d}</div>`; kpis.appendChild(e); });
+  kdata.forEach(d=>{ const e=el('div','kpi'+(d.c?' '+d.c:''));
+    e.innerHTML=`<div class="lbl">${d.l}</div><div class="krow"><div class="val">${d.v}</div>${chip(d.yoy)}</div><div class="delta">${d.d}</div>${d.spark?kspark(d.spark,d.col):''}`;
+    kpis.appendChild(e); });
   app.appendChild(kpis);
+
+  /* ---------- Destaques executivos ---------- */
+  const conc=D.concentracao||{}, pe=D.perdidos||{}, nvres=D.novos||{};
+  const yoyTxt = f12.yoy!=null ? `<b>${f12.yoy>=0?'▲ ':'▼ '}${Math.abs(f12.yoy).toFixed(1)}%</b> vs 12m anterior` : 'janela em produção';
+  const ins = el('div','insights');
+  [
+    {ic:'💰', cls:(f12.yoy>=0?'good':'warn'), h:brlk(k.faturamento_l12), t:`Receita dos últimos 12 meses · ${yoyTxt}`},
+    {ic:'🎯', cls:'', h:(conc.top10_pct!=null?conc.top10_pct+'%':'—'), t:`da receita vem dos <b>Top 10 clientes</b> · Top 50 = ${conc.top50_pct||'—'}%`},
+    {ic:'⚠️', cls:'warn', h:brlk(pe.fat_em_risco||0), t:`/ano <b>em risco</b> · ${(pe.sumidos||[]).length} sumidos + ${(pe.queda||[]).length} em queda forte`},
+    {ic:'🌱', cls:'good', h:num(nvres.total||0), t:`novos clientes (90d) · <b>${nvres.esfriando||0} esfriando</b> precisam de atenção`},
+  ].forEach(d=>{ const e=el('div','insight'+(d.cls?' '+d.cls:''));
+    e.innerHTML=`<div class="ic">${d.ic}</div><div><div class="h">${d.h}</div><div class="t">${d.t}</div></div>`; ins.appendChild(e); });
+  app.appendChild(ins);
 
   /* ===================== CRESCIMENTO ===================== */
   app.appendChild(section('Crescimento & Tendência','produção e faturamento mês a mês'));
