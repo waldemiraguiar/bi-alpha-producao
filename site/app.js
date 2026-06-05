@@ -11,6 +11,26 @@ const fmtYM = ym => { const [y,m]=ym.split('-'); return MES[+m]+'/'+y.slice(2); 
 Chart.defaults.color = C.mut;
 Chart.defaults.font.family = 'Inter';
 Chart.defaults.font.size = 11;
+/* --- polimento premium global --- */
+Chart.defaults.elements.bar.borderRadius = 6;
+Chart.defaults.elements.bar.borderSkipped = false;
+Chart.defaults.elements.point.radius = 0;
+Chart.defaults.elements.point.hoverRadius = 5;
+Chart.defaults.elements.point.hitRadius = 8;
+Chart.defaults.elements.line.tension = .35;
+Chart.defaults.elements.line.borderWidth = 2.2;
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
+Chart.defaults.plugins.legend.labels.boxWidth = 8;
+Chart.defaults.plugins.legend.labels.padding = 14;
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(10,22,40,.96)';
+Chart.defaults.plugins.tooltip.borderColor = 'rgba(0,212,255,.3)';
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.plugins.tooltip.cornerRadius = 9;
+Chart.defaults.plugins.tooltip.padding = 11;
+Chart.defaults.plugins.tooltip.titleColor = '#fff';
+Chart.defaults.plugins.tooltip.usePointStyle = true;
+Chart.defaults.plugins.tooltip.boxPadding = 4;
 const GRID = {color:'rgba(255,255,255,.05)'};
 const noGrid = {grid:{display:false}};
 
@@ -97,20 +117,25 @@ function render(D){
   const app = document.getElementById('app'); app.innerHTML='';
 
   /* ---------- KPIs executivos ---------- */
-  const f12 = last12prev12(D.mensal,'fat'), e12 = last12prev12(D.mensal,'qtd');
-  // tira o mês corrente (parcial) das sparklines de 12m pra não mostrar um falso "abismo"
+  // usa meses COMPLETOS (exclui o mês corrente parcial) — bate com a janela do KPI e com a Projeção
   const _partial = D.mensal && D.mensal.length && D.mensal[D.mensal.length-1].ym===(m.max_data||'').slice(0,7);
   const _mmS = _partial ? D.mensal.slice(0,-1) : (D.mensal||[]);
-  f12.spark=_mmS.slice(-12).map(x=>x.fat); e12.spark=_mmS.slice(-12).map(x=>x.qtd);
+  const f12 = last12prev12(_mmS,'fat'), e12 = last12prev12(_mmS,'qtd');
   const an2025 = (D.anual||[]).find(a=>a.ano==='2025')||{};
   const spark2025 = (D.mensal||[]).filter(x=>x.ym>='2025-01'&&x.ym<='2025-12').map(x=>x.fat);
+  // ticket médio 12m + variação vs 12m anteriores (mesma janela de meses completos)
+  const _s12=k2=>_mmS.slice(-12).reduce((a,x)=>a+x[k2],0), _p12=k2=>_mmS.slice(-24,-12).reduce((a,x)=>a+x[k2],0);
+  const tick12=_s12('qtd')?_s12('fat')/_s12('qtd'):k.ticket_medio_exame;
+  const tickPrev=_p12('qtd')?_p12('fat')/_p12('qtd'):null;
+  const tickYoY=tickPrev?100*(tick12-tickPrev)/tickPrev:null;
+  const novosTrend=(D.novos_clientes||[]).slice(-12).map(x=>x.novos);
   const kpis = el('div','kpis');
   const kdata = [
     {l:'Faturamento · últ. 12m', v:brlk(k.faturamento_l12), d:`${num(k.exames_l12)} exames · vs 12m anterior`, c:'',  yoy:f12.yoy, spark:f12.spark, col:C.cyan},
     {l:'Exames · últ. 12m',      v:num(k.exames_l12),       d:`${k.exames_por_req_l12} por requisição · vs 12m anterior`, c:'g', yoy:e12.yoy, spark:e12.spark, col:C.green},
     {l:'Faturamento 2025',       v:brlk(k.faturamento_2025),d:`${num(k.exames_2025)} exames · vs 2024`, c:'',  yoy:an2025.yoy_fat, spark:spark2025, col:C.cyan},
-    {l:'Ticket médio / exame',   v:brl(k.ticket_medio_exame), d:`requisição: ${brl(k.ticket_medio_req_l12)} · 12m`, c:'a'},
-    {l:'Clientes ativos · 12m',  v:num(k.clientes_ativos_l12), d:`de ${num(k.clientes_total)} cadastrados`, c:'p'},
+    {l:'Ticket médio / exame',   v:brl(tick12),             d:`requisição: ${brl(k.ticket_medio_req_l12)} · vs 12m anterior`, c:'a', yoy:tickYoY},
+    {l:'Clientes ativos · 12m',  v:num(k.clientes_ativos_l12), d:`de ${num(k.clientes_total)} cadastrados`, c:'p', spark:novosTrend, col:C.purple},
     {l:'Faturamento histórico',  v:brlk(k.total_faturamento), d:`desde 2014 · ${num(k.total_exames)} exames`, c:'a'},
   ];
   kdata.forEach(d=>{ const e=el('div','kpi'+(d.c?' '+d.c:''));
@@ -241,6 +266,9 @@ function render(D){
 
   /* ===================== GEOGRAFIA ===================== */
   app.appendChild(section('Geografia & Rota','onde está a receita · últ. 12m'));
+  const mapCard=card('Mapa — faturamento por município (RJ)','intensidade = faturamento dos últimos 12 meses');
+  const mapBox=el('div','chartbox lg'); mapBox.innerHTML='<canvas id="mapaRJ"></canvas>'; mapCard.appendChild(mapBox);
+  app.appendChild(mapCard); renderMapaRJ(D);
   const gg=el('div','grid g2');
   const g1c=card('Faturamento por UF',''); const cvuf=canvasIn(g1c,'chartbox sm'); gg.appendChild(g1c);
   const gtc=card('Top 20 cidades','Faturamento e clientes'); gtc.appendChild(tblCidades(D.cidades)); gg.appendChild(gtc);
@@ -260,10 +288,33 @@ function render(D){
   </div>`;
   app.appendChild(go);
 
+  window.__D = D;
+  renderProjecao(D);
   renderClientes(D);
   renderNovos(D);
   renderPerdidos(D);
   wireFTabs();
+  wireTools();
+}
+
+/* ---------- Modo TV (rotação) + Resumo PDF ---------- */
+function wireTools(){
+  const tv=document.getElementById('btnTV'), pr=document.getElementById('btnPrint');
+  if(pr && !pr.__w){ pr.__w=1; pr.addEventListener('click',()=>{
+    const g=[...document.querySelectorAll('.ftab')].find(x=>x.dataset.v==='geral');
+    if(g && !g.classList.contains('on')) g.click();
+    setTimeout(()=>window.print(), 250);
+  });}
+  if(tv && !tv.__w){ tv.__w=1; let timer=null, i=0;
+    const order=['geral','projecao','clientes','novos','perdidos'];
+    const tick=()=>{ const v=order[i%order.length]; i++;
+      const t=[...document.querySelectorAll('.ftab')].find(x=>x.dataset.v===v); if(t)t.click();
+      window.scrollTo({top:0,behavior:'smooth'}); };
+    tv.addEventListener('click',()=>{
+      if(timer){ clearInterval(timer); timer=null; tv.classList.remove('on'); tv.textContent='📺 Modo TV'; return; }
+      tv.classList.add('on'); tv.textContent='⏹ Parar TV'; i=0; tick(); timer=setInterval(tick, 12000);
+    });
+  }
 }
 
 /* ===================== ABA CLIENTES · TIERS ===================== */
@@ -314,11 +365,12 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',clientes:'clientes',novos:'novos',perdidos:'perdidos'};
+  const map={geral:'app',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
     Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id); if(el)el.style.display=(k===v)?'':'none';});
+    if(v==='projecao') drawProjCharts();
   });});
 }
 
@@ -368,6 +420,87 @@ function renderPerdidos(D){
   html+=sec('🔴 Sumidos — era relevante e parou',pe.sumidos,'#E03131');
   html+=sec('🟠 Em risco — queda forte na semana',pe.queda,'#FF8A00');
   wrap.innerHTML=html;
+}
+
+/* ===================== ABA PROJEÇÃO ===================== */
+let PROJ=null;
+function renderProjecao(D){
+  const wrap=document.getElementById('projecao'); if(!wrap) return;
+  const mensal=D.mensal||[], maxData=(D.meta&&D.meta.max_data)||'';
+  if(mensal.length<25){ wrap.innerHTML='<div class="card" style="margin-top:18px;color:var(--mut)">Histórico insuficiente para projeção.</div>'; return; }
+  const partial = mensal[mensal.length-1].ym===maxData.slice(0,7);
+  const hist = partial ? mensal.slice(0,-1) : mensal.slice();
+  const byYm={}; hist.forEach(x=>byYm[x.ym]={fat:x.fat,qtd:x.qtd});
+  const fv=hist.map(x=>x.fat), qv=hist.map(x=>x.qtd), S=a=>a.reduce((x,y)=>x+y,0);
+  const gFat=S(fv.slice(-12))/S(fv.slice(-24,-12))-1, gQtd=S(qv.slice(-12))/S(qv.slice(-24,-12))-1;
+  const gB=gFat, gC=gFat*0.6, gO=gFat*1.4;
+  const addM=(ym,k)=>{const [y,m]=ym.split('-').map(Number); const t=y*12+(m-1)+k; return Math.floor(t/12)+'-'+String(t%12+1).padStart(2,'0');};
+  const lastYm=hist[hist.length-1].ym, fc=[];
+  for(let i=1;i<=12;i++){ const ym=addM(lastYm,i), py=addM(ym,-12);
+    const bf=byYm[py]?byYm[py].fat:fv[fv.length-1], bq=byYm[py]?byYm[py].qtd:qv[qv.length-1];
+    fc.push({ym,base:bf*(1+gB),cons:bf*(1+gC),otim:bf*(1+gO),qtd:bq*(1+gQtd)}); }
+  const next12=S(fc.map(x=>x.base));
+  const total26=(g,key)=>{let s=0;for(let mo=1;mo<=12;mo++){const ym='2026-'+String(mo).padStart(2,'0');
+    if(byYm[ym])s+=byYm[ym][key]; else{const py='2025-'+String(mo).padStart(2,'0'); s+=(byYm[py]?byYm[py][key]:0)*(1+g);}}return s;};
+  const p26=total26(gB,'fat'), q26=total26(gQtd,'qtd'), c26=total26(gC,'fat'), o26=total26(gO,'fat');
+  const fat2025=S(hist.filter(x=>x.ym>='2025-01'&&x.ym<='2025-12').map(x=>x.fat));
+  const d26=fat2025>0?100*(p26-fat2025)/fat2025:null;
+  const anual=(D.anual||[]).filter(a=>a.ano>='2019'&&a.ano<='2025');
+  const a25=anual.find(a=>a.ano==='2025'), a22=anual.find(a=>a.ano==='2022');
+  const cagr=(a25&&a22&&a22.fat>0)?Math.pow(a25.fat/a22.fat,1/3)-1:gFat;
+  const p27=p26*(1+cagr);
+  PROJ={fc,hist,anual,p26,p27,drawn:false};
+  const pf=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
+  wrap.innerHTML=`
+  <div class="kpis" style="margin-top:18px">
+    <div class="kpi"><div class="lbl">Projeção 2026 · ano cheio</div><div class="krow"><div class="val">${brlk(p26)}</div>${chip(d26)}</div><div class="delta">vs 2025 ${brlk(fat2025)} · realizado + projetado</div></div>
+    <div class="kpi g"><div class="lbl">Próximos 12 meses</div><div class="krow"><div class="val">${brlk(next12)}</div></div><div class="delta">ritmo atual projetado mês a mês</div></div>
+    <div class="kpi a"><div class="lbl">Crescimento base aplicado</div><div class="krow"><div class="val">${pf(gFat)}</div></div><div class="delta">faturamento 12m vs 12m anteriores</div></div>
+    <div class="kpi p"><div class="lbl">Exames projetados 2026</div><div class="krow"><div class="val">${num(q26)}</div>${chip(gQtd*100)}</div><div class="delta">volume · vs 2025</div></div>
+  </div>
+  <div class="note-fin" style="border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.06);color:#bfe9ff">
+    <b>ℹ Como é calculado:</b> cada mês futuro = o <b>mesmo mês do ano anterior</b> (sua sazonalidade real) × o <b>crescimento atual</b> (${pf(gFat)}). Cenários: <b>conservador</b> (×0,6), <b>base</b> e <b>otimista</b> (×1,4). É projeção estatística do seu track record, não garantia — recalcula a cada atualização.
+  </div>`;
+  wrap.appendChild(section('Projeção mensal','histórico + próximos 12 meses · banda conservador↔otimista'));
+  const c1=card('Faturamento mensal — realizado e projetado',''); const b1=el('div','chartbox lg'); b1.innerHTML='<canvas id="projMensal"></canvas>'; c1.appendChild(b1); wrap.appendChild(c1);
+  wrap.appendChild(section('Projeção anual','realizado + 2026 / 2027 projetados'));
+  const g2=el('div','grid g2');
+  const c2=card('Faturamento anual',`CAGR 3 anos: ${pf(cagr)} ao ano`); const b2=el('div','chartbox lg'); b2.innerHTML='<canvas id="projAnual"></canvas>'; c2.appendChild(b2); g2.appendChild(c2);
+  const c3=card('Cenários para 2026','faturamento do ano cheio'); c3.appendChild(scenBox(c26,p26,o26,fat2025)); g2.appendChild(c3);
+  wrap.appendChild(g2);
+}
+function scenBox(c,b,o,base){
+  const box=el('div'),mx=Math.max(c,b,o,1);
+  const row=(l,v,col)=>`<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--mut);font-weight:600">${l}</span><b>${brlk(v)}</b></div><div style="height:13px;background:rgba(255,255,255,.06);border-radius:7px;margin-top:5px;overflow:hidden"><div style="height:13px;width:${Math.round(100*v/mx)}%;background:${col};border-radius:7px"></div></div><div style="font-size:11px;color:var(--mut);margin-top:3px">vs 2025: ${base>0?((v-base)/base*100>=0?'+':'')+((v-base)/base*100).toFixed(1)+'%':'—'}</div></div>`;
+  box.innerHTML=row('Conservador',c,C.amber)+row('Base',b,C.cyan)+row('Otimista',o,C.green);
+  return box;
+}
+function drawProjCharts(){
+  if(!PROJ||PROJ.drawn||typeof Chart==='undefined') return; PROJ.drawn=true;
+  const {fc,hist,anual,p26,p27}=PROJ;
+  const tail=hist.slice(-18), N=tail.length;
+  const labels=tail.map(x=>fmtYM(x.ym)).concat(fc.map(x=>fmtYM(x.ym)));
+  const actual=tail.map(x=>x.fat).concat(Array(12).fill(null));
+  const pad=Array(N-1).fill(null), lastF=tail[N-1].fat;
+  const mk=key=>pad.concat([lastF], fc.map(x=>x[key]));
+  const cv=document.getElementById('projMensal');
+  if(cv) new Chart(cv,{data:{labels,datasets:[
+    {type:'line',label:'Realizado',data:actual,borderColor:C.cyan,backgroundColor:ctx=>gradient(ctx.chart.ctx,ctx.chart.chartArea,hex2rgb(C.cyan)),fill:true,tension:.3,borderWidth:2.6,pointRadius:0},
+    {type:'line',label:'cons',data:mk('cons'),borderColor:'rgba(0,0,0,0)',pointRadius:0,tension:.3,fill:false},
+    {type:'line',label:'otim',data:mk('otim'),borderColor:'rgba(0,0,0,0)',pointRadius:0,tension:.3,backgroundColor:'rgba(0,212,255,.12)',fill:'-1'},
+    {type:'line',label:'Projeção (base)',data:mk('base'),borderColor:C.cyan,borderDash:[6,4],pointRadius:0,tension:.3,borderWidth:2,fill:false},
+  ]},options:{...baseOpts(),interaction:{mode:'index',intersect:false},
+    plugins:{legend:{labels:{boxWidth:12,padding:12,filter:i=>i.text==='Realizado'||i.text==='Projeção (base)'}},
+      tooltip:{...bt(),filter:c=>c.dataset.label!=='cons'&&c.dataset.label!=='otim'&&c.raw!=null,callbacks:{label:c=>' '+c.dataset.label+': '+brl(c.raw)}}},
+    scales:{x:{...noGrid,ticks:{maxTicksLimit:12}},y:{grid:GRID,ticks:{callback:v=>brlk(v)}}}}});
+  const aLabels=anual.map(a=>a.ano).concat(['2026 *','2027 *']);
+  const aData=anual.map(a=>a.fat).concat([p26,p27]);
+  const cyR=hex2rgb(C.cyan).replace('rgb','rgba').replace(')',',.85)');
+  const amR=hex2rgb(C.amber).replace('rgb','rgba').replace(')',',.85)'), amR2=hex2rgb(C.amber).replace('rgb','rgba').replace(')',',.5)');
+  const aCol=anual.map(()=>cyR).concat([amR,amR2]);
+  const cv2=document.getElementById('projAnual');
+  if(cv2) new Chart(cv2,{type:'bar',data:{labels:aLabels,datasets:[{data:aData,backgroundColor:aCol,borderRadius:5}]},
+    options:{...baseOpts(),plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.raw)+(c.dataIndex>=anual.length?' · projeção':'')}}},scales:{x:noGrid,y:{grid:GRID,ticks:{callback:v=>brlk(v)}}}}});
 }
 
 /* ---------- helpers de tabela ---------- */
@@ -430,6 +563,26 @@ function concBox(c){
   ]},options:{...baseOpts(),plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>'Top '+i[0].label+' dos clientes',label:c=>' '+c.raw+'% do faturamento'}}},
     scales:{x:{...noGrid,ticks:{maxTicksLimit:6,callback:function(v){return this.getLabelForValue(v)}}},y:{grid:GRID,max:100,ticks:{callback:v=>v+'%'}}}}});
   return box;
+}
+
+/* ---------- mapa choropleth do RJ (chartjs-chart-geo) ---------- */
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=()=>res(); s.onerror=()=>rej(new Error('falha '+src)); document.head.appendChild(s); }); }
+async function renderMapaRJ(D){
+  const cv=document.getElementById('mapaRJ'); if(!cv) return; const box=cv.parentElement;
+  try{
+    if(!window.__geoLoaded){ await loadScript('https://cdn.jsdelivr.net/npm/chartjs-chart-geo@4.3.4/build/index.umd.min.js'); window.__geoLoaded=true; }
+    const geo=await fetch('https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-33-mun.json').then(r=>{if(!r.ok)throw new Error('geo'); return r.json();});
+    const feats=geo.features;
+    const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z]/g,'');
+    const byCity={}; (D.cidades||[]).forEach(c=>{ const k=norm(c.cidade); byCity[k]=(byCity[k]||0)+(c.fat||0); });
+    const data=feats.map(f=>({feature:f, value: byCity[norm(f.properties.name)]||0}));
+    new Chart(cv,{type:'choropleth',data:{labels:feats.map(f=>f.properties.name),
+      datasets:[{label:'Faturamento',outline:feats,data}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const v=c.raw.value; return ' '+c.raw.feature.properties.name+': '+(v>0?brl(v):'sem faturamento'); }}}},
+        scales:{ projection:{axis:'x',projection:'mercator'},
+          color:{axis:'x',quantize:6,interpolate:t=>`rgba(0,212,255,${(0.05+0.95*t).toFixed(3)})`,missing:'rgba(255,255,255,.04)',legend:{display:false}} }}});
+  }catch(e){ console.warn('mapaRJ',e); box.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px;text-align:center;padding:24px">🗺️ Mapa indisponível agora — veja o ranking de cidades abaixo.</div>'; }
 }
 
 /* ---------- donut ---------- */
