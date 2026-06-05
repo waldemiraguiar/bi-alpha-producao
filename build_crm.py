@@ -59,16 +59,29 @@ def crm_from(D):
                   "spark": spark(x.get("semanas")), "dias_inativo": x.get("dias_inativo")})
         return b
 
+    def calc_delta(x, existing, stop=False):
+        """Garante um % útil para a fila. Se já há variação significativa, mantém.
+        Senão, calcula a queda vs as semanas anteriores; cliente zerado que tinha
+        histórico (parado/esfriando) = parou totalmente -> -100%."""
+        if existing not in (None, 0):
+            return existing
+        sem = x.get("semanas") or []
+        if len(sem) >= 2:
+            atual = sem[-1]; base = sum(sem[:-1]) / max(1, len(sem) - 1)
+            if base > 0:
+                return round(100 * (atual - base) / base, 1)
+        return -100.0 if stop else existing
+
     em_queda = [{**mov(x), "motivo": "queda"} for x in down]
     em_alta = [{**mov(x), "motivo": "alta"} for x in up]
     parados = [{**base(x), "dias_inativo": x.get("dias_inativo"), "ultima": x.get("ultima"),
-                "delta": x.get("delta"), "spark": spark(x.get("semanas")), "motivo": "parado"}
+                "delta": calc_delta(x, x.get("delta"), stop=True), "spark": spark(x.get("semanas")), "motivo": "parado"}
                for x in sumidos]
     qforte = [{**base(x), "delta": x.get("delta"), "dias_inativo": x.get("dias_inativo"),
                "ultima": x.get("ultima"), "spark": spark(x.get("semanas")), "motivo": "queda_forte"}
               for x in queda_forte_src]
     novos_esfri = [{**base(x), "dias_inativo": x.get("dias_inativo"), "dias_cad": x.get("dias_cad"),
-                    "spark": spark(x.get("semanas")), "motivo": "novo_esfriando"} for x in esfri]
+                    "delta": calc_delta(x, None, stop=True), "spark": spark(x.get("semanas")), "motivo": "novo_esfriando"} for x in esfri]
     novos = [{**base(x), "dias_cad": x.get("dias_cad"), "spark": spark(x.get("semanas")),
               "motivo": "novo"} for x in novos_ok[:40]]
 
