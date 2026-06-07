@@ -975,7 +975,7 @@ function renderAnalises(D){
       <div style="color:var(--mut);font-size:11px;margin-bottom:10px">Dados diários desde ${dMin?_dmy(dMin):'—'} (sistema HF, sem Pet Love).</div>
       <div id="anManualOut"></div>
     </div>
-    ${mesesRecentes(D,'2026-01')}
+    ${mesesRecentes(D,(dMax||'2026').slice(0,4)+'-01')}
     <div class="wsel">${wins.map(([k,l])=>`<button class="wbtn ${k===selWin?'on':''}" data-w="${k}">${l}</button>`).join('')}</div>
     <div id="anTable"></div>`;
   wrap.querySelectorAll('.wbtn[data-w]').forEach(b=>b.addEventListener('click',()=>{
@@ -1016,8 +1016,10 @@ function renderManual(){
   const sumR=(d1,d2)=>{let q=0,f=0,n=0; for(const k in _dayMap){ if(k>=d1&&k<=d2){q+=_dayMap[k].q;f+=_dayMap[k].f;n++;} } return {q,f,n};};
   const len=_ndays(de,ate);
   const cur=sumR(de,ate);
-  const prev=sumR(_addD(de,-len),_addD(de,-1));        // período imediatamente anterior, mesmo tamanho
-  const yo=sumR(_addY(de,-1),_addY(ate,-1));            // mesmas datas no ano anterior
+  const prevDe=_addD(de,-len), prevAte=_addD(de,-1);    // janela imediatamente anterior, mesmo tamanho
+  const yDe=_addY(de,-1), yAte=_addY(ate,-1);           // mesmas datas no ano anterior
+  const prev=sumR(prevDe,prevAte);
+  const yo=sumR(yDe,yAte);
   const pc=(a,b)=>b>0?100*(a/b-1):null;
   const kpi=(l,v,s)=>`<div><div class="acmp-l">${l}</div><div class="acmp-v">${v}</div><div class="acmp-s">${s}</div></div>`;
   const cmp=(l,a,b)=>{const p=pc(a,b);return `<div><div class="acmp-l">${l}</div><div class="acmp-v" style="color:${gcol(p)}">${gtxt(p==null?null:+p.toFixed(1))}</div><div class="acmp-s">base ${num(b)}</div></div>`;};
@@ -1026,7 +1028,8 @@ function renderManual(){
   let sliceHtml='';
   if(sameMonth){
     const dd1=+de.slice(8,10), dd2=+ate.slice(8,10), endYm=de.slice(0,7);
-    const rows=[]; for(let ym=endYm; ym>='2026-01'; ym=_prevYmS(ym)){
+    const yStart=endYm.slice(0,4)+'-01';   // até o início do ano vigente da seleção
+    const rows=[]; for(let ym=endYm; ym>=yStart; ym=_prevYmS(ym)){
       const last=_daysInMonth(ym);
       const a=ym+'-'+String(Math.min(dd1,last)).padStart(2,'0'), b=ym+'-'+String(Math.min(dd2,last)).padStart(2,'0');
       const s=sumR(a,b); rows.push({ym,q:s.q,f:s.f,sel:ym===endYm});
@@ -1055,6 +1058,7 @@ function renderManual(){
       ${cmp(`vs ano anterior (exames)`,cur.q,yo.q)}
       ${cmp(`vs ano anterior (fat.)`,cur.f,yo.f)}
     </div>
+    <div style="color:var(--mut);font-size:11px;margin-bottom:4px">período anterior = os ${len} dias imediatamente antes (${_dmy(prevDe)}–${_dmy(prevAte)}) · ano anterior = ${_dmy(yDe)}–${_dmy(yAte)}. Comparação mês a mês (mesmo trecho) logo abaixo.</div>
     ${sliceHtml}
     <div style="display:flex;gap:8px;align-items:center;margin:12px 0 6px">
       <span style="color:var(--mut);font-size:12px">por dia · barras azuis = exames · linha verde = faturamento</span>
