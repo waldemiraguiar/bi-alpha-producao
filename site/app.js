@@ -948,12 +948,14 @@ function _addD(s,n){const d=_d1(s);d.setDate(d.getDate()+n);return _fmt(d);}
 function _addY(s,n){const d=_d1(s);d.setFullYear(d.getFullYear()+n);return _fmt(d);}
 function _ndays(a,b){return Math.round((_d1(b)-_d1(a))/864e5)+1;}
 function _dmy(s){const[y,m,d]=s.split('-');return d+'/'+m+'/'+y.slice(2);}
+function _daysInMonth(ym){const[y,m]=ym.split('-').map(Number);return new Date(y,m,0).getDate();}
+function _prevYmS(ym){let[y,m]=ym.split('-').map(Number);m--;if(m<1){m=12;y--;}return y+'-'+String(m).padStart(2,'0');}
 function renderAnalises(D){
   _AD=D; const wrap=document.getElementById('analises'); if(!wrap) return;
   const wins=[['5','5 dias'],['10','10 dias'],['15','15 dias'],['20','20 dias'],['mes','Mês a mês']];
   _dayMap={}; (D.serie_diaria||[]).forEach(x=>_dayMap[x.d]={q:x.q,f:x.f});
   const days=(D.serie_diaria||[]).map(x=>x.d); const dMin=days[0]||'2023-01-01', dMax=days[days.length-1]||'';
-  const dDe=dMax?_addD(dMax,-29):dMin;
+  const dDe=dMax?dMax.slice(0,7)+'-01':dMin;  // default = mês corrente até a data (mostra a comparação com meses anteriores)
   wrap.innerHTML=`
     <div class="card" style="margin-bottom:16px"><h3>Faturamento e produção mensal desde 2014 <span class="cap">${(D.serie_mensal_full||[]).length} meses · área = faturamento · linha = exames (eixo dir.)</span></h3>
       <div class="chartbox lg"><canvas id="anHist"></canvas></div></div>
@@ -1019,6 +1021,28 @@ function renderManual(){
   const pc=(a,b)=>b>0?100*(a/b-1):null;
   const kpi=(l,v,s)=>`<div><div class="acmp-l">${l}</div><div class="acmp-v">${v}</div><div class="acmp-s">${s}</div></div>`;
   const cmp=(l,a,b)=>{const p=pc(a,b);return `<div><div class="acmp-l">${l}</div><div class="acmp-v" style="color:${gcol(p)}">${gtxt(p==null?null:+p.toFixed(1))}</div><div class="acmp-s">base ${num(b)}</div></div>`;};
+  // mesmo trecho de dias nos meses anteriores (desde jan/26) — só faz sentido p/ intervalo dentro de 1 mês
+  const sameMonth=de.slice(0,7)===ate.slice(0,7);
+  let sliceHtml='';
+  if(sameMonth){
+    const dd1=+de.slice(8,10), dd2=+ate.slice(8,10), endYm=de.slice(0,7);
+    const rows=[]; for(let ym=endYm; ym>='2026-01'; ym=_prevYmS(ym)){
+      const last=_daysInMonth(ym);
+      const a=ym+'-'+String(Math.min(dd1,last)).padStart(2,'0'), b=ym+'-'+String(Math.min(dd2,last)).padStart(2,'0');
+      const s=sumR(a,b); rows.push({ym,q:s.q,f:s.f,sel:ym===endYm});
+    }
+    const ref=rows[0];
+    const body=rows.map(r=>{const sq=(!r.sel&&r.q)?pc(ref.q,r.q):null, sf=(!r.sel&&r.f)?pc(ref.f,r.f):null;
+      return `<tr${r.sel?' style="background:rgba(0,212,255,.08)"':''}><td>${ymLabel(r.ym)}${r.sel?' <span style="color:var(--cyan);font-size:10px;font-weight:700">selecionado</span>':''}</td>
+        <td class="num">${num(r.q)}</td><td class="num">${brl(r.f)}</td>
+        <td class="num" style="color:${gcol(sq==null?null:+sq.toFixed(1))};font-weight:700">${r.sel?'—':gtxt(sq==null?null:+sq.toFixed(1))}</td>
+        <td class="num" style="color:${gcol(sf==null?null:+sf.toFixed(1))};font-weight:700">${r.sel?'—':gtxt(sf==null?null:+sf.toFixed(1))}</td></tr>`;}).join('');
+    sliceHtml=`<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <div style="font-weight:700;margin-bottom:6px">📆 Mesmo trecho (dias ${dd1}–${dd2}) nos meses anteriores <span style="color:var(--mut);font-weight:400;font-size:12px">— quanto o selecionado está acima/abaixo de cada mês</span></div>
+      <table class="atab"><thead><tr><th>Mês (dias ${dd1}–${dd2})</th><th class="num">Exames</th><th class="num">Faturamento</th><th class="num">sel. vs mês (exames)</th><th class="num">sel. vs mês (fat.)</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  } else {
+    sliceHtml=`<div style="margin-top:12px;color:var(--mut);font-size:12px;border-top:1px solid var(--line);padding-top:10px">💡 Selecione um intervalo <b>dentro de um mesmo mês</b> (ex.: atalho "Este mês") para comparar o mesmo trecho de dias com os meses anteriores. Para meses inteiros, veja o quadro "📊 Meses desde jan/26" abaixo.</div>`;
+  }
   out.innerHTML=`
     <div style="display:flex;gap:26px;flex-wrap:wrap;margin-bottom:6px">
       ${kpi('Produção (exames)',num(cur.q),de===ate?'no dia':`${len} dias · ${(cur.q/len).toFixed(0)}/dia`)}
@@ -1031,6 +1055,7 @@ function renderManual(){
       ${cmp(`vs ano anterior (exames)`,cur.q,yo.q)}
       ${cmp(`vs ano anterior (fat.)`,cur.f,yo.f)}
     </div>
+    ${sliceHtml}
     <div style="display:flex;gap:8px;align-items:center;margin:12px 0 6px">
       <span style="color:var(--mut);font-size:12px">por dia · barras azuis = exames · linha verde = faturamento</span>
       <button class="wbtn" id="anTblToggle" style="margin-left:auto">Ver tabela diária</button>
