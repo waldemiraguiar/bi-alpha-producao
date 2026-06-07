@@ -973,6 +973,7 @@ function renderAnalises(D){
       <div style="color:var(--mut);font-size:11px;margin-bottom:10px">Dados diários desde ${dMin?_dmy(dMin):'—'} (sistema HF, sem Pet Love).</div>
       <div id="anManualOut"></div>
     </div>
+    ${mesesRecentes(D,'2026-01')}
     <div class="wsel">${wins.map(([k,l])=>`<button class="wbtn ${k===selWin?'on':''}" data-w="${k}">${l}</button>`).join('')}</div>
     <div id="anTable"></div>`;
   wrap.querySelectorAll('.wbtn[data-w]').forEach(b=>b.addEventListener('click',()=>{
@@ -987,6 +988,24 @@ function renderAnalises(D){
     else setRange(_addD(dMax,-(+p-1)),dMax);
   }));
   renderAnTable(); renderManual();
+}
+function mesesRecentes(D,fromYm){
+  const s=D.serie_mensal_full||[]; if(!s.length) return '';
+  const by={}; s.forEach(x=>by[x.ym]={q:x.qtd,f:x.fat});
+  const prevYm=ym=>{let[y,m]=ym.split('-').map(Number);m--;if(m<1){m=12;y--;}return y+'-'+String(m).padStart(2,'0');};
+  const yoyYm=ym=>{const[y,m]=ym.split('-');return (+y-1)+'-'+m;};
+  const pc=(a,b)=>(b>0)?100*(a/b-1):null;
+  const maxd=(D.meta&&D.meta.max_data)||''; const partYm=maxd.slice(0,7);
+  const yms=s.map(x=>x.ym).filter(ym=>ym>=fromYm).sort().reverse();
+  const rows=yms.map(ym=>{const c=by[ym],p=by[prevYm(ym)],y=by[yoyYm(ym)];const part=ym===partYm;
+    const dmq=p?pc(c.q,p.q):null,dmf=p?pc(c.f,p.f):null,dyf=y?pc(c.f,y.f):null;
+    return `<tr${part?' style="opacity:.6"':''}><td>${ymLabel(ym)}${part?' <span style="color:var(--amber);font-size:10px;font-weight:700">parcial</span>':''}</td>
+      <td class="num">${num(c.q)}</td><td class="num" style="color:${gcol(dmq==null?null:+dmq.toFixed(1))};font-weight:700">${gtxt(dmq==null?null:+dmq.toFixed(1))}</td>
+      <td class="num">${brl(c.f)}</td><td class="num" style="color:${gcol(dmf==null?null:+dmf.toFixed(1))};font-weight:700">${gtxt(dmf==null?null:+dmf.toFixed(1))}</td>
+      <td class="num" style="color:${gcol(dyf==null?null:+dyf.toFixed(1))};font-weight:700">${gtxt(dyf==null?null:+dyf.toFixed(1))}</td></tr>`;}).join('');
+  return `<div class="card" style="margin-bottom:16px"><h3>📊 Meses desde ${ymLabel(fromYm)} — visão rápida <span class="cap">produção e faturamento por mês · variação vs mês anterior e vs mesmo mês do ano passado</span></h3>
+    <table class="atab"><thead><tr><th>Mês</th><th class="num">Exames</th><th class="num">vs mês ant.</th><th class="num">Faturamento</th><th class="num">vs mês ant.</th><th class="num">fat. vs ano ant.</th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">azul = sobe · vermelho = cai. Só sistema (sem Pet Love). Mês corrente marcado como parcial.</div></div>`;
 }
 function renderManual(){
   const out=document.getElementById('anManualOut'); if(!out||!_dayMap) return;
