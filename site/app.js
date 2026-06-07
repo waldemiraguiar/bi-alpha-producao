@@ -420,7 +420,7 @@ function wireFTabs(){
     Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id); if(el)el.style.display=(k===v)?'':'none';});
     if(v==='projecao') drawProjCharts();
     if(v==='analises') drawAnalisesChart();
-    if(v==='petlove') drawPetloveChart();
+    if(v==='petlove'){ drawPetloveChart(); drawPetloveYearChart(); }
   });});
 }
 
@@ -707,43 +707,75 @@ function renderAlertas(D){
 /* ===================== ABA PET LOVE (análise em paralelo) ===================== */
 const MES3PL=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function ymLabel(ym){const [y,m]=ym.split('-');return MES3PL[+m]+'/'+y.slice(2);}
-let _plchart=null;
+let _plchart=null,_plYearChart=null,_PLY=null;
+const MESFULL=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+/* estatísticas Pet Love por ano: mensal por ano, YTD equalizado, projeção sazonal do ano corrente */
+function plYearStats(D){
+  const men=(D.petlove||{}).mensal||{};
+  const byYear={};
+  Object.entries(men).forEach(([ym,v])=>{const [y,m]=ym.split('-').map(Number);(byYear[y]=byYear[y]||{m:{},total:0}); byYear[y].m[m]=v; byYear[y].total+=v;});
+  const years=Object.keys(byYear).map(Number).sort();
+  const curY=years[years.length-1], prevY=curY-1;
+  const cur=byYear[curY]||{m:{}}, prev=byYear[prevY]||null;
+  const lastM=Math.max(0,...Object.keys(cur.m).map(Number));
+  let ytdCur=0,ytdPrev=0; for(let m=1;m<=lastM;m++){ytdCur+=cur.m[m]||0; if(prev)ytdPrev+=prev.m[m]||0;}
+  const ytdPct=(prev&&ytdPrev>0)?100*(ytdCur/ytdPrev-1):null;
+  const ratio=(prev&&ytdPrev>0)?ytdCur/ytdPrev:1;
+  // projeção sazonal: meses restantes = mês do ano anterior × razão YTD
+  let projTotal=ytdCur, projMon={}; for(let m=1;m<=12;m++){projMon[m]= m<=lastM ? (cur.m[m]||0) : (prev?(prev.m[m]||0)*ratio:0); if(m>lastM)projTotal+=projMon[m];}
+  const projPct=(prev&&prev.total>0)?100*(projTotal/prev.total-1):null;
+  return {byYear,years,curY,prevY,cur,prev,lastM,ytdCur,ytdPrev,ytdPct,ratio,projTotal,projMon,projPct};
+}
 function renderPetlove(D){
   const wrap=document.getElementById('petlove'); if(!wrap) return;
   const pl=D.petlove||{}; const men=pl.mensal||{}; const at=pl.atend_mensal||{};
-  const mensalLab={}; (D.mensal||[]).forEach(x=>mensalLab[x.ym]={fat:x.fat||0,pl:x.petlove||0});
+  const mensalLab={}; (D.mensal||[]).forEach(x=>mensalLab[x.ym]={fat:x.fat||0,qtd:x.qtd||0});
   const yms=Object.keys(men).sort();
-  // último mês com valor relevante
   const ult=yms[yms.length-1]||''; const ultV=men[ult]||0;
   const labFatUlt=(mensalLab[ult]||{}).fat||0;
   const pctUlt=labFatUlt+ultV>0?100*ultV/(labFatUlt+ultV):0;
-  // YoY do último mês
-  const [uy,um]=ult.split('-'); const yoyKey=(+uy-1)+'-'+um; const yoyV=men[yoyKey];
-  const yoy=yoyV?100*(ultV/yoyV-1):null;
   const total=pl.total||Object.values(men).reduce((a,b)=>a+b,0);
-  const anoAtual=(uy)||''; const porAno=pl.por_ano||{};
+  const Y=plYearStats(D); _PLY=Y;
   let html=`<div class="fbanner">
     <div class="b"><div class="v" style="color:var(--cyan)">${brlk(total)}</div><div class="l">Pet Love acumulado (${pl.desde?ymLabel(pl.desde):''}→${ult?ymLabel(ult):''})</div></div>
     <div class="b"><div class="v">${brlk(ultV)}</div><div class="l">último mês (${ult?ymLabel(ult):'—'})</div></div>
     <div class="b"><div class="v" style="color:var(--green)">${pctUlt.toFixed(1)}%</div><div class="l">do faturamento total do lab</div></div>
-    <div class="b"><div class="v" style="color:${yoy==null?'var(--mut)':(yoy>=0?AZUL2:'var(--red)')}">${yoy==null?'—':(yoy>=0?'▲ +':'▼ ')+yoy.toFixed(1)+'%'}</div><div class="l">vs mesmo mês ano anterior</div></div></div>`;
+    <div class="b"><div class="v" style="color:${Y.ytdPct==null?'var(--mut)':(Y.ytdPct>=0?AZUL2:'var(--red)')}">${Y.ytdPct==null?'—':(Y.ytdPct>=0?'▲ +':'▼ ')+Y.ytdPct.toFixed(0)+'%'}</div><div class="l">${Y.curY} vs ${Y.prevY} (mesmo período, jan–${MESFULL[Y.lastM]})</div></div></div>`;
   html+=`<div class="alert-card info" style="margin:6px 0 16px"><div class="ai">🐾</div><div><div class="at">Receita externa que ENTRA no total dos meses</div>
     <div class="ax">O sistema (HF) conta os exames Pet Love mas zera o valor (reembolso vem por fora). Estes R$ — Contas Médicas + Recurso de Glosa, por competência — são somados ao faturamento total do laboratório. ${esc(pl.obs||'')}</div></div></div>`;
-  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love dentro do faturamento total <span class="cap">barra clara = sistema · ciano = Pet Love (empilhado) · últimos 24 meses</span></h3>
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love dentro do faturamento total <span class="cap">barras (R$, eixo esq.): cinza = produção interna (sistema HF) · ciano = Pet Love · linha verde (eixo dir.) = % Pet Love no total · últimos 24 meses</span></h3>
     <div class="chartbox lg"><canvas id="plChart"></canvas></div></div>`;
-  // por ano
-  const anos=Object.keys(porAno).sort();
-  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love por ano</h3><table class="atab"><thead><tr><th>Ano</th><th class="num">Pet Love</th><th class="num">var. a/a</th></tr></thead><tbody>`+
-    anos.map((a,i)=>{const v=porAno[a],pv=i>0?porAno[anos[i-1]]:null,g=pv?100*(v/pv-1):null;
-      return `<tr><td>${a}</td><td class="num">${brl(v)}</td><td class="num" style="color:${g==null?'var(--mut)':(g>=0?AZUL2:'var(--red)')};font-weight:700">${g==null?'—':(g>=0?'+':'')+g.toFixed(0)+'%'}</td></tr>`;}).join('')+
-    `</tbody></table></div>`;
-  // tabela mensal
+  // ---- crescimento equalizado (mesmo período + projeção) ----
+  const eqColor=Y.ytdPct==null?'var(--mut)':(Y.ytdPct>=0?AZUL2:'var(--red)');
+  const prjColor=Y.projPct==null?'var(--mut)':(Y.projPct>=0?AZUL2:'var(--red)');
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love — crescimento equalizado <span class="cap">comparar ano cheio contra parcial engana; aqui igualamos pelo mesmo período</span></h3>
+    <div style="display:flex;gap:30px;flex-wrap:wrap;margin-bottom:14px">
+      <div><div class="acmp-l">${Y.curY} até ${MESFULL[Y.lastM]} (YTD)</div><div class="acmp-v">${brl(Y.ytdCur)}</div><div class="acmp-s">mesmo período ${Y.prevY}: ${brl(Y.ytdPrev)}</div></div>
+      <div><div class="acmp-l">Crescimento real (mesmo período)</div><div class="acmp-v" style="color:${eqColor}">${Y.ytdPct==null?'—':(Y.ytdPct>=0?'▲ +':'▼ ')+Y.ytdPct.toFixed(0)+'%'}</div><div class="acmp-s">jan–${MESFULL[Y.lastM]} ${Y.curY} vs ${Y.prevY}</div></div>
+      <div><div class="acmp-l">Projeção ${Y.curY} (ano cheio, sazonal)</div><div class="acmp-v" style="color:var(--cyan)">${brl(Y.projTotal)}</div><div class="acmp-s">vs ${Y.prevY} fechado ${brl(Y.prev?Y.prev.total:0)} · <span style="color:${prjColor}">${Y.projPct==null?'—':(Y.projPct>=0?'+':'')+Y.projPct.toFixed(0)+'%'}</span></div></div>
+    </div>
+    <div class="chartbox lg"><canvas id="plYearChart"></canvas></div>
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">Linhas = acumulado mês a mês. Projeção ${Y.curY} (tracejada) = meses restantes estimados pelo mês equivalente de ${Y.prevY} × ritmo do período (×${Y.ratio.toFixed(2)}).</div></div>`;
+  // por ano (com mesmo-período a/a e flag de parcial)
+  const anos=Y.years;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love por ano <span class="cap">a "var. mesmo período" compara só os meses já decorridos do ano corrente — leitura justa</span></h3>
+    <table class="atab"><thead><tr><th>Ano</th><th class="num">Pet Love (realizado)</th><th class="num">var. a/a (ano cheio)</th><th class="num">var. mesmo período</th></tr></thead><tbody>`+
+    anos.map((a,i)=>{const v=Y.byYear[a].total;const pv=i>0?Y.byYear[anos[i-1]].total:null;const g=pv?100*(v/pv-1):null;
+      const parcial=(a===Y.curY); let same=null;
+      if(parcial&&Y.ytdPct!=null) same=Y.ytdPct;
+      return `<tr><td>${a}${parcial?` <span style="color:var(--amber);font-size:10px;font-weight:700">parcial até ${MESFULL[Y.lastM]}</span>`:''}</td>
+        <td class="num">${brl(v)}</td>
+        <td class="num" style="color:${g==null?'var(--mut)':(g>=0?AZUL2:'var(--red)')};${parcial?'opacity:.45':'font-weight:700'}">${g==null?'—':(g>=0?'+':'')+g.toFixed(0)+'%'}${parcial?' ⚠':''}</td>
+        <td class="num" style="color:${same==null?'var(--mut)':(same>=0?AZUL2:'var(--red)')};font-weight:700">${same==null?'—':(same>=0?'+':'')+same.toFixed(0)+'%'}</td></tr>`;}).join('')+
+    `<tr style="border-top:2px solid var(--line)"><td>${Y.curY} <span style="color:var(--cyan);font-size:10px;font-weight:700">PROJEÇÃO ano cheio</span></td><td class="num" style="color:var(--cyan);font-weight:700">${brl(Y.projTotal)}</td><td class="num" style="color:${prjColor};font-weight:700">${Y.projPct==null?'—':(Y.projPct>=0?'+':'')+Y.projPct.toFixed(0)+'%'}</td><td class="num">—</td></tr>`+
+    `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">⚠ A "var. ano cheio" do ano corrente é enganosa (compara meses parciais contra 12 meses). Use a coluna "mesmo período".</div></div>`;
+  // detalhe mensal — agora com produção interna do sistema
   const rec=yms.slice(-18).reverse();
-  html+=`<div class="card"><h3>Detalhe mensal <span class="cap">% = participação da Pet Love no faturamento total do mês</span></h3>
-    <table class="atab"><thead><tr><th>Mês</th><th class="num">Pet Love R$</th><th class="num">Atendimentos</th><th class="num">% do total lab</th></tr></thead><tbody>`+
-    rec.map(ym=>{const v=men[ym]||0;const lab=(mensalLab[ym]||{}).fat||0;const p=lab+v>0?100*v/(lab+v):0;const n=(at[ym]||{}).n_atend;
-      return `<tr><td>${ymLabel(ym)}</td><td class="num">${brl(v)}</td><td class="num">${n?num(n):'—'}</td><td class="num" style="font-weight:700">${p.toFixed(1)}%</td></tr>`;}).join('')+
-    `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">Atendimentos só constam dos meses cujos relatórios foram importados. Valores conferem com os relatórios oficiais de pagamento Pet Love.</div></div>`;
+  html+=`<div class="card"><h3>Detalhe mensal <span class="cap">produção interna (sistema HF) + Pet Love · % = participação Pet Love no total do mês</span></h3>
+    <table class="atab"><thead><tr><th>Mês</th><th class="num">Produção interna (R$)</th><th class="num">Exames (sistema)</th><th class="num">Pet Love (R$)</th><th class="num">Atend. PL</th><th class="num">Total mês</th><th class="num">% Pet Love</th></tr></thead><tbody>`+
+    rec.map(ym=>{const v=men[ym]||0;const lab=(mensalLab[ym]||{}).fat||0;const q=(mensalLab[ym]||{}).qtd||0;const p=lab+v>0?100*v/(lab+v):0;const n=(at[ym]||{}).n_atend;
+      return `<tr><td>${ymLabel(ym)}</td><td class="num">${lab?brl(lab):'—'}</td><td class="num">${q?num(q):'—'}</td><td class="num" style="color:var(--cyan)">${brl(v)}</td><td class="num">${n?num(n):'—'}</td><td class="num">${brl(lab+v)}</td><td class="num" style="font-weight:700">${p.toFixed(1)}%</td></tr>`;}).join('')+
+    `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">Produção interna e exames vêm do sistema (inclui 2026). "Atend. PL" só consta dos meses cujos relatórios Pet Love foram importados.</div></div>`;
   wrap.innerHTML=html;
 }
 function drawPetloveChart(){
@@ -751,12 +783,31 @@ function drawPetloveChart(){
   if(_plchart) _plchart.destroy();
   const men=(D.petlove||{}).mensal||{}; const mensalLab={}; (D.mensal||[]).forEach(x=>mensalLab[x.ym]=x.fat||0);
   const yms=[...new Set([...Object.keys(men),...Object.keys(mensalLab)])].sort().slice(-24);
-  _plchart=new Chart(cv,{type:'bar',data:{labels:yms.map(ymLabel),datasets:[
-    {label:'Sistema (HF)',data:yms.map(y=>mensalLab[y]||0),backgroundColor:'rgba(120,140,170,.45)',stack:'s'},
-    {label:'Pet Love',data:yms.map(y=>men[y]||0),backgroundColor:'#00D4FF',stack:'s'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+brl(c.raw)}}},
+  const pctArr=yms.map(y=>{const s=mensalLab[y]||0,p=men[y]||0;return s+p>0?100*p/(s+p):null;});
+  _plchart=new Chart(cv,{data:{labels:yms.map(ymLabel),datasets:[
+    {type:'bar',label:'Produção interna (sistema)',data:yms.map(y=>mensalLab[y]||0),backgroundColor:'rgba(120,140,170,.45)',stack:'s',yAxisID:'y'},
+    {type:'bar',label:'Pet Love',data:yms.map(y=>men[y]||0),backgroundColor:'#00D4FF',stack:'s',yAxisID:'y'},
+    {type:'line',label:'% Pet Love no total',data:pctArr,borderColor:'#00E5A0',backgroundColor:'#00E5A0',borderWidth:2,tension:.3,pointRadius:2,yAxisID:'pct',spanGaps:true}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='pct'?' '+c.dataset.label+': '+(c.raw==null?'—':c.raw.toFixed(1)+'%'):' '+c.dataset.label+': '+brl(c.raw)}}},
       scales:{x:{ticks:{color:'#7f90a8',maxRotation:90,minRotation:90,font:{size:9}},stacked:true,grid:{display:false}},
-        y:{stacked:true,ticks:{color:'#7f90a8',callback:v=>brlk(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
+        y:{stacked:true,position:'left',ticks:{color:'#7f90a8',callback:v=>brlk(v)},grid:{color:'rgba(255,255,255,.05)'}},
+        pct:{position:'right',min:0,suggestedMax:50,ticks:{color:'#00E5A0',callback:v=>v+'%'},grid:{display:false}}}}});
+}
+function drawPetloveYearChart(){
+  const cv=document.getElementById('plYearChart'); if(!cv||typeof Chart==='undefined'||!_PLY) return;
+  if(_plYearChart) _plYearChart.destroy();
+  const Y=_PLY; const labels=MESFULL.slice(1);
+  const acc=(src,upto)=>{let s=0;const out=[];for(let m=1;m<=12;m++){if(upto&&m>upto){out.push(null);continue;} s+=(src[m]||0); out.push(s);}return out;};
+  const prevCum=Y.prev?acc(Y.prev.m,0):labels.map(()=>null);
+  const curCum=acc(Y.cur.m,Y.lastM);
+  // projeção: nula antes do último mês, conecta no último real e segue com projMon
+  const projCum=[]; let s=0; for(let m=1;m<=12;m++){ s+=(m<=Y.lastM?(Y.cur.m[m]||0):(Y.projMon[m]||0)); projCum.push(m<Y.lastM?null:s); }
+  _plYearChart=new Chart(cv,{type:'line',data:{labels,datasets:[
+    {label:`${Y.prevY} (acum.)`,data:prevCum,borderColor:'rgba(160,176,200,.8)',backgroundColor:'rgba(160,176,200,.1)',borderWidth:2,tension:.3,pointRadius:0},
+    {label:`${Y.curY} (acum. real)`,data:curCum,borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',borderWidth:3,tension:.3,pointRadius:2,fill:true},
+    {label:`${Y.curY} (projeção)`,data:projCum,borderColor:'#00E5A0',borderDash:[6,4],borderWidth:2,tension:.3,pointRadius:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+(c.raw==null?'—':brl(c.raw))}}},
+      scales:{x:{ticks:{color:'#7f90a8'},grid:{display:false}},y:{ticks:{color:'#7f90a8',callback:v=>brlk(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
 }
 
 /* ===================== ABA MARGEM PET LOVE (reembolso vs tabela varejo) ===================== */
