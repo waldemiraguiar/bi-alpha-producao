@@ -31,7 +31,16 @@ jobs:
           MYSQL_DB:   ${{ secrets.MYSQL_DB }}
           BI_PWD:     ${{ secrets.BI_PWD }}
         run: python build_financeiro.py
+      - name: Config + dependências da função (e-mail renegociação)
+        env:
+          BI_PWD:             ${{ secrets.BI_PWD }}
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: |
+          node -e "const fs=require('fs');const q=s=>JSON.stringify(s||'');const e=process.env;fs.writeFileSync('site/functions/secret.mjs',['export const SECRET='+q(e.BI_PWD),'export const GMAIL_USER='+q(e.GMAIL_USER),'export const GMAIL_APP_PASSWORD='+q(e.GMAIL_APP_PASSWORD),'export const EMAIL_TO='+q(e.EMAIL_TO||e.GMAIL_USER)].join(';\n')+';\n')"
+          cd site/functions && npm install >/dev/null 2>&1 && echo "func e-mail pronta"
       - name: Publicar no Netlify (site admin)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: npx --yes netlify-cli@26 deploy --prod --dir=site --site=${{ secrets.FIN_SITE_ID }}
+        run: npx --yes netlify-cli@26 deploy --prod --dir=site --functions=site/functions --site=${{ secrets.FIN_SITE_ID }}
