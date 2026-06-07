@@ -955,7 +955,7 @@ function renderAnalises(D){
   const days=(D.serie_diaria||[]).map(x=>x.d); const dMin=days[0]||'2023-01-01', dMax=days[days.length-1]||'';
   const dDe=dMax?_addD(dMax,-29):dMin;
   wrap.innerHTML=`
-    <div class="card" style="margin-bottom:16px"><h3>Faturamento mensal desde 2014 <span class="cap">${(D.serie_mensal_full||[]).length} meses · evolução histórica da Matriz</span></h3>
+    <div class="card" style="margin-bottom:16px"><h3>Faturamento e produção mensal desde 2014 <span class="cap">${(D.serie_mensal_full||[]).length} meses · área = faturamento · linha = exames (eixo dir.)</span></h3>
       <div class="chartbox lg"><canvas id="anHist"></canvas></div></div>
     <div class="card" style="margin-bottom:16px"><h3>📅 Período manual · produção por dia <span class="cap">escolha as datas (ou um atalho) e veja produção e faturamento do intervalo, comparado</span></h3>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:4px">
@@ -1013,14 +1013,11 @@ function renderManual(){
       ${cmp(`vs ano anterior (fat.)`,cur.f,yo.f)}
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin:12px 0 6px">
-      <span style="color:var(--mut);font-size:12px">gráfico por dia:</span>
-      <button class="wbtn ${_manMetric==='q'?'on':''}" data-m="q">Produção</button>
-      <button class="wbtn ${_manMetric==='f'?'on':''}" data-m="f">Faturamento</button>
+      <span style="color:var(--mut);font-size:12px">por dia · barras azuis = exames · linha verde = faturamento</span>
       <button class="wbtn" id="anTblToggle" style="margin-left:auto">Ver tabela diária</button>
     </div>
     <div class="chartbox"><canvas id="anDayChart"></canvas></div>
     <div id="anDayTbl" style="display:none;margin-top:12px"></div>`;
-  out.querySelectorAll('.wbtn[data-m]').forEach(b=>b.addEventListener('click',()=>{_manMetric=b.dataset.m; renderManual();}));
   const tg=out.querySelector('#anTblToggle');
   tg.addEventListener('click',()=>{const t=out.querySelector('#anDayTbl'); const show=t.style.display==='none'; t.style.display=show?'':'none'; tg.textContent=show?'Ocultar tabela diária':'Ver tabela diária'; if(show&&!t.dataset.done){t.innerHTML=manTable(de,ate); t.dataset.done='1';}});
   drawDailyChart();
@@ -1034,12 +1031,14 @@ function drawDailyChart(){
   const de=(document.getElementById('anDe')||{}).value, ate=(document.getElementById('anAte')||{}).value;
   if(!de||!ate||de>ate||!_dayMap) return;
   if(_manChart) _manChart.destroy();
-  const labels=[],data=[]; for(let k=de;k<=ate;k=_addD(k,1)){labels.push(_dmy(k)); const v=_dayMap[k]; data.push(v?v[_manMetric]:0);}
-  const isF=_manMetric==='f';
-  _manChart=new Chart(cv,{type:'bar',data:{labels,datasets:[{label:isF?'Faturamento/dia':'Exames/dia',data,backgroundColor:isF?'#00E5A0':'#00D4FF'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const k=_addD(de,c.dataIndex); const v=_dayMap[k]||{q:0,f:0}; return [' Exames: '+num(v.q),' Faturamento: '+brl(v.f)];}}}},
+  const labels=[],qd=[],fd=[]; for(let k=de;k<=ate;k=_addD(k,1)){labels.push(_dmy(k)); const v=_dayMap[k]; qd.push(v?v.q:0); fd.push(v?v.f:0);}
+  _manChart=new Chart(cv,{data:{labels,datasets:[
+    {type:'bar',label:'Exames/dia',data:qd,backgroundColor:'#00D4FF',yAxisID:'q'},
+    {type:'line',label:'Faturamento/dia',data:fd,borderColor:'#00E5A0',backgroundColor:'#00E5A0',borderWidth:2,tension:.3,pointRadius:1,yAxisID:'f'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='f'?' Faturamento: '+brl(c.raw):' Exames: '+num(c.raw)}}},
       scales:{x:{ticks:{color:'#7f90a8',maxTicksLimit:16,maxRotation:90,minRotation:0,font:{size:9}},grid:{display:false}},
-        y:{ticks:{color:'#7f90a8',callback:v=>isF?brlk(v):num(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
+        q:{position:'left',ticks:{color:'#00D4FF',callback:v=>num(v)},grid:{color:'rgba(255,255,255,.05)'},title:{display:true,text:'exames',color:'#00D4FF'}},
+        f:{position:'right',ticks:{color:'#00E5A0',callback:v=>brlk(v)},grid:{display:false},title:{display:true,text:'R$',color:'#00E5A0'}}}}});
 }
 function renderAnTable(){
   const D=_AD; if(!D) return; const items=(D.analises||{})[selWin]||[];
@@ -1064,8 +1063,11 @@ function drawAnalisesChart(){
   const D=_AD; if(!D) return; const cv=document.getElementById('anHist'); if(!cv||typeof Chart==='undefined') return;
   if(_achart) _achart.destroy();
   const s=D.serie_mensal_full||[];
-  _achart=new Chart(cv,{type:'line',data:{labels:s.map(x=>x.ym),datasets:[
-    {label:'Faturamento',data:s.map(x=>x.fat),borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',fill:true,tension:.3,pointRadius:0,borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.raw)}}},
-      scales:{x:{ticks:{maxTicksLimit:14,color:'#8aa2bd'},grid:{display:false}},y:{ticks:{callback:v=>brlk(v),color:'#8aa2bd'},grid:{color:'rgba(255,255,255,.05)'}}}}});
+  _achart=new Chart(cv,{data:{labels:s.map(x=>x.ym),datasets:[
+    {type:'line',label:'Faturamento',data:s.map(x=>x.fat),borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',fill:true,tension:.3,pointRadius:0,borderWidth:2,yAxisID:'f'},
+    {type:'line',label:'Exames',data:s.map(x=>x.qtd),borderColor:'#00E5A0',backgroundColor:'#00E5A0',fill:false,tension:.3,pointRadius:0,borderWidth:1.5,yAxisID:'q'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='q'?' Exames: '+num(c.raw):' Faturamento: '+brl(c.raw)}}},
+      scales:{x:{ticks:{maxTicksLimit:14,color:'#8aa2bd'},grid:{display:false}},
+        f:{position:'left',ticks:{callback:v=>brlk(v),color:'#00D4FF'},grid:{color:'rgba(255,255,255,.05)'}},
+        q:{position:'right',ticks:{callback:v=>num(v),color:'#00E5A0'},grid:{display:false}}}}});
 }
