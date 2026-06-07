@@ -720,14 +720,19 @@ function plYearStats(D){
   const lastM=Math.max(0,...Object.keys(cur.m).map(Number));
   let ytdCur=0,ytdPrev=0; for(let m=1;m<=lastM;m++){ytdCur+=cur.m[m]||0; if(prev)ytdPrev+=prev.m[m]||0;}
   const ytdPct=(prev&&ytdPrev>0)?100*(ytdCur/ytdPrev-1):null;
-  const ratio=(prev&&ytdPrev>0)?ytdCur/ytdPrev:1; const g=ratio-1;
+  const ytdRatio=(prev&&ytdPrev>0)?ytdCur/ytdPrev:1;
+  // ritmo BASE = momentum dos ÚLTIMOS 3 meses (mais responsivo que o YTD inteiro)
+  const w0=Math.max(1,lastM-2); let m3Cur=0,m3Prev=0;
+  for(let m=w0;m<=lastM;m++){m3Cur+=cur.m[m]||0; if(prev)m3Prev+=prev.m[m]||0;}
+  const ratio=(prev&&m3Prev>0)?m3Cur/m3Prev:ytdRatio; const g=ratio-1;
+  const winLabel=(lastM>w0?MESFULL[w0]+'–'+MESFULL[lastM]:MESFULL[lastM]);
   // 3 cenários (padrão skin): conservador g×0,6 · base g · otimista g×1,4
   const rC=1+g*0.6, rB=ratio, rO=1+g*1.4;
   // projeção sazonal: meses restantes = mês equivalente do ano anterior × razão do cenário
   function projWith(r){let t=ytdCur,mon={};for(let m=1;m<=12;m++){mon[m]=m<=lastM?(cur.m[m]||0):(prev?(prev.m[m]||0)*r:0); if(m>lastM)t+=mon[m];}return {t,mon};}
   const PB=projWith(rB),PC=projWith(rC),PO=projWith(rO);
   const pct=t=>(prev&&prev.total>0)?100*(t/prev.total-1):null;
-  return {byYear,years,curY,prevY,cur,prev,lastM,ytdCur,ytdPrev,ytdPct,ratio,
+  return {byYear,years,curY,prevY,cur,prev,lastM,ytdCur,ytdPrev,ytdPct,ratio,ytdRatio,winLabel,m3Cur,m3Prev,
     projTotal:PB.t,projMon:PB.mon,projPct:pct(PB.t),
     projCons:PC.t,projMonC:PC.mon,projConsPct:pct(PC.t),
     projOtim:PO.t,projMonO:PO.mon,projOtimPct:pct(PO.t)};
@@ -766,7 +771,7 @@ function renderPetlove(D){
         ${srow('Conservador',Y.projCons,Y.projConsPct,C.amber)+srow('Base',Y.projTotal,Y.projPct,C.cyan)+srow('Otimista',Y.projOtim,Y.projOtimPct,C.green)}</div>
     </div>
     <div class="chartbox lg"><canvas id="plYearChart"></canvas></div>
-    <div style="color:var(--mut);font-size:11px;margin-top:8px">Linhas = acumulado mês a mês. <b>Faixa</b> = conservador↔otimista · <b>tracejado</b> = base. Meses restantes estimados pelo mês equivalente de ${Y.prevY} × ritmo do período: base ×${Y.ratio.toFixed(2)}, conservador ×${(1+(Y.ratio-1)*0.6).toFixed(2)}, otimista ×${(1+(Y.ratio-1)*1.4).toFixed(2)}.</div></div>`;
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">Linhas = acumulado mês a mês. <b>Faixa</b> = conservador↔otimista · <b>tracejado</b> = base. Ritmo base = <b>momentum dos últimos 3 meses</b> (${Y.winLabel} ${Y.curY} vs ${Y.prevY} = ×${Y.ratio.toFixed(2)}), mais responsivo que o YTD (×${Y.ytdRatio.toFixed(2)}). Meses restantes = mês equivalente de ${Y.prevY} × ritmo: base ×${Y.ratio.toFixed(2)}, conservador ×${(1+(Y.ratio-1)*0.6).toFixed(2)}, otimista ×${(1+(Y.ratio-1)*1.4).toFixed(2)}.</div></div>`;
   // por ano (com mesmo-período a/a e flag de parcial)
   const anos=Y.years;
   html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love por ano <span class="cap">a "var. mesmo período" compara só os meses já decorridos do ano corrente — leitura justa</span></h3>
