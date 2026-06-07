@@ -419,7 +419,7 @@ function wireFTabs(){
     const v=t.dataset.v;
     Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id); if(el)el.style.display=(k===v)?'':'none';});
     if(v==='projecao') drawProjCharts();
-    if(v==='analises') drawAnalisesChart();
+    if(v==='analises'){ drawAnalisesChart(); drawDailyChart(); }
     if(v==='petlove'){ drawPetloveChart(); drawPetloveYearChart(); }
   });});
 }
@@ -936,21 +936,110 @@ async function enviarRenegociacao(M){
 }
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
-let _AD=null, selWin='5', _achart=null;
+let _AD=null, selWin='5', _achart=null, _dayMap=null, _manMetric='q', _manChart=null;
 const AZUL2='#4D9DFF';
+const INP='background:#0E1E36;border:1px solid var(--line);color:#E8EEF6;border-radius:8px;padding:7px 9px;font-size:13px';
 function gcol(v){return v==null?'var(--mut)':(v>=0?AZUL2:'var(--red)');}
 function gtxt(v){return v==null?'—':(v>0?'▲ +':v<0?'▼ ':'')+v+'%';}
+// helpers de data (string YYYY-MM-DD)
+function _d1(s){return new Date(s+'T00:00:00');}
+function _fmt(dt){return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');}
+function _addD(s,n){const d=_d1(s);d.setDate(d.getDate()+n);return _fmt(d);}
+function _addY(s,n){const d=_d1(s);d.setFullYear(d.getFullYear()+n);return _fmt(d);}
+function _ndays(a,b){return Math.round((_d1(b)-_d1(a))/864e5)+1;}
+function _dmy(s){const[y,m,d]=s.split('-');return d+'/'+m+'/'+y.slice(2);}
 function renderAnalises(D){
   _AD=D; const wrap=document.getElementById('analises'); if(!wrap) return;
   const wins=[['5','5 dias'],['10','10 dias'],['15','15 dias'],['20','20 dias'],['mes','Mês a mês']];
+  _dayMap={}; (D.serie_diaria||[]).forEach(x=>_dayMap[x.d]={q:x.q,f:x.f});
+  const days=(D.serie_diaria||[]).map(x=>x.d); const dMin=days[0]||'2023-01-01', dMax=days[days.length-1]||'';
+  const dDe=dMax?_addD(dMax,-29):dMin;
   wrap.innerHTML=`
     <div class="card" style="margin-bottom:16px"><h3>Faturamento mensal desde 2014 <span class="cap">${(D.serie_mensal_full||[]).length} meses · evolução histórica da Matriz</span></h3>
       <div class="chartbox lg"><canvas id="anHist"></canvas></div></div>
+    <div class="card" style="margin-bottom:16px"><h3>📅 Período manual · produção por dia <span class="cap">escolha as datas (ou um atalho) e veja produção e faturamento do intervalo, comparado</span></h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:4px">
+        <div><div class="acmp-l">De</div><input type="date" id="anDe" min="${dMin}" max="${dMax}" value="${dDe}" style="${INP}"></div>
+        <div><div class="acmp-l">Até</div><input type="date" id="anAte" min="${dMin}" max="${dMax}" value="${dMax}" style="${INP}"></div>
+        <button class="wbtn on" id="anApply" style="padding:8px 16px">Analisar</button>
+        <span style="color:var(--mut);font-size:12px;align-self:center">atalhos:</span>
+        <button class="wbtn" data-preset="7">7 dias</button>
+        <button class="wbtn" data-preset="30">30 dias</button>
+        <button class="wbtn" data-preset="90">90 dias</button>
+        <button class="wbtn" data-preset="mes">Este mês</button>
+        <button class="wbtn" data-preset="mesant">Mês passado</button>
+        <button class="wbtn" data-preset="ano">Este ano</button>
+      </div>
+      <div style="color:var(--mut);font-size:11px;margin-bottom:10px">Dados diários desde ${dMin?_dmy(dMin):'—'} (sistema HF, sem Pet Love).</div>
+      <div id="anManualOut"></div>
+    </div>
     <div class="wsel">${wins.map(([k,l])=>`<button class="wbtn ${k===selWin?'on':''}" data-w="${k}">${l}</button>`).join('')}</div>
     <div id="anTable"></div>`;
-  wrap.querySelectorAll('.wbtn').forEach(b=>b.addEventListener('click',()=>{
-    selWin=b.dataset.w; wrap.querySelectorAll('.wbtn').forEach(o=>o.classList.toggle('on',o===b)); renderAnTable();}));
-  renderAnTable();
+  wrap.querySelectorAll('.wbtn[data-w]').forEach(b=>b.addEventListener('click',()=>{
+    selWin=b.dataset.w; wrap.querySelectorAll('.wbtn[data-w]').forEach(o=>o.classList.toggle('on',o===b)); renderAnTable();}));
+  const setRange=(de,ate)=>{document.getElementById('anDe').value=de; document.getElementById('anAte').value=ate; renderManual();};
+  wrap.querySelector('#anApply').addEventListener('click',renderManual);
+  wrap.querySelectorAll('.wbtn[data-preset]').forEach(b=>b.addEventListener('click',()=>{
+    const p=b.dataset.preset;
+    if(p==='mes') setRange(dMax.slice(0,7)+'-01',dMax);
+    else if(p==='mesant'){const f=_addD(dMax.slice(0,7)+'-01',-1); setRange(f.slice(0,7)+'-01',f);}
+    else if(p==='ano') setRange(dMax.slice(0,4)+'-01-01',dMax);
+    else setRange(_addD(dMax,-(+p-1)),dMax);
+  }));
+  renderAnTable(); renderManual();
+}
+function renderManual(){
+  const out=document.getElementById('anManualOut'); if(!out||!_dayMap) return;
+  const de=(document.getElementById('anDe')||{}).value, ate=(document.getElementById('anAte')||{}).value;
+  if(!de||!ate||de>ate){ out.innerHTML='<div style="color:var(--amber);font-size:13px">Selecione um intervalo válido (De ≤ Até).</div>'; return; }
+  const sumR=(d1,d2)=>{let q=0,f=0,n=0; for(const k in _dayMap){ if(k>=d1&&k<=d2){q+=_dayMap[k].q;f+=_dayMap[k].f;n++;} } return {q,f,n};};
+  const len=_ndays(de,ate);
+  const cur=sumR(de,ate);
+  const prev=sumR(_addD(de,-len),_addD(de,-1));        // período imediatamente anterior, mesmo tamanho
+  const yo=sumR(_addY(de,-1),_addY(ate,-1));            // mesmas datas no ano anterior
+  const pc=(a,b)=>b>0?100*(a/b-1):null;
+  const kpi=(l,v,s)=>`<div><div class="acmp-l">${l}</div><div class="acmp-v">${v}</div><div class="acmp-s">${s}</div></div>`;
+  const cmp=(l,a,b)=>{const p=pc(a,b);return `<div><div class="acmp-l">${l}</div><div class="acmp-v" style="color:${gcol(p)}">${gtxt(p==null?null:+p.toFixed(1))}</div><div class="acmp-s">base ${num(b)}</div></div>`;};
+  out.innerHTML=`
+    <div style="display:flex;gap:26px;flex-wrap:wrap;margin-bottom:6px">
+      ${kpi('Produção (exames)',num(cur.q),de===ate?'no dia':`${len} dias · ${(cur.q/len).toFixed(0)}/dia`)}
+      ${kpi('Faturamento',brl(cur.f),`ticket ${cur.q?brl(cur.f/cur.q):'—'}/exame`)}
+      ${kpi('Média diária',brl(cur.f/len),`${cur.n} dias com produção`)}
+    </div>
+    <div style="display:flex;gap:26px;flex-wrap:wrap;margin:10px 0 6px;border-top:1px solid var(--line);padding-top:12px">
+      ${cmp(`vs período anterior (exames)`,cur.q,prev.q)}
+      ${cmp(`vs período anterior (fat.)`,cur.f,prev.f)}
+      ${cmp(`vs ano anterior (exames)`,cur.q,yo.q)}
+      ${cmp(`vs ano anterior (fat.)`,cur.f,yo.f)}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin:12px 0 6px">
+      <span style="color:var(--mut);font-size:12px">gráfico por dia:</span>
+      <button class="wbtn ${_manMetric==='q'?'on':''}" data-m="q">Produção</button>
+      <button class="wbtn ${_manMetric==='f'?'on':''}" data-m="f">Faturamento</button>
+      <button class="wbtn" id="anTblToggle" style="margin-left:auto">Ver tabela diária</button>
+    </div>
+    <div class="chartbox"><canvas id="anDayChart"></canvas></div>
+    <div id="anDayTbl" style="display:none;margin-top:12px"></div>`;
+  out.querySelectorAll('.wbtn[data-m]').forEach(b=>b.addEventListener('click',()=>{_manMetric=b.dataset.m; renderManual();}));
+  const tg=out.querySelector('#anTblToggle');
+  tg.addEventListener('click',()=>{const t=out.querySelector('#anDayTbl'); const show=t.style.display==='none'; t.style.display=show?'':'none'; tg.textContent=show?'Ocultar tabela diária':'Ver tabela diária'; if(show&&!t.dataset.done){t.innerHTML=manTable(de,ate); t.dataset.done='1';}});
+  drawDailyChart();
+}
+function manTable(de,ate){
+  const rows=[]; for(let k=ate;k>=de;k=_addD(k,-1)){const v=_dayMap[k]; if(v) rows.push(`<tr><td>${_dmy(k)}</td><td class="num">${num(v.q)}</td><td class="num">${brl(v.f)}</td><td class="num">${v.q?brl(v.f/v.q):'—'}</td></tr>`);}
+  return `<table class="atab"><thead><tr><th>Dia</th><th class="num">Exames</th><th class="num">Faturamento</th><th class="num">Ticket</th></tr></thead><tbody>${rows.join('')||'<tr><td colspan=4 style="color:var(--mut)">Sem produção no intervalo.</td></tr>'}</tbody></table>`;
+}
+function drawDailyChart(){
+  const cv=document.getElementById('anDayChart'); if(!cv||typeof Chart==='undefined') return;
+  const de=(document.getElementById('anDe')||{}).value, ate=(document.getElementById('anAte')||{}).value;
+  if(!de||!ate||de>ate||!_dayMap) return;
+  if(_manChart) _manChart.destroy();
+  const labels=[],data=[]; for(let k=de;k<=ate;k=_addD(k,1)){labels.push(_dmy(k)); const v=_dayMap[k]; data.push(v?v[_manMetric]:0);}
+  const isF=_manMetric==='f';
+  _manChart=new Chart(cv,{type:'bar',data:{labels,datasets:[{label:isF?'Faturamento/dia':'Exames/dia',data,backgroundColor:isF?'#00E5A0':'#00D4FF'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const k=_addD(de,c.dataIndex); const v=_dayMap[k]||{q:0,f:0}; return [' Exames: '+num(v.q),' Faturamento: '+brl(v.f)];}}}},
+      scales:{x:{ticks:{color:'#7f90a8',maxTicksLimit:16,maxRotation:90,minRotation:0,font:{size:9}},grid:{display:false}},
+        y:{ticks:{color:'#7f90a8',callback:v=>isF?brlk(v):num(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
 }
 function renderAnTable(){
   const D=_AD; if(!D) return; const items=(D.analises||{})[selWin]||[];

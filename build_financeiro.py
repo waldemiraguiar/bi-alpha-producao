@@ -346,6 +346,8 @@ def build():
     D["analises"]=analises
     # série mensal completa desde 2014 (p/ gráfico didático)
     D["serie_mensal_full"]=[{"ym":h["ym"],"qtd":h["qtd"],"fat":round(h["fat"] or 0)} for h in hist if h["ym"]]
+    # série DIÁRIA (desde 2023) para análise por dia + seletor de período manual no front
+    D["serie_diaria"]=[{"d":k,"q":daily[k][0],"f":round(daily[k][1])} for k in sorted(daily) if k>='2023-01-01']
 
     # ---------- ALERTAS & RECOMENDAÇÕES (data-driven) ----------
     MESNOME=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
