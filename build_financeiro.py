@@ -272,6 +272,37 @@ def build():
                            "Valores reais (Contas Médicas + Recurso de Glosa) informados manualmente por competência. "
                            "Some no faturamento TOTAL; não é rateada nas quebras por cliente/exame."}
 
+    # ---- Pet Love: MARGEM (reembolso PL vs nossa tabela varejo) + exames ----
+    # Dados extraídos OFFLINE dos relatórios "Informações do Pagamento" (Contas Médicas)
+    # e da Tabela de Preços Alpha Mar/2026. Atualizar rodando os extratores quando vierem
+    # novos relatórios. Ver data_petlove/.
+    try:
+        PLDIR=os.path.join(ROOT,"data_petlove")
+        marg=json.load(open(os.path.join(PLDIR,"petlove_margem.json"),encoding="utf-8"))
+        plex=json.load(open(os.path.join(PLDIR,"petlove_exames.json"),encoding="utf-8"))
+        try: D["petlove"]["atend_mensal"]=json.load(open(os.path.join(PLDIR,"petlove_mensal.json"),encoding="utf-8"))
+        except Exception: pass
+        mt=[r for r in marg if r.get("tabela")]
+        rev_pl=sum(r["volume"]*r["petlove"] for r in mt)
+        rev_tb=sum(r["volume"]*r["tabela"] for r in mt)
+        acima=[r for r in mt if r["delta"]>0]; abaixo=[r for r in mt if r["delta"]<0]
+        D["petlove_margem"]={
+            "agregado":{"receita_petlove":round(rev_pl,2),"receita_tabela":round(rev_tb,2),
+                "premio_pct":round((rev_pl/rev_tb-1)*100,1) if rev_tb else None,
+                "n_match":len(mt),"n_total":len(marg),
+                "n_acima":len(acima),"n_abaixo":len(abaixo),
+                "ganho_acima":round(sum(r["delta"]*r["volume"] for r in acima),2),
+                "perda_abaixo":round(sum(-r["delta"]*r["volume"] for r in abaixo),2)},
+            "exames":marg,
+            "top_exames":sorted(plex,key=lambda x:-x["volume"])[:40],
+            "fonte":"Relatórios de pagamento Pet Love (Contas Médicas) jan–nov/2025 · "
+                    "Tabela de Preços Alpha Março/2026 · preço unit. PL = mediana de atendimentos avulsos",
+            "obs":"Compara o REEMBOLSO que a Pet Love nos paga por exame vs nossa TABELA DE VAREJO. "
+                  "Δ>0 = Pet Love paga ACIMA do varejo (favorável). Δ<0 = abaixo (desconto que damos). "
+                  "Margem real (com custo do exame) depende do dev liberar custo."}
+    except Exception as e:
+        D["petlove_margem"]={"erro":str(e)}
+
     # ---------- ANÁLISES PONTUAIS (janelas 5/10/15/20 dias + mês a mês) ----------
     import calendar
     serie=q(f"SELECT DataExame d, COUNT(*) q, ROUND(SUM(ValorExame)) f FROM {EX} "
