@@ -335,6 +335,7 @@ function render(D){
   renderClientes(D);
   renderNovos(D);
   renderPerdidos(D);
+  renderAnalises(D);
   wireFTabs();
   wireTools();
 }
@@ -348,7 +349,7 @@ function wireTools(){
     setTimeout(()=>window.print(), 250);
   });}
   if(tv && !tv.__w){ tv.__w=1; let timer=null, i=0;
-    const order=['geral','projecao','clientes','novos','perdidos'];
+    const order=['geral','projecao','clientes','novos','perdidos','analises'];
     const tick=()=>{ const v=order[i%order.length]; i++;
       const t=[...document.querySelectorAll('.ftab')].find(x=>x.dataset.v===v); if(t)t.click();
       window.scrollTo({top:0,behavior:'smooth'}); };
@@ -407,12 +408,13 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos'};
+  const map={geral:'app',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
     Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id); if(el)el.style.display=(k===v)?'':'none';});
     if(v==='projecao') drawProjCharts();
+    if(v==='analises') drawAnalisesChart();
   });});
 }
 
@@ -679,3 +681,49 @@ function mergeByName(rows, field){
   return Object.values(map).sort((a,b)=>b.qtd-a.qtd);
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
+let _AD=null, selWin='5', _achart=null;
+const AZUL2='#4D9DFF';
+function gcol(v){return v==null?'var(--mut)':(v>=0?AZUL2:'var(--red)');}
+function gtxt(v){return v==null?'—':(v>0?'▲ +':v<0?'▼ ':'')+v+'%';}
+function renderAnalises(D){
+  _AD=D; const wrap=document.getElementById('analises'); if(!wrap) return;
+  const wins=[['5','5 dias'],['10','10 dias'],['15','15 dias'],['20','20 dias'],['mes','Mês a mês']];
+  wrap.innerHTML=`
+    <div class="card" style="margin-bottom:16px"><h3>Faturamento mensal desde 2014 <span class="cap">${(D.serie_mensal_full||[]).length} meses · evolução histórica da Matriz</span></h3>
+      <div class="chartbox lg"><canvas id="anHist"></canvas></div></div>
+    <div class="wsel">${wins.map(([k,l])=>`<button class="wbtn ${k===selWin?'on':''}" data-w="${k}">${l}</button>`).join('')}</div>
+    <div id="anTable"></div>`;
+  wrap.querySelectorAll('.wbtn').forEach(b=>b.addEventListener('click',()=>{
+    selWin=b.dataset.w; wrap.querySelectorAll('.wbtn').forEach(o=>o.classList.toggle('on',o===b)); renderAnTable();}));
+  renderAnTable();
+}
+function renderAnTable(){
+  const D=_AD; if(!D) return; const items=(D.analises||{})[selWin]||[];
+  const comp=items.find(x=>!x.parcial)||items[0]; const el=document.getElementById('anTable'); if(!el) return;
+  let head=`<div class="radar" style="margin-bottom:14px"><h3>📌 Período comparado ${comp?'· '+esc(comp.label):''}</h3>`;
+  if(comp){
+    head+=`<div style="display:flex;gap:30px;flex-wrap:wrap">
+      <div><div class="acmp-l">Faturamento</div><div class="acmp-v">${brl(comp.fat)}</div><div class="acmp-s">${num(comp.qtd)} exames</div></div>
+      <div><div class="acmp-l">vs mesmo período do MÊS anterior</div><div class="acmp-v" style="color:${gcol(comp.mom_fat)}">${gtxt(comp.mom_fat)}</div><div class="acmp-s">faturamento</div></div>
+      <div><div class="acmp-l">vs mesmo período do ANO anterior</div><div class="acmp-v" style="color:${gcol(comp.yoy_fat)}">${gtxt(comp.yoy_fat)}</div><div class="acmp-s">faturamento · prod. ${gtxt(comp.yoy_qtd)}</div></div></div>`;
+  } else head+='<div style="color:var(--mut)">Sem dados.</div>';
+  head+=`</div>`;
+  const rows=items.map(x=>`<tr ${x.parcial?'style="opacity:.5"':''}>
+    <td>${esc(x.label)}${x.parcial?' <span style="color:var(--amber);font-size:10px;font-weight:700">parcial</span>':''}</td>
+    <td class="num">${num(x.qtd)}</td><td class="num">${brl(x.fat)}</td>
+    <td class="num" style="color:${gcol(x.mom_fat)};font-weight:700">${gtxt(x.mom_fat)}</td>
+    <td class="num" style="color:${gcol(x.yoy_fat)};font-weight:700">${gtxt(x.yoy_fat)}</td></tr>`).join('');
+  el.innerHTML=head+`<div class="card"><h3>${selWin==='mes'?'Mês a mês':'Blocos de '+selWin+' dias'} <span class="cap">azul = crescimento · vermelho = queda · vs mesma janela</span></h3>
+    <table class="atab"><thead><tr><th>Período</th><th class="num">Exames</th><th class="num">Faturamento</th><th class="num">vs mês ant.</th><th class="num">vs ano ant.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function drawAnalisesChart(){
+  const D=_AD; if(!D) return; const cv=document.getElementById('anHist'); if(!cv||typeof Chart==='undefined') return;
+  if(_achart) _achart.destroy();
+  const s=D.serie_mensal_full||[];
+  _achart=new Chart(cv,{type:'line',data:{labels:s.map(x=>x.ym),datasets:[
+    {label:'Faturamento',data:s.map(x=>x.fat),borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',fill:true,tension:.3,pointRadius:0,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.raw)}}},
+      scales:{x:{ticks:{maxTicksLimit:14,color:'#8aa2bd'},grid:{display:false}},y:{ticks:{callback:v=>brlk(v),color:'#8aa2bd'},grid:{color:'rgba(255,255,255,.05)'}}}}});
+}

@@ -141,6 +141,16 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 .cli-badge.lost{background:rgba(255,84,112,.16);color:var(--red)}
 .fbanner{display:flex;gap:24px;flex-wrap:wrap;background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-bottom:18px}
 .fbanner .b{min-width:120px}.fbanner .b .v{font-size:26px;font-weight:900}.fbanner .b .l{font-size:11.5px;color:var(--mut)}
+/* aba Análises */
+.wsel{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.wbtn{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 16px;cursor:pointer;font-weight:700;font-size:13px;color:var(--mut)}
+.wbtn.on{color:var(--cyan);border-color:rgba(0,212,255,.5);background:rgba(0,212,255,.08)}
+.acmp-l{font-size:11.5px;color:var(--mut)}.acmp-v{font-size:27px;font-weight:900;letter-spacing:-.02em}.acmp-s{font-size:11.5px;color:var(--mut)}
+.atab{width:100%;border-collapse:collapse;font-size:13px}
+.atab th{text-align:left;color:var(--mut);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:1px solid var(--line)}
+.atab td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.04);font-variant-numeric:tabular-nums}
+.atab td.num,.atab th.num{text-align:right}
+.atab tr:hover td{background:rgba(0,212,255,.04)}
 #gate{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(900px 500px at 50% 0,rgba(0,212,255,.1),transparent 60%),var(--navy)}
 .gate-card{width:340px;max-width:90vw;background:linear-gradient(180deg,var(--card),var(--navy2));
@@ -195,6 +205,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
     <div class="ftab" data-v="clientes">⭐ Clientes · Tiers</div>
     <div class="ftab" data-v="novos">🌱 Novos (90d)</div>
     <div class="ftab" data-v="perdidos">🔻 Perdidos / Risco</div>
+    <div class="ftab" data-v="analises">🔎 Análises</div>
     <div class="tools">
       <button class="toolbtn" id="btnTV">📺 Modo TV</button>
       <button class="toolbtn" id="btnPrint">📄 Resumo PDF</button>
@@ -206,6 +217,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
   <div id="clientes" style="display:none"></div>
   <div id="novos" style="display:none"></div>
   <div id="perdidos" style="display:none"></div>
+  <div id="analises" style="display:none"></div>
 
   <footer id="foot"></footer>
 </div>

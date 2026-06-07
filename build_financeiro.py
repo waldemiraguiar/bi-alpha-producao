@@ -226,10 +226,10 @@ def build():
         if not L["primeira"]: continue
         dias=(hoje-L["primeira"]).days
         if dias<0 or dias>90: continue
-        c=climap.get(L["cod"]); info=names.get(L["cod"],{})
-        fat=float((c or {}).get("fat") or 0); ult=L["ultima"]; di=(hoje-ult).days if ult else dias
-        novos.append({"cod":L["cod"],"nome":(c or {}).get("nome") or info.get("nome"),
-            "cidade":(c or {}).get("Cidade") or info.get("Cidade"),"primeira":str(L["primeira"]),
+        cl=climap.get(L["cod"]); info=names.get(L["cod"],{})
+        fat=float((cl or {}).get("fat") or 0); ult=L["ultima"]; di=(hoje-ult).days if ult else dias
+        novos.append({"cod":L["cod"],"nome":(cl or {}).get("nome") or info.get("nome"),
+            "cidade":(cl or {}).get("Cidade") or info.get("Cidade"),"primeira":str(L["primeira"]),
             "dias_cad":dias,"dias_inativo":di,"fat":round(fat,2),
             "mensal":round(fat/max(1,dias)*30,2),"semanas":semanas_de(L["cod"]),
             "grupo":"recem" if dias<=30 else "maturando","esfriando":di>=14})
@@ -242,9 +242,9 @@ def build():
     # ---------- PERDIDOS / RISCO (era relevante: >=R$300/mês) ----------
     perdidos=[]
     for L in life:
-        c=climap.get(L["cod"])
-        if not c: continue
-        fat12=float(c["fat"] or 0); mensal=fat12/12.0
+        cl=climap.get(L["cod"])
+        if not cl: continue
+        fat12=float(cl["fat"] or 0); mensal=fat12/12.0
         if mensal<300: continue
         if L["primeira"] and (hoje-L["primeira"]).days<=90: continue   # novo, não perdido
         ult=L["ultima"]; di=(hoje-ult).days if ult else 999
@@ -253,7 +253,7 @@ def build():
         delta=round(100*(atual-base)/base,1) if base>0 else (0.0 if atual==0 else 100.0)
         motivo="sumido" if di>=21 else ("queda" if delta<=-40 else None)
         if not motivo: continue
-        perdidos.append({"cod":L["cod"],"nome":c["nome"],"cidade":c["Cidade"],"fat12m":round(fat12,2),
+        perdidos.append({"cod":L["cod"],"nome":cl["nome"],"cidade":cl["Cidade"],"fat12m":round(fat12,2),
             "mensal":round(mensal,2),"ultima":str(ult) if ult else None,"dias_inativo":di,
             "delta":delta,"semanas":semanas[::-1],"motivo":motivo})
     perdidos.sort(key=lambda x:-x["fat12m"])
@@ -271,6 +271,50 @@ def build():
                     "obs": "Receita externa Pet Love: o HF conta os exames mas zera o valor. "
                            "Valores reais (Contas Médicas + Recurso de Glosa) informados manualmente por competência. "
                            "Some no faturamento TOTAL; não é rateada nas quebras por cliente/exame."}
+
+    # ---------- ANÁLISES PONTUAIS (janelas 5/10/15/20 dias + mês a mês) ----------
+    import calendar
+    serie=q(f"SELECT DataExame d, COUNT(*) q, ROUND(SUM(ValorExame)) f FROM {EX} "
+            f"WHERE DataExame>='2014-01-01' AND DataExame<=CURDATE() GROUP BY DataExame")
+    daily={str(r["d"]):(r["q"],float(r["f"] or 0)) for r in serie if r["d"]}
+    MES3=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+    def bsum(y,m,d1,d2):
+        if y<2014 or m<1 or m>12: return (0,0.0,d2)
+        last=calendar.monthrange(y,m)[1]; e=min(d2,last); qa=0; fa=0.0
+        for dd in range(d1,e+1):
+            v=daily.get(f"{y:04d}-{m:02d}-{dd:02d}")
+            if v: qa+=v[0]; fa+=v[1]
+        return (qa,fa,e)
+    def blocks(W):
+        if W=="mes": return [(1,31)]
+        W=int(W); out=[]; d=1
+        while d<=31: out.append((d,d+W-1)); d+=W
+        return out
+    def gpct(cur,base): return round(100*(cur-base)/base,1) if base>0 else None
+    hoje=datetime.date.today()
+    months=[]; yy,mm=hoje.year,hoje.month
+    for _ in range(15):
+        months.append((yy,mm)); mm-=1
+        if mm==0: mm=12; yy-=1
+    analises={}
+    for W in ["5","10","15","20","mes"]:
+        bls=blocks(W); items=[]
+        for (ay,am) in months:
+            for bi,(d1,d2) in enumerate(bls):
+                if datetime.date(ay,am,min(d1,calendar.monthrange(ay,am)[1]))>hoje: continue
+                qc,fc,e=bsum(ay,am,d1,d2)
+                pmY,pmM=(ay,am-1) if am>1 else (ay-1,12)
+                pq,pf,_=bsum(pmY,pmM,d1,d2); yq,yf,_=bsum(ay-1,am,d1,d2)
+                lbl=(f"{d1:02d}–{e:02d} {MES3[am]}/{str(ay)[2:]}" if W!="mes" else f"{MES3[am]}/{ay}")
+                items.append({"ym":f"{ay}-{am:02d}","bi":bi,"label":lbl,"ano":ay,
+                    "qtd":qc,"fat":round(fc),"parcial":datetime.date(ay,am,e)>=hoje,
+                    "mom_fat":gpct(fc,pf),"mom_qtd":gpct(qc,pq),
+                    "yoy_fat":gpct(fc,yf),"yoy_qtd":gpct(qc,yq)})
+        items.sort(key=lambda x:(x["ym"],x["bi"]),reverse=True)
+        analises[W]=items[:24]
+    D["analises"]=analises
+    # série mensal completa desde 2014 (p/ gráfico didático)
+    D["serie_mensal_full"]=[{"ym":h["ym"],"qtd":h["qtd"],"fat":round(h["fat"] or 0)} for h in hist if h["ym"]]
 
     conn.close()
     return D
