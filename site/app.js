@@ -95,6 +95,7 @@ async function decryptDashboard(pwd){
     e.preventDefault(); err.textContent=''; btn.disabled=true; btn.textContent='Verificando…';
     try{
       const D = await decryptDashboard(pwd.value);
+      window.__PW = pwd.value;
       document.getElementById('gate').style.display='none';
       document.getElementById('dash').style.display='';
       render(D);
@@ -774,6 +775,9 @@ function renderMargem(D){
   html+=`<div class="alert-card ${prem>=0?'info':'warn'}" style="margin:6px 0 16px"><div class="ai">⚖️</div><div>
     <div class="at">No agregado, a Pet Love nos paga ${prem>=0?'ACIMA':'ABAIXO'} do varejo (${prem>=0?'+':''}${prem}%)</div>
     <div class="ax">Compara o <b>reembolso</b> que a Pet Love paga por exame com a <b>nossa tabela de varejo (Mar/2026)</b>. Onde paga acima, ganhamos ${brl(ag.ganho_acima)} (${ag.n_acima} exames); onde paga abaixo, abrimos mão de ${brl(ag.perda_abaixo)} (${ag.n_abaixo} exames). <b>Atenção:</b> isto é preço × preço — a margem REAL precisa do custo do exame (pendente do dev). ${esc(M.obs||'')}</div></div></div>`;
+  html+=`<div style="display:flex;align-items:center;gap:14px;margin:0 0 16px;flex-wrap:wrap">
+    <button class="toolbtn" id="btnReneg" style="background:var(--cyan);color:var(--navy);font-weight:700">📧 Exportar lista de renegociação por e-mail</button>
+    <span id="renegStatus" style="color:var(--mut);font-size:13px"></span></div>`;
   // dois blocos: acima e abaixo
   const acima=exs.filter(x=>x.delta>0).sort((a,b)=>b.impacto-a.impacto);
   const abaixo=exs.filter(x=>x.delta<0).sort((a,b)=>a.delta_pct-b.delta_pct);
@@ -799,6 +803,57 @@ function renderMargem(D){
   }
   html+=`<div style="color:var(--mut);font-size:11px;margin-top:10px">${esc(M.fonte||'')}</div>`;
   wrap.innerHTML=html;
+  const bt=document.getElementById('btnReneg');
+  if(bt) bt.addEventListener('click',()=>enviarRenegociacao(M));
+}
+
+/* monta a lista priorizada de renegociação (espelha gera_renegociacao.py) */
+function renegLista(M){
+  const EXC=new Set(['sódio','potássio','sodio','potassio']);
+  const ab=(M.exames||[]).filter(x=>x.tabela!=null && x.delta<0 && x.volume>=15
+      && !EXC.has((x.exame||'').trim().toLowerCase()));
+  ab.forEach(x=>{x._gap=Math.round((-x.delta)*x.volume*1.2);
+    const alvo=Math.round(0.8*x.tabela*100)/100; x._alvo=alvo>x.petlove?alvo:x.petlove;
+    x._recup=Math.round(Math.max(0,(x._alvo-x.petlove))*x.volume*1.2);});
+  ab.sort((a,b)=>b._gap-a._gap);
+  return ab;
+}
+function renegEmailHTML(M){
+  const ab=renegLista(M); const teto=ab.reduce((s,x)=>s+x._gap,0), recup=ab.reduce((s,x)=>s+x._recup,0);
+  const td='style="padding:6px 8px;border:1px solid #1C2F4A;font-size:13px"';
+  const tdr='style="padding:6px 8px;border:1px solid #1C2F4A;font-size:13px;text-align:right"';
+  const rows=ab.map((x,i)=>`<tr${i%2?' style="background:#0E1E36"':''}>
+    <td ${td}>${i+1}</td><td ${td}>${esc(x.exame)}</td><td ${tdr}>${num(x.volume)}</td>
+    <td ${tdr}>${brl(x.petlove)}</td><td ${tdr}>${brl(x.tabela)}</td>
+    <td ${tdr} ><span style="color:#C92A2A;font-weight:700">${x.delta_pct}%</span></td>
+    <td ${tdr}><b>${brl(x._gap)}</b></td><td ${tdr}>${brl(x._alvo)}</td><td ${tdr}>${brl(x._recup)}</td></tr>`).join('');
+  return `<div style="font-family:Inter,Arial,sans-serif;background:#0A1628;color:#E8EEF6;padding:22px">
+   <h2 style="color:#00D4FF;margin:0 0 4px">Renegociação Pet Love — exames subprecificados</h2>
+   <div style="color:#9FB0C8;font-size:12px;margin-bottom:14px">Gerado pelo painel BI Alpha · base relatórios Pet Love jan–nov/2025 × Tabela Mar/2026</div>
+   <div style="background:#0E1E36;border:1px solid #1C2F4A;border-radius:8px;padding:14px;margin-bottom:16px">
+     <b>Em jogo: até ${brl(teto)}/ano</b> · recuperável ~${brl(recup)}/ano (alvo: desconto máx 20% do varejo) · ${ab.length} exames.<br>
+     <span style="color:#9FB0C8;font-size:12px">No agregado a Pet Love paga +20% acima do varejo (rotina de alto volume). O ajuste é só nos especializados/endócrinos abaixo.</span>
+   </div>
+   <table style="border-collapse:collapse;width:100%">
+     <thead><tr style="background:#13294A;color:#fff">
+       <th ${td}>#</th><th ${td} align="left">Exame</th><th ${tdr}>Vol.</th><th ${tdr}>PL paga</th>
+       <th ${tdr}>Varejo</th><th ${tdr}>Desc.</th><th ${tdr}>R$/ano em jogo</th><th ${tdr}>Alvo −20%</th><th ${tdr}>Recupera/ano</th></tr></thead>
+     <tbody>${rows}</tbody></table>
+   <div style="color:#868E96;font-size:11px;margin-top:14px">Sódio/Potássio excluídos (tabela só vende o par R$23). Margem real precisa do custo do exame (pendente do dev). Volume anualizado ×1,2 (~10 meses observados).</div>
+  </div>`;
+}
+async function enviarRenegociacao(M){
+  const st=document.getElementById('renegStatus'); const bt=document.getElementById('btnReneg');
+  if(!window.__PW){ if(st)st.textContent='Sessão sem senha — recarregue e entre novamente.'; return; }
+  if(bt){bt.disabled=true;} if(st){st.style.color='var(--mut)';st.textContent='Enviando…';}
+  try{
+    const r=await fetch('/api/enviar-renegociacao',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({senha:window.__PW,assunto:'Renegociação Pet Love — exames subprecificados',html:renegEmailHTML(M)})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok&&j.ok){ if(st){st.style.color='var(--green)';st.textContent='✅ Enviado para '+(j.to||'seu e-mail')+'.'; } }
+    else { if(st){st.style.color='var(--red)';st.textContent='❌ '+(j.erro||('falha '+r.status))+(j.detalhe?' — '+j.detalhe:'');} }
+  }catch(e){ if(st){st.style.color='var(--red)';st.textContent='❌ erro de rede: '+e.message;} }
+  finally{ if(bt) bt.disabled=false; }
 }
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
