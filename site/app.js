@@ -771,7 +771,15 @@ function renderPetlove(D){
         ${srow('Conservador',Y.projCons,Y.projConsPct,C.amber)+srow('Base',Y.projTotal,Y.projPct,C.cyan)+srow('Otimista',Y.projOtim,Y.projOtimPct,C.green)}</div>
     </div>
     <div class="chartbox lg"><canvas id="plYearChart"></canvas></div>
-    <div style="color:var(--mut);font-size:11px;margin-top:8px">Linhas = acumulado mês a mês. <b>Faixa</b> = conservador↔otimista · <b>tracejado</b> = base. Ritmo base = <b>momentum dos últimos 3 meses</b> (${Y.winLabel} ${Y.curY} vs ${Y.prevY} = ×${Y.ratio.toFixed(2)}), mais responsivo que o YTD (×${Y.ytdRatio.toFixed(2)}). Meses restantes = mês equivalente de ${Y.prevY} × ritmo: base ×${Y.ratio.toFixed(2)}, conservador ×${(1+(Y.ratio-1)*0.6).toFixed(2)}, otimista ×${(1+(Y.ratio-1)*1.4).toFixed(2)}.</div></div>`;
+    <div style="background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.25);border-radius:8px;padding:11px 14px;margin-top:10px;font-size:12px;line-height:1.5">
+      <b style="color:var(--cyan)">📐 Como os cenários são calculados</b> — cada mês que falta = o <b>mesmo mês de ${Y.prevY}</b> × o <b>ritmo dos últimos 3 meses</b> (${Y.winLabel}: a Pet Love faturou <b>×${Y.ratio.toFixed(2)}</b> o que fez no mesmo trecho de ${Y.prevY}).
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px">
+        <span style="color:var(--amber)">● <b>Conservador</b> = 60% do ritmo (×${(1+(Y.ratio-1)*0.6).toFixed(2)})</span>
+        <span style="color:var(--cyan)">● <b>Base</b> = ritmo cheio (×${Y.ratio.toFixed(2)})</span>
+        <span style="color:var(--green)">● <b>Otimista</b> = 140% do ritmo (×${(1+(Y.ratio-1)*1.4).toFixed(2)})</span>
+      </div>
+      <div style="color:var(--mut);margin-top:7px">No gráfico: <b>faixa sombreada</b> = entre conservador e otimista · <b>linha tracejada</b> = base · linhas cheias = realizado (${Y.curY} ciano, ${Y.prevY} cinza). Ritmo de 3 meses é mais responsivo que o YTD (×${Y.ytdRatio.toFixed(2)}).</div>
+    </div></div>`;
   // por ano (com mesmo-período a/a e flag de parcial)
   const anos=Y.years;
   html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love por ano <span class="cap">a "var. mesmo período" compara só os meses já decorridos do ano corrente — leitura justa</span></h3>
