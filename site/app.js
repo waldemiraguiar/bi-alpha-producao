@@ -115,6 +115,7 @@ function render(D){
     `BI Alpha · fonte: ${m.fonte} · ${num(k.total_exames)} exames analisados (R$ ${num(k.total_faturamento)} faturados no histórico). Valores = faturamento (valor cobrado).`;
 
   const app = document.getElementById('app'); app.innerHTML='';
+  app.insertAdjacentHTML('beforeend', alertStripHTML(D));
 
   /* ---------- KPIs executivos ---------- */
   // usa meses COMPLETOS (exclui o mês corrente parcial) — bate com a janela do KPI e com a Projeção
@@ -336,6 +337,7 @@ function render(D){
   renderNovos(D);
   renderPerdidos(D);
   renderAnalises(D);
+  renderAlertas(D);
   wireFTabs();
   wireTools();
 }
@@ -349,7 +351,7 @@ function wireTools(){
     setTimeout(()=>window.print(), 250);
   });}
   if(tv && !tv.__w){ tv.__w=1; let timer=null, i=0;
-    const order=['geral','projecao','clientes','novos','perdidos','analises'];
+    const order=['geral','alertas','projecao','clientes','novos','perdidos','analises'];
     const tick=()=>{ const v=order[i%order.length]; i++;
       const t=[...document.querySelectorAll('.ftab')].find(x=>x.dataset.v===v); if(t)t.click();
       window.scrollTo({top:0,behavior:'smooth'}); };
@@ -408,7 +410,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -681,6 +683,22 @@ function mergeByName(rows, field){
   return Object.values(map).sort((a,b)=>b.qtd-a.qtd);
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* ===================== ALERTAS & RECOMENDAÇÕES ===================== */
+function alertStripHTML(D){
+  const A=(D.alertas||[]); if(!A.length) return '';
+  const ord={danger:0,warn:1,info:2};
+  const top=[...A].sort((a,b)=>(ord[a.nivel]??3)-(ord[b.nivel]??3)).slice(0,4);
+  return `<div class="alert-strip">${top.map(a=>`<div class="alert-chip ${a.nivel}" onclick="(function(){const t=[...document.querySelectorAll('.ftab')].find(x=>x.dataset.v==='alertas');if(t)t.click();})()">${a.icone} ${esc(a.titulo)}</div>`).join('')}</div>`;
+}
+function renderAlertas(D){
+  const wrap=document.getElementById('alertas'); if(!wrap) return;
+  const A=(D.alertas||[]); const ord={danger:0,warn:1,info:2};
+  const sorted=[...A].sort((a,b)=>(ord[a.nivel]??3)-(ord[b.nivel]??3));
+  wrap.innerHTML=`<div style="margin-bottom:14px;color:var(--mut);font-size:13px">💡 Pontos de atenção e recomendações — gerados automaticamente a partir dos dados, atualizados a cada 30 min.</div>`+
+    sorted.map(a=>`<div class="alert-card ${a.nivel}"><div class="ai">${a.icone}</div><div><div class="at">${esc(a.titulo)}</div><div class="ax">${esc(a.texto)}</div></div></div>`).join('')
+    || '<div style="color:var(--green)">✓ Nenhum alerta no momento.</div>';
+}
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
 let _AD=null, selWin='5', _achart=null;

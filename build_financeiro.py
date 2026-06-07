@@ -316,6 +316,41 @@ def build():
     # série mensal completa desde 2014 (p/ gráfico didático)
     D["serie_mensal_full"]=[{"ym":h["ym"],"qtd":h["qtd"],"fat":round(h["fat"] or 0)} for h in hist if h["ym"]]
 
+    # ---------- ALERTAS & RECOMENDAÇÕES (data-driven) ----------
+    MESNOME=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+    seas={}
+    for h in hist:
+        if not h["ym"]: continue
+        yy2,mm2=h["ym"][:4],h["ym"][5:7]
+        if '2015'<=yy2<='2025': seas.setdefault(mm2,[0.0,0]); seas[mm2][0]+=h["fat"] or 0; seas[mm2][1]+=1
+    avgm={m:(seas[m][0]/seas[m][1]) for m in seas if seas[m][1]}
+    sbase=sum(avgm.values())/len(avgm) if avgm else 1
+    sidx={m:round(100*avgm[m]/sbase) for m in avgm}
+    curm=f"{hoje.month:02d}"; ci=sidx.get(curm,100)
+    pico=max(sidx,key=sidx.get) if sidx else "10"; vale=min(sidx,key=sidx.get) if sidx else "02"
+    A=[]
+    def br(n): return f"R$ {round(n):,}".replace(",",".")
+    if ci>=105: A.append({"nivel":"info","icone":"🗓️","titulo":f"{MESNOME[hoje.month]}: alta sazonal (índice {ci}, +{ci-100}% vs média)","texto":f"Período historicamente forte. Garanta capacidade — no pico os atrasados sobem. Pico do ano: {MESNOME[int(pico)]}."})
+    elif ci<=95: A.append({"nivel":"warn","icone":"🗓️","titulo":f"{MESNOME[hoje.month]}: baixa sazonal (índice {ci}, {ci-100}% vs média)","texto":f"Período historicamente fraco — bom para campanhas/contratos (concorrência relaxa). Vale: {MESNOME[int(vale)]} · Pico: {MESNOME[int(pico)]}."})
+    else: A.append({"nivel":"info","icone":"🗓️","titulo":f"{MESNOME[hoje.month]}: sazonalidade neutra (índice {ci})","texto":f"Pico histórico: {MESNOME[int(pico)]} · Vale: {MESNOME[int(vale)]}."})
+    pr=D["perdidos"]; risco=pr.get("fat_em_risco",0); sm=pr.get("sumidos",[])
+    if sm: A.append({"nivel":"danger","icone":"🔻","titulo":f"{br(risco)}/ano em risco · {len(sm)} clientes sumidos","texto":f"Maior: {sm[0]['nome']} ({sm[0]['dias_inativo']}d sem envio, ~{br(sm[0]['mensal'])}/mês). Reter 1 grande vale mais que ganhar dezenas pequenos. (Aba Perdidos/Risco)"})
+    fats=[(h["qtd"],h["fat"] or 0) for h in hist if h["ym"]]
+    if len(fats)>=24:
+        l12=fats[-12:]; p12=fats[-24:-12]
+        def tk(a): q=sum(x[0] for x in a); return (sum(x[1] for x in a)/q) if q else 0
+        t1,t0=tk(l12),tk(p12); dT=(100*(t1-t0)/t0) if t0 else 0
+        A.append({"nivel":"info" if dT>=0 else "warn","icone":"🎟️","titulo":f"Ticket médio {br(t1)} por exame ({'+' if dT>=0 else ''}{dT:.1f}% vs 12m anteriores)","texto":("Subindo — mix de valor melhorando, manter o rumo." if dT>=3 else "Crescer por VALOR (exames caros: PCR, painéis, especializados) complementa o volume e tem margem melhor.")})
+    esf=D["novos"].get("esfriando",0)
+    if esf: A.append({"nivel":"warn","icone":"🌱","titulo":f"{esf} clientes novos esfriando","texto":"Entraram (≤90d) e pararam de enviar (≥14d). Reativar agora aumenta a chance de virarem recorrentes. (Aba Novos)"})
+    am=D["analises"]["mes"]; cmp=next((x for x in am if not x["parcial"]),None)
+    if cmp and cmp["yoy_fat"] is not None:
+        v=cmp["yoy_fat"]; q=cmp["yoy_qtd"]
+        A.append({"nivel":"info" if v>=0 else "danger","icone":"📊","titulo":f"{cmp['label']}: faturamento {'+' if v>=0 else ''}{v}% vs ano anterior","texto":f"Produção {('+' if (q or 0)>=0 else '')}{q if q is not None else '—'}% · faturamento {'+' if v>=0 else ''}{v}% no mesmo mês do ano passado."})
+    t10=D["concentracao"].get("top10_pct",0)
+    if t10>=20: A.append({"nivel":"warn","icone":"⚠️","titulo":f"Concentração: top 10 clientes = {t10}% da receita","texto":"Perder um grande dói: em 2023, perder a Vet Popular (R$240k/ano → zero) ajudou a estagnar o ano. Diversificar reduz risco."})
+    D["alertas"]=A; D["meta"]["sazonalidade_idx"]=sidx
+
     conn.close()
     return D
 
