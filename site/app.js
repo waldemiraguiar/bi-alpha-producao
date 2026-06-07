@@ -720,11 +720,17 @@ function plYearStats(D){
   const lastM=Math.max(0,...Object.keys(cur.m).map(Number));
   let ytdCur=0,ytdPrev=0; for(let m=1;m<=lastM;m++){ytdCur+=cur.m[m]||0; if(prev)ytdPrev+=prev.m[m]||0;}
   const ytdPct=(prev&&ytdPrev>0)?100*(ytdCur/ytdPrev-1):null;
-  const ratio=(prev&&ytdPrev>0)?ytdCur/ytdPrev:1;
-  // projeção sazonal: meses restantes = mês do ano anterior × razão YTD
-  let projTotal=ytdCur, projMon={}; for(let m=1;m<=12;m++){projMon[m]= m<=lastM ? (cur.m[m]||0) : (prev?(prev.m[m]||0)*ratio:0); if(m>lastM)projTotal+=projMon[m];}
-  const projPct=(prev&&prev.total>0)?100*(projTotal/prev.total-1):null;
-  return {byYear,years,curY,prevY,cur,prev,lastM,ytdCur,ytdPrev,ytdPct,ratio,projTotal,projMon,projPct};
+  const ratio=(prev&&ytdPrev>0)?ytdCur/ytdPrev:1; const g=ratio-1;
+  // 3 cenários (padrão skin): conservador g×0,6 · base g · otimista g×1,4
+  const rC=1+g*0.6, rB=ratio, rO=1+g*1.4;
+  // projeção sazonal: meses restantes = mês equivalente do ano anterior × razão do cenário
+  function projWith(r){let t=ytdCur,mon={};for(let m=1;m<=12;m++){mon[m]=m<=lastM?(cur.m[m]||0):(prev?(prev.m[m]||0)*r:0); if(m>lastM)t+=mon[m];}return {t,mon};}
+  const PB=projWith(rB),PC=projWith(rC),PO=projWith(rO);
+  const pct=t=>(prev&&prev.total>0)?100*(t/prev.total-1):null;
+  return {byYear,years,curY,prevY,cur,prev,lastM,ytdCur,ytdPrev,ytdPct,ratio,
+    projTotal:PB.t,projMon:PB.mon,projPct:pct(PB.t),
+    projCons:PC.t,projMonC:PC.mon,projConsPct:pct(PC.t),
+    projOtim:PO.t,projMonO:PO.mon,projOtimPct:pct(PO.t)};
 }
 function renderPetlove(D){
   const wrap=document.getElementById('petlove'); if(!wrap) return;
@@ -748,14 +754,19 @@ function renderPetlove(D){
   // ---- crescimento equalizado (mesmo período + projeção) ----
   const eqColor=Y.ytdPct==null?'var(--mut)':(Y.ytdPct>=0?AZUL2:'var(--red)');
   const prjColor=Y.projPct==null?'var(--mut)':(Y.projPct>=0?AZUL2:'var(--red)');
+  const mxP=Math.max(Y.projCons,Y.projTotal,Y.projOtim,1);
+  const srow=(l,v,vp,col)=>`<div style="margin:9px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--mut);font-weight:600">${l}</span><b>${brlk(v)}</b></div><div style="height:12px;background:rgba(255,255,255,.06);border-radius:7px;margin-top:5px;overflow:hidden"><div style="height:12px;width:${Math.round(100*v/mxP)}%;background:${col};border-radius:7px"></div></div><div style="font-size:11px;color:var(--mut);margin-top:3px">vs ${Y.prevY} fechado: ${vp==null?'—':(vp>=0?'+':'')+vp.toFixed(0)+'%'}</div></div>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love — crescimento equalizado <span class="cap">comparar ano cheio contra parcial engana; aqui igualamos pelo mesmo período</span></h3>
-    <div style="display:flex;gap:30px;flex-wrap:wrap;margin-bottom:14px">
-      <div><div class="acmp-l">${Y.curY} até ${MESFULL[Y.lastM]} (YTD)</div><div class="acmp-v">${brl(Y.ytdCur)}</div><div class="acmp-s">mesmo período ${Y.prevY}: ${brl(Y.ytdPrev)}</div></div>
-      <div><div class="acmp-l">Crescimento real (mesmo período)</div><div class="acmp-v" style="color:${eqColor}">${Y.ytdPct==null?'—':(Y.ytdPct>=0?'▲ +':'▼ ')+Y.ytdPct.toFixed(0)+'%'}</div><div class="acmp-s">jan–${MESFULL[Y.lastM]} ${Y.curY} vs ${Y.prevY}</div></div>
-      <div><div class="acmp-l">Projeção ${Y.curY} (ano cheio, sazonal)</div><div class="acmp-v" style="color:var(--cyan)">${brl(Y.projTotal)}</div><div class="acmp-s">vs ${Y.prevY} fechado ${brl(Y.prev?Y.prev.total:0)} · <span style="color:${prjColor}">${Y.projPct==null?'—':(Y.projPct>=0?'+':'')+Y.projPct.toFixed(0)+'%'}</span></div></div>
+    <div class="grid g2" style="margin-bottom:14px">
+      <div><div style="display:flex;gap:28px;flex-wrap:wrap">
+        <div><div class="acmp-l">${Y.curY} até ${MESFULL[Y.lastM]} (YTD)</div><div class="acmp-v">${brl(Y.ytdCur)}</div><div class="acmp-s">mesmo período ${Y.prevY}: ${brl(Y.ytdPrev)}</div></div>
+        <div><div class="acmp-l">Crescimento real (mesmo período)</div><div class="acmp-v" style="color:${eqColor}">${Y.ytdPct==null?'—':(Y.ytdPct>=0?'▲ +':'▼ ')+Y.ytdPct.toFixed(0)+'%'}</div><div class="acmp-s">jan–${MESFULL[Y.lastM]} ${Y.curY} vs ${Y.prevY}</div></div>
+      </div></div>
+      <div><div class="acmp-l" style="margin-bottom:2px">Projeção ${Y.curY} — ano cheio · 3 cenários</div>
+        ${srow('Conservador',Y.projCons,Y.projConsPct,C.amber)+srow('Base',Y.projTotal,Y.projPct,C.cyan)+srow('Otimista',Y.projOtim,Y.projOtimPct,C.green)}</div>
     </div>
     <div class="chartbox lg"><canvas id="plYearChart"></canvas></div>
-    <div style="color:var(--mut);font-size:11px;margin-top:8px">Linhas = acumulado mês a mês. Projeção ${Y.curY} (tracejada) = meses restantes estimados pelo mês equivalente de ${Y.prevY} × ritmo do período (×${Y.ratio.toFixed(2)}).</div></div>`;
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">Linhas = acumulado mês a mês. <b>Faixa</b> = conservador↔otimista · <b>tracejado</b> = base. Meses restantes estimados pelo mês equivalente de ${Y.prevY} × ritmo do período: base ×${Y.ratio.toFixed(2)}, conservador ×${(1+(Y.ratio-1)*0.6).toFixed(2)}, otimista ×${(1+(Y.ratio-1)*1.4).toFixed(2)}.</div></div>`;
   // por ano (com mesmo-período a/a e flag de parcial)
   const anos=Y.years;
   html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love por ano <span class="cap">a "var. mesmo período" compara só os meses já decorridos do ano corrente — leitura justa</span></h3>
@@ -801,12 +812,16 @@ function drawPetloveYearChart(){
   const prevCum=Y.prev?acc(Y.prev.m,0):labels.map(()=>null);
   const curCum=acc(Y.cur.m,Y.lastM);
   // projeção: nula antes do último mês, conecta no último real e segue com projMon
-  const projCum=[]; let s=0; for(let m=1;m<=12;m++){ s+=(m<=Y.lastM?(Y.cur.m[m]||0):(Y.projMon[m]||0)); projCum.push(m<Y.lastM?null:s); }
+  const scCum=mon=>{let s=0;const out=[];for(let m=1;m<=12;m++){s+=(m<=Y.lastM?(Y.cur.m[m]||0):(mon[m]||0)); out.push(m<Y.lastM?null:s);}return out;};
+  const projCum=scCum(Y.projMon), consCum=Y.prev?scCum(Y.projMonC):labels.map(()=>null), otimCum=Y.prev?scCum(Y.projMonO):labels.map(()=>null);
   _plYearChart=new Chart(cv,{type:'line',data:{labels,datasets:[
-    {label:`${Y.prevY} (acum.)`,data:prevCum,borderColor:'rgba(160,176,200,.8)',backgroundColor:'rgba(160,176,200,.1)',borderWidth:2,tension:.3,pointRadius:0},
-    {label:`${Y.curY} (acum. real)`,data:curCum,borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',borderWidth:3,tension:.3,pointRadius:2,fill:true},
-    {label:`${Y.curY} (projeção)`,data:projCum,borderColor:'#00E5A0',borderDash:[6,4],borderWidth:2,tension:.3,pointRadius:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+(c.raw==null?'—':brl(c.raw))}}},
+    {label:`${Y.prevY} (acum.)`,data:prevCum,borderColor:'rgba(160,176,200,.8)',backgroundColor:'rgba(160,176,200,.08)',borderWidth:2,tension:.3,pointRadius:0},
+    {label:'cons',data:consCum,borderColor:'rgba(0,0,0,0)',pointRadius:0,tension:.3,fill:false},
+    {label:'otim',data:otimCum,borderColor:'rgba(0,0,0,0)',pointRadius:0,tension:.3,backgroundColor:'rgba(0,212,255,.12)',fill:'-1'},
+    {label:`${Y.curY} (acum. real)`,data:curCum,borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',borderWidth:3,tension:.3,pointRadius:2,fill:false},
+    {label:`${Y.curY} (projeção base)`,data:projCum,borderColor:'#00D4FF',borderDash:[6,4],borderWidth:2,tension:.3,pointRadius:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8',filter:i=>i.text!=='cons'&&i.text!=='otim'}},
+      tooltip:{filter:c=>c.dataset.label!=='cons'&&c.dataset.label!=='otim'&&c.raw!=null,callbacks:{label:c=>' '+c.dataset.label+': '+brl(c.raw)}}},
       scales:{x:{ticks:{color:'#7f90a8'},grid:{display:false}},y:{ticks:{color:'#7f90a8',callback:v=>brlk(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
 }
 
