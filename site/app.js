@@ -994,6 +994,7 @@ function renderAnalises(D){
 function mesesRecentes(D,fromYm){
   const s=D.serie_mensal_full||[]; if(!s.length) return '';
   const by={}; s.forEach(x=>by[x.ym]={q:x.qtd,f:x.fat});
+  const plm=(D.petlove||{}).mensal||{}, pla=(D.petlove||{}).atend_mensal||{};
   const prevYm=ym=>{let[y,m]=ym.split('-').map(Number);m--;if(m<1){m=12;y--;}return y+'-'+String(m).padStart(2,'0');};
   const yoyYm=ym=>{const[y,m]=ym.split('-');return (+y-1)+'-'+m;};
   const pc=(a,b)=>(b>0)?100*(a/b-1):null;
@@ -1001,13 +1002,16 @@ function mesesRecentes(D,fromYm){
   const yms=s.map(x=>x.ym).filter(ym=>ym>=fromYm).sort().reverse();
   const rows=yms.map(ym=>{const c=by[ym],p=by[prevYm(ym)],y=by[yoyYm(ym)];const part=ym===partYm;
     const dmq=p?pc(c.q,p.q):null,dmf=p?pc(c.f,p.f):null,dyf=y?pc(c.f,y.f):null;
+    const plf=plm[ym]||0, pln=(pla[ym]||{}).n_atend;
     return `<tr${part?' style="opacity:.6"':''}><td>${ymLabel(ym)}${part?' <span style="color:var(--amber);font-size:10px;font-weight:700">parcial</span>':''}</td>
       <td class="num">${num(c.q)}</td><td class="num" style="color:${gcol(dmq==null?null:+dmq.toFixed(1))};font-weight:700">${gtxt(dmq==null?null:+dmq.toFixed(1))}</td>
       <td class="num">${brl(c.f)}</td><td class="num" style="color:${gcol(dmf==null?null:+dmf.toFixed(1))};font-weight:700">${gtxt(dmf==null?null:+dmf.toFixed(1))}</td>
-      <td class="num" style="color:${gcol(dyf==null?null:+dyf.toFixed(1))};font-weight:700">${gtxt(dyf==null?null:+dyf.toFixed(1))}</td></tr>`;}).join('');
-  return `<div class="card" style="margin-bottom:16px"><h3>📊 Meses desde ${ymLabel(fromYm)} — visão rápida <span class="cap">produção e faturamento por mês · variação vs mês anterior e vs mesmo mês do ano passado</span></h3>
-    <table class="atab"><thead><tr><th>Mês</th><th class="num">Exames</th><th class="num">vs mês ant.</th><th class="num">Faturamento</th><th class="num">vs mês ant.</th><th class="num">fat. vs ano ant.</th></tr></thead><tbody>${rows}</tbody></table>
-    <div style="color:var(--mut);font-size:11px;margin-top:8px">azul = sobe · vermelho = cai. Só sistema (sem Pet Love). Mês corrente marcado como parcial.</div></div>`;
+      <td class="num" style="color:${gcol(dyf==null?null:+dyf.toFixed(1))};font-weight:700">${gtxt(dyf==null?null:+dyf.toFixed(1))}</td>
+      <td class="num" style="color:var(--cyan)">${plf?brl(plf):'—'}</td><td class="num">${pln?num(pln):'—'}</td>
+      <td class="num" style="font-weight:700">${brl(c.f+plf)}</td></tr>`;}).join('');
+  return `<div class="card" style="margin-bottom:16px"><h3>📊 Meses desde ${ymLabel(fromYm)} — visão rápida <span class="cap">produção e faturamento por mês (sistema + Pet Love) · variação vs mês anterior e vs mesmo mês do ano passado</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr><th>Mês</th><th class="num">Exames (sist.)</th><th class="num">vs mês ant.</th><th class="num">Faturam. (sist.)</th><th class="num">vs mês ant.</th><th class="num">fat. vs ano ant.</th><th class="num" style="color:var(--cyan)">Pet Love (R$)</th><th class="num" style="color:var(--cyan)">Pet Love (atend.)</th><th class="num">Total fat.</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">azul = sobe · vermelho = cai · variações referem-se ao faturamento do sistema. <b>Pet Love (R$)</b> = reembolso externo (entra no Total). <b>Pet Love (atend.)</b> só consta dos meses com relatório importado (2025); 2026 ainda não importado. Exames (sist.) já inclui os exames Pet Love. Mês corrente parcial.</div></div>`;
 }
 function renderManual(){
   const out=document.getElementById('anManualOut'); if(!out||!_dayMap) return;
