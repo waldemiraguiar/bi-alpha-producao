@@ -338,6 +338,8 @@ function render(D){
   renderPerdidos(D);
   renderAnalises(D);
   renderAlertas(D);
+  renderPetlove(D);
+  renderMargem(D);
   wireFTabs();
   wireTools();
 }
@@ -410,13 +412,14 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
     Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id); if(el)el.style.display=(k===v)?'':'none';});
     if(v==='projecao') drawProjCharts();
     if(v==='analises') drawAnalisesChart();
+    if(v==='petlove') drawPetloveChart();
   });});
 }
 
@@ -698,6 +701,104 @@ function renderAlertas(D){
   wrap.innerHTML=`<div style="margin-bottom:14px;color:var(--mut);font-size:13px">💡 Pontos de atenção e recomendações — gerados automaticamente a partir dos dados, atualizados a cada 30 min.</div>`+
     sorted.map(a=>`<div class="alert-card ${a.nivel}"><div class="ai">${a.icone}</div><div><div class="at">${esc(a.titulo)}</div><div class="ax">${esc(a.texto)}</div></div></div>`).join('')
     || '<div style="color:var(--green)">✓ Nenhum alerta no momento.</div>';
+}
+
+/* ===================== ABA PET LOVE (análise em paralelo) ===================== */
+const MES3PL=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function ymLabel(ym){const [y,m]=ym.split('-');return MES3PL[+m]+'/'+y.slice(2);}
+let _plchart=null;
+function renderPetlove(D){
+  const wrap=document.getElementById('petlove'); if(!wrap) return;
+  const pl=D.petlove||{}; const men=pl.mensal||{}; const at=pl.atend_mensal||{};
+  const mensalLab={}; (D.mensal||[]).forEach(x=>mensalLab[x.ym]={fat:x.fat||0,pl:x.petlove||0});
+  const yms=Object.keys(men).sort();
+  // último mês com valor relevante
+  const ult=yms[yms.length-1]||''; const ultV=men[ult]||0;
+  const labFatUlt=(mensalLab[ult]||{}).fat||0;
+  const pctUlt=labFatUlt+ultV>0?100*ultV/(labFatUlt+ultV):0;
+  // YoY do último mês
+  const [uy,um]=ult.split('-'); const yoyKey=(+uy-1)+'-'+um; const yoyV=men[yoyKey];
+  const yoy=yoyV?100*(ultV/yoyV-1):null;
+  const total=pl.total||Object.values(men).reduce((a,b)=>a+b,0);
+  const anoAtual=(uy)||''; const porAno=pl.por_ano||{};
+  let html=`<div class="fbanner">
+    <div class="b"><div class="v" style="color:var(--cyan)">${brlk(total)}</div><div class="l">Pet Love acumulado (${pl.desde?ymLabel(pl.desde):''}→${ult?ymLabel(ult):''})</div></div>
+    <div class="b"><div class="v">${brlk(ultV)}</div><div class="l">último mês (${ult?ymLabel(ult):'—'})</div></div>
+    <div class="b"><div class="v" style="color:var(--green)">${pctUlt.toFixed(1)}%</div><div class="l">do faturamento total do lab</div></div>
+    <div class="b"><div class="v" style="color:${yoy==null?'var(--mut)':(yoy>=0?AZUL2:'var(--red)')}">${yoy==null?'—':(yoy>=0?'▲ +':'▼ ')+yoy.toFixed(1)+'%'}</div><div class="l">vs mesmo mês ano anterior</div></div></div>`;
+  html+=`<div class="alert-card info" style="margin:6px 0 16px"><div class="ai">🐾</div><div><div class="at">Receita externa que ENTRA no total dos meses</div>
+    <div class="ax">O sistema (HF) conta os exames Pet Love mas zera o valor (reembolso vem por fora). Estes R$ — Contas Médicas + Recurso de Glosa, por competência — são somados ao faturamento total do laboratório. ${esc(pl.obs||'')}</div></div></div>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love dentro do faturamento total <span class="cap">barra clara = sistema · ciano = Pet Love (empilhado) · últimos 24 meses</span></h3>
+    <div class="chartbox lg"><canvas id="plChart"></canvas></div></div>`;
+  // por ano
+  const anos=Object.keys(porAno).sort();
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love por ano</h3><table class="atab"><thead><tr><th>Ano</th><th class="num">Pet Love</th><th class="num">var. a/a</th></tr></thead><tbody>`+
+    anos.map((a,i)=>{const v=porAno[a],pv=i>0?porAno[anos[i-1]]:null,g=pv?100*(v/pv-1):null;
+      return `<tr><td>${a}</td><td class="num">${brl(v)}</td><td class="num" style="color:${g==null?'var(--mut)':(g>=0?AZUL2:'var(--red)')};font-weight:700">${g==null?'—':(g>=0?'+':'')+g.toFixed(0)+'%'}</td></tr>`;}).join('')+
+    `</tbody></table></div>`;
+  // tabela mensal
+  const rec=yms.slice(-18).reverse();
+  html+=`<div class="card"><h3>Detalhe mensal <span class="cap">% = participação da Pet Love no faturamento total do mês</span></h3>
+    <table class="atab"><thead><tr><th>Mês</th><th class="num">Pet Love R$</th><th class="num">Atendimentos</th><th class="num">% do total lab</th></tr></thead><tbody>`+
+    rec.map(ym=>{const v=men[ym]||0;const lab=(mensalLab[ym]||{}).fat||0;const p=lab+v>0?100*v/(lab+v):0;const n=(at[ym]||{}).n_atend;
+      return `<tr><td>${ymLabel(ym)}</td><td class="num">${brl(v)}</td><td class="num">${n?num(n):'—'}</td><td class="num" style="font-weight:700">${p.toFixed(1)}%</td></tr>`;}).join('')+
+    `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">Atendimentos só constam dos meses cujos relatórios foram importados. Valores conferem com os relatórios oficiais de pagamento Pet Love.</div></div>`;
+  wrap.innerHTML=html;
+}
+function drawPetloveChart(){
+  const D=window.__D; if(!D) return; const cv=document.getElementById('plChart'); if(!cv||typeof Chart==='undefined') return;
+  if(_plchart) _plchart.destroy();
+  const men=(D.petlove||{}).mensal||{}; const mensalLab={}; (D.mensal||[]).forEach(x=>mensalLab[x.ym]=x.fat||0);
+  const yms=[...new Set([...Object.keys(men),...Object.keys(mensalLab)])].sort().slice(-24);
+  _plchart=new Chart(cv,{type:'bar',data:{labels:yms.map(ymLabel),datasets:[
+    {label:'Sistema (HF)',data:yms.map(y=>mensalLab[y]||0),backgroundColor:'rgba(120,140,170,.45)',stack:'s'},
+    {label:'Pet Love',data:yms.map(y=>men[y]||0),backgroundColor:'#00D4FF',stack:'s'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+brl(c.raw)}}},
+      scales:{x:{ticks:{color:'#7f90a8',maxRotation:90,minRotation:90,font:{size:9}},stacked:true,grid:{display:false}},
+        y:{stacked:true,ticks:{color:'#7f90a8',callback:v=>brlk(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
+}
+
+/* ===================== ABA MARGEM PET LOVE (reembolso vs tabela varejo) ===================== */
+function renderMargem(D){
+  const wrap=document.getElementById('margem'); if(!wrap) return;
+  const M=D.petlove_margem||{};
+  if(M.erro){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--red)">Falha ao carregar margem: ${esc(M.erro)}</div>`; return; }
+  const ag=M.agregado||{}; const exs=(M.exames||[]).filter(x=>x.tabela!=null);
+  exs.forEach(x=>x.impacto=Math.round((x.delta||0)*x.volume));
+  const prem=ag.premio_pct;
+  let html=`<div class="fbanner">
+    <div class="b"><div class="v" style="color:${prem>=0?AZUL2:'var(--red)'}">${prem>=0?'+':''}${prem}%</div><div class="l">Pet Love paga vs NOSSA tabela (varejo)</div></div>
+    <div class="b"><div class="v">${brlk(ag.receita_petlove)}</div><div class="l">reembolso Pet Love (exames casados)</div></div>
+    <div class="b"><div class="v" style="color:var(--mut)">${brlk(ag.receita_tabela)}</div><div class="l">se cobrado pela tabela varejo</div></div>
+    <div class="b"><div class="v" style="color:var(--green)">${ag.n_match}</div><div class="l">exames casados (de ${ag.n_total})</div></div></div>`;
+  html+=`<div class="alert-card ${prem>=0?'info':'warn'}" style="margin:6px 0 16px"><div class="ai">⚖️</div><div>
+    <div class="at">No agregado, a Pet Love nos paga ${prem>=0?'ACIMA':'ABAIXO'} do varejo (${prem>=0?'+':''}${prem}%)</div>
+    <div class="ax">Compara o <b>reembolso</b> que a Pet Love paga por exame com a <b>nossa tabela de varejo (Mar/2026)</b>. Onde paga acima, ganhamos ${brl(ag.ganho_acima)} (${ag.n_acima} exames); onde paga abaixo, abrimos mão de ${brl(ag.perda_abaixo)} (${ag.n_abaixo} exames). <b>Atenção:</b> isto é preço × preço — a margem REAL precisa do custo do exame (pendente do dev). ${esc(M.obs||'')}</div></div></div>`;
+  // dois blocos: acima e abaixo
+  const acima=exs.filter(x=>x.delta>0).sort((a,b)=>b.impacto-a.impacto);
+  const abaixo=exs.filter(x=>x.delta<0).sort((a,b)=>a.delta_pct-b.delta_pct);
+  const rowsT=(lst)=>lst.map(x=>`<tr>
+    <td>${esc(x.exame)}${x.nota?` <span style="color:var(--amber);font-size:10px">(${esc(x.nota)})</span>`:''}<div style="color:var(--mut);font-size:10px">→ ${esc(x.tabela_exame||'')}</div></td>
+    <td class="num">${num(x.volume)}</td>
+    <td class="num">${brl(x.petlove)}</td>
+    <td class="num" style="color:var(--mut)">${brl(x.tabela)}</td>
+    <td class="num" style="color:${x.delta>=0?AZUL2:'var(--red)'};font-weight:700">${x.delta>=0?'+':''}${x.delta_pct}%</td>
+    <td class="num" style="color:${x.impacto>=0?AZUL2:'var(--red)'};font-weight:700">${x.impacto>=0?'+':''}${brl(x.impacto)}</td></tr>`).join('');
+  const thead=`<thead><tr><th>Exame</th><th class="num">Volume</th><th class="num">Pet Love paga</th><th class="num">Nossa tabela</th><th class="num">Δ%</th><th class="num">Impacto (Δ×vol)</th></tr></thead>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>🟦 Pet Love paga ACIMA do varejo — favorável <span class="cap">${acima.length} exames · ordenado por impacto</span></h3>
+    <table class="atab">${thead}<tbody>${rowsT(acima)}</tbody></table></div>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>🟥 Pet Love paga ABAIXO do varejo — desconto que damos <span class="cap">${abaixo.length} exames · maior desconto primeiro</span></h3>
+    <table class="atab">${thead}<tbody>${rowsT(abaixo)}</tbody></table></div>`;
+  // sem correspondência
+  const sem=(M.exames||[]).filter(x=>x.tabela==null).sort((a,b)=>b.volume-a.volume);
+  if(sem.length){
+    html+=`<div class="card"><h3>Sem correspondência direta na tabela <span class="cap">${sem.length} exames — nome Pet Love não bateu com a tabela varejo</span></h3>
+      <table class="atab"><thead><tr><th>Exame (Pet Love)</th><th class="num">Volume</th><th class="num">Pet Love paga</th></tr></thead><tbody>`+
+      sem.slice(0,30).map(x=>`<tr><td>${esc(x.exame)}</td><td class="num">${num(x.volume)}</td><td class="num">${x.petlove?brl(x.petlove):'—'}</td></tr>`).join('')+
+      `</tbody></table></div>`;
+  }
+  html+=`<div style="color:var(--mut);font-size:11px;margin-top:10px">${esc(M.fonte||'')}</div>`;
+  wrap.innerHTML=html;
 }
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */

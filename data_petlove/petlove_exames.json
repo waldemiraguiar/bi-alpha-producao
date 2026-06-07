@@ -1,0 +1,3460 @@
+[
+ {
+  "exame": "Hemograma",
+  "volume": 8807,
+  "preco_unit": 25.02,
+  "n_amostras_preco": 1712,
+  "receita_aprox": 220351.14
+ },
+ {
+  "exame": "Creatinina",
+  "volume": 7060,
+  "preco_unit": 13.03,
+  "n_amostras_preco": 28,
+  "receita_aprox": 91991.8
+ },
+ {
+  "exame": "Uréia",
+  "volume": 7050,
+  "preco_unit": 13.03,
+  "n_amostras_preco": 37,
+  "receita_aprox": 91861.5
+ },
+ {
+  "exame": "Alanina Aminotransferase (TGP/ALT)",
+  "volume": 6626,
+  "preco_unit": 13.03,
+  "n_amostras_preco": 33,
+  "receita_aprox": 86336.78
+ },
+ {
+  "exame": "Fosfatase Alcalina (FA)",
+  "volume": 6126,
+  "preco_unit": 48.15,
+  "n_amostras_preco": 29,
+  "receita_aprox": 294966.9
+ },
+ {
+  "exame": "Proteínas Totais e Frações",
+  "volume": 2635,
+  "preco_unit": 15.17,
+  "n_amostras_preco": 29,
+  "receita_aprox": 39972.95
+ },
+ {
+  "exame": "Aspartato Aminotransferase (TGO/AST)",
+  "volume": 2151,
+  "preco_unit": 13.03,
+  "n_amostras_preco": 14,
+  "receita_aprox": 28027.53
+ },
+ {
+  "exame": "Potássio",
+  "volume": 1956,
+  "preco_unit": 10.94,
+  "n_amostras_preco": 10,
+  "receita_aprox": 21398.64
+ },
+ {
+  "exame": "Sódio",
+  "volume": 1866,
+  "preco_unit": 10.94,
+  "n_amostras_preco": 10,
+  "receita_aprox": 20414.04
+ },
+ {
+  "exame": "Glicemia laboratório",
+  "volume": 1634,
+  "preco_unit": 13.47,
+  "n_amostras_preco": 39,
+  "receita_aprox": 22009.98
+ },
+ {
+  "exame": "Gama Glutamil Transferase (GGT)",
+  "volume": 1400,
+  "preco_unit": 16.21,
+  "n_amostras_preco": 26,
+  "receita_aprox": 22694.0
+ },
+ {
+  "exame": "Triglicerídeos",
+  "volume": 1392,
+  "preco_unit": 13.13,
+  "n_amostras_preco": 34,
+  "receita_aprox": 18276.96
+ },
+ {
+  "exame": "Fósforo",
+  "volume": 1274,
+  "preco_unit": 13.47,
+  "n_amostras_preco": 8,
+  "receita_aprox": 17160.78
+ },
+ {
+  "exame": "Colesterol total",
+  "volume": 1034,
+  "preco_unit": 13.03,
+  "n_amostras_preco": 8,
+  "receita_aprox": 13473.02
+ },
+ {
+  "exame": "Urinálise (E.Q.U.)",
+  "volume": 685,
+  "preco_unit": 21.89,
+  "n_amostras_preco": 156,
+  "receita_aprox": 14994.65
+ },
+ {
+  "exame": "Cultura bacteriológica + Antibiograma",
+  "volume": 664,
+  "preco_unit": 78.01,
+  "n_amostras_preco": 239,
+  "receita_aprox": 51798.64
+ },
+ {
+  "exame": "Análise Citológica Otológica",
+  "volume": 556,
+  "preco_unit": 22.98,
+  "n_amostras_preco": 246,
+  "receita_aprox": 12776.88
+ },
+ {
+  "exame": "Erliquiose",
+  "volume": 549,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Coproparasitológico Simples (1 amostra)",
+  "volume": 541,
+  "preco_unit": 28.45,
+  "n_amostras_preco": 248,
+  "receita_aprox": 15391.45
+ },
+ {
+  "exame": "Bilirrubinas - totais e frações",
+  "volume": 523,
+  "preco_unit": 9.75,
+  "n_amostras_preco": 16,
+  "receita_aprox": 5099.25
+ },
+ {
+  "exame": "Análise Citológica Aspirativa (BAAF/CAAF)",
+  "volume": 480,
+  "preco_unit": 49.25,
+  "n_amostras_preco": 378,
+  "receita_aprox": 23640.0
+ },
+ {
+  "exame": "Colesterol total e frações",
+  "volume": 432,
+  "preco_unit": 84.27,
+  "n_amostras_preco": 28,
+  "receita_aprox": 36404.64
+ },
+ {
+  "exame": "Histopatológico",
+  "volume": 414,
+  "preco_unit": 125.2,
+  "n_amostras_preco": 263,
+  "receita_aprox": 51832.8
+ },
+ {
+  "exame": "Cálcio iônico",
+  "volume": 407,
+  "preco_unit": 17.51,
+  "n_amostras_preco": 11,
+  "receita_aprox": 7126.57
+ },
+ {
+  "exame": "Proteínas Totais",
+  "volume": 368,
+  "preco_unit": 16.21,
+  "n_amostras_preco": 4,
+  "receita_aprox": 5965.28
+ },
+ {
+  "exame": "Relação Proteína / Creatinina Urinária (RPC/RPU/CU)",
+  "volume": 304,
+  "preco_unit": 25.17,
+  "n_amostras_preco": 23,
+  "receita_aprox": 7651.68
+ },
+ {
+  "exame": "Albumina",
+  "volume": 300,
+  "preco_unit": 13.83,
+  "n_amostras_preco": 4,
+  "receita_aprox": 4149.0
+ },
+ {
+  "exame": "TSH - Quimioluminescência",
+  "volume": 286,
+  "preco_unit": 50.34,
+  "n_amostras_preco": 3,
+  "receita_aprox": 14397.24
+ },
+ {
+  "exame": "Análise Citológica de Pele",
+  "volume": 281,
+  "preco_unit": 22.98,
+  "n_amostras_preco": 95,
+  "receita_aprox": 6457.38
+ },
+ {
+  "exame": "Anaplasmose e/ou Doença de Lyme - Teste Rápido",
+  "volume": 268,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dirofilariose - Sorologia",
+  "volume": 261,
+  "preco_unit": 99.59,
+  "n_amostras_preco": 117,
+  "receita_aprox": 25992.99
+ },
+ {
+  "exame": "Dirofilariose",
+  "volume": 261,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE",
+  "volume": 228,
+  "preco_unit": 64.57,
+  "n_amostras_preco": 14,
+  "receita_aprox": 14721.96
+ },
+ {
+  "exame": "Anaplasmose - Teste Rápido)",
+  "volume": 205,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Doença de Lyme",
+  "volume": 204,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Frutosamina",
+  "volume": 200,
+  "preco_unit": 18.61,
+  "n_amostras_preco": 16,
+  "receita_aprox": 3722.0
+ },
+ {
+  "exame": "SNAP 4Dx (Dirofilariose",
+  "volume": 199,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D",
+  "volume": 189,
+  "preco_unit": 94.12,
+  "n_amostras_preco": 34,
+  "receita_aprox": 17788.68
+ },
+ {
+  "exame": "Giárdia - Teste rápido",
+  "volume": 182,
+  "preco_unit": 59.1,
+  "n_amostras_preco": 45,
+  "receita_aprox": 10756.2
+ },
+ {
+  "exame": "Giárdia - PCR",
+  "volume": 182,
+  "preco_unit": 165.41,
+  "n_amostras_preco": 43,
+  "receita_aprox": 30104.62
+ },
+ {
+  "exame": "Babesia Canis - PCR",
+  "volume": 182,
+  "preco_unit": 171.72,
+  "n_amostras_preco": 30,
+  "receita_aprox": 31253.04
+ },
+ {
+  "exame": "Dosagem de vitamina B12",
+  "volume": 152,
+  "preco_unit": 56.91,
+  "n_amostras_preco": 5,
+  "receita_aprox": 8650.32
+ },
+ {
+  "exame": "Coproparasitológico Funcional",
+  "volume": 145,
+  "preco_unit": 61.91,
+  "n_amostras_preco": 75,
+  "receita_aprox": 8976.95
+ },
+ {
+  "exame": "Anaplasma Platys - PCR",
+  "volume": 144,
+  "preco_unit": 140.09,
+  "n_amostras_preco": 17,
+  "receita_aprox": 20172.96
+ },
+ {
+  "exame": "Anaplasma Platys - Sorologia",
+  "volume": 134,
+  "preco_unit": 56.91,
+  "n_amostras_preco": 60,
+  "receita_aprox": 7625.94
+ },
+ {
+  "exame": "Cálcio sérico ou urinário",
+  "volume": 128,
+  "preco_unit": 13.47,
+  "n_amostras_preco": 5,
+  "receita_aprox": 1724.16
+ },
+ {
+  "exame": "Ehrlichia SP - PCR",
+  "volume": 128,
+  "preco_unit": 171.72,
+  "n_amostras_preco": 12,
+  "receita_aprox": 21980.16
+ },
+ {
+  "exame": "Babesia SP - PCR",
+  "volume": 127,
+  "preco_unit": 121.48,
+  "n_amostras_preco": 28,
+  "receita_aprox": 15427.96
+ },
+ {
+  "exame": "Lipase Sérica",
+  "volume": 123,
+  "preco_unit": 9.85,
+  "n_amostras_preco": 4,
+  "receita_aprox": 1211.55
+ },
+ {
+  "exame": "Cultura fúngica",
+  "volume": 123,
+  "preco_unit": 74.67,
+  "n_amostras_preco": 60,
+  "receita_aprox": 9184.41
+ },
+ {
+  "exame": "FIV + FeLV PCR",
+  "volume": 107,
+  "preco_unit": 286.21,
+  "n_amostras_preco": 52,
+  "receita_aprox": 30624.47
+ },
+ {
+  "exame": "Babesia SP - IgG",
+  "volume": 104,
+  "preco_unit": 57.31,
+  "n_amostras_preco": 4,
+  "receita_aprox": 5960.76
+ },
+ {
+  "exame": "Ácido fólico (Folato)",
+  "volume": 103,
+  "preco_unit": 58.0,
+  "n_amostras_preco": 5,
+  "receita_aprox": 5974.0
+ },
+ {
+  "exame": "Bilirrubinas totais e frações",
+  "volume": 98,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE",
+  "volume": 98,
+  "preco_unit": 49.25,
+  "n_amostras_preco": 17,
+  "receita_aprox": 4826.5
+ },
+ {
+  "exame": "Cálcio total ou urinário",
+  "volume": 98,
+  "preco_unit": 13.47,
+  "n_amostras_preco": 1,
+  "receita_aprox": 1320.06
+ },
+ {
+  "exame": "Babesia SP - IgM",
+  "volume": 97,
+  "preco_unit": 59.55,
+  "n_amostras_preco": 2,
+  "receita_aprox": 5776.35
+ },
+ {
+  "exame": "Amilase",
+  "volume": 95,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 87,
+  "preco_unit": 48.15,
+  "n_amostras_preco": 14,
+  "receita_aprox": 4189.05
+ },
+ {
+  "exame": "Ehrlichia SP - IgG",
+  "volume": 87,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgM",
+  "volume": 84,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Histopatológico com margem",
+  "volume": 83,
+  "preco_unit": 166.89,
+  "n_amostras_preco": 78,
+  "receita_aprox": 13851.87
+ },
+ {
+  "exame": "doença de lyme e anaplasmose",
+  "volume": 77,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Estimulação com ACTH (2 Dosagens - Pré e Pós) - RIE",
+  "volume": 75,
+  "preco_unit": 123.67,
+  "n_amostras_preco": 55,
+  "receita_aprox": 9275.25
+ },
+ {
+  "exame": "FIV + FeLV Sorologia",
+  "volume": 74,
+  "preco_unit": 143.1,
+  "n_amostras_preco": 27,
+  "receita_aprox": 10589.4
+ },
+ {
+  "exame": "Magnésio",
+  "volume": 74,
+  "preco_unit": 9.85,
+  "n_amostras_preco": 2,
+  "receita_aprox": 728.9
+ },
+ {
+  "exame": "Teste rápido para dirofilariose",
+  "volume": 71,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "SDMA",
+  "volume": 66,
+  "preco_unit": 125.08,
+  "n_amostras_preco": 28,
+  "receita_aprox": 8255.28
+ },
+ {
+  "exame": "FIV/FeLV - Teste Rápido",
+  "volume": 63,
+  "preco_unit": 95.0,
+  "n_amostras_preco": 30,
+  "receita_aprox": 5985.0
+ },
+ {
+  "exame": "Contagem de reticulócitos",
+  "volume": 62,
+  "preco_unit": 9.75,
+  "n_amostras_preco": 4,
+  "receita_aprox": 604.5
+ },
+ {
+  "exame": "Aminotransferase (TGO/AST)",
+  "volume": 60,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "TSH (Quimioluminescência)",
+  "volume": 59,
+  "preco_unit": 50.34,
+  "n_amostras_preco": 5,
+  "receita_aprox": 2970.06
+ },
+ {
+  "exame": "Lipase pancreática específica",
+  "volume": 56,
+  "preco_unit": 82.08,
+  "n_amostras_preco": 10,
+  "receita_aprox": 4596.48
+ },
+ {
+  "exame": "Relação proteína / creatinina urinária (RPC /RPU / CU)",
+  "volume": 56,
+  "preco_unit": 25.17,
+  "n_amostras_preco": 7,
+  "receita_aprox": 1409.52
+ },
+ {
+  "exame": "Babesia Canis - IgG",
+  "volume": 56,
+  "preco_unit": 54.72,
+  "n_amostras_preco": 8,
+  "receita_aprox": 3064.32
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR",
+  "volume": 55,
+  "preco_unit": 171.72,
+  "n_amostras_preco": 9,
+  "receita_aprox": 9444.6
+ },
+ {
+  "exame": "Babesia Canis - IgM",
+  "volume": 52,
+  "preco_unit": 62.38,
+  "n_amostras_preco": 4,
+  "receita_aprox": 3243.76
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e TSH - Quimioluminescência",
+  "volume": 52,
+  "preco_unit": 114.91,
+  "n_amostras_preco": 26,
+  "receita_aprox": 5975.32
+ },
+ {
+  "exame": "Leishmaniose - PCR",
+  "volume": 51,
+  "preco_unit": 114.15,
+  "n_amostras_preco": 15,
+  "receita_aprox": 5821.65
+ },
+ {
+  "exame": "Leishmaniose - Sorologia (Teste rápido)",
+  "volume": 50,
+  "preco_unit": 61.29,
+  "n_amostras_preco": 6,
+  "receita_aprox": 3064.5
+ },
+ {
+  "exame": "Pesquisa de hematozoários",
+  "volume": 48,
+  "preco_unit": 7.66,
+  "n_amostras_preco": 4,
+  "receita_aprox": 367.68
+ },
+ {
+  "exame": "Fosfatase Alcalina (FA) - Total e Frações",
+  "volume": 47,
+  "preco_unit": 94.22,
+  "n_amostras_preco": 15,
+  "receita_aprox": 4428.34
+ },
+ {
+  "exame": "Cloro",
+  "volume": 43,
+  "preco_unit": 17.51,
+  "n_amostras_preco": 2,
+  "receita_aprox": 752.93
+ },
+ {
+  "exame": "Ácidos Biliares (Pré e/ou Pós-prandial)",
+  "volume": 42,
+  "preco_unit": 159.37,
+  "n_amostras_preco": 4,
+  "receita_aprox": 6693.54
+ },
+ {
+  "exame": "Tiroxina (T4) total pós-levotiroxina - RIE",
+  "volume": 41,
+  "preco_unit": 50.34,
+  "n_amostras_preco": 19,
+  "receita_aprox": 2063.94
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE",
+  "volume": 41,
+  "preco_unit": 49.25,
+  "n_amostras_preco": 6,
+  "receita_aprox": 2019.25
+ },
+ {
+  "exame": "Alcalina (FA)",
+  "volume": 40,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Glutamil Transferase (GGT)",
+  "volume": 40,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Supressão com dexametasona (2 Dosagens - Pré e Pós) - RIE",
+  "volume": 40,
+  "preco_unit": 72.23,
+  "n_amostras_preco": 24,
+  "receita_aprox": 2889.2
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Ehrlichia SP - PCR",
+  "volume": 36,
+  "preco_unit": 311.81,
+  "n_amostras_preco": 4,
+  "receita_aprox": 11225.16
+ },
+ {
+  "exame": "Ehrlichia Canis - IgM",
+  "volume": 34,
+  "preco_unit": 104.94,
+  "n_amostras_preco": 1,
+  "receita_aprox": 3567.96
+ },
+ {
+  "exame": "Tempo de Coagulação",
+  "volume": 34,
+  "preco_unit": 52.58,
+  "n_amostras_preco": 9,
+  "receita_aprox": 1787.72
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG",
+  "volume": 33,
+  "preco_unit": 104.94,
+  "n_amostras_preco": 1,
+  "receita_aprox": 3463.02
+ },
+ {
+  "exame": "Tricograma",
+  "volume": 33,
+  "preco_unit": 76.61,
+  "n_amostras_preco": 9,
+  "receita_aprox": 2528.13
+ },
+ {
+  "exame": "Pesquisa de Ectoparasitas (Pele / Ouvido)",
+  "volume": 32,
+  "preco_unit": 22.93,
+  "n_amostras_preco": 7,
+  "receita_aprox": 733.76
+ },
+ {
+  "exame": "(GGT)",
+  "volume": 31,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de fenobarbital",
+  "volume": 31,
+  "preco_unit": 83.18,
+  "n_amostras_preco": 13,
+  "receita_aprox": 2578.58
+ },
+ {
+  "exame": "Análise de cálculos urinários (qualitativo)",
+  "volume": 30,
+  "preco_unit": 33.93,
+  "n_amostras_preco": 21,
+  "receita_aprox": 1017.9
+ },
+ {
+  "exame": "Tripsinogênio (TLI canino)",
+  "volume": 29,
+  "preco_unit": 62.38,
+  "n_amostras_preco": 4,
+  "receita_aprox": 1809.02
+ },
+ {
+  "exame": "Ferro",
+  "volume": 28,
+  "preco_unit": 9.85,
+  "n_amostras_preco": 2,
+  "receita_aprox": 275.8
+ },
+ {
+  "exame": "(FA)",
+  "volume": 26,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "(TGO/AST)",
+  "volume": 25,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Giárdia - PCR e Coproparasitológico Simples (1 amostra)",
+  "volume": 24,
+  "preco_unit": 193.86,
+  "n_amostras_preco": 23,
+  "receita_aprox": 4652.64
+ },
+ {
+  "exame": "Cinomose - Teste Rápido",
+  "volume": 22,
+  "preco_unit": 60.77,
+  "n_amostras_preco": 7,
+  "receita_aprox": 1336.94
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Babesia SP - PCR",
+  "volume": 21,
+  "preco_unit": 293.2,
+  "n_amostras_preco": 5,
+  "receita_aprox": 6157.2
+ },
+ {
+  "exame": "Análise Completa de Efusões",
+  "volume": 20,
+  "preco_unit": 72.23,
+  "n_amostras_preco": 12,
+  "receita_aprox": 1444.6
+ },
+ {
+  "exame": "Amônia",
+  "volume": 20,
+  "preco_unit": 48.15,
+  "n_amostras_preco": 3,
+  "receita_aprox": 963.0
+ },
+ {
+  "exame": "Leucemia Viral Felina (FeLV) - PCR",
+  "volume": 20,
+  "preco_unit": 105.06,
+  "n_amostras_preco": 11,
+  "receita_aprox": 2101.2
+ },
+ {
+  "exame": "CK - Creatinoquinase Total",
+  "volume": 19,
+  "preco_unit": 35.02,
+  "n_amostras_preco": 1,
+  "receita_aprox": 665.38
+ },
+ {
+  "exame": "Aminotransferase (TGP/ALT)",
+  "volume": 19,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Transferase (GGT)",
+  "volume": 18,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Ehrlichia Canis - PCR",
+  "volume": 18,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Hemoglobina Glicada",
+  "volume": 17,
+  "preco_unit": 22.98,
+  "n_amostras_preco": 3,
+  "receita_aprox": 390.66
+ },
+ {
+  "exame": "Ferritina",
+  "volume": 17,
+  "preco_unit": 61.29,
+  "n_amostras_preco": 1,
+  "receita_aprox": 1041.93
+ },
+ {
+  "exame": "(TGP/ALT)",
+  "volume": 17,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - PCR",
+  "volume": 17,
+  "preco_unit": 104.23,
+  "n_amostras_preco": 6,
+  "receita_aprox": 1771.91
+ },
+ {
+  "exame": "FIV + FeLV PCR e Hemograma",
+  "volume": 16,
+  "preco_unit": 311.23,
+  "n_amostras_preco": 14,
+  "receita_aprox": 4979.68
+ },
+ {
+  "exame": "Babesia SP - PCR e Ehrlichia SP - PCR",
+  "volume": 16,
+  "preco_unit": 293.2,
+  "n_amostras_preco": 3,
+  "receita_aprox": 4691.2
+ },
+ {
+  "exame": "Tempo de Protrombina (TP)",
+  "volume": 16,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Totais e Frações",
+  "volume": 15,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgG e Babesia SP - IgM",
+  "volume": 15,
+  "preco_unit": 113.82,
+  "n_amostras_preco": 7,
+  "receita_aprox": 1707.3
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Anaplasma Platys - PCR",
+  "volume": 15,
+  "preco_unit": 320.15,
+  "n_amostras_preco": 2,
+  "receita_aprox": 4802.25
+ },
+ {
+  "exame": "Micológico direto",
+  "volume": 14,
+  "preco_unit": 15.32,
+  "n_amostras_preco": 6,
+  "receita_aprox": 214.48
+ },
+ {
+  "exame": "Tempo de Trombina (TT) e/ou Tempo de Tromboplastina Parcial Ativada (TTPA)",
+  "volume": 14,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Imunohistoquímica Diagnóstico",
+  "volume": 14,
+  "preco_unit": 752.02,
+  "n_amostras_preco": 14,
+  "receita_aprox": 10528.28
+ },
+ {
+  "exame": "Babesia Canis - IgG e Babesia Canis - IgM",
+  "volume": 14,
+  "preco_unit": 117.1,
+  "n_amostras_preco": 6,
+  "receita_aprox": 1639.4
+ },
+ {
+  "exame": "Frações",
+  "volume": 14,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e TSH - Quimioluminescência",
+  "volume": 14,
+  "preco_unit": 99.59,
+  "n_amostras_preco": 4,
+  "receita_aprox": 1394.26
+ },
+ {
+  "exame": "Triiodotironina (T3) - Quimioluminescência",
+  "volume": 13,
+  "preco_unit": 43.78,
+  "n_amostras_preco": 9,
+  "receita_aprox": 569.14
+ },
+ {
+  "exame": "Dosagem de Insulina",
+  "volume": 13,
+  "preco_unit": 36.12,
+  "n_amostras_preco": 3,
+  "receita_aprox": 469.56
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Anaplasma Platys - PCR",
+  "volume": 13,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Babesia SP - PCR",
+  "volume": 13,
+  "preco_unit": 261.57,
+  "n_amostras_preco": 1,
+  "receita_aprox": 3400.41
+ },
+ {
+  "exame": "Parvovírus canino - PCR",
+  "volume": 13,
+  "preco_unit": 165.62,
+  "n_amostras_preco": 6,
+  "receita_aprox": 2152.99
+ },
+ {
+  "exame": "Imunodeficiência Viral Felina (FIV) - PCR",
+  "volume": 12,
+  "preco_unit": 195.01,
+  "n_amostras_preco": 3,
+  "receita_aprox": 2340.12
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 12,
+  "preco_unit": 112.72,
+  "n_amostras_preco": 2,
+  "receita_aprox": 1352.64
+ },
+ {
+  "exame": "Supressão com dexametasona 2 dosagens (pré e pós) - RIE",
+  "volume": 11,
+  "preco_unit": 72.23,
+  "n_amostras_preco": 7,
+  "receita_aprox": 794.53
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG e Ehrlichia Canis - IgM",
+  "volume": 11,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e TSH - Quimioluminescência",
+  "volume": 11,
+  "preco_unit": 99.59,
+  "n_amostras_preco": 6,
+  "receita_aprox": 1095.49
+ },
+ {
+  "exame": "Hemocultura com Antibiograma",
+  "volume": 11,
+  "preco_unit": 47.32,
+  "n_amostras_preco": 6,
+  "receita_aprox": 520.52
+ },
+ {
+  "exame": "Parvovirose - Teste rápido",
+  "volume": 11,
+  "preco_unit": 60.77,
+  "n_amostras_preco": 5,
+  "receita_aprox": 668.47
+ },
+ {
+  "exame": "Imunodeficiência Viral felina (FIV) - PCR e Leucemia Viral Felina (FELV) - PCR",
+  "volume": 10,
+  "preco_unit": 308.1,
+  "n_amostras_preco": 2,
+  "receita_aprox": 3080.95
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e TSH (Quimioluminescência)",
+  "volume": 10,
+  "preco_unit": 114.91,
+  "n_amostras_preco": 4,
+  "receita_aprox": 1149.1
+ },
+ {
+  "exame": "Relação Cortisol - Creatinina Urinária",
+  "volume": 10,
+  "preco_unit": 61.29,
+  "n_amostras_preco": 4,
+  "receita_aprox": 612.9
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Babesia Canis - PCR",
+  "volume": 10,
+  "preco_unit": 311.81,
+  "n_amostras_preco": 1,
+  "receita_aprox": 3118.1
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Dosagem de vitamina B12",
+  "volume": 10,
+  "preco_unit": 151.03,
+  "n_amostras_preco": 1,
+  "receita_aprox": 1510.3
+ },
+ {
+  "exame": "Pesquisa de Ectoparasitas (Pele/Ouvido)",
+  "volume": 9,
+  "preco_unit": 22.93,
+  "n_amostras_preco": 2,
+  "receita_aprox": 206.37
+ },
+ {
+  "exame": "Estimulação com ACTH 2 dosagens (pré e pós) - RIE",
+  "volume": 9,
+  "preco_unit": 123.67,
+  "n_amostras_preco": 7,
+  "receita_aprox": 1113.03
+ },
+ {
+  "exame": "Imunohistoquímica Prognóstico",
+  "volume": 9,
+  "preco_unit": 752.02,
+  "n_amostras_preco": 9,
+  "receita_aprox": 6768.18
+ },
+ {
+  "exame": "total",
+  "volume": 9,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Eletroforese de Proteína Sérica",
+  "volume": 9,
+  "preco_unit": 63.48,
+  "n_amostras_preco": 5,
+  "receita_aprox": 571.32
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Supressão com dexametasona (2 Dosagens - Pré e Pós) - RIE",
+  "volume": 9,
+  "preco_unit": 136.8,
+  "n_amostras_preco": 2,
+  "receita_aprox": 1231.2
+ },
+ {
+  "exame": "Tiroxina total (T4) - Quimioluminescência",
+  "volume": 9,
+  "preco_unit": 43.92,
+  "n_amostras_preco": 1,
+  "receita_aprox": 395.28
+ },
+ {
+  "exame": "Micoplasma Felino - PCR",
+  "volume": 9,
+  "preco_unit": 103.19,
+  "n_amostras_preco": 5,
+  "receita_aprox": 928.71
+ },
+ {
+  "exame": "Citologia de Ouvido/Pele (Pesquisa de Malassezia e/ou Cândida)",
+  "volume": 9,
+  "preco_unit": 25.02,
+  "n_amostras_preco": 3,
+  "receita_aprox": 225.18
+ },
+ {
+  "exame": "Babesia Canis - PCR e Ehrlichia Canis - PCR",
+  "volume": 9,
+  "preco_unit": 343.44,
+  "n_amostras_preco": 2,
+  "receita_aprox": 3090.96
+ },
+ {
+  "exame": "Fibrinogênio",
+  "volume": 8,
+  "preco_unit": 13.13,
+  "n_amostras_preco": 2,
+  "receita_aprox": 105.04
+ },
+ {
+  "exame": "Exame parasitológico de fezes - Simples",
+  "volume": 8,
+  "preco_unit": 15.63,
+  "n_amostras_preco": 3,
+  "receita_aprox": 125.04
+ },
+ {
+  "exame": "Babesia SP - PCR e Anaplasma Platys - PCR",
+  "volume": 8,
+  "preco_unit": 261.57,
+  "n_amostras_preco": 1,
+  "receita_aprox": 2092.56
+ },
+ {
+  "exame": "Supressão com dexametasona (2 Dosagens - Pré e Pós) - Quimioluminescência",
+  "volume": 8,
+  "preco_unit": 88.65,
+  "n_amostras_preco": 4,
+  "receita_aprox": 709.2
+ },
+ {
+  "exame": "Babesia SP - IgM e Babesia SP - IgG",
+  "volume": 8,
+  "preco_unit": 113.82,
+  "n_amostras_preco": 2,
+  "receita_aprox": 910.56
+ },
+ {
+  "exame": "Tempo de Sangramento",
+  "volume": 8,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "laboratório",
+  "volume": 7,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Parasitológico de Fezes Seriado (3 amostras)",
+  "volume": 7,
+  "preco_unit": 63.48,
+  "n_amostras_preco": 5,
+  "receita_aprox": 444.36
+ },
+ {
+  "exame": "Babesia Canis - PCR e Ehrlichia SP - PCR",
+  "volume": 7,
+  "preco_unit": 343.44,
+  "n_amostras_preco": 4,
+  "receita_aprox": 2404.08
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Ehrlichia SP - IgM",
+  "volume": 7,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Autoanticorpo Anti-tireoglobulina (anti-TG)",
+  "volume": 7,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cortisol Basal - Quimioluminescência",
+  "volume": 7,
+  "preco_unit": 51.88,
+  "n_amostras_preco": 1,
+  "receita_aprox": 363.16
+ },
+ {
+  "exame": "Leucemia Viral Felina (FeLV) - PCR e Imunodeficiência Viral Felina (FIV) - PCR",
+  "volume": 7,
+  "preco_unit": 300.07,
+  "n_amostras_preco": 6,
+  "receita_aprox": 2100.49
+ },
+ {
+  "exame": "Babesia Canis - PCR e Anaplasma Platys - PCR",
+  "volume": 7,
+  "preco_unit": 311.81,
+  "n_amostras_preco": 2,
+  "receita_aprox": 2182.67
+ },
+ {
+  "exame": "Supressão com dexametasona (3 Dosagens) - RIE",
+  "volume": 6,
+  "preco_unit": 82.08,
+  "n_amostras_preco": 6,
+  "receita_aprox": 492.48
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Babesia Canis - PCR",
+  "volume": 6,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Giárdia - PCR e Coproparasitológico Funcional",
+  "volume": 5,
+  "preco_unit": 227.32,
+  "n_amostras_preco": 5,
+  "receita_aprox": 1136.6
+ },
+ {
+  "exame": "Ácido úrico",
+  "volume": 5,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Hemograma",
+  "volume": 5,
+  "preco_unit": 196.74,
+  "n_amostras_preco": 2,
+  "receita_aprox": 983.7
+ },
+ {
+  "exame": "FIV/FELV Teste rápido",
+  "volume": 5,
+  "preco_unit": 95.0,
+  "n_amostras_preco": 1,
+  "receita_aprox": 475.0
+ },
+ {
+  "exame": "Herpes Vírus Felino - PCR",
+  "volume": 5,
+  "preco_unit": 171.72,
+  "n_amostras_preco": 3,
+  "receita_aprox": 858.6
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Ehrlichia SP - IgG",
+  "volume": 5,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Lipase pancreática específica felina",
+  "volume": 5,
+  "preco_unit": 138.42,
+  "n_amostras_preco": 1,
+  "receita_aprox": 692.1
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Anaplasma Platys - Sorologia",
+  "volume": 5,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Anaplasma Platys - Sorologia",
+  "volume": 5,
+  "preco_unit": 197.0,
+  "n_amostras_preco": 1,
+  "receita_aprox": 985.0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e TSH (Quimioluminescência)",
+  "volume": 4,
+  "preco_unit": 99.59,
+  "n_amostras_preco": 1,
+  "receita_aprox": 398.36
+ },
+ {
+  "exame": "Babesia Canis - PCR e Hemograma",
+  "volume": 4,
+  "preco_unit": 196.74,
+  "n_amostras_preco": 3,
+  "receita_aprox": 786.96
+ },
+ {
+  "exame": "Leucemia Viral Felina (FELV) - PCR e Hemograma",
+  "volume": 4,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Total e Frações - FA",
+  "volume": 4,
+  "preco_unit": 94.22,
+  "n_amostras_preco": 2,
+  "receita_aprox": 376.88
+ },
+ {
+  "exame": "Teste de compatibilidade",
+  "volume": 4,
+  "preco_unit": 137.58,
+  "n_amostras_preco": 4,
+  "receita_aprox": 550.32
+ },
+ {
+  "exame": "Ehrlichia SP - IGG e Ehrlichia SP- IGM",
+  "volume": 4,
+  "preco_unit": 209.88,
+  "n_amostras_preco": 1,
+  "receita_aprox": 839.52
+ },
+ {
+  "exame": "Babesia SP - PCR e Hemograma",
+  "volume": 4,
+  "preco_unit": 146.5,
+  "n_amostras_preco": 1,
+  "receita_aprox": 586.0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Leishmaniose - PCR",
+  "volume": 4,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgM e Ehrlichia Canis - IgG",
+  "volume": 4,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Pesquisa de sangue oculto nas fezes",
+  "volume": 4,
+  "preco_unit": 19.61,
+  "n_amostras_preco": 1,
+  "receita_aprox": 78.44
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Anaplasma Platys - Sorologia",
+  "volume": 4,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Micoplasma Felino - PCR e FIV + FeLV PCR",
+  "volume": 4,
+  "preco_unit": 389.4,
+  "n_amostras_preco": 3,
+  "receita_aprox": 1557.6
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Dirofilariose - Sorologia",
+  "volume": 4,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ácidos Biliares (Pré e/ou Pós- prandial)",
+  "volume": 4,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgM e Babesia Canis - IgG",
+  "volume": 4,
+  "preco_unit": 117.1,
+  "n_amostras_preco": 1,
+  "receita_aprox": 468.4
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Triglicerídeos",
+  "volume": 4,
+  "preco_unit": 77.7,
+  "n_amostras_preco": 2,
+  "receita_aprox": 310.8
+ },
+ {
+  "exame": "Tiroxina (T4) livre - Qimioluminescência",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose Teste rápido",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) total pós-levotiroxina - RIE e TSH (Quimioluminescência)",
+  "volume": 3,
+  "preco_unit": 100.68,
+  "n_amostras_preco": 2,
+  "receita_aprox": 302.04
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Babesia SP - PCR",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Relação Sódio/Potássio",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Toxoplasma Gondii - IgG",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "iônico",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Parvovirose Teste rápido",
+  "volume": 3,
+  "preco_unit": 60.77,
+  "n_amostras_preco": 3,
+  "receita_aprox": 182.31
+ },
+ {
+  "exame": "Ehrlichia Canis - IgM e Anaplasma Platys - Sorologia",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Glicemia laboratório",
+  "volume": 3,
+  "preco_unit": 78.04,
+  "n_amostras_preco": 1,
+  "receita_aprox": 234.12
+ },
+ {
+  "exame": "Paratormônio (PTH)",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Anaplasma Platys - PCR",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgM e Babesia SP - PCR",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) total pós-levotiroxina - RIE e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 3,
+  "preco_unit": 103.76,
+  "n_amostras_preco": 3,
+  "receita_aprox": 311.28
+ },
+ {
+  "exame": "Cryptococcus SP - PCR",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Hemograma",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Quimioluminescência",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "PPT",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Babesia SP - PCR",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Hemograma",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "ACTH - Quimioluminescência",
+  "volume": 3,
+  "preco_unit": 76.61,
+  "n_amostras_preco": 1,
+  "receita_aprox": 229.83
+ },
+ {
+  "exame": "Tiroxina (T4) livre - Quimioluminescência",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - IgM",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Ácido fólico (Folato)",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Supressão com dexametasona (3 Dosagens) - Quimioluminescência",
+  "volume": 3,
+  "preco_unit": 80.99,
+  "n_amostras_preco": 2,
+  "receita_aprox": 242.97
+ },
+ {
+  "exame": "Babesia Canis - PCR e Babesia SP - PCR",
+  "volume": 3,
+  "preco_unit": 293.2,
+  "n_amostras_preco": 1,
+  "receita_aprox": 879.6
+ },
+ {
+  "exame": "Leptospirose - Sorologia",
+  "volume": 3,
+  "preco_unit": 105.06,
+  "n_amostras_preco": 1,
+  "receita_aprox": 315.18
+ },
+ {
+  "exame": "Neospora Caninum - Sorologia",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 3,
+  "preco_unit": 142.27,
+  "n_amostras_preco": 2,
+  "receita_aprox": 426.81
+ },
+ {
+  "exame": "Leucemia Viral Felina (FeLV) - Sorologia",
+  "volume": 3,
+  "preco_unit": 198.04,
+  "n_amostras_preco": 1,
+  "receita_aprox": 594.12
+ },
+ {
+  "exame": "Cinomose - IgG",
+  "volume": 3,
+  "preco_unit": 95.84,
+  "n_amostras_preco": 1,
+  "receita_aprox": 287.52
+ },
+ {
+  "exame": "Progesterona",
+  "volume": 3,
+  "preco_unit": 79.89,
+  "n_amostras_preco": 1,
+  "receita_aprox": 239.67
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Triglicerídeos",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Babesia Canis - PCR",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP- IGM",
+  "volume": 3,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "FIV + FELV PCR e Micoplasma Felino - PCR",
+  "volume": 2,
+  "preco_unit": 389.4,
+  "n_amostras_preco": 2,
+  "receita_aprox": 778.8
+ },
+ {
+  "exame": "Supressão com dexametasona 2 dosagens (pré e pós) - Qimioluminescência",
+  "volume": 2,
+  "preco_unit": 88.65,
+  "n_amostras_preco": 1,
+  "receita_aprox": 177.3
+ },
+ {
+  "exame": "Leishmaniose - PCR e Dirofilariose - Sorologia",
+  "volume": 2,
+  "preco_unit": 207.94,
+  "n_amostras_preco": 1,
+  "receita_aprox": 415.88
+ },
+ {
+  "exame": "rápido para dirofilariose",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Dirofilariose - Sorologia",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "fólico (Folato)",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e TSH (Quimioluminescência)",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Albumina",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgM e Ehrlichia SP - PCR",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "ou urinário",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Supressão com dexametasona (2 Dosagens - Pré e Pós) - RIE e Hemograma",
+  "volume": 2,
+  "preco_unit": 97.25,
+  "n_amostras_preco": 1,
+  "receita_aprox": 194.5
+ },
+ {
+  "exame": "Babesia SP - IgG e Ehrlichia SP - IgM",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Parvovírus Canino - IgM",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Dosagem de Vitamina D",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Hemograma",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgM e Anaplasma Platys - PCR",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Hemograma",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Dirofilariose",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Proteínas Totais e Frações",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e Dirofilariose",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "RIE",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Babesia Canis - PCR",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "total e frações",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgG e Albumina",
+  "volume": 2,
+  "preco_unit": 69.29,
+  "n_amostras_preco": 1,
+  "receita_aprox": 138.58
+ },
+ {
+  "exame": "Babesia SP - IgM e Ehrlichia SP - IgM",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgM e Anaplasma Platys - Sorologia",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Teste de compatibilidade sanguínea (Resultado até 6h)",
+  "volume": 2,
+  "preco_unit": 52.53,
+  "n_amostras_preco": 2,
+  "receita_aprox": 105.06
+ },
+ {
+  "exame": "Parvovírus Canino - IgG",
+  "volume": 2,
+  "preco_unit": 104.23,
+  "n_amostras_preco": 1,
+  "receita_aprox": 208.46
+ },
+ {
+  "exame": "Babesia SP - IgG e Anaplasma Platys - Sorologia",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgG e Ehrlichia Canis - IgG",
+  "volume": 2,
+  "preco_unit": 159.66,
+  "n_amostras_preco": 1,
+  "receita_aprox": 319.32
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Anaplasma Platys - Sorologia",
+  "volume": 2,
+  "preco_unit": 228.63,
+  "n_amostras_preco": 1,
+  "receita_aprox": 457.26
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG e Anaplasma Platys - Sorologia",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Autoanticorpo Anti-tireoglobulina (anti-TG)",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Hemograma",
+  "volume": 2,
+  "preco_unit": 94.38,
+  "n_amostras_preco": 1,
+  "receita_aprox": 188.76
+ },
+ {
+  "exame": "Babesia SP - IgM e Anaplasma Platys - Sorologia",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Frutosamina",
+  "volume": 2,
+  "preco_unit": 67.86,
+  "n_amostras_preco": 1,
+  "receita_aprox": 135.72
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Tiroxina (T4) livre por diálise - RIE",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Triiodotironina (T3) - RIE",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "(Radioimunoensaio)",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Coronavírus Felino (Peritonite Infecciosa Felina) - Sorologia",
+  "volume": 2,
+  "preco_unit": 114.91,
+  "n_amostras_preco": 1,
+  "receita_aprox": 229.82
+ },
+ {
+  "exame": "Parvovírus Canino - IgG e Parvovírus Canino - IgM",
+  "volume": 2,
+  "preco_unit": 208.46,
+  "n_amostras_preco": 1,
+  "receita_aprox": 416.92
+ },
+ {
+  "exame": "Toxoplasma Gondii - IgG e Toxoplasma Gondii - IgM",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Leishmaniose - PCR",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Hemograma",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Estimulação com ACTH (2 Dosagens - Pré e Pós) - Quimioluminescência",
+  "volume": 2,
+  "preco_unit": 88.65,
+  "n_amostras_preco": 1,
+  "receita_aprox": 177.3
+ },
+ {
+  "exame": "Babesia Canis - IgG e Anaplasma Platys - Sorologia",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "PCR",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "17 Hidroxiprogesterona - RIE",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Análise Citológica Aspirativa (BAAF/CAAF)",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Tiroxina (T4) livre por diálise - RIE",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e SNAP 4Dx (Dirofilariose",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Anaplasma Platys - PCR",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgM e Babesia Canis - IgM",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Dirofilariose - Sorologia",
+  "volume": 2,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Parvovírus Felino - PCR",
+  "volume": 2,
+  "preco_unit": 171.72,
+  "n_amostras_preco": 1,
+  "receita_aprox": 343.44
+ },
+ {
+  "exame": "Leptospirose - PCR",
+  "volume": 2,
+  "preco_unit": 171.72,
+  "n_amostras_preco": 1,
+  "receita_aprox": 343.44
+ },
+ {
+  "exame": "Cortisol Basal (Quimioluminescência)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Creatinina",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Supressão com dexametasona 2 dosagens (pré e pós) - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Leptospirose - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Coronavírus Entérico Felino - Sorologia",
+  "volume": 1,
+  "preco_unit": 100.37,
+  "n_amostras_preco": 1,
+  "receita_aprox": 100.37
+ },
+ {
+  "exame": "proteína / creatinina urinária (RPC /RPU / CU)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Total e Frações - FA e Dosagem de fenobarbital",
+  "volume": 1,
+  "preco_unit": 177.4,
+  "n_amostras_preco": 1,
+  "receita_aprox": 177.4
+ },
+ {
+  "exame": "Toxoplasma Gondii - IGM e Toxoplasma Gondii - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Frações - FA",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Mielograma",
+  "volume": 1,
+  "preco_unit": 93.03,
+  "n_amostras_preco": 1,
+  "receita_aprox": 93.03
+ },
+ {
+  "exame": "Tiroxina (T4) total pós- levotiroxina - RIE e Dosagem de Vitamina D",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP- IGM e Teste rápido para dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Glicemia laboratório",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Babesia Canis - IGG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Teste rápido para dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Hemograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - IGG e Parvovírus Canino - IGG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Leishmaniose - Sorologia (Teste rápido)",
+  "volume": 1,
+  "preco_unit": 169.64,
+  "n_amostras_preco": 1,
+  "receita_aprox": 169.64
+ },
+ {
+  "exame": "de Ectoparasitas (Pele / Ouvido)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Cultura bacteriológica + Antibiograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Supressão com dexametasona (2 Dosagens - Pré e Pós) - RIE e ACTH - Quimioluminescência",
+  "volume": 1,
+  "preco_unit": 156.8,
+  "n_amostras_preco": 1,
+  "receita_aprox": 156.8
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Gama Glutamil Transferase (GGT)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e Anaplasma Platys - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "17 Hidroxiprogesterona - RIE e Estimulação com ACTH (2 Dosagens - Pré e Pós) - RIE",
+  "volume": 1,
+  "preco_unit": 291.71,
+  "n_amostras_preco": 1,
+  "receita_aprox": 291.71
+ },
+ {
+  "exame": "Tiroxina (T4) total pós-levotiroxina - RIE e TSH - Quimioluminescência",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Anaplasma Platys - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Toxoplasma Gondii - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e SDMA",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Dirofilariose - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "(RPC/RPU/CU)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Paratormônio (PTH)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgG e Babesia Canis - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leptospirose - PCR e Colesterol total e frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgM e Babesia Canis - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgG e Uréia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgG e Colesterol total",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Aspartato Aminotransferase (TGO/AST)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Ehrlichia Canis - IgG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Frutosamina",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Colesterol total e frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Babesia SP - IgG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Parvovírus canino - PCR e Giárdia - PCR",
+  "volume": 1,
+  "preco_unit": 344.19,
+  "n_amostras_preco": 1,
+  "receita_aprox": 344.19
+ },
+ {
+  "exame": "Coronavírus Entérico Canino - PCR",
+  "volume": 1,
+  "preco_unit": 180.91,
+  "n_amostras_preco": 1,
+  "receita_aprox": 180.91
+ },
+ {
+  "exame": "FIV + FeLV PCR e Coproparasitológico Simples (1 amostra)",
+  "volume": 1,
+  "preco_unit": 331.49,
+  "n_amostras_preco": 1,
+  "receita_aprox": 331.49
+ },
+ {
+  "exame": "Leishmaniose - PCR e Dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "FIV + FeLV PCR e Coronavírus Felino (Peritonite Infecciosa Felina) - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Urinária (RPC/RPU/CU)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG e Leishmaniose - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Ferro",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgG e Leishmaniose - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Ehrlichia Canis - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Velocidade de Hemossedimentação (VHS)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Tiroxina (T4) livre - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - IgM e Babesia SP - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Gama Glutamil Transferase (GGT)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "- Quimioluminescência",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgM e Cinomose - IgM",
+  "volume": 1,
+  "preco_unit": 158.22,
+  "n_amostras_preco": 1,
+  "receita_aprox": 158.22
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Lipase pancreática específica",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Leishmaniose - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Babesia Canis - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Estimulação com ACTH (2 Dosagens - Pré e Pós) - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Leishmaniose - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Supressão com dexametasona (2 Dosagens - Pré e Pós) - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG e Ehrlichia SP - IgG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Tripsinogênio (TLI canino)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Análise Citológica de Pele",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Fósforo",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Micoplasma Felino - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Babesia Canis - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Adenovírus Canino Tipo 1",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgM e Babesia Canis - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgM e Ehrlichia SP - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Urinálise (E.Q.U.)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Urinálise (E.Q.U.)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Herpes Vírus Felino - PCR e Hemograma",
+  "volume": 1,
+  "preco_unit": 196.74,
+  "n_amostras_preco": 1,
+  "receita_aprox": 196.74
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Tiroxina total (T4) - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - IgM e Cinomose - Teste Rápido",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Fósforo",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Biliares (Pré e/ou Pós-prandial)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Creatinina",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - PCR e Dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Giárdia - PCR e Pesquisa de sangue oculto nas fezes",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Toxoplasma Gondii - IgM e Neospora Caninum - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgG e Análise Citológica Aspirativa (BAAF/CAAF)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Coproparasitológico Simples (1 amostra)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Ehrlichia SP - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Dosagem de Vitamina D",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Imunodeficiência Viral Felina (FIV) - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgG e Babesia SP - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG e Anaplasma Platys - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Calicivírus Felino - PCR",
+  "volume": 1,
+  "preco_unit": 171.72,
+  "n_amostras_preco": 1,
+  "receita_aprox": 171.72
+ },
+ {
+  "exame": "Doença de Lyme - Teste Rápido",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Tempo de Coagulação",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "total ou urinário",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Pós-prandial)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "(E.Q.U.)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Babesia Canis - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Paratormônio (PTH)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - IgM e Bordetella Bronchiseptica - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Colesterol total e frações",
+  "volume": 1,
+  "preco_unit": 133.52,
+  "n_amostras_preco": 1,
+  "receita_aprox": 133.52
+ },
+ {
+  "exame": "Babesia SP - PCR e Uréia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e Coronavírus Entérico Canino - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgG e Hemograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Uréia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Dosagem de vitamina B12",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Giárdia - PCR e Análise Citológica Aspirativa (BAAF/CAAF)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG e Babesia Canis - IgG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Urinálise (E.Q.U.)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Cálcio iônico",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgM e Leishmaniose - Sorologia (Teste rápido)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgM e Ehrlichia Canis - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - PCR e Coproparasitológico Simples (1 amostra)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Babesia Canis - PCR",
+  "volume": 1,
+  "preco_unit": 280.07,
+  "n_amostras_preco": 1,
+  "receita_aprox": 280.07
+ },
+ {
+  "exame": "e Frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Babesia SP - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina total (T4) - RIE e Cálcio total ou urinário",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leucemia Viral Felina (FeLV) - PCR e Proteínas Totais e Frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tempo de Tromboplastina Parcial Ativada (TTPA)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "FIV + FeLV PCR e Uréia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Ehrlichia Canis - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e Dirofilariose - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - PCR e Parvovírus canino - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Dirofilariose - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Cálcio iônico",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cinomose - IgG e Cinomose - IgM",
+  "volume": 1,
+  "preco_unit": 191.68,
+  "n_amostras_preco": 1,
+  "receita_aprox": 191.68
+ },
+ {
+  "exame": "Leishmaniose - PCR Ajustes Desconto referente ao atendimento 8079652",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "do pet Bart 981020004201419",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "devido ao procedimento Ácidos Biliares ( Pré e/ou Pós-prandial ) não ter - R$ 159",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "37 sido realizado",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Fosfatase Alcalina (FA) - Total e Frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Tripsinogênio (TLI canino)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e Análise Citológica Aspirativa (BAAF/CAAF)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Coproparasitológico Simples (1 amostra)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgG e Hemograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Cinomose - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Sódio",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - IgG e Estimulação com ACTH (2 Dosagens - Pré e Pós) - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgG e Babesia Canis - IgM",
+  "volume": 1,
+  "preco_unit": 118.2,
+  "n_amostras_preco": 1,
+  "receita_aprox": 118.2
+ },
+ {
+  "exame": "Ehrlichia Canis - IgM e Hemograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Ehrlichia SP - PCR",
+  "volume": 1,
+  "preco_unit": 343.44,
+  "n_amostras_preco": 1,
+  "receita_aprox": 343.44
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Fosfatase Alcalina (FA)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Tiroxina (T4) livre por diálise - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "SDMA e Relação Proteína / Creatinina Urinária (RPC/RPU/CU)",
+  "volume": 1,
+  "preco_unit": 150.25,
+  "n_amostras_preco": 1,
+  "receita_aprox": 150.25
+ },
+ {
+  "exame": "prandial)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Supressão com dexametasona (2 Dosagens - Pré e Pós) - Quimioluminescência",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Uréia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - IgG e Dirofilariose - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Aspirativa (BAAF/CAAF)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e Dosagem de Vitamina D",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "FIV + FeLV PCR e Gama Glutamil Transferase (GGT)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia Canis - PCR e Ehrlichia Canis - IgG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e SNAP 4Dx (Dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Pesquisa de Corpúsculo de Lentz",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Ehrlichia SP - IgM",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "4Dx (Dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Proteínas Totais e Frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Proteínas Totais e Frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Dosagem de Insulina",
+  "volume": 1,
+  "preco_unit": 130.24,
+  "n_amostras_preco": 1,
+  "receita_aprox": 130.24
+ },
+ {
+  "exame": "SP - IgG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Otológica",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "pancreática específica",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "de Coagulação",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "17 Hidroxiprogesterona - RIE e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 1,
+  "preco_unit": 201.37,
+  "n_amostras_preco": 1,
+  "receita_aprox": 201.37
+ },
+ {
+  "exame": "Micoplasma Felino - PCR e Imunodeficiência Viral Felina (FIV) - PCR",
+  "volume": 1,
+  "preco_unit": 298.2,
+  "n_amostras_preco": 1,
+  "receita_aprox": 298.2
+ },
+ {
+  "exame": "Coronavírus Felino (Peritonite Infecciosa Felina) - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Bordetella Bronchiseptica - PCR e Giárdia - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Cortisol Basal - RIE (Radioimunoensaio)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Creatinina",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Dosagem de Vitamina D e Tripsinogênio (TLI canino)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Babesia Canis - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Análise Citológica Otológica",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Cryptococcus SP - PCR e Sódio",
+  "volume": 1,
+  "preco_unit": 182.66,
+  "n_amostras_preco": 1,
+  "receita_aprox": 182.66
+ },
+ {
+  "exame": "D",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP - IgM e Ehrlichia SP - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Leishmaniose - PCR",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Brucella Canis - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Creatinina",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IgM e Hemograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre por diálise - RIE e Frutosamina",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "diálise - RIE",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Proteínas Totais e Frações",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Lactato laboratório",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Leishmaniose - Sorologia (Teste rápido)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Tiroxina (T4) livre - RIE e Tempo de Coagulação",
+  "volume": 1,
+  "preco_unit": 101.83,
+  "n_amostras_preco": 1,
+  "receita_aprox": 101.83
+ },
+ {
+  "exame": "Toxoplasma Gondii - PCR e Leishmaniose - Sorologia (Teste rápido)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP- IGM e Hemograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - IGG e Análise citológica Aspirativa (BAAF/CAAF)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia Canis - PCR e Coproparasitológico Simples (1 amostra)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "ACTH (Quimioluminescência)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "(Quimioluminescência)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Total e Frações - FA e Creatinina",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Anaplasma Platys - PCR e Teste rápido para dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Análise citológica Aspirativa (BAAF/CAAF)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Leishmaniose - PCR e Teste rápido para dirofilariose",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Ehrlichia SP- IGM e Ehrlichia SP - IGG",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Fosfatase alcalina (FA)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "ALT)",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Babesia SP - PCR e Anaplasma Platys - Sorologia",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "Supressão com dexametasona 3 dosagens - RIE",
+  "volume": 1,
+  "preco_unit": 82.08,
+  "n_amostras_preco": 1,
+  "receita_aprox": 82.08
+ },
+ {
+  "exame": "Hemograma Ajustes - Desconto referente ao Hemograma",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "do pet Zeus Bezerra da Silva 981020004307077",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "não ter sido realizado. R$ 25",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ },
+ {
+  "exame": "02",
+  "volume": 1,
+  "preco_unit": null,
+  "n_amostras_preco": 0,
+  "receita_aprox": 0
+ }
+]
