@@ -151,6 +151,19 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 .atab td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.04);font-variant-numeric:tabular-nums}
 .atab td.num,.atab th.num{text-align:right}
 .atab tr:hover td{background:rgba(0,212,255,.04)}
+/* alertas */
+.alert-card{display:flex;gap:14px;align-items:flex-start;border-radius:12px;padding:14px 18px;margin-bottom:10px;border:1px solid var(--line);background:linear-gradient(180deg,var(--card),var(--navy2))}
+.alert-card.danger{border-color:rgba(255,84,112,.5);background:linear-gradient(180deg,rgba(255,84,112,.1),var(--navy2))}
+.alert-card.warn{border-color:rgba(255,176,32,.45)} .alert-card.info{border-color:rgba(0,212,255,.35)}
+.alert-card .ai{font-size:24px;line-height:1}
+.alert-card .at{font-weight:800;font-size:15px;margin-bottom:3px}
+.alert-card.danger .at{color:var(--red)}.alert-card.warn .at{color:var(--amber)}.alert-card.info .at{color:var(--cyan)}
+.alert-card .ax{font-size:13px;color:var(--mut)}
+.alert-strip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.alert-chip{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:20px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer}
+.alert-chip.danger{border-color:rgba(255,84,112,.5);color:var(--red);background:rgba(255,84,112,.08)}
+.alert-chip.warn{border-color:rgba(255,176,32,.45);color:var(--amber);background:rgba(255,176,32,.06)}
+.alert-chip.info{border-color:rgba(0,212,255,.4);color:var(--cyan);background:rgba(0,212,255,.06)}
 #gate{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(900px 500px at 50% 0,rgba(0,212,255,.1),transparent 60%),var(--navy)}
 .gate-card{width:340px;max-width:90vw;background:linear-gradient(180deg,var(--card),var(--navy2));
@@ -201,6 +214,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 
   <div class="ftabs">
     <div class="ftab on" data-v="geral">📊 Visão Geral</div>
+    <div class="ftab" data-v="alertas">💡 Alertas</div>
     <div class="ftab" data-v="projecao">📈 Projeção</div>
     <div class="ftab" data-v="clientes">⭐ Clientes · Tiers</div>
     <div class="ftab" data-v="novos">🌱 Novos (90d)</div>
@@ -218,6 +232,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
   <div id="novos" style="display:none"></div>
   <div id="perdidos" style="display:none"></div>
   <div id="analises" style="display:none"></div>
+  <div id="alertas" style="display:none"></div>
 
   <footer id="foot"></footer>
 </div>
