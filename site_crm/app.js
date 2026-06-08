@@ -109,6 +109,27 @@ function contatosWeek(lst){
   }).join('');
   return `<div style="margin-top:12px"><div class="histhead" style="color:var(--cyan)">📞 Contatos da equipe (${lst.length})</div>${rows}</div>`;
 }
+function histByWeek(){
+  const byWeek={};
+  HIST.forEach(s=>{ byWeek[s.week]={week:s.week,label:s.label||isoMonday(s.week).toISOString().slice(0,10),snap:s,contatos:[]}; });
+  INTER.forEach(x=>{ const wk=isoWeekKey(new Date(x.ts)); if(!byWeek[wk]) byWeek[wk]={week:wk,label:isoMonday(wk).toISOString().slice(0,10),snap:null,contatos:[]}; byWeek[wk].contatos.push(x); });
+  const weeks=Object.values(byWeek).sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0));
+  const diff={}; for(let i=1;i<HIST.length;i++) diff[HIST[i].week]=weekDiff(HIST[i-1],HIST[i]);
+  return {weeks, diff};
+}
+function exportHistCSV(){
+  const {weeks, diff}=histByWeek();
+  const mn=wk=>{const md=isoMonday(wk);return MESF[md.getUTCMonth()+1]+' '+md.getUTCFullYear();};
+  const rows=[["Mes","Semana","Inicio","Tipo","Cliente","Cidade","Canal/Motivo","Resultado/Variacao","Por","Nota"]];
+  weeks.forEach(wo=>{ const d=diff[wo.week];
+    if(d){ d.entraram.forEach(x=>rows.push([mn(wo.week),wo.week,wo.label,"Entrou no radar",x.nome||('#'+x.cod),x.cidade||'',MOTLAB[x.motivo]||x.motivo||'',(x.delta!=null?Math.round(x.delta)+'%':''),'','']));
+      d.sairam.forEach(x=>rows.push([mn(wo.week),wo.week,wo.label,"Saiu do radar",x.nome||('#'+x.cod),x.cidade||'',MOTLAB[x.motivo]||x.motivo||'','','',''])); }
+    wo.contatos.slice().sort((a,b)=>a.ts-b.ts).forEach(h=>{const r=RESULT[h.resultado]||RESULT.sem_resposta;
+      rows.push([mn(wo.week),wo.week,wo.label,"Contato",h.cliente||('#'+h.cod),'',h.canal||'',r.lbl+(h.motivo?(' / '+h.motivo):''),h.por||'',(h.nota||'').replace(/[\r\n]+/g,' ')]); }); });
+  const csv="﻿"+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download="catalogo-crm-"+new Date().toISOString().slice(0,10)+".csv"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
 function weekBlock(wo, d){
   const radar = d ? `<div class="histgrid">
       <div><div class="histhead" style="color:var(--amber)">⚠ Entraram no radar (${d.entraram.length}) <span class="t-mut" style="font-weight:500">· novos alertas</span></div>${histCliList(d.entraram)}</div>
@@ -444,15 +465,8 @@ function renderTab(){
   }
 
   if(ACTIVE==="historico"){
-    // une semanas do radar (HIST) + semanas com contatos (INTER), por semana ISO
-    const byWeek={};
-    HIST.forEach(s=>{ byWeek[s.week]={week:s.week,label:s.label||isoMonday(s.week).toISOString().slice(0,10),snap:s,contatos:[]}; });
-    INTER.forEach(x=>{ const wk=isoWeekKey(new Date(x.ts));
-      if(!byWeek[wk]) byWeek[wk]={week:wk,label:isoMonday(wk).toISOString().slice(0,10),snap:null,contatos:[]};
-      byWeek[wk].contatos.push(x); });
-    const weeks=Object.values(byWeek).sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0)); // ordem crescente
+    const {weeks, diff}=histByWeek();
     if(!weeks.length){ c.innerHTML=`<div class="empty" style="margin-top:18px">📅 O catálogo está começando. O robô grava uma <b>foto por semana</b> do radar e cada <b>contato registrado</b> entra aqui — permanente, em ordem crescente por mês e semana.</div>`; return; }
-    const diff={}; for(let i=1;i<HIST.length;i++) diff[HIST[i].week]=weekDiff(HIST[i-1],HIST[i]);
     const lastSnap=HIST.length?HIST[HIST.length-1]:null;
     const lastD=HIST.length>=2?diff[lastSnap.week]:{entraram:[],sairam:[]};
     let body="", curM=null;
@@ -468,8 +482,13 @@ function renderTab(){
         ${kpi("r", lastSnap?(lastSnap.flagged||[]).length:0, "No radar agora", lastSnap?`semana ${esc(lastSnap.week)}`:"—")}
         ${kpi("a", (lastD.entraram||[]).length, "Entraram (últ. semana)", "novos alertas")}
       </div>
-      <div class="seclabel">📅 Catálogo completo · ordem crescente · por mês e semana</div>
+      <div class="tabsbar" style="margin:16px 0 8px">
+        <div class="seclabel" style="margin:0">📅 Catálogo completo · ordem crescente · por mês e semana</div>
+        <div style="display:flex;gap:8px"><button class="regbtn" id="histCSV">⬇ CSV</button><button class="regbtn" id="histPDF">🖨 PDF</button></div>
+      </div>
       ${body}`;
+    const ec=document.getElementById("histCSV"); if(ec) ec.onclick=exportHistCSV;
+    const ep=document.getElementById("histPDF"); if(ep) ep.onclick=()=>window.print();
     return;
   }
 

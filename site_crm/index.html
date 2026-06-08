@@ -116,6 +116,13 @@
   .histcli .pr{flex-shrink:0}
   .monthhead{font-size:17px;font-weight:900;letter-spacing:-.01em;margin:22px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line);color:var(--cyan)}
   .monthhead span{font-size:12.5px;font-weight:600;color:var(--mut)}
+  @media print{
+    #gate,.bar,.tabs,#modal,#foot{display:none!important}
+    .regbtn,.fubtn,.rotctl,.demo-flag{display:none!important}
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{padding:0;max-width:none}
+    .card,.monthhead,.kpi,.histcli{break-inside:avoid}
+  }
 
   /* modal de registro */
   #modal{position:fixed;inset:0;z-index:60;display:none;align-items:flex-start;justify-content:center;
