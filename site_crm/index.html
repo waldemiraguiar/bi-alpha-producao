@@ -107,6 +107,13 @@
   .feedrow .fi{font-size:18px}
   .hi-body{min-width:0}
   .hi-nota{font-size:12.5px;color:var(--mut);font-style:italic;margin-top:3px;line-height:1.4}
+  /* histórico semana a semana */
+  .histgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:680px){.histgrid{grid-template-columns:1fr}}
+  .histhead{font-size:13px;font-weight:800;margin-bottom:8px}
+  .histcli{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px}
+  .histcli .nm{font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .histcli .pr{flex-shrink:0}
 
   /* modal de registro */
   #modal{position:fixed;inset:0;z-index:60;display:none;align-items:flex-start;justify-content:center;

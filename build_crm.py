@@ -163,12 +163,43 @@ def encrypt(D2, pwd=None, out=OUT_ENC):
           f"em_alta={r['em_alta']} · novos_esfriando={r['novos_esfriando']}")
 
 
+def post_snapshot(D2):
+    """Grava a foto da semana ISO no histórico (/api/crm-history) — upsert idempotente por semana.
+    Resolve o dado vivo: a cada 6h regrava a semana corrente; quando ela fecha, congela."""
+    import urllib.request, time, datetime
+    pwd = CRM_PWD
+    if not pwd:
+        return
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+    iso = (datetime.date.today() - datetime.timedelta(days=7)).isocalendar()  # última semana completa
+    week = f"{iso[0]}-W{int(iso[1]):02d}"
+    flagged, seen = [], set()
+    for x in D2.get("reativar", []):
+        flagged.append({"cod": x.get("cod"), "nome": x.get("nome"), "cidade": x.get("cidade"),
+                        "motivo": x.get("motivo"), "delta": x.get("delta")})
+        seen.add(x.get("cod"))
+    for x in D2.get("em_alta", []):
+        if x.get("cod") not in seen:
+            flagged.append({"cod": x.get("cod"), "nome": x.get("nome"), "cidade": x.get("cidade"),
+                            "motivo": "alta", "delta": x.get("delta")})
+    snap = {"week": week, "ts": int(time.time() * 1000),
+            "label": datetime.date.fromisocalendar(iso[0], int(iso[1]), 1).isoformat(),
+            "counts": D2.get("resumo", {}), "flagged": flagged}
+    try:
+        payload = json.dumps({"week": week, "snapshot": snap, "senha": pwd}).encode()
+        r = urllib.request.urlopen(urllib.request.Request(
+            base + "/api/crm-history", data=payload, headers={"Content-Type": "application/json"}), timeout=30)
+        print(f"snapshot {week} -> HTTP {r.status} ({len(flagged)} clientes)")
+    except Exception as e:
+        print(f"snapshot {week} falhou (ok, tenta no próximo ciclo): {e}")
+
+
 if __name__ == "__main__":
     from build_financeiro import build  # importado só na nuvem (precisa do MySQL)
     last = None
     for attempt in range(1, 4):
         try:
-            encrypt(crm_from(build())); break
+            D2 = crm_from(build()); encrypt(D2); post_snapshot(D2); break
         except Exception as e:
             import pymysql
             if isinstance(e, pymysql.err.OperationalError):
