@@ -25,6 +25,7 @@ const TABS = [
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
+  {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
 ];
 const ROT_MS = 15000;
 
@@ -68,6 +69,34 @@ async function loadInter(){ try{ const r=await fetch(INTER_API); if(r.ok) syncIn
 function interOf(cod){ const c=String(cod); return INTER.filter(x=>String(x.cod)===c); }
 function lastInter(cod){ return interOf(cod)[0]||null; }
 function diasAtras(ts){ const d=Math.floor((Date.now()-ts)/864e5); return d<=0?"hoje":d===1?"ontem":`há ${d}d`; }
+
+/* ---------- histórico semanal do radar (snapshots) ---------- */
+const HIST_API = "/api/crm-history";
+let HIST = [];
+const MOTLAB = {parado:"Parado", queda_forte:"Queda forte", queda:"Em queda", novo_esfriando:"Novo esfriando", alta:"Em alta"};
+const MOTCOL = {parado:"#FF5470", queda_forte:"#FF2D55", queda:"#FF8A8A", novo_esfriando:"#FFB020", alta:"#4D9DFF"};
+async function loadHist(){ try{ const r=await fetch(HIST_API); if(r.ok){ const j=await r.json(); HIST=(j.snapshots||[]).slice().sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0)); } }catch(e){} }
+function weekDiff(prev, cur){
+  const pm=new Map((prev&&prev.flagged?prev.flagged:[]).map(x=>[String(x.cod),x]));
+  const cm=new Map((cur.flagged||[]).map(x=>[String(x.cod),x]));
+  return {entraram:[...cm.values()].filter(x=>!pm.has(String(x.cod))),
+          sairam:[...pm.values()].filter(x=>!cm.has(String(x.cod)))};
+}
+function histCliList(arr){
+  if(!arr.length) return `<div class="t-mut" style="font-size:12.5px;padding:4px 0">—</div>`;
+  return arr.map(x=>{const col=MOTCOL[x.motivo]||"#8aa2bd";
+    const dl=(x.delta!=null&&Math.abs(x.delta)>=1)?` ${x.delta>0?'+':''}${Math.round(x.delta)}%`:"";
+    return `<div class="histcli"><span class="nm">${esc(x.nome||('#'+x.cod))}</span><span class="t-mut">${esc(x.cidade||'')}</span><span class="pr" style="background:${col}22;color:${col}">${esc(MOTLAB[x.motivo]||x.motivo||'')}${dl}</span></div>`;
+  }).join("");
+}
+function weekCard(wk, d){
+  return `<div class="card" style="margin-bottom:12px">
+    <h3>Semana ${esc(wk.week)} <span class="tag">início ${esc(wk.label||'')}</span></h3>
+    <div class="histgrid">
+      <div><div class="histhead" style="color:var(--amber)">⚠ Entraram no radar (${d.entraram.length}) <span class="t-mut" style="font-weight:500">· novos alertas</span></div>${histCliList(d.entraram)}</div>
+      <div><div class="histhead" style="color:var(--green)">✓ Saíram do radar (${d.sairam.length}) <span class="t-mut" style="font-weight:500">· recuperaram</span></div>${histCliList(d.sairam)}</div>
+    </div></div>`;
+}
 function findClient(cod){
   const c=String(cod), D=DATA||{};
   for(const k of ["reativar","parados","em_queda","queda_forte","novos_esfriando","em_alta","carteira"]){
@@ -392,6 +421,25 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="historico"){
+    if(!HIST.length){ c.innerHTML=`<div class="empty" style="margin-top:18px">📅 O histórico está começando a acumular. O robô grava uma <b>foto por semana</b> do radar — volte após o próximo ciclo e, ao longo das semanas, para comparar quem entrou e saiu.</div>`; return; }
+    const w=HIST, last=w[w.length-1];
+    const lastD = w.length>=2 ? weekDiff(w[w.length-2], last) : {entraram:[],sairam:[]};
+    let feed="";
+    if(w.length>=2){ for(let i=w.length-1;i>=1;i--){ feed += weekCard(w[i], weekDiff(w[i-1], w[i])); } }
+    else { feed=`<div class="empty">Só <b>1 semana</b> registrada — preciso de pelo menos 2 para comparar entradas/saídas. A 1ª foto (${(last.flagged||[]).length} clientes no radar) já está guardada; volte na próxima semana. 👍</div>`; }
+    c.innerHTML = `
+      <div class="kgrid">
+        ${kpi("", w.length, "Semanas registradas", "fotos semanais do radar")}
+        ${kpi("r", (last.flagged||[]).length, "No radar agora", `semana ${esc(last.week)}`)}
+        ${kpi("a", lastD.entraram.length, "Entraram (últ. semana)", "novos alertas")}
+        ${kpi("g", lastD.sairam.length, "Saíram (últ. semana)", "recuperaram")}
+      </div>
+      <div class="seclabel">📅 Entradas e saídas do radar · semana a semana</div>
+      ${feed}`;
+    return;
+  }
+
   if(ACTIVE==="carteira"){
     const all = D.carteira||[];
     const q = search.trim().toLowerCase();
@@ -415,7 +463,9 @@ function renderTabs(){
   const D = DATA, r = D.resumo||{}, t = document.getElementById("tabs");
   const shown = locked ? TABS.filter(tb=>tb.k===locked) : TABS;
   t.innerHTML = shown.map(tb=>{
-    const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length : (r[tb.k] || 0);
+    const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length
+            : tb.k==="historico" ? HIST.length
+            : (r[tb.k] || 0);
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
     return `<div class="tab ${tb.cls} ${on?"on":""}" data-k="${tb.k}">
@@ -482,10 +532,10 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter()]).then(()=>renderAll());
-    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join()+"|"+INTER.length;
-      await Promise.all([loadFollowups(), loadInter()]);
-      if(a!==[...FOLLOWED.keys()].sort().join()+"|"+INTER.length) renderTab(); }, 45000);
+    Promise.all([loadFollowups(), loadInter(), loadHist()]).then(()=>renderAll());
+    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length;
+      await Promise.all([loadFollowups(), loadInter(), loadHist()]);
+      if(a!==[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length) renderTab(); }, 45000);
   }
 }
 window.addEventListener("hashchange", ()=>{ if(DATA){ applyLock(); search=""; renderAll(); } });
