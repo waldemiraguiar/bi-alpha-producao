@@ -6,7 +6,7 @@
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
 
-const MAX_WEEKS = 104;
+const MAX_WEEKS = 520; // ~10 anos (permanente na prática)
 
 export default async (req) => {
   const store = getStore("crm-history");
