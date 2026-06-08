@@ -5,16 +5,13 @@
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
 
-const AGE = 365 * 864e5;
 const RESULTADOS = ["positivo", "negociacao", "sem_resposta", "negativo"];
 
 export default async (req) => {
   const store = getStore("crm-interacoes");
-  const load = async () => {
-    const raw = (await store.get("log", { type: "json", consistency: "strong" })) || [];
-    const cut = Date.now() - AGE;
-    return raw.filter((x) => x && x.ts > cut);
-  };
+  // PERMANENTE: nada expira — todo contato registrado fica para sempre no catálogo.
+  const load = async () =>
+    (await store.get("log", { type: "json", consistency: "strong" })) || [];
   const cors = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",

@@ -89,13 +89,35 @@ function histCliList(arr){
     return `<div class="histcli"><span class="nm">${esc(x.nome||('#'+x.cod))}</span><span class="t-mut">${esc(x.cidade||'')}</span><span class="pr" style="background:${col}22;color:${col}">${esc(MOTLAB[x.motivo]||x.motivo||'')}${dl}</span></div>`;
   }).join("");
 }
-function weekCard(wk, d){
-  return `<div class="card" style="margin-bottom:12px">
-    <h3>Semana ${esc(wk.week)} <span class="tag">início ${esc(wk.label||'')}</span></h3>
-    <div class="histgrid">
+const MESF=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function isoWeekKey(date){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  const dow=d.getUTCDay()||7; d.setUTCDate(d.getUTCDate()+4-dow);
+  const ys=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const wk=Math.ceil((((d-ys)/864e5)+1)/7);
+  return d.getUTCFullYear()+'-W'+String(wk).padStart(2,'0');
+}
+function isoMonday(wk){ const [y,w]=wk.split('-W').map(Number);
+  const jan4=new Date(Date.UTC(y,0,4)), dow=jan4.getUTCDay()||7;
+  const w1=new Date(jan4); w1.setUTCDate(jan4.getUTCDate()-dow+1);
+  const mon=new Date(w1); mon.setUTCDate(w1.getUTCDate()+(w-1)*7); return mon;
+}
+function contatosWeek(lst){
+  if(!lst.length) return '';
+  const rows=lst.slice().sort((a,b)=>a.ts-b.ts).map(h=>{const r=rbadge(h);
+    return `<div class="histcli"><span class="nm">${esc(h.cliente||('#'+h.cod))}</span><span class="t-mut">${esc(h.canal||'')} · ${esc(h.por||'')}</span><span class="pr" style="background:${r.col}22;color:${r.col}">${r.ic} ${esc(r.lbl)}</span></div>`;
+  }).join('');
+  return `<div style="margin-top:12px"><div class="histhead" style="color:var(--cyan)">📞 Contatos da equipe (${lst.length})</div>${rows}</div>`;
+}
+function weekBlock(wo, d){
+  const radar = d ? `<div class="histgrid">
       <div><div class="histhead" style="color:var(--amber)">⚠ Entraram no radar (${d.entraram.length}) <span class="t-mut" style="font-weight:500">· novos alertas</span></div>${histCliList(d.entraram)}</div>
       <div><div class="histhead" style="color:var(--green)">✓ Saíram do radar (${d.sairam.length}) <span class="t-mut" style="font-weight:500">· recuperaram</span></div>${histCliList(d.sairam)}</div>
-    </div></div>`;
+    </div>`
+    : (wo.snap ? `<div class="t-mut" style="font-size:12.5px">📅 Início do histórico · ${(wo.snap.flagged||[]).length} clientes no radar</div>` : `<div class="t-mut" style="font-size:12.5px">Sem foto do radar nesta semana.</div>`);
+  return `<div class="card" style="margin-bottom:12px">
+    <h3>Semana ${esc(wo.week)} <span class="tag">início ${esc(wo.label||'')}</span></h3>
+    ${radar}${contatosWeek(wo.contatos)}</div>`;
 }
 function findClient(cod){
   const c=String(cod), D=DATA||{};
@@ -422,21 +444,32 @@ function renderTab(){
   }
 
   if(ACTIVE==="historico"){
-    if(!HIST.length){ c.innerHTML=`<div class="empty" style="margin-top:18px">📅 O histórico está começando a acumular. O robô grava uma <b>foto por semana</b> do radar — volte após o próximo ciclo e, ao longo das semanas, para comparar quem entrou e saiu.</div>`; return; }
-    const w=HIST, last=w[w.length-1];
-    const lastD = w.length>=2 ? weekDiff(w[w.length-2], last) : {entraram:[],sairam:[]};
-    let feed="";
-    if(w.length>=2){ for(let i=w.length-1;i>=1;i--){ feed += weekCard(w[i], weekDiff(w[i-1], w[i])); } }
-    else { feed=`<div class="empty">Só <b>1 semana</b> registrada — preciso de pelo menos 2 para comparar entradas/saídas. A 1ª foto (${(last.flagged||[]).length} clientes no radar) já está guardada; volte na próxima semana. 👍</div>`; }
-    c.innerHTML = `
+    // une semanas do radar (HIST) + semanas com contatos (INTER), por semana ISO
+    const byWeek={};
+    HIST.forEach(s=>{ byWeek[s.week]={week:s.week,label:s.label||isoMonday(s.week).toISOString().slice(0,10),snap:s,contatos:[]}; });
+    INTER.forEach(x=>{ const wk=isoWeekKey(new Date(x.ts));
+      if(!byWeek[wk]) byWeek[wk]={week:wk,label:isoMonday(wk).toISOString().slice(0,10),snap:null,contatos:[]};
+      byWeek[wk].contatos.push(x); });
+    const weeks=Object.values(byWeek).sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0)); // ordem crescente
+    if(!weeks.length){ c.innerHTML=`<div class="empty" style="margin-top:18px">📅 O catálogo está começando. O robô grava uma <b>foto por semana</b> do radar e cada <b>contato registrado</b> entra aqui — permanente, em ordem crescente por mês e semana.</div>`; return; }
+    const diff={}; for(let i=1;i<HIST.length;i++) diff[HIST[i].week]=weekDiff(HIST[i-1],HIST[i]);
+    const lastSnap=HIST.length?HIST[HIST.length-1]:null;
+    const lastD=HIST.length>=2?diff[lastSnap.week]:{entraram:[],sairam:[]};
+    let body="", curM=null;
+    weeks.forEach(wo=>{ const md=isoMonday(wo.week), mk=md.getUTCFullYear()*100+(md.getUTCMonth()+1);
+      if(mk!==curM){ curM=mk; const cnt=weeks.filter(w2=>{const m2=isoMonday(w2.week);return m2.getUTCFullYear()*100+(m2.getUTCMonth()+1)===mk;}).reduce((a,w2)=>a+w2.contatos.length,0);
+        body+=`<div class="monthhead">${MESF[md.getUTCMonth()+1]} ${md.getUTCFullYear()}${cnt?` <span>· ${cnt} contato${cnt>1?'s':''}</span>`:''}</div>`; }
+      body+=weekBlock(wo, diff[wo.week]);
+    });
+    c.innerHTML=`
       <div class="kgrid">
-        ${kpi("", w.length, "Semanas registradas", "fotos semanais do radar")}
-        ${kpi("r", (last.flagged||[]).length, "No radar agora", `semana ${esc(last.week)}`)}
-        ${kpi("a", lastD.entraram.length, "Entraram (últ. semana)", "novos alertas")}
-        ${kpi("g", lastD.sairam.length, "Saíram (últ. semana)", "recuperaram")}
+        ${kpi("", weeks.length, "Semanas no catálogo", "radar + contatos")}
+        ${kpi("g", INTER.length, "Contatos registrados", "permanente, não expira")}
+        ${kpi("r", lastSnap?(lastSnap.flagged||[]).length:0, "No radar agora", lastSnap?`semana ${esc(lastSnap.week)}`:"—")}
+        ${kpi("a", (lastD.entraram||[]).length, "Entraram (últ. semana)", "novos alertas")}
       </div>
-      <div class="seclabel">📅 Entradas e saídas do radar · semana a semana</div>
-      ${feed}`;
+      <div class="seclabel">📅 Catálogo completo · ordem crescente · por mês e semana</div>
+      ${body}`;
     return;
   }
 
