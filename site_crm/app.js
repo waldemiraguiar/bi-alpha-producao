@@ -26,6 +26,7 @@ const TABS = [
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
+  {k:"encerrados",      ic:"🔒", nm:"Encerrados",      cls:"",         bcls:""},
 ];
 const ROT_MS = 15000;
 
@@ -57,10 +58,11 @@ async function toggleFollowup(cod, nome){
 const INTER_API = "/api/interacoes";
 let INTER = [], CHARTS = [];
 const RESULT = {
-  positivo:    {lbl:"Positivo",      ic:"✅", col:"#00E5A0"},
-  negociacao:  {lbl:"Em negociação", ic:"🔄", col:"#00D4FF"},
-  sem_resposta:{lbl:"Sem resposta",  ic:"⚠️", col:"#FFB020"},
-  negativo:    {lbl:"Negativo",      ic:"❌", col:"#FF5470"},
+  positivo:    {lbl:"Positivo",            ic:"✅", col:"#00E5A0"},
+  negociacao:  {lbl:"Em negociação",       ic:"🔄", col:"#00D4FF"},
+  sem_resposta:{lbl:"Sem resposta",        ic:"⚠️", col:"#FFB020"},
+  em_andamento:{lbl:"Contato em andamento", ic:"⏳", col:"#A78BFA"},
+  negativo:    {lbl:"Negativo",            ic:"❌", col:"#FF5470"},
 };
 const CANAIS = ["Ligação","WhatsApp","E-mail","Visita"];
 const MOTIVOS = ["Preço","Concorrente","Qualidade","Fechou","Sem demanda","Outro"];
@@ -69,6 +71,28 @@ async function loadInter(){ try{ const r=await fetch(INTER_API); if(r.ok) syncIn
 function interOf(cod){ const c=String(cod); return INTER.filter(x=>String(x.cod)===c); }
 function lastInter(cod){ return interOf(cod)[0]||null; }
 function diasAtras(ts){ const d=Math.floor((Date.now()-ts)/864e5); return d<=0?"hoje":d===1?"ontem":`há ${d}d`; }
+
+/* ---------- clientes encerrados (Netlify Function + Blobs, permanente) ---------- */
+const ENCERR_API="/api/crm-encerrados";
+let ENCERR=new Map();   // cod(string) -> {cod,cliente,cidade,motivo,por,nota,ts}
+const MOTIVOS_ENC=["Em débito","Sem interesse","Judicial"];
+function syncEncerr(arr){ ENCERR=new Map((arr||[]).map(e=>[String(e.cod),e])); }
+async function loadEncerr(){ try{ const r=await fetch(ENCERR_API); if(r.ok) syncEncerr((await r.json()).encerrados); }catch(e){} }
+function motivosEnc(){ return [...new Set([...MOTIVOS_ENC, ...[...ENCERR.values()].map(e=>e.motivo).filter(Boolean)])]; }
+function act(arr){ return (arr||[]).filter(x=>!ENCERR.has(String(x.cod))); }   // tira encerrados do fluxo ativo
+async function encerrar(cod, cliente, cidade, motivo, nota){
+  const por=quem(); if(por===null) return false;
+  try{ const r=await fetch(ENCERR_API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({acao:"add",cod:String(cod),cliente,cidade,motivo,nota,por,senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo."); return false; }
+    syncEncerr((await r.json()).encerrados); return true;
+  }catch(e){ console.warn(e); alert("Não foi possível encerrar (função indisponível)."); return false; }
+}
+async function reabrir(cod){
+  try{ const r=await fetch(ENCERR_API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({acao:"remove",cod:String(cod),senha:window.__pwd})});
+    if(r.ok){ syncEncerr((await r.json()).encerrados); closeModal(); renderAll(); } }catch(e){}
+}
 
 /* ---------- histórico semanal do radar (snapshots) ---------- */
 const HIST_API = "/api/crm-history";
@@ -154,47 +178,74 @@ function snapOf(cod){
 }
 
 /* ---- modal de registro ---- */
-let M_COD=null, M_RES="positivo", M_CANAL="Ligação", M_MOTIVO="";
+let M_COD=null, M_RES="positivo", M_CANAL="Ligação", M_MOTIVO="", M_SAT=null, M_ENCMOT="";
 function rbadge(h){ const r=RESULT[h.resultado]||RESULT.sem_resposta; return r; }
 function openReg(cod){
-  M_COD=String(cod); M_RES="positivo"; M_CANAL="Ligação"; M_MOTIVO="";
-  const cli=findClient(cod)||{}, nome=cli.nome||("#"+cod), hist=interOf(cod);
+  M_COD=String(cod); M_RES="positivo"; M_CANAL="Ligação"; M_MOTIVO=""; M_SAT=null; M_ENCMOT="";
+  const cli=findClient(cod)||ENCERR.get(String(cod))||{}, nome=cli.nome||cli.cliente||("#"+cod), hist=interOf(cod);
+  const enc=ENCERR.get(String(cod));
   const histHtml = hist.length ? hist.map(h=>{ const r=rbadge(h);
+    const sat=(h.nota_satisfacao!=null)?` · <span class="t-cyan">satisf. ${h.nota_satisfacao}/10${h.nota_motivo?(" ("+esc(h.nota_motivo)+")"):""}</span>`:"";
     return `<div class="hist-row"><span class="hi-ic">${r.ic}</span>
-      <div class="hi-body"><div class="hi-top"><b>${esc(r.lbl)}</b> <span class="t-mut">· ${esc(h.canal||"—")} · ${esc(diasAtras(h.ts))} · ${esc(h.por)}</span>${h.motivo?` · <span class="t-red">${esc(h.motivo)}</span>`:""}</div>
+      <div class="hi-body"><div class="hi-top"><b>${esc(r.lbl)}</b> <span class="t-mut">· ${esc(h.canal||"—")} · ${esc(diasAtras(h.ts))} · ${esc(h.por)}</span>${h.motivo?` · <span class="t-red">${esc(h.motivo)}</span>`:""}${sat}</div>
       ${h.nota?`<div class="hi-nota">"${esc(h.nota)}"</div>`:""}${h.proximo_passo?`<div class="hi-next">↻ retorno: ${esc(h.proximo_passo)}</div>`:""}</div>
       <button class="hi-del" data-del="${esc(h.id)}" title="remover">✕</button></div>`;
   }).join("") : `<div class="t-mut" style="font-size:13px;padding:6px 0">Sem contatos registrados ainda.</div>`;
+  const encBlock = enc
+    ? `<div class="m-sec" style="color:var(--red)">Cliente encerrado</div>
+       <div class="encbanner"><div><b>${esc(enc.motivo)}</b> <span class="t-mut">· ${esc(diasAtras(enc.ts))} · ${esc(enc.por)}</span>${enc.nota?`<div class="hi-nota">"${esc(enc.nota)}"</div>`:""}</div><button class="opt" id="mReabrir">↩ Reabrir</button></div>`
+    : `<div class="m-sec" style="color:var(--red)">Encerrar cliente</div>
+       <div class="t-mut" style="font-size:12px;margin-bottom:8px">Tira do fluxo ativo e arquiva em <b>Encerrados</b> (rastreado, permanente).</div>
+       <div class="m-opts" id="mEnc">${motivosEnc().map(m=>`<button class="opt enc" data-enc="${esc(m)}">${esc(m)}</button>`).join("")}<button class="opt" data-enc="__novo">+ novo motivo</button></div>
+       <input id="mEncNovo" class="m-date" style="width:100%;display:none;margin-top:8px" placeholder="Novo motivo de encerramento">
+       <textarea id="mEncNota" class="m-ta" style="min-height:48px;margin-top:8px" placeholder="Observação do encerramento (opcional)"></textarea>
+       <button class="m-enc" id="mEncBtn">🔒 Encerrar contato</button>`;
   document.getElementById("modalBody").innerHTML = `
     <div class="m-head"><div><div class="m-cli">${esc(nome)}</div>
-      <div class="t-mut" style="font-size:13px;margin-top:2px">${esc(cli.cidade||"")}${cli.dias_inativo!=null?` · ${cli.dias_inativo}d sem enviar`:""}</div></div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">${esc(cli.cidade||"")}${cli.dias_inativo!=null?` · ${cli.dias_inativo}d sem enviar`:""}${enc?' · <span class="t-red" style="font-weight:800">ENCERRADO</span>':""}</div></div>
       <button class="m-x" id="mClose">✕</button></div>
     <div class="m-sec">Histórico de contatos</div><div class="m-hist">${histHtml}</div>
     <div class="m-sec">Registrar novo contato</div>
     <div class="m-lbl">Canal</div><div class="m-opts" id="mCanal">${CANAIS.map(c=>`<button class="opt${c===M_CANAL?" on":""}" data-canal="${c}">${c}</button>`).join("")}</div>
     <div class="m-lbl">Resultado</div><div class="m-opts" id="mRes">${Object.entries(RESULT).map(([k,v])=>`<button class="opt res-${k}${k===M_RES?" on":""}" data-res="${k}">${v.ic} ${v.lbl}</button>`).join("")}</div>
     <div id="mMotivoWrap" style="display:none"><div class="m-lbl">Motivo da perda</div><div class="m-opts" id="mMotivo">${MOTIVOS.map(m=>`<button class="opt" data-motivo="${m}">${m}</button>`).join("")}</div></div>
+    <div class="m-lbl">Satisfação (0–10) · opcional <span class="t-mut" style="font-weight:500">— pesquisa (use em Em Alta)</span></div>
+    <div class="m-opts" id="mSat">${[0,1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="opt sat" data-sat="${n}">${n}</button>`).join("")}</div>
+    <div id="mSatMotivoWrap" style="display:none"><div class="m-lbl">Motivo da nota (abaixo de 8)</div><input id="mSatMotivo" class="m-date" style="width:100%" placeholder="Por que essa nota?"></div>
     <div class="m-lbl">Nota / relatório</div><textarea id="mNota" class="m-ta" placeholder="O que foi conversado, combinado, objeções…"></textarea>
     <div class="m-lbl">Próximo passo (retorno)</div><input id="mNext" type="date" class="m-date">
-    <button class="m-save" id="mSave">Salvar contato</button>`;
+    <button class="m-save" id="mSave">Salvar contato</button>
+    ${encBlock}`;
   document.getElementById("modal").style.display="flex";
   document.getElementById("mClose").onclick=closeModal;
   document.getElementById("mCanal").onclick=e=>{const b=e.target.closest("[data-canal]");if(b){M_CANAL=b.dataset.canal;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
   document.getElementById("mRes").onclick=e=>{const b=e.target.closest("[data-res]");if(b){M_RES=b.dataset.res;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));document.getElementById("mMotivoWrap").style.display=M_RES==="negativo"?"block":"none";}};
   const mm=document.getElementById("mMotivo"); if(mm) mm.onclick=e=>{const b=e.target.closest("[data-motivo]");if(b){M_MOTIVO=b.dataset.motivo;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
+  document.getElementById("mSat").onclick=e=>{const b=e.target.closest("[data-sat]");if(b){M_SAT=+b.dataset.sat;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));document.getElementById("mSatMotivoWrap").style.display=M_SAT<8?"block":"none";}};
   document.getElementById("mSave").onclick=submitReg;
   document.querySelectorAll(".hi-del").forEach(b=>b.onclick=()=>removeInter(b.dataset.del));
+  const me=document.getElementById("mEnc"); if(me) me.onclick=e=>{const b=e.target.closest("[data-enc]");if(!b)return; const v=b.dataset.enc;
+    if(v==="__novo"){ const inp=document.getElementById("mEncNovo"); inp.style.display="block"; inp.focus(); M_ENCMOT=""; [...me.children].forEach(c=>c.classList.remove("on")); }
+    else { M_ENCMOT=v; document.getElementById("mEncNovo").style.display="none"; [...me.children].forEach(c=>c.classList.toggle("on",c===b)); } };
+  const meb=document.getElementById("mEncBtn"); if(meb) meb.onclick=async()=>{
+    const novo=(document.getElementById("mEncNovo").value||"").trim(), motivo=novo||M_ENCMOT;
+    if(!motivo){ alert("Escolha ou digite um motivo de encerramento."); return; }
+    meb.disabled=true; meb.textContent="Encerrando…";
+    const ok=await encerrar(M_COD, cli.nome||"", cli.cidade||"", motivo, (document.getElementById("mEncNota").value||"").trim());
+    if(ok){ closeModal(); renderAll(); } else { meb.disabled=false; meb.textContent="🔒 Encerrar contato"; } };
+  const mr=document.getElementById("mReabrir"); if(mr) mr.onclick=()=>reabrir(M_COD);
 }
 function closeModal(){ document.getElementById("modal").style.display="none"; }
 async function submitReg(){
   const por=quem(); if(por===null) return;
   const nota=document.getElementById("mNota").value.trim(), next=document.getElementById("mNext").value;
+  const satMot=(M_SAT!=null&&M_SAT<8)?(document.getElementById("mSatMotivo").value||"").trim():"";
   const cli=findClient(M_COD)||{}, btn=document.getElementById("mSave");
   btn.disabled=true; btn.textContent="Salvando…";
   try{
     const r=await fetch(INTER_API,{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({acao:"add",cod:M_COD,cliente:cli.nome||"",por,canal:M_CANAL,resultado:M_RES,
-        motivo:M_RES==="negativo"?M_MOTIVO:"",nota,proximo_passo:next,snapshot:snapOf(M_COD),senha:window.__pwd})});
+        motivo:M_RES==="negativo"?M_MOTIVO:"",nota,proximo_passo:next,nota_satisfacao:M_SAT,nota_motivo:satMot,snapshot:snapOf(M_COD),senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); btn.disabled=false; btn.textContent="Salvar contato"; return; }
     syncInter((await r.json()).interacoes); closeModal(); renderAll();
   }catch(e){ console.warn(e); alert("Não foi possível salvar (função indisponível)."); btn.disabled=false; btn.textContent="Salvar contato"; }
@@ -225,19 +276,22 @@ function biStats(){
   const paradosSet=new Set((D.parados||[]).map(x=>String(x.cod)));
   const quedaSet=new Set([...(D.em_queda||[]),...(D.queda_forte||[])].map(x=>String(x.cod)));
   const wk=Date.now()-7*864e5, mo=Date.now()-30*864e5;
-  const byRes={positivo:0,negociacao:0,sem_resposta:0,negativo:0};
+  const byRes={}; Object.keys(RESULT).forEach(k=>byRes[k]=0);
   INTER.forEach(x=>{ if(byRes[x.resultado]!=null) byRes[x.resultado]++; });
   const porPessoa={}; INTER.forEach(x=>{const p=x.por||"equipe"; (porPessoa[p]=porPessoa[p]||{n:0,pos:0}); porPessoa[p].n++; if(x.resultado==="positivo")porPessoa[p].pos++;});
   const contatados=new Set(INTER.map(x=>String(x.cod)));
-  let reativados=0;
-  contatados.forEach(cod=>{ const ruim=interOf(cod).some(h=>{const s=h.snapshot||{}; return (s.dias_inativo!=null&&s.dias_inativo>=21)||(s.delta!=null&&s.delta<=-10)||["parado","queda","queda_forte"].includes(s.situacao);});
-    if(ruim && !paradosSet.has(cod) && !quedaSet.has(cod)) reativados++; });
+  // REATIVADO = estava PARADO (sem enviar) em algum contato e HOJE não está mais parado nem em queda = voltou a enviar
+  const reativadosList=[];
+  contatados.forEach(cod=>{ const eraParado=interOf(cod).some(h=>(h.snapshot||{}).situacao==="parado");
+    if(eraParado && !paradosSet.has(cod) && !quedaSet.has(cod)){ reativadosList.push(interOf(cod).map(i=>i.cliente).find(Boolean)||("#"+cod)); } });
   const motivos={}; INTER.filter(x=>x.resultado==="negativo"&&x.motivo).forEach(x=>{motivos[x.motivo]=(motivos[x.motivo]||0)+1;});
   const weeks=[]; for(let i=7;i>=0;i--){const end=Date.now()-i*7*864e5,start=end-7*864e5; weeks.push({lbl:i===0?"agora":`-${i}s`,c:INTER.filter(x=>x.ts>=start&&x.ts<end).length});}
   const total=INTER.length, topP=Object.entries(porPessoa).sort((a,b)=>b[1].n-a[1].n)[0];
+  const notas=INTER.filter(x=>x.nota_satisfacao!=null).map(x=>x.nota_satisfacao);
+  const satMedia=notas.length?notas.reduce((a,b)=>a+b,0)/notas.length:null;
   return {total,sem:INTER.filter(x=>x.ts>=wk).length,mes:INTER.filter(x=>x.ts>=mo).length,byRes,porPessoa,
-    reativados,motivos,weeks,contatados:contatados.size,pctPos:total?Math.round(100*byRes.positivo/total):0,
-    topPessoa:topP?topP[0]:"—",alvos:(D.parados||[]).length+(D.em_queda||[]).length};
+    reativados:reativadosList.length, reativadosList, motivos,weeks,contatados:contatados.size,pctPos:total?Math.round(100*byRes.positivo/total):0,
+    topPessoa:topP?topP[0]:"—",alvos:(D.parados||[]).length+(D.em_queda||[]).length, satMedia, satN:notas.length};
 }
 function funil(s){
   const steps=[["Alvos (parados + em queda)",s.alvos,"#FF5470"],["Contatados",s.contatados,"#FFB020"],
@@ -362,7 +416,7 @@ function renderTab(){
   const ativos = r.ativos || r.carteira || 0;
 
   if(ACTIVE==="reativar"){
-    const arr = bumpDue(D.reativar||[]);
+    const arr = bumpDue(act(D.reativar||[]));
     const calm = arr.length===0; const dc = dueCount();
     const riscoPct = ativos ? 100*arr.length/ativos : 0;
     c.innerHTML = `
@@ -387,7 +441,7 @@ function renderTab(){
   }
 
   if(ACTIVE==="em_queda"){
-    const arr = D.em_queda||[];
+    const arr = act(D.em_queda||[]);
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "em queda")}
         <div class="kgrid" style="margin:0">
@@ -396,12 +450,12 @@ function renderTab(){
           ${kpi("", ativos, "Carteira ativa", "clientes com envio recente")}
         </div></div>
       <div class="seclabel">▼ Em queda — acompanhar de perto</div>
-      ${list(arr, {badge:"motivo", rank:true})}`;
+      ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
     return;
   }
 
   if(ACTIVE==="parados"){
-    const arr = bumpDue(D.parados||[]);
+    const arr = bumpDue(act(D.parados||[]));
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "parados")}
         <div class="kgrid" style="margin:0">
@@ -415,29 +469,29 @@ function renderTab(){
   }
 
   if(ACTIVE==="novos_esfriando"){
-    const esf = D.novos_esfriando||[], ok = D.novos||[];
+    const esf = act(D.novos_esfriando||[]), ok = act(D.novos||[]);
     c.innerHTML = `
       <div class="kgrid">
         ${kpi("a", esf.length, "Novos esfriando", "pararam após início")}
         ${kpi("g", ok.length, "Novos aquecendo", "engajando bem")}
       </div>
       <div class="seclabel">🌱 Novos esfriando — recuperar antes de perder</div>
-      ${list(esf, {acao:false, badge:"motivo", rank:true})}
+      ${list(esf, {badge:"motivo", rank:true, fu:true})}
       <div class="seclabel">✅ Novos aquecendo — manter o ritmo</div>
-      ${list(ok, {rank:false})}`;
+      ${list(ok, {rank:false, fu:true})}`;
     return;
   }
 
   if(ACTIVE==="em_alta"){
-    const arr = D.em_alta||[];
+    const arr = act(D.em_alta||[]);
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#4D9DFF", "em alta")}
         <div class="kgrid" style="margin:0">
           ${kpi("", arr.length, "Clientes em alta", "10%+ acima do normal")}
           ${kpi("g", ativos, "Carteira ativa", "")}
         </div></div>
-      <div class="seclabel">▲ Em alta — fortalecer relacionamento</div>
-      ${list(arr, {badge:"motivo", rank:true})}`;
+      <div class="seclabel">▲ Em alta — fortalecer + <b style="color:var(--cyan)">pesquisa de satisfação</b> (no 📞 Registrar)</div>
+      ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
     return;
   }
 
@@ -447,8 +501,15 @@ function renderTab(){
       <div class="kgrid">
         ${kpi("", s.sem, "Contatos na semana", `${s.mes} no mês · ${s.total} no total`)}
         ${kpi("g", s.pctPos+"%", "Taxa de sucesso", "contatos com resultado positivo")}
-        ${kpi("g", s.reativados, "Clientes reativados", "estavam ruins e voltaram a enviar")}
+        ${kpi("g", s.reativados, "Clientes reativados", "estavam parados e voltaram a enviar")}
         ${kpi("a", s.topPessoa, "Mais ativo", "colaborador com mais contatos")}
+        ${s.satN?kpi("", s.satMedia.toFixed(1)+"/10", "Satisfação média", `${s.satN} resposta(s) · Em Alta`):""}
+      </div>
+      <div class="card" style="margin-bottom:14px;border-color:rgba(0,229,160,.3)">
+        <h3>✅ Clientes reativados <span class="tag">parados que voltaram a enviar</span></h3>
+        ${s.reativadosList.length
+          ? `<div style="font-size:14px;color:var(--green);font-weight:700">${s.reativadosList.map(esc).join(" · ")}</div>`
+          : `<div class="t-mut" style="font-size:13px;line-height:1.5">Nenhum ainda. Conta <b>só quem estava PARADO</b> (sem enviar) e voltou — não conta quedas que se recuperaram sozinhas. O rastreio semana a semana fica na aba <b>📅 Histórico</b> (“Saíram do radar”).</div>`}
       </div>
       <div class="bigrid">
         <div class="card"><h3>Resultados dos contatos</h3><div class="cwrap"><canvas id="cRes"></canvas></div></div>
@@ -492,8 +553,37 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="encerrados"){
+    const allE=[...ENCERR.values()].sort((a,b)=>b.ts-a.ts);
+    const q=search.trim().toLowerCase();
+    const arr = q ? allE.filter(e=>(e.cliente||"").toLowerCase().includes(q)||(e.motivo||"").toLowerCase().includes(q)) : allE;
+    let body="", curM=null;
+    arr.forEach(e=>{ const d=new Date(e.ts), mk=d.getFullYear()*100+(d.getMonth()+1);
+      if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
+      body+=`<div class="crow" data-reg="${esc(e.cod)}" style="cursor:pointer">
+        <div class="rk" style="color:var(--line)">•</div>
+        <div><div class="nm">${esc(e.cliente||('#'+e.cod))}</div><div class="ci">${esc(e.cidade||'')} · encerrado ${esc(diasAtras(e.ts))} · ${esc(e.por||'')}</div>${e.nota?`<div class="lastint" style="cursor:pointer">"${esc(e.nota)}"</div>`:''}</div>
+        <div class="mid"></div>
+        <div class="rcell"><span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">${esc(e.motivo)}</span></div>
+      </div>`; });
+    c.innerHTML=`
+      <div class="kgrid">
+        ${kpi("r", allE.length, "Clientes encerrados", "arquivados, permanente")}
+        ${kpi("a", new Set(allE.map(e=>e.motivo)).size, "Motivos distintos", "editável")}
+        ${kpi("", q?arr.length:allE.length, q?"Encontrados":"No total", q?`filtro: "${esc(search)}"`:"clique p/ ver histórico / reabrir")}
+      </div>
+      <div class="tabsbar" style="margin:16px 0 8px">
+        <div class="seclabel" style="margin:0">🔒 Encerrados · por mês e ano</div>
+        <input class="wlsearch" id="lupaEnc" placeholder="🔍 buscar por cliente ou motivo…" value="${esc(search)}">
+      </div>
+      ${allE.length ? (arr.length? body : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`) : `<div class="empty">Nenhum cliente encerrado ainda. Use <b>🔒 Encerrar contato</b> no 📞 Registrar de qualquer cliente.</div>`}`;
+    const lp=document.getElementById("lupaEnc");
+    if(lp){ lp.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const p=lp.selectionStart; renderTab(); const l2=document.getElementById("lupaEnc"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
+    return;
+  }
+
   if(ACTIVE==="carteira"){
-    const all = D.carteira||[];
+    const all = act(D.carteira||[]);
     const q = search.trim().toLowerCase();
     const arr = q ? all.filter(x => (x.nome||"").toLowerCase().includes(q) || (x.cidade||"").toLowerCase().includes(q)) : all;
     c.innerHTML = `
@@ -501,7 +591,7 @@ function renderTab(){
         <div class="seclabel" style="margin:0">👥 Carteira ativa — ${all.length} clientes</div>
         <input class="wlsearch" id="lupa" placeholder="🔍 buscar cliente ou cidade…" value="${esc(search)}">
       </div>
-      ${list(arr, {badge:"sit", rank:false})}`;
+      ${list(arr, {badge:"sit", rank:false, fu:true})}`;
     const lupa = document.getElementById("lupa");
     if(lupa){
       lupa.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const p=lupa.selectionStart; renderTab(); const l2=document.getElementById("lupa"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}});
@@ -517,6 +607,7 @@ function renderTabs(){
   t.innerHTML = shown.map(tb=>{
     const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length
             : tb.k==="historico" ? HIST.length
+            : tb.k==="encerrados" ? ENCERR.size
             : (r[tb.k] || 0);
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
@@ -584,10 +675,10 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter(), loadHist()]).then(()=>renderAll());
-    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length;
-      await Promise.all([loadFollowups(), loadInter(), loadHist()]);
-      if(a!==[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length) renderTab(); }, 45000);
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr()]).then(()=>renderAll());
+    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size;
+      await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr()]);
+      if(a!==[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size) renderTab(); }, 45000);
   }
 }
 window.addEventListener("hashchange", ()=>{ if(DATA){ applyLock(); search=""; renderAll(); } });

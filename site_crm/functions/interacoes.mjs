@@ -5,7 +5,7 @@
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
 
-const RESULTADOS = ["positivo", "negociacao", "sem_resposta", "negativo"];
+const RESULTADOS = ["positivo", "negociacao", "sem_resposta", "em_andamento", "negativo"];
 
 export default async (req) => {
   const store = getStore("crm-interacoes");
@@ -45,6 +45,9 @@ export default async (req) => {
         motivo: (body.motivo || "").slice(0, 40),
         nota: (body.nota || "").slice(0, 600),
         proximo_passo: (body.proximo_passo || "").slice(0, 20),
+        nota_satisfacao: (body.nota_satisfacao === 0 || body.nota_satisfacao)
+          ? Math.max(0, Math.min(10, Math.round(Number(body.nota_satisfacao)))) : null,
+        nota_motivo: (body.nota_motivo || "").slice(0, 300),
         snapshot: {
           dias_inativo: body.snapshot?.dias_inativo ?? null,
           delta: body.snapshot?.delta ?? null,
