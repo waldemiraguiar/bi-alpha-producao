@@ -25,6 +25,7 @@ const TABS = [
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
+  {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
   {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
   {k:"encerrados",      ic:"🔒", nm:"Encerrados",      cls:"",         bcls:""},
 ];
@@ -170,6 +171,22 @@ function findClient(cod){
     const hit=(D[k]||[]).find(x=>String(x.cod)===c); if(hit) return hit;
   }
   return null;
+}
+/* eventos de REATIVAÇÃO (visão ampla): estava ruim (parado/queda/queda forte/esfriando) e saiu do radar.
+   Fonte 1 = histórico semanal (saiu do radar, datado por semana). Fonte 2 = detecção atual (contato com
+   snapshot ruim + hoje fora dos alertas). Dedupe por cliente. */
+function reativadosEvents(){
+  const D=DATA||{};
+  const ainda=new Set([...(D.parados||[]),...(D.em_queda||[]),...(D.queda_forte||[]),...(D.novos_esfriando||[])].map(x=>String(x.cod)));
+  const evts=[], visto=new Set();
+  for(let i=1;i<HIST.length;i++){ const d=weekDiff(HIST[i-1],HIST[i]), ts=isoMonday(HIST[i].week).getTime();
+    d.sairam.forEach(x=>{ const cod=String(x.cod); evts.push({cod,cliente:x.nome,cidade:x.cidade,motivo:x.motivo,ts,week:HIST[i].week,fonte:"semana"}); visto.add(cod); }); }
+  [...new Set(INTER.map(x=>String(x.cod)))].forEach(cod=>{
+    if(visto.has(cod) || ainda.has(cod)) return;
+    const bad=interOf(cod).find(h=>["parado","queda","queda_forte","novo_esfriando"].includes((h.snapshot||{}).situacao));
+    if(bad){ const nm=interOf(cod).map(i=>i.cliente).find(Boolean)||("#"+cod);
+      evts.push({cod,cliente:nm,cidade:(findClient(cod)||{}).cidade||"",motivo:(bad.snapshot||{}).situacao,ts:Date.now(),week:isoWeekKey(new Date()),fonte:"atual"}); } });
+  return evts.sort((a,b)=>b.ts-a.ts);
 }
 function snapOf(cod){
   const x=findClient(cod)||{};
@@ -553,6 +570,36 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="reativados"){
+    const allR=reativadosEvents();
+    const q=search.trim().toLowerCase();
+    const arr = q ? allR.filter(e=>(e.cliente||"").toLowerCase().includes(q)||((MOTLAB[e.motivo]||e.motivo||"").toLowerCase().includes(q))) : allR;
+    let body="", curM=null;
+    arr.forEach(e=>{ const d=new Date(e.ts), mk=d.getUTCFullYear()*100+(d.getUTCMonth()+1), col=MOTCOL[e.motivo]||"#00E5A0";
+      if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getUTCMonth()+1]} ${d.getUTCFullYear()}</div>`; }
+      body+=`<div class="crow" data-reg="${esc(e.cod)}" style="cursor:pointer">
+        <div class="rk" style="color:var(--green)">✓</div>
+        <div><div class="nm">${esc(e.cliente||('#'+e.cod))}</div><div class="ci">${e.cidade?esc(e.cidade)+' · ':''}recuperou ${esc(diasAtras(e.ts))} · ${e.fonte==='atual'?'detecção atual':esc(e.week)}</div></div>
+        <div class="mid"></div>
+        <div class="rcell"><span class="pr" style="background:${col}22;color:${col}">era ${esc(MOTLAB[e.motivo]||e.motivo||'—')}</span></div>
+      </div>`; });
+    const now=new Date(), mesN=allR.filter(e=>{const d=new Date(e.ts);return d.getUTCFullYear()===now.getUTCFullYear()&&d.getUTCMonth()===now.getUTCMonth();}).length;
+    c.innerHTML=`
+      <div class="kgrid">
+        ${kpi("g", new Set(allR.map(e=>e.cod)).size, "Reativados (total)", "estavam ruins e voltaram")}
+        ${kpi("g", mesN, "Reativados no mês", "recuperaram este mês")}
+        ${kpi("", q?arr.length:allR.length, q?"Encontrados":"Eventos", q?`filtro: "${esc(search)}"`:"saídas do radar")}
+      </div>
+      <div class="tabsbar" style="margin:16px 0 8px">
+        <div class="seclabel" style="margin:0">♻️ Reativados · por mês e ano <span class="t-mut" style="font-weight:500">— estavam parados / em queda / esfriando e voltaram</span></div>
+        <input class="wlsearch" id="lupaReat" placeholder="🔍 buscar por cliente ou motivo…" value="${esc(search)}">
+      </div>
+      ${allR.length ? (arr.length? body : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`) : `<div class="empty">Ainda sem reativados. Conforme os snapshots semanais acumulam e clientes saem do radar (ou contatos de clientes ruins se recuperam), eles aparecem aqui — por mês e ano.</div>`}`;
+    const lp=document.getElementById("lupaReat");
+    if(lp){ lp.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const p=lp.selectionStart; renderTab(); const l2=document.getElementById("lupaReat"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
+    return;
+  }
+
   if(ACTIVE==="encerrados"){
     const allE=[...ENCERR.values()].sort((a,b)=>b.ts-a.ts);
     const q=search.trim().toLowerCase();
@@ -608,6 +655,7 @@ function renderTabs(){
     const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length
             : tb.k==="historico" ? HIST.length
             : tb.k==="encerrados" ? ENCERR.size
+            : tb.k==="reativados" ? new Set(reativadosEvents().map(e=>e.cod)).size
             : (r[tb.k] || 0);
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
