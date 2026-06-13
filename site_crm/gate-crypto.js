@@ -25,12 +25,17 @@ function initGate(opts){
   const f=document.getElementById('gateForm'), p=document.getElementById('gatePwd'),
         er=document.getElementById('gateErr'), b=document.getElementById('gateBtn');
   let timer=null;
+  const _BIO=lsKey+'_bio';
+  const _be=x=>btoa(String.fromCharCode(...new Uint8Array(x))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const _bd=x=>{x=x.replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(x),c=>c.charCodeAt(0));};
+  const gbio=document.getElementById('gateBio'), bset=document.getElementById('bioSetup');
   async function unlock(pw, fromLS){
     try{
       const D = await decryptEnc(encUrl, pw);
       localStorage.setItem(lsKey, pw); window.__pwd = pw;
       document.getElementById('gate').style.display='none';
       onData(D);
+      if(window.PublicKeyCredential && bset && !localStorage.getItem(_BIO)) bset.style.display='';
       if(timer) clearInterval(timer);
       timer = setInterval(async()=>{ try{ onData(await decryptEnc(encUrl, window.__pwd)); }catch(e){ console.warn(e); } }, refreshMs);
     }catch(e){
@@ -40,5 +45,18 @@ function initGate(opts){
     }
   }
   f.addEventListener('submit', e=>{ e.preventDefault(); er.textContent=''; b.disabled=true; b.textContent='Verificando…'; unlock(p.value,false); });
-  const saved = localStorage.getItem(lsKey); if(saved) unlock(saved, true);
+  /* ---- digital / Touch ID (por aparelho; preserva auto-login da TV) ---- */
+  if(gbio) gbio.onclick=async()=>{ const id=localStorage.getItem(_BIO), pw=localStorage.getItem(lsKey); if(!id||!pw)return;
+    try{gbio.textContent='👆 Toque o leitor…';
+      await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:_bd(id)}],userVerification:'required',timeout:60000,rpId:location.hostname}});
+      unlock(pw,true);
+    }catch(e){console.warn(e);gbio.textContent='👆 Entrar com digital';} };
+  if(bset) bset.onclick=async()=>{ const pw=localStorage.getItem(lsKey); if(!pw)return;
+    try{bset.textContent='👆 Toque p/ ativar…';
+      const c=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'Alpha — Atlas Digital',id:location.hostname},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'alpha',displayName:'Alpha'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000,attestation:'none'}});
+      localStorage.setItem(_BIO,_be(c.rawId)); bset.textContent='✅ Digital ativa neste PC'; setTimeout(()=>{bset.style.display='none';},1800);
+    }catch(e){console.warn(e);bset.textContent='👆 Proteger com digital';} };
+  const saved = localStorage.getItem(lsKey);
+  if(saved && localStorage.getItem(_BIO) && gbio){ gbio.style.display=''; p.placeholder='ou use a senha'; }
+  else if(saved){ unlock(saved, true); }
 }
