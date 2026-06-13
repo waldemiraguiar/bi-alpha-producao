@@ -75,15 +75,34 @@ const slug=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a
 
 (function gate(){
   const f=document.getElementById('gateForm'),p=document.getElementById('gatePwd'),er=document.getElementById('gateErr'),b=document.getElementById('gateBtn');
+  const _BIO='bi_prod_bio';
+  const _be=x=>btoa(String.fromCharCode(...new Uint8Array(x))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const _bd=x=>{x=x.replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(x),c=>c.charCodeAt(0));};
+  const gbio=document.getElementById('gateBio'), bset=document.getElementById('bioSetup');
   tick();setInterval(tick,1000);
   async function unlock(pw,fromLS){
     try{const D=await decrypt(pw);localStorage.setItem(LS,pw);window.__pwd=pw;
-      document.getElementById('gate').style.display='none';document.getElementById('tv').style.display='';boot(D);}
+      document.getElementById('gate').style.display='none';document.getElementById('tv').style.display='';boot(D);
+      if(window.PublicKeyCredential && bset && !localStorage.getItem(_BIO)) bset.style.display='';}
     catch(e){if(fromLS){localStorage.removeItem(LS);return;}
       er.textContent=/sem dados/.test(e.message)?'Dados indisponíveis.':'Senha incorreta.';b.disabled=false;b.textContent='Entrar';p.select();}
   }
   f.addEventListener('submit',e=>{e.preventDefault();er.textContent='';b.disabled=true;b.textContent='Verificando…';unlock(p.value,false);});
-  const s=localStorage.getItem(LS); if(s) unlock(s,true);
+  /* ---- digital / Touch ID (por aparelho; NÃO afeta a TV) ---- */
+  if(gbio) gbio.onclick=async()=>{ const id=localStorage.getItem(_BIO); if(!id)return;
+    try{gbio.textContent='👆 Toque o leitor…';
+      await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:_bd(id)}],userVerification:'required',timeout:60000,rpId:location.hostname}});
+      unlock(localStorage.getItem(LS),true);
+    }catch(e){console.warn(e);gbio.textContent='👆 Entrar com digital';} };
+  if(bset) bset.onclick=async()=>{ const pw=localStorage.getItem(LS); if(!pw)return;
+    try{bset.textContent='👆 Toque p/ ativar…';
+      const c=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'BI Produção Alpha — Atlas Digital',id:location.hostname},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'prod',displayName:'BI Produção'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000,attestation:'none'}});
+      localStorage.setItem(_BIO,_be(c.rawId)); bset.textContent='✅ Digital ativa neste PC'; setTimeout(()=>{bset.style.display='none';},1800);
+    }catch(e){console.warn(e);bset.textContent='👆 Proteger com digital';} };
+  /* auto-entrar SÓ se NÃO houver digital neste aparelho → a TV continua sozinha; seu PC pede o dedo */
+  const s=localStorage.getItem(LS);
+  if(s && localStorage.getItem(_BIO) && gbio){ gbio.style.display=''; p.placeholder='ou use a senha'; }
+  else if(s){ unlock(s,true); }
 })();
 
 function cats(){
