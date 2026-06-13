@@ -91,19 +91,36 @@ async function decryptDashboard(pwd){
 (function gate(){
   const form=document.getElementById('gateForm'), pwd=document.getElementById('gatePwd'),
         err=document.getElementById('gateErr'), btn=document.getElementById('gateBtn');
+  const _BIO='bi_fin_bio', _PW='bi_fin_pw';
+  const _be=x=>btoa(String.fromCharCode(...new Uint8Array(x))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const _bd=x=>{x=x.replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(x),c=>c.charCodeAt(0));};
+  const gbio=document.getElementById('gateBio'), bset=document.getElementById('bioSetup');
   form.addEventListener('submit', async e=>{
     e.preventDefault(); err.textContent=''; btn.disabled=true; btn.textContent='Verificando…';
     try{
       const D = await decryptDashboard(pwd.value);
-      window.__PW = pwd.value;
+      window.__PW = pwd.value; try{localStorage.setItem(_PW,pwd.value);}catch(_){}
       document.getElementById('gate').style.display='none';
       document.getElementById('dash').style.display='';
       render(D);
+      if(window.PublicKeyCredential && bset && !localStorage.getItem(_BIO)) bset.style.display='';
     }catch(ex){
       err.textContent = /não encontrado/.test(ex.message) ? 'Dados indisponíveis. Tente recarregar.' : 'Senha incorreta.';
       btn.disabled=false; btn.textContent='Entrar'; pwd.select();
     }
   });
+  /* ---- digital / Touch ID (por aparelho) ---- */
+  if(gbio) gbio.onclick=async()=>{ const id=localStorage.getItem(_BIO), pw=localStorage.getItem(_PW); if(!id||!pw)return;
+    try{gbio.textContent='👆 Toque o leitor…';
+      await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:_bd(id)}],userVerification:'required',timeout:60000,rpId:location.hostname}});
+      pwd.value=pw; (form.requestSubmit?form.requestSubmit():btn.click());
+    }catch(e){console.warn(e);gbio.textContent='👆 Entrar com digital';} };
+  if(bset) bset.onclick=async()=>{ const pw=localStorage.getItem(_PW)||window.__PW; if(!pw)return;
+    try{bset.textContent='👆 Toque p/ ativar…';
+      const c=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'BI Financeiro Alpha — Atlas Digital',id:location.hostname},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'fin',displayName:'BI Financeiro'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000,attestation:'none'}});
+      localStorage.setItem(_BIO,_be(c.rawId)); bset.textContent='✅ Digital ativa neste PC'; setTimeout(()=>{bset.style.display='none';},1800);
+    }catch(e){console.warn(e);bset.textContent='👆 Proteger com digital';} };
+  if(localStorage.getItem(_BIO) && localStorage.getItem(_PW) && gbio){ gbio.style.display=''; pwd.placeholder='ou use a senha'; }
 })();
 
 function render(D){
