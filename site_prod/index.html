@@ -145,10 +145,13 @@ body{font-family:'Inter',sans-serif;background:
     <img src="logo-full.png" alt="Alpha Labs" style="width:150px;margin:0 auto 14px;display:block"><h2>Painel de Produção</h2><p>Acesso da equipe</p>
     <form id="gateForm" autocomplete="off">
       <input id="gatePwd" type="password" placeholder="Senha da equipe" autocomplete="current-password" autofocus>
-      <button type="submit" id="gateBtn">Entrar</button><div id="gateErr" class="gate-err"></div>
+      <button type="submit" id="gateBtn">Entrar</button>
+      <button type="button" id="gateBio" style="display:none;width:100%;margin-top:9px;background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:14px;border-radius:10px;padding:11px;cursor:pointer;font-family:inherit">👆 Entrar com digital</button>
+      <div id="gateErr" class="gate-err"></div>
     </form>
   </div>
 </div>
+<button id="bioSetup" style="display:none;position:fixed;right:14px;bottom:14px;z-index:30;background:rgba(10,22,40,.92);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">👆 Proteger com digital</button>
 <div id="tv" style="display:none">
   <div class="bar">
     <div class="brand"><img src="logo.png" alt="Alpha Labs" class="logo">
