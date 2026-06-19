@@ -24,6 +24,7 @@ const TABS = [
   {k:"novos_esfriando", ic:"🌱", nm:"Novos Esfriando", cls:"",         bcls:""},
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
+  {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
   {k:"sensiveis",       ic:"🚨", nm:"Sensíveis",       cls:"urgtab",   bcls:"urgb"},
@@ -105,6 +106,59 @@ async function addSens(nome,obs){ if(!(nome||"").trim()) return; const por=quem(
   try{ const r=await fetch(SENS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,obs,por,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão."); return; } if(r.ok){ syncSens((await r.json()).sensiveis); renderTab(); } }catch(e){ alert("Falha ao adicionar."); } }
 async function removeSens(id){ try{ const r=await fetch(SENS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncSens((await r.json()).sensiveis); renderTab(); } }catch(e){} }
+
+/* ---------- PROSPECÇÃO (novos leads — crescimento) ---------- */
+const PROSP_API="/api/crm-prospeccao";
+let PROSP=[];
+const PSTATUS={novo:{lbl:"Novo",col:"#8aa2bd"},em_contato:{lbl:"Em contato",col:"#00D4FF"},
+  visita_agendada:{lbl:"Visita agendada",col:"#FFB020"},grupo_aberto:{lbl:"Grupo aberto",col:"#A78BFA"},
+  venda_ganha:{lbl:"Venda ganha",col:"#00E5A0"},venda_perdida:{lbl:"Venda perdida",col:"#FF5470"}};
+const PORDER=["novo","em_contato","visita_agendada","grupo_aberto","venda_ganha","venda_perdida"];
+function syncProsp(arr){ PROSP=(arr||[]).slice().sort((a,b)=>(b.ts_upd||b.ts||0)-(a.ts_upd||a.ts||0)); }
+async function loadProsp(){ try{ const r=await fetch(PROSP_API); if(r.ok) syncProsp((await r.json()).prospects); }catch(e){} }
+function prospOf(id){ return PROSP.find(p=>p.id===id); }
+async function saveProsp(p){ const por=quem(); if(por===null) return false; if(!p.por) p.por=por;
+  try{ const r=await fetch(PROSP_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",prospect:p,senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncProsp((await r.json()).prospects); return true; } }catch(e){ alert("Falha ao salvar."); } return false; }
+async function removeProsp(id){ try{ const r=await fetch(PROSP_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncProsp((await r.json()).prospects); closeModal(); renderTab(); } }catch(e){} }
+async function addProspInline(){
+  const nome=document.getElementById("npNome"), contato=document.getElementById("npContato"), cidade=document.getElementById("npCidade"), origem=document.getElementById("npOrigem");
+  if(!nome.value.trim()){ nome.focus(); return; }
+  const ok=await saveProsp({nome:nome.value,contato:contato.value,cidade:cidade.value,origem:origem.value,status:"novo",feedbacks:[],incrementos:[]});
+  if(ok) renderTab();
+}
+let P_ID=null, P_STATUS="novo", P_INC=[];
+function openProsp(id){
+  const p=prospOf(id); if(!p) return; P_ID=id; P_STATUS=p.status; P_INC=(p.incrementos||[]).slice();
+  const fb=(p.feedbacks||[]).slice().sort((a,b)=>b.ts-a.ts);
+  const fbHtml=fb.length?fb.map(f=>`<div class="hist-row"><span class="hi-ic">💬</span><div class="hi-body"><div class="hi-top t-mut">${esc(diasAtras(f.ts))} · ${esc(f.por)}</div><div class="hi-nota">"${esc(f.texto)}"</div></div></div>`).join(""):`<div class="t-mut" style="font-size:13px;padding:6px 0">Sem feedbacks ainda.</div>`;
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div><div class="m-cli">${esc(p.nome)}</div><div class="t-mut" style="font-size:13px;margin-top:2px">${esc(p.contato||"")}${p.cidade?" · "+esc(p.cidade):""}${p.origem?" · origem: "+esc(p.origem):""}</div></div><button class="m-x" id="mClose">✕</button></div>
+    <div class="m-sec">Status (pipeline)</div>
+    <div class="m-opts" id="pStatus">${PORDER.map(k=>`<button class="opt pst-${k}${k===P_STATUS?" on":""}" data-st="${k}">${PSTATUS[k].lbl}</button>`).join("")}</div>
+    <div class="m-lbl">Visita agendada</div><input id="pVisita" type="date" class="m-date" value="${esc(p.visita||"")}">
+    <div class="m-sec">Feedback do contato</div><div class="m-hist">${fbHtml}</div>
+    <textarea id="pFb" class="m-ta" style="min-height:54px;margin-top:8px" placeholder="Novo feedback / o que rolou no contato…"></textarea>
+    <div class="m-sec">Incrementos <span class="t-mut" style="font-weight:500">— campos extras (futuro)</span></div>
+    <div id="pIncList"></div>
+    <div class="m-opts" style="margin-top:6px"><input id="pIncL" class="m-date" style="flex:1;min-width:120px" placeholder="Campo (ex.: Indicado por)"><input id="pIncV" class="m-date" style="flex:1;min-width:120px" placeholder="Valor"><button class="opt" id="pIncAdd">+ campo</button></div>
+    <button class="m-save" id="pSave">Salvar prospect</button>
+    <button class="m-enc" id="pDel" style="border-color:var(--mut);color:var(--mut)">Remover prospect</button>`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("pStatus").onclick=e=>{const b=e.target.closest("[data-st]");if(b){P_STATUS=b.dataset.st;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
+  const drawInc=()=>{ document.getElementById("pIncList").innerHTML=P_INC.map((i,idx)=>`<div class="histcli"><span class="nm">${esc(i.label)}</span><span class="t-mut">${esc(i.valor)}</span><button class="hi-del" data-incdel="${idx}">✕</button></div>`).join("");
+    document.querySelectorAll("[data-incdel]").forEach(b=>b.onclick=()=>{ P_INC.splice(+b.dataset.incdel,1); drawInc(); }); };
+  drawInc();
+  document.getElementById("pIncAdd").onclick=()=>{ const l=document.getElementById("pIncL"),v=document.getElementById("pIncV"); if(!l.value.trim())return; P_INC.push({label:l.value.trim(),valor:v.value.trim()}); l.value="";v.value=""; drawInc(); };
+  document.getElementById("pSave").onclick=async()=>{
+    const fbTxt=document.getElementById("pFb").value.trim(), por=localStorage.getItem("crm_quem")||"equipe";
+    const np={...p, status:P_STATUS, visita:document.getElementById("pVisita").value, incrementos:P_INC,
+      feedbacks:[...(p.feedbacks||[]), ...(fbTxt?[{ts:Date.now(),por,texto:fbTxt}]:[])]};
+    const btn=document.getElementById("pSave"); btn.disabled=true; btn.textContent="Salvando…";
+    const ok=await saveProsp(np); if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar prospect"; } };
+  document.getElementById("pDel").onclick=()=>{ if(confirm("Remover este prospect?")) removeProsp(P_ID); };
+}
 
 /* ---------- histórico semanal do radar (snapshots) ---------- */
 const HIST_API = "/api/crm-history";
@@ -585,6 +639,48 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="prospeccao"){
+    const q=search.trim().toLowerCase();
+    const all = q ? PROSP.filter(p=>(p.nome||"").toLowerCase().includes(q)||(p.cidade||"").toLowerCase().includes(q)||(p.contato||"").toLowerCase().includes(q)) : PROSP;
+    const wk=Date.now()-7*864e5, novosSem=PROSP.filter(p=>(p.ts||0)>=wk).length, cont=k=>PROSP.filter(p=>p.status===k).length;
+    let body="";
+    PORDER.forEach(k=>{ const grp=all.filter(p=>p.status===k); if(!grp.length && q) return;
+      body+=`<div class="seclabel" style="color:${PSTATUS[k].col}">${PSTATUS[k].lbl} (${grp.length})</div>`;
+      body+= grp.length ? grp.map(p=>{ const lf=(p.feedbacks||[]).slice().sort((a,b)=>b.ts-a.ts)[0];
+        return `<div class="crow" data-prosp="${esc(p.id)}" style="cursor:pointer">
+          <div class="rk" style="color:var(--line)">•</div>
+          <div><div class="nm">${esc(p.nome)}</div><div class="ci">${[esc(p.cidade||''),esc(p.contato||''),p.origem?'origem: '+esc(p.origem):'',p.visita?'📅 '+esc(p.visita):''].filter(Boolean).join(' · ')}</div>${lf?`<div class="lastint">💬 "${esc(lf.texto)}" · ${esc(diasAtras(lf.ts))}</div>`:''}</div>
+          <div class="mid"></div>
+          <div class="rcell"><span class="pr" style="background:${PSTATUS[k].col}22;color:${PSTATUS[k].col}">${PSTATUS[k].lbl}</span></div>
+        </div>`; }).join("") : `<div class="t-mut" style="font-size:12.5px;padding:4px 0 8px">—</div>`;
+    });
+    c.innerHTML=`
+      <div class="kgrid">
+        ${kpi("", PROSP.length, "Prospects", "total na base")}
+        ${kpi("a", novosSem, "Novos na semana", "leads adicionados")}
+        ${kpi("a", cont('visita_agendada'), "Visitas agendadas", "")}
+        ${kpi("g", cont('venda_ganha'), "Vendas ganhas", "")}
+        ${kpi("r", cont('venda_perdida'), "Vendas perdidas", "")}
+      </div>
+      <div class="senshead"><div class="seclabel" style="margin:0">🧲 Prospecção — novos clientes (crescimento)</div>
+        <input class="wlsearch" id="lupaP" placeholder="🔍 buscar prospect…" value="${esc(search)}"></div>
+      <div class="card" style="margin:8px 0 14px">
+        <div class="m-lbl" style="margin-top:0">+ Novo prospect</div>
+        <div class="sensadd">
+          <input id="npNome" class="wlsearch" placeholder="Nome *">
+          <input id="npContato" class="wlsearch" placeholder="Contato (tel/e-mail)">
+          <input id="npCidade" class="wlsearch" placeholder="Cidade">
+          <input id="npOrigem" class="wlsearch" placeholder="Origem (feira, indicação…)">
+          <button class="regbtn" id="npAdd">+ Adicionar</button>
+        </div>
+      </div>
+      ${PROSP.length? body : `<div class="empty">Nenhum prospect ainda. Adicione o primeiro lead acima. 🧲</div>`}`;
+    const add=document.getElementById("npAdd"); if(add) add.onclick=addProspInline;
+    document.querySelectorAll("[data-prosp]").forEach(el=>el.onclick=()=>openProsp(el.dataset.prosp));
+    const lp=document.getElementById("lupaP"); if(lp){ lp.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const pos=lp.selectionStart; renderTab(); const l2=document.getElementById("lupaP"); if(l2){l2.focus(); try{l2.setSelectionRange(pos,pos);}catch(_){}}}); }
+    return;
+  }
+
   if(ACTIVE==="sensiveis"){
     const tv = locked==="sensiveis";
     const cards = SENS.length
@@ -695,6 +791,7 @@ function renderTabs(){
             : tb.k==="encerrados" ? ENCERR.size
             : tb.k==="reativados" ? new Set(reativadosEvents().map(e=>e.cod)).size
             : tb.k==="sensiveis" ? SENS.length
+            : tb.k==="prospeccao" ? PROSP.length
             : (Array.isArray(D[tb.k]) ? act(D[tb.k]).length : (r[tb.k] || 0));
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
@@ -763,9 +860,9 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens()]).then(()=>renderAll());
-    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+SENS.length;
-      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens()]);
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens(), loadProsp()]).then(()=>renderAll());
+    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+SENS.length+"|"+PROSP.length;
+      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens(), loadProsp()]);
       if(a!==sig()) renderTab(); }, 45000);
   }
 }

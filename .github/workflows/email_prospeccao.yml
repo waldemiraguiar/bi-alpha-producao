@@ -1,0 +1,26 @@
+name: E-mail semanal de Prospecção (sexta 17h)
+
+on:
+  schedule:
+    - cron: '0 20 * * 5'    # sexta 20:00 UTC = 17:00 BRT — melhor esforço do GitHub
+  workflow_dispatch:          # gatilho manual / cron-job.org
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Enviar resumo de prospecção
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          CRM_TO: ${{ secrets.CRM_TO }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python email_prospeccao.py
