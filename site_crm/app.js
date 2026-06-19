@@ -847,9 +847,9 @@ function renderAll(){ renderTabs(); renderTab();
   const db=document.getElementById("diaBtn"); if(db){ db.classList.toggle("pinned",diaFilter); const n=dueCount(); db.innerHTML="📞 Contatos do dia"+(n?` (${n})`:""); } }
 function applyLock(){
   locked = resolveLock();
-  const rc = document.getElementById("rotctl");
-  if(locked){ ACTIVE = locked; pinned = true; rc.style.display="none"; }
-  else { rc.style.display=""; }
+  const rc = document.getElementById("rotctl"), db = document.getElementById("diaBtn");
+  if(locked){ ACTIVE = locked; pinned = true; rc.style.display="none"; if(db) db.style.display="none"; }
+  else { rc.style.display=""; if(db) db.style.display=""; }
 }
 function render(D){
   DATA = D;
