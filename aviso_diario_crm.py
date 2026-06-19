@@ -54,7 +54,7 @@ parados = len(act(D.get("parados")))
 queda = len(act(D.get("em_queda"))) + len(act(D.get("queda_forte")))
 alta = len(act(D.get("em_alta")))
 carteira = len(act(D.get("carteira"))) or D.get("resumo", {}).get("ativos", 0) or 0
-risco = round(100 * (parados + queda) / carteira) if carteira else 0
+risco = round(100 * queda / carteira) if carteira else 0   # risco GERAL = sem parados (parados à parte)
 
 # contatos do dia (retorno <= hoje), do último próximo_passo de cada cliente
 inter = fetch_json(BASE + "/api/interacoes").get("interacoes", [])
@@ -80,7 +80,7 @@ wpp = (f"*Bom dia, Wal!* ☀️ {diasem}, {hoje}\n\n"
        f"*📞 Contatos do dia ({len(contatos)})*\n{cont_top}\n\n"
        f"*🎯 Radar do CRM*\n"
        f"• Parados: {parados}\n• Em queda: {queda}\n• Em alta: {alta}\n"
-       f"• Carteira ativa: {carteira} · {risco}% em risco\n\n"
+       f"• Carteira ativa: {carteira} · {risco}% em risco (sem parados)\n\n"
        f"Painel: {BASE}")
 wa_link = "https://wa.me/" + WA_PHONE + "?text=" + quote(wpp)
 
@@ -103,7 +103,7 @@ html = f"""<div style='font-family:Arial;max-width:680px;margin:auto;color:#1a1a
 <h3 style='margin:20px 0 8px'>🎯 Radar / panorama do CRM</h3>
 <table style='width:100%;border-collapse:separate;border-spacing:8px'><tr>
   {kpi(parados, "Parados", "#FF5470")}{kpi(queda, "Em queda", "#FF8A00")}
-  {kpi(alta, "Em alta", "#0A7")}{kpi(carteira, "Carteira ativa")}{kpi(f"{risco}%", "Em risco", "#FF5470")}
+  {kpi(alta, "Em alta", "#0A7")}{kpi(carteira, "Carteira ativa")}{kpi(f"{risco}%", "Em risco (s/ parados)", "#FF5470")}
 </tr></table>
 <p style='color:#888;font-size:12px;margin:6px 0 0'>Inativos e encerrados não entram nestas contagens.</p>
 <div style='text-align:center;margin:22px 0'>
