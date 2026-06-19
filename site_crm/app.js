@@ -7,8 +7,8 @@ let DATA = null, ACTIVE = "reativar", pinned = false, rotTimer = null, search = 
 
 /* deep-link por visão: #reativar / #em_queda / #parados / ... trava a tela numa visão
    (igual ao #setor da Produção). Sem hash = visão completa rotativa da equipe. */
-const HASH_ALIAS = {queda:"em_queda", "em-queda":"em_queda", parado:"parados",
-  alta:"em_alta", "em-alta":"em_alta", novos:"novos_esfriando", esfriando:"novos_esfriando",
+const HASH_ALIAS = {queda:"em_queda", "em-queda":"em_queda", parado:"parados", resgate:"parados",
+  alta:"em_alta", "em-alta":"em_alta", novos:"novos_esfriando", esfriando:"novos_esfriando", onboarding:"novos_esfriando",
   reativacao:"reativar", "reativação":"reativar"};
 function resolveLock(){
   const h = decodeURIComponent((location.hash||"").replace("#","")).trim().toLowerCase();
@@ -20,9 +20,9 @@ function resolveLock(){
 const TABS = [
   {k:"reativar",        ic:"🎯", nm:"Reativar",        cls:"urgtab",   bcls:"urgb"},
   {k:"em_queda",        ic:"▼",  nm:"Em Queda",        cls:"atrastab", bcls:"atrasb"},
-  {k:"parados",         ic:"⛔", nm:"Parados",         cls:"atrastab", bcls:"atrasb"},
+  {k:"parados",         ic:"🆘", nm:"Resgate",         cls:"atrastab", bcls:"atrasb"},
   {k:"inativos",        ic:"🚫", nm:"Inativos",        cls:"",         bcls:""},
-  {k:"novos_esfriando", ic:"🌱", nm:"Novos Esfriando", cls:"",         bcls:""},
+  {k:"novos_esfriando", ic:"🌱", nm:"Onboarding",      cls:"",         bcls:""},
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
@@ -560,38 +560,38 @@ function renderTab(){
   const ativos = (D.carteira ? act(D.carteira).length : (r.ativos || r.carteira || 0));
 
   if(ACTIVE==="reativar"){
-    const arr = bumpDue(flt(act(D.reativar||[])));
+    const FOCO=new Set(["queda_forte","queda"]);                         // foco DIÁRIO = ativos caindo
+    const foco = act(D.reativar||[]).filter(x=>FOCO.has(x.motivo||""));
+    const arr = bumpDue(flt(foco));
     const calm = arr.length===0; const dc = dueCount();
-    const paradosSet = new Set(act(D.parados||[]).map(x=>String(x.cod)));
-    const riscoArr = act(D.reativar||[]).filter(x=>!paradosSet.has(String(x.cod)));  // risco GERAL = SEM parados (parados têm % próprio na aba)
-    const riscoPct = ativos ? 100*riscoArr.length/ativos : 0;
-    // composição da fila (deduplicada — soma exatamente o total)
-    const RLBL=[["parado","⛔","Parados","21+ dias sem enviar"],["queda_forte","🔻","Queda forte","40%+ abaixo do normal"],["queda","▼","Em queda","10%+ abaixo do normal"],["novo_esfriando","🌱","Novos esfriando","novo que parou após o início"]];
-    const rfull=act(D.reativar||[]); const rc={}; rfull.forEach(x=>{const m=x.motivo||x.prioridade; if(m)rc[m]=(rc[m]||0)+1;});
-    const comp=RLBL.filter(([k])=>rc[k]).map(([k,ic,lb,desc])=>`<div class="leg-row"><span class="leg-dot" style="background:${MOTCOL[k]||'#888'}"></span><b>${ic} ${esc(lb)}</b><span class="leg-n" style="color:${MOTCOL[k]||'#fff'}">${rc[k]}</span><span class="t-mut">— ${esc(desc)}</span></div>`).join("");
+    const riscoPct = ativos ? 100*foco.length/ativos : 0;
+    const nPar = cnt('parados'), nNovos = cnt('novos_esfriando');
+    const rc={}; foco.forEach(x=>{const m=x.motivo; if(m)rc[m]=(rc[m]||0)+1;});
+    const RLBL=[["queda_forte","🔻","Queda forte","caiu 40%+ — ainda compra, janela aberta"],["queda","▼","Em queda","caiu 10%+ — pegar cedo, esforço baixo"]];
+    const comp=RLBL.map(([k,ic,lb,desc])=>`<div class="leg-row"><span class="leg-dot" style="background:${MOTCOL[k]||'#888'}"></span><b>${ic} ${esc(lb)}</b><span class="leg-n" style="color:${MOTCOL[k]||'#fff'}">${rc[k]||0}</span><span class="t-mut">— ${esc(desc)}</span></div>`).join("");
     c.innerHTML = `
       <div class="radar ${calm?"calm":""}">
         <div class="ico">${calm?"✅":"🎯"}</div>
         <div><div class="big">${arr.length}</div></div>
         <div style="flex:1">
-          <div class="lbl">${calm?(diaFilter?"Nenhum contato agendado para hoje":"Carteira saudável — nada para reativar agora"):(diaFilter?"CONTATOS DO DIA — ligar hoje":"CLIENTES PARA REATIVAR — ação comercial")}</div>
-          <div class="sub">${cnt('parados')} parados · ${cnt('queda_forte')} em queda forte · ${cnt('em_queda')} em queda · ${cnt('novos_esfriando')} novos esfriando · ${Math.round(riscoPct)}% em risco (sem parados)${(ENCERR.size+INAT.size)?` · 🔒 ${ENCERR.size+INAT.size} fora da conta`:""}${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
-          <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${riscoArr.length} em risco (sem parados) · ⛔ ${cnt('parados')} parados (à parte) · 🔒 ${ENCERR.size+INAT.size} ${INAT.size?"encerrados/inativos":"encerrados"} já fora · base ${brData((D.meta||{}).max_data)}</div>
+          <div class="lbl">${calm?(diaFilter?"Nenhum contato agendado para hoje":"Tudo sob controle — nada caindo agora"):(diaFilter?"CONTATOS DO DIA — ligar hoje":"REATIVAR (foco diário) — clientes ATIVOS caindo")}</div>
+          <div class="sub">${rc.queda_forte||0} queda forte · ${rc.queda||0} em queda · ${Math.round(riscoPct)}% em risco${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
+          <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${foco.length} em risco (queda forte + em queda) · 🆘 ${nPar} parados (Resgate) · 🌱 ${nNovos} novos (Onboarding) · 🔒 ${ENCERR.size+INAT.size} já fora · base ${brData((D.meta||{}).max_data)}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
       <div class="card" style="margin-bottom:14px">
-        <h3>📋 Legenda — o que compõe a fila <span class="tag">${rfull.length} clientes · 1× cada</span></h3>
-        <div class="legenda">${comp||'<span class="t-mut">fila vazia 👌</span>'}</div>
-        <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">A soma dos grupos = <b>total da fila (${rfull.length})</b>. Cada cliente entra <b>1 vez</b>, no motivo mais grave (parado &gt; queda forte &gt; queda &gt; novo esfriando). <b>Encerrados e inativos não entram.</b> O <b>% em risco</b> usa esta fila <b>sem os parados</b>.</div>
+        <h3>📋 Legenda — foco diário <span class="tag">${foco.length} clientes · queda forte + em queda</span></h3>
+        <div class="legenda">${comp}</div>
+        <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">A fila diária é só de quem <b>ainda compra e está caindo</b> (maior retorno). <b>🆘 Parados</b> e <b>🌱 Novos esfriando</b> têm abas próprias (resgate em campanha / onboarding) pra não dispersar a energia. Encerrados/inativos fora.</div>
       </div>
       <div class="kgrid">
-        ${kpi("r", cnt('parados'), "Parados", "21+ dias sem enviar")}
-        ${kpi("r", cnt('queda_forte'), "Queda forte", "40%+ abaixo do normal")}
-        ${kpi("a", cnt('em_queda'), "Em queda", "10%+ abaixo do normal")}
-        ${kpi("a", cnt('novos_esfriando'), "Novos esfriando", "pararam após início")}
+        ${kpi("r", rc.queda_forte||0, "Queda forte", "40%+ abaixo — urgente")}
+        ${kpi("a", rc.queda||0, "Em queda", "10%+ abaixo — preventivo")}
+        ${kpi("", nPar, "🆘 Parados", "aba Resgate — campanha")}
+        ${kpi("", nNovos, "🌱 Novos esfriando", "aba Onboarding — nutrir")}
       </div>
-      <div class="seclabel">${diaFilter?"📞 Contatos do dia — retorno agendado p/ hoje":"🔴 Fila de reativação — priorizada"}</div>
+      <div class="seclabel">${diaFilter?"📞 Contatos do dia — retorno agendado p/ hoje":"🎯 Fila diária — queda forte + em queda (priorizada)"}</div>
       ${list(arr, {acao:true, rank:true, fu:true})}`;
     return;
   }
@@ -619,7 +619,7 @@ function renderTab(){
           ${kpi("a", (arr[0]&&arr[0].dias_inativo)||0, "Mais antigo", "dias sem enviar")}
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
-      <div class="seclabel">⛔ Parados — priorizar contato (recência primeiro)${INAT.size?` <span class="t-mut" style="font-weight:500">· 🚫 ${INAT.size} inativo(s) fora da conta (aba Inativos)</span>`:""}</div>
+      <div class="seclabel">🆘 Resgate — clientes parados (≥21d sem enviar). Trabalhar em <b>campanha/lote</b>, fora do balde diário — não drena a energia da reativação${INAT.size?` <span class="t-mut" style="font-weight:500">· 🚫 ${INAT.size} inativo(s) fora da conta</span>`:""}</div>
       ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
     return;
   }
@@ -631,7 +631,7 @@ function renderTab(){
         ${kpi("a", esf.length, "Novos esfriando", "pararam após início")}
         ${kpi("g", ok.length, "Novos aquecendo", "engajando bem")}
       </div>
-      <div class="seclabel">🌱 Novos esfriando — recuperar antes de perder</div>
+      <div class="seclabel">🌱 Onboarding — novos que esfriaram. <b>Nutrir/engajar</b> (não é resgate — cliente recém-chegado, vale o esforço)</div>
       ${list(esf, {badge:"motivo", rank:true, fu:true})}
       <div class="seclabel">✅ Novos aquecendo — manter o ritmo</div>
       ${list(ok, {rank:false, fu:true})}`;
