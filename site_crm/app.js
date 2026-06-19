@@ -20,7 +20,7 @@ function resolveLock(){
 const TABS = [
   {k:"reativar",        ic:"🎯", nm:"Reativar",        cls:"urgtab",   bcls:"urgb"},
   {k:"em_queda",        ic:"▼",  nm:"Em Queda",        cls:"atrastab", bcls:"atrasb"},
-  {k:"parados",         ic:"🆘", nm:"Resgate",         cls:"atrastab", bcls:"atrasb"},
+  {k:"parados",         ic:"⛔", nm:"Parados",         cls:"atrastab", bcls:"atrasb"},
   {k:"inativos",        ic:"🚫", nm:"Inativos",        cls:"",         bcls:""},
   {k:"novos_esfriando", ic:"🌱", nm:"Onboarding",      cls:"",         bcls:""},
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
@@ -576,7 +576,7 @@ function renderTab(){
         <div style="flex:1">
           <div class="lbl">${calm?(diaFilter?"Nenhum contato agendado para hoje":"Tudo sob controle — nada caindo agora"):(diaFilter?"CONTATOS DO DIA — ligar hoje":"REATIVAR (foco diário) — clientes ATIVOS caindo")}</div>
           <div class="sub">${rc.queda_forte||0} queda forte · ${rc.queda||0} em queda · ${Math.round(riscoPct)}% em risco${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
-          <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${foco.length} em risco (queda forte + em queda) · 🆘 ${nPar} parados (Resgate) · 🌱 ${nNovos} novos (Onboarding) · 🔒 ${ENCERR.size+INAT.size} já fora · base ${brData((D.meta||{}).max_data)}</div>
+          <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${foco.length} em risco (queda forte + em queda) · ⛔ ${nPar} parados (à parte) · 🌱 ${nNovos} novos (Onboarding) · 🔒 ${ENCERR.size+INAT.size} já fora · base ${brData((D.meta||{}).max_data)}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
@@ -588,7 +588,7 @@ function renderTab(){
       <div class="kgrid">
         ${kpi("r", rc.queda_forte||0, "Queda forte", "40%+ abaixo — urgente")}
         ${kpi("a", rc.queda||0, "Em queda", "10%+ abaixo — preventivo")}
-        ${kpi("", nPar, "🆘 Parados", "aba Resgate — campanha")}
+        ${kpi("", nPar, "⛔ Parados", "aba própria — fora do somatório")}
         ${kpi("", nNovos, "🌱 Novos esfriando", "aba Onboarding — nutrir")}
       </div>
       <div class="seclabel">${diaFilter?"📞 Contatos do dia — retorno agendado p/ hoje":"🎯 Fila diária — queda forte + em queda (priorizada)"}</div>
@@ -619,7 +619,7 @@ function renderTab(){
           ${kpi("a", (arr[0]&&arr[0].dias_inativo)||0, "Mais antigo", "dias sem enviar")}
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
-      <div class="seclabel">🆘 Resgate — clientes parados (≥21d sem enviar). Trabalhar em <b>campanha/lote</b>, fora do balde diário — não drena a energia da reativação${INAT.size?` <span class="t-mut" style="font-weight:500">· 🚫 ${INAT.size} inativo(s) fora da conta</span>`:""}</div>
+      <div class="seclabel">⛔ Parados — priorizar contato (recência primeiro) <span class="t-mut" style="font-weight:500">· fora dos somatórios gerais (lista à parte)</span>${INAT.size?` <span class="t-mut" style="font-weight:500">· 🚫 ${INAT.size} inativo(s) fora da conta</span>`:""}</div>
       ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
     return;
   }
