@@ -23,4 +23,6 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           CRM_TO: ${{ secrets.CRM_TO }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
         run: python email_prospeccao.py
