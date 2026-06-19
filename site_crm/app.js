@@ -26,6 +26,7 @@ const TABS = [
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
+  {k:"sensiveis",       ic:"🚨", nm:"Sensíveis",       cls:"urgtab",   bcls:"urgb"},
   {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
   {k:"encerrados",      ic:"🔒", nm:"Encerrados",      cls:"",         bcls:""},
 ];
@@ -94,6 +95,16 @@ async function reabrir(cod){
     body:JSON.stringify({acao:"remove",cod:String(cod),senha:window.__pwd})});
     if(r.ok){ syncEncerr((await r.json()).encerrados); closeModal(); renderAll(); } }catch(e){}
 }
+
+/* ---------- clientes SENSÍVEIS (atenção máxima, editável, pra telão) ---------- */
+const SENS_API="/api/crm-sensiveis";
+let SENS=[];
+function syncSens(arr){ SENS=(arr||[]).slice().sort((a,b)=>b.ts-a.ts); }
+async function loadSens(){ try{ const r=await fetch(SENS_API); if(r.ok) syncSens((await r.json()).sensiveis); }catch(e){} }
+async function addSens(nome,obs){ if(!(nome||"").trim()) return; const por=quem(); if(por===null) return;
+  try{ const r=await fetch(SENS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,obs,por,senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão."); return; } if(r.ok){ syncSens((await r.json()).sensiveis); renderTab(); } }catch(e){ alert("Falha ao adicionar."); } }
+async function removeSens(id){ try{ const r=await fetch(SENS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncSens((await r.json()).sensiveis); renderTab(); } }catch(e){} }
 
 /* ---------- histórico semanal do radar (snapshots) ---------- */
 const HIST_API = "/api/crm-history";
@@ -285,7 +296,7 @@ function retorno(cod){
 }
 function dueRank(cod){ const r=retorno(cod); if(!r) return 3; return r.status==="atrasado"?0:r.status==="hoje"?1:(r.dias<=3?2:3); }
 function bumpDue(arr){ return arr.map((x,i)=>[x,i]).sort((a,b)=>(dueRank(a[0].cod)-dueRank(b[0].cod))||(a[1]-b[1])).map(p=>p[0]); }
-function dueCount(){ return [...new Set(INTER.map(x=>String(x.cod)))].filter(cod=>{const r=retorno(cod);return r&&(r.status==="hoje"||r.status==="atrasado");}).length; }
+function dueCount(){ return [...new Set(INTER.map(x=>String(x.cod)))].filter(cod=>!ENCERR.has(cod)&&(()=>{const r=retorno(cod);return r&&(r.status==="hoje"||r.status==="atrasado");})()).length; }
 
 /* ---- BI: estatísticas + gráficos ---- */
 function biStats(){
@@ -428,42 +439,46 @@ function list(arr, opts){
 }
 
 /* ---------- render por aba ---------- */
+let diaFilter = false;   // #2: filtro "contatos do dia" (retorno hoje/atrasado)
+function dueOnly(arr){ return (arr||[]).filter(x=>{const rt=retorno(x.cod); return rt&&(rt.status==="hoje"||rt.status==="atrasado");}); }
 function renderTab(){
   const D = DATA, r = D.resumo || {}, c = document.getElementById("content");
-  const ativos = r.ativos || r.carteira || 0;
+  const cnt = k => act(D[k]||[]).length;                 // contagem JÁ sem encerrados (#1)
+  const flt = a => diaFilter ? dueOnly(a) : a;            // filtro contatos do dia (#2)
+  const ativos = (D.carteira ? act(D.carteira).length : (r.ativos || r.carteira || 0));
 
   if(ACTIVE==="reativar"){
-    const arr = bumpDue(act(D.reativar||[]));
+    const arr = bumpDue(flt(act(D.reativar||[])));
     const calm = arr.length===0; const dc = dueCount();
-    const riscoPct = ativos ? 100*arr.length/ativos : 0;
+    const riscoPct = ativos ? 100*act(D.reativar||[]).length/ativos : 0;
     c.innerHTML = `
       <div class="radar ${calm?"calm":""}">
         <div class="ico">${calm?"✅":"🎯"}</div>
         <div><div class="big">${arr.length}</div></div>
         <div style="flex:1">
-          <div class="lbl">${calm?"Carteira saudável — nada para reativar agora":"CLIENTES PARA REATIVAR — ação comercial"}</div>
-          <div class="sub">${r.parados||0} parados · ${r.queda_forte||0} em queda forte · ${r.em_queda||0} em queda · ${r.novos_esfriando||0} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
+          <div class="lbl">${calm?(diaFilter?"Nenhum contato agendado para hoje":"Carteira saudável — nada para reativar agora"):(diaFilter?"CONTATOS DO DIA — ligar hoje":"CLIENTES PARA REATIVAR — ação comercial")}</div>
+          <div class="sub">${cnt('parados')} parados · ${cnt('queda_forte')} em queda forte · ${cnt('em_queda')} em queda · ${cnt('novos_esfriando')} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
       <div class="kgrid">
-        ${kpi("r", r.parados||0, "Parados", "21+ dias sem enviar")}
-        ${kpi("r", r.queda_forte||0, "Queda forte", "40%+ abaixo do normal")}
-        ${kpi("a", r.em_queda||0, "Em queda", "10%+ abaixo do normal")}
-        ${kpi("a", r.novos_esfriando||0, "Novos esfriando", "pararam após início")}
+        ${kpi("r", cnt('parados'), "Parados", "21+ dias sem enviar")}
+        ${kpi("r", cnt('queda_forte'), "Queda forte", "40%+ abaixo do normal")}
+        ${kpi("a", cnt('em_queda'), "Em queda", "10%+ abaixo do normal")}
+        ${kpi("a", cnt('novos_esfriando'), "Novos esfriando", "pararam após início")}
       </div>
-      <div class="seclabel">🔴 Fila de reativação — priorizada</div>
+      <div class="seclabel">${diaFilter?"📞 Contatos do dia — retorno agendado p/ hoje":"🔴 Fila de reativação — priorizada"}</div>
       ${list(arr, {acao:true, rank:true, fu:true})}`;
     return;
   }
 
   if(ACTIVE==="em_queda"){
-    const arr = act(D.em_queda||[]);
+    const arr = flt(act(D.em_queda||[]));
     c.innerHTML = `
-      <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "em queda")}
+      <div class="hero">${ring(ativos? 100*cnt('em_queda')/ativos:0, "#FF5470", "em queda")}
         <div class="kgrid" style="margin:0">
           ${kpi("r", arr.length, "Clientes em queda", "10%+ abaixo do normal")}
-          ${kpi("a", D.queda_forte? (D.queda_forte.length):0, "Quedas fortes", "40%+ abaixo do normal")}
+          ${kpi("a", cnt('queda_forte'), "Quedas fortes", "40%+ abaixo do normal")}
           ${kpi("", ativos, "Carteira ativa", "clientes com envio recente")}
         </div></div>
       <div class="seclabel">▼ Em queda — acompanhar de perto</div>
@@ -472,7 +487,7 @@ function renderTab(){
   }
 
   if(ACTIVE==="parados"){
-    const arr = bumpDue(act(D.parados||[]));
+    const arr = bumpDue(flt(act(D.parados||[])));
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "parados")}
         <div class="kgrid" style="margin:0">
@@ -486,7 +501,7 @@ function renderTab(){
   }
 
   if(ACTIVE==="novos_esfriando"){
-    const esf = act(D.novos_esfriando||[]), ok = act(D.novos||[]);
+    const esf = flt(act(D.novos_esfriando||[])), ok = flt(act(D.novos||[]));
     c.innerHTML = `
       <div class="kgrid">
         ${kpi("a", esf.length, "Novos esfriando", "pararam após início")}
@@ -500,9 +515,9 @@ function renderTab(){
   }
 
   if(ACTIVE==="em_alta"){
-    const arr = act(D.em_alta||[]);
+    const arr = flt(act(D.em_alta||[]));
     c.innerHTML = `
-      <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#4D9DFF", "em alta")}
+      <div class="hero">${ring(ativos? 100*cnt('em_alta')/ativos:0, "#4D9DFF", "em alta")}
         <div class="kgrid" style="margin:0">
           ${kpi("", arr.length, "Clientes em alta", "10%+ acima do normal")}
           ${kpi("g", ativos, "Carteira ativa", "")}
@@ -570,6 +585,29 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="sensiveis"){
+    const tv = locked==="sensiveis";
+    const cards = SENS.length
+      ? `<div class="sensgrid">${SENS.map(s=>`<div class="senscard"><div class="sc-ic">⚠️</div>
+          <div class="sc-body"><div class="sc-nome">${esc(s.nome)}</div>${s.obs?`<div class="sc-obs">${esc(s.obs)}</div>`:""}<div class="sc-meta">incluído ${esc(diasAtras(s.ts))} · ${esc(s.por||"")}</div></div>
+          ${tv?"":`<button class="sc-del" data-sens="${esc(s.id)}" title="remover">✕</button>`}</div>`).join("")}</div>`
+      : `<div class="empty" style="margin-top:18px">Nenhum cliente sensível cadastrado.${tv?"":" Adicione acima."}</div>`;
+    c.innerHTML = `
+      <div class="senshead">
+        <div class="seclabel" style="margin:0;color:var(--amber);font-size:15px">🚨 CLIENTES SENSÍVEIS — ATENÇÃO MÁXIMA</div>
+        ${tv?"":`<div class="sensadd"><input id="sNome" class="wlsearch" placeholder="Nome do cliente"><input id="sObs" class="wlsearch" placeholder="Observação / por quê (opcional)"><button class="regbtn" id="sAdd">+ Adicionar</button></div>`}
+      </div>
+      ${cards}
+      ${tv?"":`<div class="t-mut" style="font-size:12px;margin-top:18px;line-height:1.5">💡 <b>Telão do atendimento:</b> abra <b>…/#sensiveis</b> nessa TV — trava só esta aba (pulsando), sem mostrar o resto do CRM. A equipe edita aqui; a TV só exibe.</div>`}`;
+    if(!tv){
+      const add=document.getElementById("sAdd"); const sn=document.getElementById("sNome"), so=document.getElementById("sObs");
+      if(add) add.onclick=()=>{ addSens(sn.value, so.value); };
+      if(sn) sn.addEventListener("keydown", e=>{ if(e.key==="Enter" && add) add.click(); });
+      document.querySelectorAll(".sc-del").forEach(b=>b.onclick=()=>removeSens(b.dataset.sens));
+    }
+    return;
+  }
+
   if(ACTIVE==="reativados"){
     const allR=reativadosEvents();
     const q=search.trim().toLowerCase();
@@ -630,7 +668,7 @@ function renderTab(){
   }
 
   if(ACTIVE==="carteira"){
-    const all = act(D.carteira||[]);
+    const all = flt(act(D.carteira||[]));
     const q = search.trim().toLowerCase();
     const arr = q ? all.filter(x => (x.nome||"").toLowerCase().includes(q) || (x.cidade||"").toLowerCase().includes(q)) : all;
     c.innerHTML = `
@@ -656,7 +694,8 @@ function renderTabs(){
             : tb.k==="historico" ? HIST.length
             : tb.k==="encerrados" ? ENCERR.size
             : tb.k==="reativados" ? new Set(reativadosEvents().map(e=>e.cod)).size
-            : (r[tb.k] || 0);
+            : tb.k==="sensiveis" ? SENS.length
+            : (Array.isArray(D[tb.k]) ? act(D[tb.k]).length : (r[tb.k] || 0));
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
     return `<div class="tab ${tb.cls} ${on?"on":""}" data-k="${tb.k}">
@@ -703,7 +742,8 @@ function footer(){
 }
 
 /* ---------- ciclo ---------- */
-function renderAll(){ renderTabs(); renderTab(); }
+function renderAll(){ renderTabs(); renderTab();
+  const db=document.getElementById("diaBtn"); if(db){ db.classList.toggle("pinned",diaFilter); const n=dueCount(); db.innerHTML="📞 Contatos do dia"+(n?` (${n})`:""); } }
 function applyLock(){
   locked = resolveLock();
   const rc = document.getElementById("rotctl");
@@ -723,15 +763,16 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr()]).then(()=>renderAll());
-    setInterval(async()=>{ const a=[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size;
-      await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr()]);
-      if(a!==[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size) renderTab(); }, 45000);
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens()]).then(()=>renderAll());
+    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+SENS.length;
+      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens()]);
+      if(a!==sig()) renderTab(); }, 45000);
   }
 }
 window.addEventListener("hashchange", ()=>{ if(DATA){ applyLock(); search=""; renderAll(); } });
 
 document.getElementById("rotctl").addEventListener("click", ()=>{ if(locked) return; pinned=!pinned; setPin(); if(!pinned){search="";} renderAll(); });
+document.getElementById("diaBtn").addEventListener("click", ()=>{ diaFilter=!diaFilter; if(diaFilter && !locked){ pinned=true; setPin(); } renderAll(); });
 setInterval(clock, 1000); clock();
 setInterval(()=>{ if(DATA) rotate(); }, ROT_MS);
 
