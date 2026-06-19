@@ -93,7 +93,9 @@ html = f"""<div style='font-family:Arial;max-width:760px;margin:auto;color:#1a1a
 <p style='color:#888;font-size:12px;margin-top:16px'>Copie o texto acima ou clique em "Enviar no WhatsApp". Resumo automático · sexta 17h.</p></div>"""
 
 GU = os.environ.get("GMAIL_USER", ""); GP = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
-TO = (os.environ.get("CRM_TO") or os.environ.get("EMAIL_TO") or GU).strip()
+# manda p/ a equipe (CRM_TO) E p/ o gestor (EMAIL_TO) E p/ a própria conta (GU), sem duplicar
+_raw = ",".join([os.environ.get("CRM_TO", ""), os.environ.get("EMAIL_TO", ""), GU])
+TO = ",".join(dict.fromkeys([t.strip() for t in _raw.split(",") if t.strip()])) or GU
 CB_PHONE = os.environ.get("CALLMEBOT_PHONE", "").strip()
 CB_KEY = os.environ.get("CALLMEBOT_APIKEY", "").strip()
 
