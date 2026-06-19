@@ -201,8 +201,10 @@ function contatosWeek(lst){
 }
 function histByWeek(){
   const byWeek={};
-  HIST.forEach(s=>{ byWeek[s.week]={week:s.week,label:s.label||isoMonday(s.week).toISOString().slice(0,10),snap:s,contatos:[]}; });
-  INTER.forEach(x=>{ const wk=isoWeekKey(new Date(x.ts)); if(!byWeek[wk]) byWeek[wk]={week:wk,label:isoMonday(wk).toISOString().slice(0,10),snap:null,contatos:[]}; byWeek[wk].contatos.push(x); });
+  const ensure=wk=>{ if(!byWeek[wk]) byWeek[wk]={week:wk,label:isoMonday(wk).toISOString().slice(0,10),snap:null,contatos:[],encerrados:[]}; return byWeek[wk]; };
+  HIST.forEach(s=>{ const w=ensure(s.week); w.snap=s; if(s.label) w.label=s.label; });
+  INTER.forEach(x=>{ ensure(isoWeekKey(new Date(x.ts))).contatos.push(x); });
+  [...ENCERR.values()].forEach(e=>{ ensure(isoWeekKey(new Date(e.ts))).encerrados.push(e); });
   const weeks=Object.values(byWeek).sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0));
   const diff={}; for(let i=1;i<HIST.length;i++) diff[HIST[i].week]=weekDiff(HIST[i-1],HIST[i]);
   return {weeks, diff};
@@ -215,7 +217,8 @@ function exportHistCSV(){
     if(d){ d.entraram.forEach(x=>rows.push([mn(wo.week),wo.week,wo.label,"Entrou no radar",x.nome||('#'+x.cod),x.cidade||'',MOTLAB[x.motivo]||x.motivo||'',(x.delta!=null?Math.round(x.delta)+'%':''),'','']));
       d.sairam.forEach(x=>rows.push([mn(wo.week),wo.week,wo.label,"Saiu do radar",x.nome||('#'+x.cod),x.cidade||'',MOTLAB[x.motivo]||x.motivo||'','','',''])); }
     wo.contatos.slice().sort((a,b)=>a.ts-b.ts).forEach(h=>{const r=RESULT[h.resultado]||RESULT.sem_resposta;
-      rows.push([mn(wo.week),wo.week,wo.label,"Contato",h.cliente||('#'+h.cod),'',h.canal||'',r.lbl+(h.motivo?(' / '+h.motivo):''),h.por||'',(h.nota||'').replace(/[\r\n]+/g,' ')]); }); });
+      rows.push([mn(wo.week),wo.week,wo.label,"Contato",h.cliente||('#'+h.cod),'',h.canal||'',r.lbl+(h.motivo?(' / '+h.motivo):''),h.por||'',(h.nota||'').replace(/[\r\n]+/g,' ')]); });
+    (wo.encerrados||[]).forEach(e=>rows.push([mn(wo.week),wo.week,wo.label,"Encerrado",e.cliente||('#'+e.cod),e.cidade||'',e.motivo||'','',e.por||'',(e.nota||'').replace(/[\r\n]+/g,' ')])); });
   const csv="﻿"+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(";")).join("\r\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download="catalogo-crm-"+new Date().toISOString().slice(0,10)+".csv"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
@@ -226,9 +229,10 @@ function weekBlock(wo, d){
       <div><div class="histhead" style="color:var(--green)">✓ Saíram do radar (${d.sairam.length}) <span class="t-mut" style="font-weight:500">· recuperaram</span></div>${histCliList(d.sairam)}</div>
     </div>`
     : (wo.snap ? `<div class="t-mut" style="font-size:12.5px">📅 Início do histórico · ${(wo.snap.flagged||[]).length} clientes no radar</div>` : `<div class="t-mut" style="font-size:12.5px">Sem foto do radar nesta semana.</div>`);
+  const encHtml=(wo.encerrados&&wo.encerrados.length)?`<div style="margin-top:12px"><div class="histhead" style="color:var(--red)">🔒 Encerrados (${wo.encerrados.length})</div>${wo.encerrados.map(e=>`<div class="histcli"><span class="nm">${esc(e.cliente||('#'+e.cod))}</span><span class="t-mut">${esc(e.por||'')}${e.nota?' · "'+esc(e.nota)+'"':''}</span><span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">${esc(e.motivo)}</span></div>`).join('')}</div>`:'';
   return `<div class="card" style="margin-bottom:12px">
     <h3>Semana ${esc(wo.week)} <span class="tag">início ${esc(wo.label||'')}</span></h3>
-    ${radar}${contatosWeek(wo.contatos)}</div>`;
+    ${radar}${contatosWeek(wo.contatos)}${encHtml}</div>`;
 }
 function findClient(cod){
   const c=String(cod), D=DATA||{};
