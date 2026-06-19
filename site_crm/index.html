@@ -116,6 +116,19 @@
   .histcli .pr{flex-shrink:0}
   .monthhead{font-size:17px;font-weight:900;letter-spacing:-.01em;margin:22px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line);color:var(--cyan)}
   .monthhead span{font-size:12.5px;font-weight:600;color:var(--mut)}
+  /* clientes sensíveis — pulsante amarelo (telão) */
+  .senshead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0 6px}
+  .sensadd{display:flex;gap:8px;flex-wrap:wrap}
+  .sensadd .wlsearch{width:auto}
+  .sensgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px;margin-top:14px}
+  .senscard{display:flex;align-items:center;gap:14px;border-radius:14px;padding:16px 18px;border:2px solid var(--amber);animation:senspulse 1.1s ease-in-out infinite}
+  @keyframes senspulse{0%,100%{background:rgba(255,176,32,.10);box-shadow:0 0 0 0 rgba(255,176,32,.45)}50%{background:rgba(255,176,32,.28);box-shadow:0 0 26px 5px rgba(255,176,32,.45)}}
+  .senscard .sc-ic{font-size:30px;line-height:1}
+  .senscard .sc-body{flex:1;min-width:0}
+  .senscard .sc-nome{font-size:19px;font-weight:900;color:#fff}
+  .senscard .sc-obs{font-size:13.5px;color:#ffe2ab;margin-top:3px}
+  .senscard .sc-meta{font-size:11px;color:var(--amber);margin-top:5px;opacity:.85}
+  .senscard .sc-del{background:transparent;border:none;color:var(--amber);cursor:pointer;font-size:17px;flex-shrink:0}
   @media print{
     #gate,.bar,.tabs,#modal,#foot{display:none!important}
     .regbtn,.fubtn,.rotctl,.demo-flag{display:none!important}
@@ -194,6 +207,7 @@
       <span class="demo-flag" id="demoFlag">DEMONSTRAÇÃO</span>
       <span class="dot" title="ao vivo"></span>
       <span class="clock" id="clock">--:--</span>
+      <span class="rotctl" id="diaBtn" title="Mostrar só clientes com retorno agendado para hoje/atrasado">📞 Contatos do dia</span>
       <span class="rotctl" id="rotctl">⏸ Fixar aba</span>
     </div>
   </div>
