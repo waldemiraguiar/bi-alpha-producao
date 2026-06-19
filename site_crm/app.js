@@ -569,7 +569,7 @@ function renderTab(){
         <div><div class="big">${arr.length}</div></div>
         <div style="flex:1">
           <div class="lbl">${calm?(diaFilter?"Nenhum contato agendado para hoje":"Carteira saudável — nada para reativar agora"):(diaFilter?"CONTATOS DO DIA — ligar hoje":"CLIENTES PARA REATIVAR — ação comercial")}</div>
-          <div class="sub">${cnt('parados')} parados · ${cnt('queda_forte')} em queda forte · ${cnt('em_queda')} em queda · ${cnt('novos_esfriando')} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
+          <div class="sub">${cnt('parados')} parados · ${cnt('queda_forte')} em queda forte · ${cnt('em_queda')} em queda · ${cnt('novos_esfriando')} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa${(ENCERR.size+INAT.size)?` · 🔒 ${ENCERR.size+INAT.size} fora da conta`:""}${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
@@ -949,17 +949,20 @@ function clock(){
   const d=new Date(); const p=n=>String(n).padStart(2,"0");
   const el=document.getElementById("clock"); if(el) el.textContent=`${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+function brData(iso){ if(!iso) return "—"; const p=String(iso).slice(0,10).split("-"); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:iso; }
 function footer(){
   const m = DATA.meta||{};
+  const fora = ENCERR.size + INAT.size;
   document.getElementById("foot").innerHTML =
-    `Fonte: ${esc(m.fonte||"—")} · ${esc(m.periodo||"")} · dados até ${esc(m.max_data||"—")} · gerado ${esc(m.gerado_em||"—")}.<br>
+    `<b style="color:var(--ink)">🔒 ${ENCERR.size} encerrados${INAT.size?` + 🚫 ${INAT.size} inativos`:""} fora de todas as contagens</b> · base ${esc(brData(m.max_data))}<br>
+     Fonte: ${esc(m.fonte||"—")} · ${esc(m.periodo||"")} · gerado ${esc(m.gerado_em||"—")}.<br>
      Sem valores financeiros. Atualização automática. — Agente CRM, frota Agentes de IA Alpha.`;
   const demo = /DEMO/i.test(m.fonte||"") || /DEMO/i.test(m.gerado_em||"");
   document.getElementById("demoFlag").classList.toggle("on", demo);
 }
 
 /* ---------- ciclo ---------- */
-function renderAll(){ renderTabs(); renderTab();
+function renderAll(){ renderTabs(); renderTab(); if(DATA&&DATA.meta!==undefined) footer();
   const db=document.getElementById("diaBtn"); if(db){ db.classList.toggle("pinned",diaFilter); const n=dueCount(); db.innerHTML="📞 Contatos do dia"+(n?` (${n})`:""); } }
 function applyLock(){
   locked = resolveLock();
