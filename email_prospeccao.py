@@ -94,8 +94,24 @@ html = f"""<div style='font-family:Arial;max-width:760px;margin:auto;color:#1a1a
 
 GU = os.environ.get("GMAIL_USER", ""); GP = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
 TO = (os.environ.get("CRM_TO") or os.environ.get("EMAIL_TO") or GU).strip()
+CB_PHONE = os.environ.get("CALLMEBOT_PHONE", "").strip()
+CB_KEY = os.environ.get("CALLMEBOT_APIKEY", "").strip()
+
+def enviar_whatsapp():
+    """CallMeBot (opcional): envia o texto pronto no WhatsApp. Falha não derruba o e-mail."""
+    if not (CB_PHONE and CB_KEY):
+        print("WhatsApp: CallMeBot não configurado (defina CALLMEBOT_PHONE e CALLMEBOT_APIKEY)."); return
+    try:
+        u = ("https://api.callmebot.com/whatsapp.php?phone=" + urllib.parse.quote(CB_PHONE)
+             + "&text=" + urllib.parse.quote(wpp) + "&apikey=" + urllib.parse.quote(CB_KEY))
+        with urllib.request.urlopen(u, timeout=30) as r:
+            print(f"WhatsApp (CallMeBot) -> {CB_PHONE}: HTTP {r.status}")
+    except Exception as e:
+        print("WhatsApp (CallMeBot) FALHOU (e-mail seguiu normal):", e)
+
 if os.environ.get("DRY_RUN"):
-    print(f"[DRY_RUN] {verdito} | novos {nov_sem}(ant {nov_ant}) | contatos {fb_sem} | ganhas {ganhas_sem} | pipeline {total} | conv {conv}% | html {len(html)}b")
+    wa = "ligado" if (CB_PHONE and CB_KEY) else "desligado (sem CALLMEBOT_*)"
+    print(f"[DRY_RUN] {verdito} | novos {nov_sem}(ant {nov_ant}) | contatos {fb_sem} | ganhas {ganhas_sem} | pipeline {total} | conv {conv}% | html {len(html)}b | WhatsApp {wa}")
     raise SystemExit(0)
 msg = MIMEText(html, "html", "utf-8")
 msg["Subject"] = f"🧲 Prospecção da semana — {nov_sem} novos leads · {verdito.split(' ',1)[1] if ' ' in verdito else verdito} ({hoje})"
@@ -104,3 +120,4 @@ with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context(
     s.login(GU, GP)
     s.sendmail(GU, [t.strip() for t in TO.split(",") if t.strip()], msg.as_string())
 print(f"Prospecção -> {TO} | {nov_sem} novos, {ganhas_sem} ganhas, pipeline {total}.")
+enviar_whatsapp()
