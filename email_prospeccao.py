@@ -47,7 +47,8 @@ conv = round(100 * st["venda_ganha"] / fechadas) if fechadas else 0
 def seta(a, b): return "▲" if a > b else "▼" if a < b else "→"
 # veredito de "mercado interno"
 score = (1 if nov_sem >= nov_ant else -1) + (1 if fb_sem >= fb_ant else -1) + (1 if ganhas_sem >= perdidas_sem else -1)
-verdito = ("🟢 ritmo BOM — prospecção aquecendo" if score >= 2 else
+verdito = ("⚪ sem prospecção registrada ainda" if total == 0 else
+           "🟢 ritmo BOM — prospecção aquecendo" if score >= 2 else
            "🟡 ritmo estável — atenção" if score >= 0 else
            "🔴 ritmo FRACO — prospecção esfriou")
 
