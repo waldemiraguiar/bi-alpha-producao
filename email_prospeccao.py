@@ -61,7 +61,8 @@ wpp = (f"*Prospecção CRM — semana {hoje}*\n"
        f"• Vendas ganhas (semana): {ganhas_sem} · perdidas: {perdidas_sem}\n"
        f"• Pipeline: {total} prospects · conversão {conv}%\n\n"
        f"Painel: {BASE} (aba Prospecção)")
-wa_link = "https://wa.me/?text=" + urllib.parse.quote(wpp)
+WA_PHONE = os.environ.get("WA_PHONE", "5521997842246")  # Wal — resumo vem SEMPRE p/ ele 1º
+wa_link = "https://wa.me/" + WA_PHONE + "?text=" + urllib.parse.quote(wpp)
 
 def card(v, l, cor="#0A1628"):
     return (f"<td style='padding:14px 10px;text-align:center;border:1px solid #e6e9ef;border-radius:10px'>"
@@ -87,10 +88,10 @@ html = f"""<div style='font-family:Arial;max-width:760px;margin:auto;color:#1a1a
 <div style='margin:22px 0;text-align:center'>
   <a href='{BASE}' style='display:inline-block;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#0A1628;font-weight:800;font-size:14px;text-decoration:none;border-radius:10px;padding:12px 22px'>🧲 Abrir Prospecção</a>
   &nbsp;
-  <a href='{wa_link}' style='display:inline-block;background:#25D366;color:#fff;font-weight:800;font-size:14px;text-decoration:none;border-radius:10px;padding:12px 22px'>📲 Enviar no WhatsApp</a>
+  <a href='{wa_link}' style='display:inline-block;background:#25D366;color:#fff;font-weight:800;font-size:14px;text-decoration:none;border-radius:10px;padding:12px 22px'>📲 Mandar no meu WhatsApp</a>
 </div>
 <div style='background:#f3f5f9;border-radius:10px;padding:14px 16px;font-family:monospace;font-size:12.5px;white-space:pre-wrap;color:#333'>{wpp}</div>
-<p style='color:#888;font-size:12px;margin-top:16px'>Copie o texto acima ou clique em "Enviar no WhatsApp". Resumo automático · sexta 17h.</p></div>"""
+<p style='color:#888;font-size:12px;margin-top:16px'>Clique em "Mandar no meu WhatsApp" (abre direto no seu Zap com o texto pronto) e encaminhe pro grupo se quiser. Resumo automático · sexta 17h.</p></div>"""
 
 GU = os.environ.get("GMAIL_USER", ""); GP = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
 # manda p/ a equipe (CRM_TO) E p/ o gestor (EMAIL_TO) E p/ a própria conta (GU), sem duplicar
