@@ -562,15 +562,17 @@ function renderTab(){
   if(ACTIVE==="reativar"){
     const arr = bumpDue(flt(act(D.reativar||[])));
     const calm = arr.length===0; const dc = dueCount();
-    const riscoPct = ativos ? 100*act(D.reativar||[]).length/ativos : 0;
+    const paradosSet = new Set(act(D.parados||[]).map(x=>String(x.cod)));
+    const riscoArr = act(D.reativar||[]).filter(x=>!paradosSet.has(String(x.cod)));  // risco GERAL = SEM parados (parados têm % próprio na aba)
+    const riscoPct = ativos ? 100*riscoArr.length/ativos : 0;
     c.innerHTML = `
       <div class="radar ${calm?"calm":""}">
         <div class="ico">${calm?"✅":"🎯"}</div>
         <div><div class="big">${arr.length}</div></div>
         <div style="flex:1">
           <div class="lbl">${calm?(diaFilter?"Nenhum contato agendado para hoje":"Carteira saudável — nada para reativar agora"):(diaFilter?"CONTATOS DO DIA — ligar hoje":"CLIENTES PARA REATIVAR — ação comercial")}</div>
-          <div class="sub">${cnt('parados')} parados · ${cnt('queda_forte')} em queda forte · ${cnt('em_queda')} em queda · ${cnt('novos_esfriando')} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa${(ENCERR.size+INAT.size)?` · 🔒 ${ENCERR.size+INAT.size} fora da conta`:""}${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
-          <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${act(D.reativar||[]).length} em risco · 🔒 ${ENCERR.size+INAT.size} ${INAT.size?"encerrados/inativos":"encerrados"} já fora · base ${brData((D.meta||{}).max_data)}</div>
+          <div class="sub">${cnt('parados')} parados · ${cnt('queda_forte')} em queda forte · ${cnt('em_queda')} em queda · ${cnt('novos_esfriando')} novos esfriando · ${Math.round(riscoPct)}% em risco (sem parados)${(ENCERR.size+INAT.size)?` · 🔒 ${ENCERR.size+INAT.size} fora da conta`:""}${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
+          <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${riscoArr.length} em risco (sem parados) · ⛔ ${cnt('parados')} parados (à parte) · 🔒 ${ENCERR.size+INAT.size} ${INAT.size?"encerrados/inativos":"encerrados"} já fora · base ${brData((D.meta||{}).max_data)}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
