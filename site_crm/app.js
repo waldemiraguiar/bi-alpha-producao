@@ -565,6 +565,10 @@ function renderTab(){
     const paradosSet = new Set(act(D.parados||[]).map(x=>String(x.cod)));
     const riscoArr = act(D.reativar||[]).filter(x=>!paradosSet.has(String(x.cod)));  // risco GERAL = SEM parados (parados têm % próprio na aba)
     const riscoPct = ativos ? 100*riscoArr.length/ativos : 0;
+    // composição da fila (deduplicada — soma exatamente o total)
+    const RLBL=[["parado","⛔","Parados"],["queda_forte","🔻","Queda forte"],["queda","▼","Em queda"],["novo_esfriando","🌱","Novos esfriando"]];
+    const rfull=act(D.reativar||[]); const rc={}; rfull.forEach(x=>{const m=x.motivo||x.prioridade; if(m)rc[m]=(rc[m]||0)+1;});
+    const comp=RLBL.filter(([k])=>rc[k]).map(([k,ic,lb])=>`<span class="comp-pill" style="border-color:${(MOTCOL[k]||'#888')}55"><b style="color:${MOTCOL[k]||'#fff'}">${ic} ${rc[k]}</b> ${lb}</span>`).join("");
     c.innerHTML = `
       <div class="radar ${calm?"calm":""}">
         <div class="ico">${calm?"✅":"🎯"}</div>
@@ -575,6 +579,11 @@ function renderTab(){
           <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${riscoArr.length} em risco (sem parados) · ⛔ ${cnt('parados')} parados (à parte) · 🔒 ${ENCERR.size+INAT.size} ${INAT.size?"encerrados/inativos":"encerrados"} já fora · base ${brData((D.meta||{}).max_data)}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h3>📋 O que compõe a fila <span class="tag">${rfull.length} clientes · 1× cada (sem repetir)</span></h3>
+        <div class="complist">${comp||'<span class="t-mut">fila vazia 👌</span>'}</div>
+        <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">A soma destes 4 grupos = <b>total da fila (${rfull.length})</b>. Cada cliente entra <b>1 vez</b>, no motivo mais grave (parado &gt; queda forte &gt; queda &gt; novo esfriando). <b>Encerrados e inativos não entram.</b> O <b>% em risco</b> usa esta fila <b>sem os parados</b>.</div>
       </div>
       <div class="kgrid">
         ${kpi("r", cnt('parados'), "Parados", "21+ dias sem enviar")}
