@@ -21,6 +21,7 @@ const TABS = [
   {k:"reativar",        ic:"🎯", nm:"Reativar",        cls:"urgtab",   bcls:"urgb"},
   {k:"em_queda",        ic:"▼",  nm:"Em Queda",        cls:"atrastab", bcls:"atrasb"},
   {k:"parados",         ic:"⛔", nm:"Parados",         cls:"atrastab", bcls:"atrasb"},
+  {k:"inativos",        ic:"🚫", nm:"Inativos",        cls:"",         bcls:""},
   {k:"novos_esfriando", ic:"🌱", nm:"Novos Esfriando", cls:"",         bcls:""},
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
@@ -82,7 +83,7 @@ const MOTIVOS_ENC=["Em débito","Sem interesse","Judicial"];
 function syncEncerr(arr){ ENCERR=new Map((arr||[]).map(e=>[String(e.cod),e])); }
 async function loadEncerr(){ try{ const r=await fetch(ENCERR_API); if(r.ok) syncEncerr((await r.json()).encerrados); }catch(e){} }
 function motivosEnc(){ return [...new Set([...MOTIVOS_ENC, ...[...ENCERR.values()].map(e=>e.motivo).filter(Boolean)])]; }
-function act(arr){ return (arr||[]).filter(x=>!ENCERR.has(String(x.cod))); }   // tira encerrados do fluxo ativo
+function act(arr){ return (arr||[]).filter(x=>!ENCERR.has(String(x.cod)) && !INAT.has(String(x.cod))); }   // tira encerrados E inativos do fluxo/% geral
 async function encerrar(cod, cliente, cidade, motivo, nota){
   const por=quem(); if(por===null) return false;
   try{ const r=await fetch(ENCERR_API,{method:"POST",headers:{"Content-Type":"application/json"},
@@ -95,6 +96,29 @@ async function reabrir(cod){
   try{ const r=await fetch(ENCERR_API,{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({acao:"remove",cod:String(cod),senha:window.__pwd})});
     if(r.ok){ syncEncerr((await r.json()).encerrados); closeModal(); renderAll(); } }catch(e){}
+}
+
+/* ---------- clientes INATIVOS (parados travados: calote, falta de pgto) ----------
+   Categoria SEPARADA de encerrados. Saem do % GERAL macro (act() abaixo) e ganham
+   aba própria com % de inativação por motivo. Permanente (Blobs). */
+const INAT_API="/api/crm-inativos";
+let INAT=new Map();   // cod(string) -> {cod,cliente,cidade,motivo,por,nota,ts}
+const MOTIVOS_INAT=["Calote","Falta de pagamento","Judicial","Sem contato"];
+function syncInat(arr){ INAT=new Map((arr||[]).map(e=>[String(e.cod),e])); }
+async function loadInat(){ try{ const r=await fetch(INAT_API); if(r.ok) syncInat((await r.json()).inativos); }catch(e){} }
+function motivosInat(){ return [...new Set([...MOTIVOS_INAT, ...[...INAT.values()].map(e=>e.motivo).filter(Boolean)])]; }
+async function inativar(cod, cliente, cidade, motivo, nota){
+  const por=quem(); if(por===null) return false;
+  try{ const r=await fetch(INAT_API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({acao:"add",cod:String(cod),cliente,cidade,motivo,nota,por,senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo."); return false; }
+    syncInat((await r.json()).inativos); return true;
+  }catch(e){ console.warn(e); alert("Não foi possível marcar inativo (função indisponível)."); return false; }
+}
+async function reativarInat(cod){
+  try{ const r=await fetch(INAT_API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({acao:"remove",cod:String(cod),senha:window.__pwd})});
+    if(r.ok){ syncInat((await r.json()).inativos); closeModal(); renderAll(); } }catch(e){}
 }
 
 /* ---------- clientes SENSÍVEIS (atenção máxima, editável, pra telão) ---------- */
@@ -201,10 +225,11 @@ function contatosWeek(lst){
 }
 function histByWeek(){
   const byWeek={};
-  const ensure=wk=>{ if(!byWeek[wk]) byWeek[wk]={week:wk,label:isoMonday(wk).toISOString().slice(0,10),snap:null,contatos:[],encerrados:[]}; return byWeek[wk]; };
+  const ensure=wk=>{ if(!byWeek[wk]) byWeek[wk]={week:wk,label:isoMonday(wk).toISOString().slice(0,10),snap:null,contatos:[],encerrados:[],inativos:[]}; return byWeek[wk]; };
   HIST.forEach(s=>{ const w=ensure(s.week); w.snap=s; if(s.label) w.label=s.label; });
   INTER.forEach(x=>{ ensure(isoWeekKey(new Date(x.ts))).contatos.push(x); });
   [...ENCERR.values()].forEach(e=>{ ensure(isoWeekKey(new Date(e.ts))).encerrados.push(e); });
+  [...INAT.values()].forEach(e=>{ ensure(isoWeekKey(new Date(e.ts))).inativos.push(e); });
   const weeks=Object.values(byWeek).sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0));
   const diff={}; for(let i=1;i<HIST.length;i++) diff[HIST[i].week]=weekDiff(HIST[i-1],HIST[i]);
   return {weeks, diff};
@@ -218,7 +243,8 @@ function exportHistCSV(){
       d.sairam.forEach(x=>rows.push([mn(wo.week),wo.week,wo.label,"Saiu do radar",x.nome||('#'+x.cod),x.cidade||'',MOTLAB[x.motivo]||x.motivo||'','','',''])); }
     wo.contatos.slice().sort((a,b)=>a.ts-b.ts).forEach(h=>{const r=RESULT[h.resultado]||RESULT.sem_resposta;
       rows.push([mn(wo.week),wo.week,wo.label,"Contato",h.cliente||('#'+h.cod),'',h.canal||'',r.lbl+(h.motivo?(' / '+h.motivo):''),h.por||'',(h.nota||'').replace(/[\r\n]+/g,' ')]); });
-    (wo.encerrados||[]).forEach(e=>rows.push([mn(wo.week),wo.week,wo.label,"Encerrado",e.cliente||('#'+e.cod),e.cidade||'',e.motivo||'','',e.por||'',(e.nota||'').replace(/[\r\n]+/g,' ')])); });
+    (wo.encerrados||[]).forEach(e=>rows.push([mn(wo.week),wo.week,wo.label,"Encerrado",e.cliente||('#'+e.cod),e.cidade||'',e.motivo||'','',e.por||'',(e.nota||'').replace(/[\r\n]+/g,' ')]));
+    (wo.inativos||[]).forEach(e=>rows.push([mn(wo.week),wo.week,wo.label,"Inativo",e.cliente||('#'+e.cod),e.cidade||'',e.motivo||'','',e.por||'',(e.nota||'').replace(/[\r\n]+/g,' ')])); });
   const csv="﻿"+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(";")).join("\r\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download="catalogo-crm-"+new Date().toISOString().slice(0,10)+".csv"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
@@ -230,9 +256,10 @@ function weekBlock(wo, d){
     </div>`
     : (wo.snap ? `<div class="t-mut" style="font-size:12.5px">📅 Início do histórico · ${(wo.snap.flagged||[]).length} clientes no radar</div>` : `<div class="t-mut" style="font-size:12.5px">Sem foto do radar nesta semana.</div>`);
   const encHtml=(wo.encerrados&&wo.encerrados.length)?`<div style="margin-top:12px"><div class="histhead" style="color:var(--red)">🔒 Encerrados (${wo.encerrados.length})</div>${wo.encerrados.map(e=>`<div class="histcli"><span class="nm">${esc(e.cliente||('#'+e.cod))}</span><span class="t-mut">${esc(e.por||'')}${e.nota?' · "'+esc(e.nota)+'"':''}</span><span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">${esc(e.motivo)}</span></div>`).join('')}</div>`:'';
+  const inatHtml=(wo.inativos&&wo.inativos.length)?`<div style="margin-top:12px"><div class="histhead" style="color:#FF8A00">🚫 Inativos (${wo.inativos.length})</div>${wo.inativos.map(e=>`<div class="histcli"><span class="nm">${esc(e.cliente||('#'+e.cod))}</span><span class="t-mut">${esc(e.por||'')}${e.nota?' · "'+esc(e.nota)+'"':''}</span><span class="pr" style="background:rgba(255,138,0,.16);color:#ffc266">${esc(e.motivo)}</span></div>`).join('')}</div>`:'';
   return `<div class="card" style="margin-bottom:12px">
     <h3>Semana ${esc(wo.week)} <span class="tag">início ${esc(wo.label||'')}</span></h3>
-    ${radar}${contatosWeek(wo.contatos)}${encHtml}</div>`;
+    ${radar}${contatosWeek(wo.contatos)}${encHtml}${inatHtml}</div>`;
 }
 function findClient(cod){
   const c=String(cod), D=DATA||{};
@@ -264,12 +291,13 @@ function snapOf(cod){
 }
 
 /* ---- modal de registro ---- */
-let M_COD=null, M_RES="positivo", M_CANAL="Ligação", M_MOTIVO="", M_SAT=null, M_ENCMOT="";
+let M_COD=null, M_RES="positivo", M_CANAL="Ligação", M_MOTIVO="", M_SAT=null, M_ENCMOT="", M_INATMOT="";
 function rbadge(h){ const r=RESULT[h.resultado]||RESULT.sem_resposta; return r; }
 function openReg(cod){
-  M_COD=String(cod); M_RES="positivo"; M_CANAL="Ligação"; M_MOTIVO=""; M_SAT=null; M_ENCMOT="";
-  const cli=findClient(cod)||ENCERR.get(String(cod))||{}, nome=cli.nome||cli.cliente||("#"+cod), hist=interOf(cod);
+  M_COD=String(cod); M_RES="positivo"; M_CANAL="Ligação"; M_MOTIVO=""; M_SAT=null; M_ENCMOT=""; M_INATMOT="";
+  const cli=findClient(cod)||ENCERR.get(String(cod))||INAT.get(String(cod))||{}, nome=cli.nome||cli.cliente||("#"+cod), hist=interOf(cod);
   const enc=ENCERR.get(String(cod));
+  const inat=INAT.get(String(cod));
   const histHtml = hist.length ? hist.map(h=>{ const r=rbadge(h);
     const sat=(h.nota_satisfacao!=null)?` · <span class="t-cyan">satisf. ${h.nota_satisfacao}/10${h.nota_motivo?(" ("+esc(h.nota_motivo)+")"):""}</span>`:"";
     return `<div class="hist-row"><span class="hi-ic">${r.ic}</span>
@@ -286,9 +314,18 @@ function openReg(cod){
        <input id="mEncNovo" class="m-date" style="width:100%;display:none;margin-top:8px" placeholder="Novo motivo de encerramento">
        <textarea id="mEncNota" class="m-ta" style="min-height:48px;margin-top:8px" placeholder="Observação do encerramento (opcional)"></textarea>
        <button class="m-enc" id="mEncBtn">🔒 Encerrar contato</button>`;
+  const inatBlock = inat
+    ? `<div class="m-sec" style="color:#FF8A00">Cliente inativo</div>
+       <div class="inatbanner"><div><b>${esc(inat.motivo)}</b> <span class="t-mut">· ${esc(diasAtras(inat.ts))} · ${esc(inat.por)}</span>${inat.nota?`<div class="hi-nota">"${esc(inat.nota)}"</div>`:""}</div><button class="opt" id="mInatReabrir">↩ Reativar</button></div>`
+    : `<div class="m-sec" style="color:#FF8A00">Marcar como inativo</div>
+       <div class="t-mut" style="font-size:12px;margin-bottom:8px">Cliente travado (calote, falta de pagamento…). Sai do <b>% geral</b> do estudo e vai p/ <b>🚫 Inativos</b> (com % de inativação por motivo). Diferente de Encerrado.</div>
+       <div class="m-opts" id="mInat">${motivosInat().map(m=>`<button class="opt inat" data-inat="${esc(m)}">${esc(m)}</button>`).join("")}<button class="opt" data-inat="__novo">+ novo motivo</button></div>
+       <input id="mInatNovo" class="m-date" style="width:100%;display:none;margin-top:8px" placeholder="Novo motivo de inativação">
+       <textarea id="mInatNota" class="m-ta" style="min-height:48px;margin-top:8px" placeholder="Observação (opcional)"></textarea>
+       <button class="m-enc" id="mInatBtn" style="border-color:#FF8A00;color:#FF8A00">🚫 Marcar inativo</button>`;
   document.getElementById("modalBody").innerHTML = `
     <div class="m-head"><div><div class="m-cli">${esc(nome)}</div>
-      <div class="t-mut" style="font-size:13px;margin-top:2px">${esc(cli.cidade||"")}${cli.dias_inativo!=null?` · ${cli.dias_inativo}d sem enviar`:""}${enc?' · <span class="t-red" style="font-weight:800">ENCERRADO</span>':""}</div></div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">${esc(cli.cidade||"")}${cli.dias_inativo!=null?` · ${cli.dias_inativo}d sem enviar`:""}${enc?' · <span class="t-red" style="font-weight:800">ENCERRADO</span>':""}${inat?' · <span style="color:#FF8A00;font-weight:800">INATIVO</span>':""}</div></div>
       <button class="m-x" id="mClose">✕</button></div>
     <div class="m-sec">Histórico de contatos</div><div class="m-hist">${histHtml}</div>
     <div class="m-sec">Registrar novo contato</div>
@@ -301,7 +338,7 @@ function openReg(cod){
     <div class="m-lbl">Nota / relatório</div><textarea id="mNota" class="m-ta" placeholder="O que foi conversado, combinado, objeções…"></textarea>
     <div class="m-lbl">Próximo passo (retorno)</div><input id="mNext" type="date" class="m-date">
     <button class="m-save" id="mSave">Salvar contato</button>
-    ${encBlock}`;
+    ${encBlock}${inatBlock}`;
   document.getElementById("modal").style.display="flex";
   document.getElementById("mClose").onclick=closeModal;
   document.getElementById("mCanal").onclick=e=>{const b=e.target.closest("[data-canal]");if(b){M_CANAL=b.dataset.canal;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
@@ -320,6 +357,16 @@ function openReg(cod){
     const ok=await encerrar(M_COD, cli.nome||"", cli.cidade||"", motivo, (document.getElementById("mEncNota").value||"").trim());
     if(ok){ closeModal(); renderAll(); } else { meb.disabled=false; meb.textContent="🔒 Encerrar contato"; } };
   const mr=document.getElementById("mReabrir"); if(mr) mr.onclick=()=>reabrir(M_COD);
+  const mi=document.getElementById("mInat"); if(mi) mi.onclick=e=>{const b=e.target.closest("[data-inat]");if(!b)return; const v=b.dataset.inat;
+    if(v==="__novo"){ const inp=document.getElementById("mInatNovo"); inp.style.display="block"; inp.focus(); M_INATMOT=""; [...mi.children].forEach(c=>c.classList.remove("on")); }
+    else { M_INATMOT=v; document.getElementById("mInatNovo").style.display="none"; [...mi.children].forEach(c=>c.classList.toggle("on",c===b)); } };
+  const mib=document.getElementById("mInatBtn"); if(mib) mib.onclick=async()=>{
+    const novo=(document.getElementById("mInatNovo").value||"").trim(), motivo=novo||M_INATMOT;
+    if(!motivo){ alert("Escolha ou digite um motivo de inativação."); return; }
+    mib.disabled=true; mib.textContent="Marcando…";
+    const ok=await inativar(M_COD, cli.nome||cli.cliente||"", cli.cidade||"", motivo, (document.getElementById("mInatNota").value||"").trim());
+    if(ok){ closeModal(); renderAll(); } else { mib.disabled=false; mib.textContent="🚫 Marcar inativo"; } };
+  const mir=document.getElementById("mInatReabrir"); if(mir) mir.onclick=()=>reativarInat(M_COD);
 }
 function closeModal(){ document.getElementById("modal").style.display="none"; }
 async function submitReg(){
@@ -359,8 +406,8 @@ function dueCount(){ return [...new Set(INTER.map(x=>String(x.cod)))].filter(cod
 /* ---- BI: estatísticas + gráficos ---- */
 function biStats(){
   const D=DATA||{};
-  const paradosSet=new Set((D.parados||[]).map(x=>String(x.cod)));
-  const quedaSet=new Set([...(D.em_queda||[]),...(D.queda_forte||[])].map(x=>String(x.cod)));
+  const paradosSet=new Set(act(D.parados||[]).map(x=>String(x.cod)));
+  const quedaSet=new Set(act([...(D.em_queda||[]),...(D.queda_forte||[])]).map(x=>String(x.cod)));
   const wk=Date.now()-7*864e5, mo=Date.now()-30*864e5;
   const byRes={}; Object.keys(RESULT).forEach(k=>byRes[k]=0);
   INTER.forEach(x=>{ if(byRes[x.resultado]!=null) byRes[x.resultado]++; });
@@ -377,7 +424,7 @@ function biStats(){
   const satMedia=notas.length?notas.reduce((a,b)=>a+b,0)/notas.length:null;
   return {total,sem:INTER.filter(x=>x.ts>=wk).length,mes:INTER.filter(x=>x.ts>=mo).length,byRes,porPessoa,
     reativados:reativadosList.length, reativadosList, motivos,weeks,contatados:contatados.size,pctPos:total?Math.round(100*byRes.positivo/total):0,
-    topPessoa:topP?topP[0]:"—",alvos:(D.parados||[]).length+(D.em_queda||[]).length, satMedia, satN:notas.length};
+    topPessoa:topP?topP[0]:"—",alvos:act(D.parados||[]).length+act(D.em_queda||[]).length, satMedia, satN:notas.length};
 }
 function funil(s){
   const steps=[["Alvos (parados + em queda)",s.alvos,"#FF5470"],["Contatados",s.contatados,"#FFB020"],
@@ -553,7 +600,7 @@ function renderTab(){
           ${kpi("a", (arr[0]&&arr[0].dias_inativo)||0, "Mais antigo", "dias sem enviar")}
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
-      <div class="seclabel">⛔ Parados — priorizar contato (recência primeiro)</div>
+      <div class="seclabel">⛔ Parados — priorizar contato (recência primeiro)${INAT.size?` <span class="t-mut" style="font-weight:500">· 🚫 ${INAT.size} inativo(s) fora da conta (aba Inativos)</span>`:""}</div>
       ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
     return;
   }
@@ -767,6 +814,51 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="inativos"){
+    const allI=[...INAT.values()].sort((a,b)=>b.ts-a.ts);
+    const total=allI.length;
+    const ativos2 = D.carteira ? act(D.carteira).length : (r.ativos || r.carteira || 0);
+    const base = ativos2 + total;                         // carteira "real" + inativos
+    const pctInat = base ? 100*total/base : 0;            // % de inativos sobre a base
+    // % de inativação POR MOTIVO (dentro deles mesmos)
+    const porMot={}; allI.forEach(e=>{const m=e.motivo||"Outro"; porMot[m]=(porMot[m]||0)+1;});
+    const motArr=Object.entries(porMot).sort((a,b)=>b[1]-a[1]);
+    const breakdown = total ? motArr.map(([m,n])=>{const p=Math.round(100*n/total);
+      return `<div class="inatrow"><div class="inatlbl">${esc(m)}</div><div class="inatbar"><div style="width:${Math.max(4,p)}%"></div></div><div class="inatpct">${p}% <span class="t-mut">(${n})</span></div></div>`;
+    }).join("") : `<div class="t-mut" style="font-size:13px;padding:6px 0">Sem inativos ainda.</div>`;
+    const q=search.trim().toLowerCase();
+    const arr = q ? allI.filter(e=>(e.cliente||"").toLowerCase().includes(q)||(e.motivo||"").toLowerCase().includes(q)) : allI;
+    let body="", curM=null;
+    arr.forEach(e=>{ const d=new Date(e.ts), mk=d.getFullYear()*100+(d.getMonth()+1);
+      if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
+      body+=`<div class="crow" data-reg="${esc(e.cod)}" style="cursor:pointer">
+        <div class="rk" style="color:#FF8A00">🚫</div>
+        <div><div class="nm">${esc(e.cliente||('#'+e.cod))}</div><div class="ci">${esc(e.cidade||'')} · inativo ${esc(diasAtras(e.ts))} · ${esc(e.por||'')}</div>${e.nota?`<div class="lastint" style="cursor:pointer">"${esc(e.nota)}"</div>`:''}</div>
+        <div class="mid"></div>
+        <div class="rcell"><span class="pr" style="background:rgba(255,138,0,.16);color:#ffc266">${esc(e.motivo)}</span></div>
+      </div>`; });
+    c.innerHTML=`
+      <div class="hero">${ring(pctInat, "#FF8A00", "inativos")}
+        <div class="kgrid" style="margin:0">
+          ${kpi("a", total, "Clientes inativos", "fora do % geral do estudo")}
+          ${kpi("", ativos2, "Carteira real", "ativos sem inativos/encerrados")}
+          ${kpi("a", motArr.length, "Motivos distintos", "editável")}
+        </div></div>
+      <div class="card" style="margin-bottom:14px;border-color:rgba(255,138,0,.3)">
+        <h3>🚫 % de inativação por motivo <span class="tag">dentro dos inativos</span></h3>
+        ${breakdown}
+        <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">Estes clientes <b>não entram</b> no percentual geral do CRM (parados, risco, carteira) — para não distorcer a estatística. Aparecem só aqui e no histórico.</div>
+      </div>
+      <div class="tabsbar" style="margin:16px 0 8px">
+        <div class="seclabel" style="margin:0">🚫 Inativos · por mês e ano</div>
+        <input class="wlsearch" id="lupaInat" placeholder="🔍 buscar por cliente ou motivo…" value="${esc(search)}">
+      </div>
+      ${total ? (arr.length? body : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`) : `<div class="empty">Nenhum inativo ainda. Em <b>⛔ Parados</b>, abra o <b>📞 Registrar</b> do cliente travado e use <b>🚫 Marcar inativo</b> (calote, falta de pagamento…).</div>`}`;
+    const lp=document.getElementById("lupaInat");
+    if(lp){ lp.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const p=lp.selectionStart; renderTab(); const l2=document.getElementById("lupaInat"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
+    return;
+  }
+
   if(ACTIVE==="carteira"){
     const all = flt(act(D.carteira||[]));
     const q = search.trim().toLowerCase();
@@ -793,6 +885,7 @@ function renderTabs(){
     const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length
             : tb.k==="historico" ? HIST.length
             : tb.k==="encerrados" ? ENCERR.size
+            : tb.k==="inativos" ? INAT.size
             : tb.k==="reativados" ? new Set(reativadosEvents().map(e=>e.cod)).size
             : tb.k==="sensiveis" ? SENS.length
             : tb.k==="prospeccao" ? PROSP.length
@@ -864,9 +957,9 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens(), loadProsp()]).then(()=>renderAll());
-    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+SENS.length+"|"+PROSP.length;
-      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadSens(), loadProsp()]);
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp()]).then(()=>renderAll());
+    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length;
+      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp()]);
       if(a!==sig()) renderTab(); }, 45000);
   }
 }
