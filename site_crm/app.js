@@ -745,7 +745,7 @@ function renderTab(){
         ${tv?"":`<div class="sensadd"><input id="sNome" class="wlsearch" placeholder="Nome do cliente"><input id="sObs" class="wlsearch" placeholder="Observação / por quê (opcional)"><button class="regbtn" id="sAdd">+ Adicionar</button></div>`}
       </div>
       ${cards}
-      ${tv?"":`<div class="t-mut" style="font-size:12px;margin-top:18px;line-height:1.5">💡 <b>Telão do atendimento:</b> abra <b>…/#sensiveis</b> nessa TV — trava só esta aba (pulsando), sem mostrar o resto do CRM. A equipe edita aqui; a TV só exibe.</div>`}`;
+      ${tv?"":`<div class="t-mut" style="font-size:12px;margin-top:18px;line-height:1.5">💡 <b>Telão do atendimento:</b> abra <b>…/telao.html</b> na TV — página própria, com <b>senha só do telão</b> (a recepção não acessa o resto do CRM). Mostra só estes cards pulsando e atualiza sozinho. A equipe edita aqui.</div>`}`;
     if(!tv){
       const add=document.getElementById("sAdd"); const sn=document.getElementById("sNome"), so=document.getElementById("sObs");
       if(add) add.onclick=()=>{ addSens(sn.value, so.value); };
