@@ -570,6 +570,7 @@ function renderTab(){
         <div style="flex:1">
           <div class="lbl">${calm?(diaFilter?"Nenhum contato agendado para hoje":"Carteira saudável — nada para reativar agora"):(diaFilter?"CONTATOS DO DIA — ligar hoje":"CLIENTES PARA REATIVAR — ação comercial")}</div>
           <div class="sub">${cnt('parados')} parados · ${cnt('queda_forte')} em queda forte · ${cnt('em_queda')} em queda · ${cnt('novos_esfriando')} novos esfriando · ${Math.round(riscoPct)}% da carteira ativa${(ENCERR.size+INAT.size)?` · 🔒 ${ENCERR.size+INAT.size} fora da conta`:""}${dc?` · <b style="color:#fff">↻ ${dc} retorno(s) p/ hoje</b>`:""}</div>
+          <div class="sub" style="margin-top:5px;font-weight:700;color:#ffd9a0">📊 ${act(D.reativar||[]).length} em risco · 🔒 ${ENCERR.size+INAT.size} ${INAT.size?"encerrados/inativos":"encerrados"} já fora · base ${brData((D.meta||{}).max_data)}</div>
         </div>
         ${ring(riscoPct, "#FF8A00", "em risco")}
       </div>
