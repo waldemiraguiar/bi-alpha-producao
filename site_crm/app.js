@@ -494,6 +494,13 @@ function ring(pct, color, label){
   return `<div class="ring" style="background:conic-gradient(${color} ${pct}%, rgba(255,255,255,.07) 0)">
     <div class="rv"><div class="big">${pct}%</div><div class="lb">${label}</div></div></div>`;
 }
+/* % por classificação (motivo) — reutilizado em Inativos, Encerrados e Histórico */
+function motCount(items){ const m={}; (items||[]).forEach(e=>{const k=e.motivo||"Outro"; m[k]=(m[k]||0)+1;}); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+function motBars(motArr, total, color){
+  if(!total) return `<div class="t-mut" style="font-size:13px;padding:6px 0">Sem registros ainda.</div>`;
+  return motArr.map(([m,n])=>{const p=Math.round(100*n/total);
+    return `<div class="inatrow"><div class="inatlbl">${esc(m)}</div><div class="inatbar"><div style="width:${Math.max(4,p)}%;background:${color}"></div></div><div class="inatpct" style="color:${color}">${p}% <span class="t-mut">(${n})</span></div></div>`;}).join("");
+}
 
 /* botão de follow-up (toggle compartilhado) */
 function fubtn(x){
@@ -680,6 +687,10 @@ function renderTab(){
         ${kpi("r", lastSnap?(lastSnap.flagged||[]).length:0, "No radar agora", lastSnap?`semana ${esc(lastSnap.week)}`:"—")}
         ${kpi("a", (lastD.entraram||[]).length, "Entraram (últ. semana)", "novos alertas")}
       </div>
+      <div class="bigrid">
+        <div class="card" style="border-color:rgba(255,84,112,.3)"><h3>🔒 % de encerramento por classificação <span class="tag">espelho da aba Encerrados</span></h3>${motBars(motCount([...ENCERR.values()]), ENCERR.size, "#FF5470")}</div>
+        <div class="card" style="border-color:rgba(255,138,0,.3)"><h3>🚫 % de inativação por classificação <span class="tag">espelho da aba Inativos</span></h3>${motBars(motCount([...INAT.values()]), INAT.size, "#FF8A00")}</div>
+      </div>
       <div class="tabsbar" style="margin:16px 0 8px">
         <div class="seclabel" style="margin:0">📅 Catálogo completo · ordem crescente · por mês e semana</div>
         <div style="display:flex;gap:8px"><button class="regbtn" id="histCSV">⬇ CSV</button><button class="regbtn" id="histPDF">🖨 PDF</button></div>
@@ -789,23 +800,38 @@ function renderTab(){
     const allE=[...ENCERR.values()].sort((a,b)=>b.ts-a.ts);
     const q=search.trim().toLowerCase();
     const arr = q ? allE.filter(e=>(e.cliente||"").toLowerCase().includes(q)||(e.motivo||"").toLowerCase().includes(q)) : allE;
-    let body="", curM=null;
+    const encMot = motCount(allE);
+    // catálogo: Mês/Ano -> Classificação -> clientes
+    const byM={};
     arr.forEach(e=>{ const d=new Date(e.ts), mk=d.getFullYear()*100+(d.getMonth()+1);
-      if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
-      body+=`<div class="crow" data-reg="${esc(e.cod)}" style="cursor:pointer">
-        <div class="rk" style="color:var(--line)">•</div>
-        <div><div class="nm">${esc(e.cliente||('#'+e.cod))}</div><div class="ci">${esc(e.cidade||'')} · encerrado ${esc(diasAtras(e.ts))} · ${esc(e.por||'')}</div>${e.nota?`<div class="lastint" style="cursor:pointer">"${esc(e.nota)}"</div>`:''}</div>
-        <div class="mid"></div>
-        <div class="rcell"><span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">${esc(e.motivo)}</span></div>
-      </div>`; });
+      (byM[mk]=byM[mk]||{y:d.getFullYear(),m:d.getMonth()+1,mots:{}}); (byM[mk].mots[e.motivo||"Outro"]=byM[mk].mots[e.motivo||"Outro"]||[]).push(e); });
+    let body="";
+    Object.keys(byM).sort((a,b)=>b-a).forEach(mk=>{ const g=byM[mk];
+      const mTot=Object.values(g.mots).reduce((a,x)=>a+x.length,0);
+      body+=`<div class="monthhead">${MESF[g.m]} ${g.y} <span>· ${mTot} encerrado${mTot>1?'s':''}</span></div>`;
+      Object.entries(g.mots).sort((a,b)=>b[1].length-a[1].length).forEach(([mot,lst])=>{
+        body+=`<div class="classhead"><span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">${esc(mot)}</span><span class="t-mut">${lst.length} · ${Math.round(100*lst.length/mTot)}% do mês</span></div>`;
+        lst.sort((a,b)=>b.ts-a.ts).forEach(e=>{ body+=`<div class="crow" data-reg="${esc(e.cod)}" style="cursor:pointer">
+          <div class="rk" style="color:var(--line)">•</div>
+          <div><div class="nm">${esc(e.cliente||('#'+e.cod))}</div><div class="ci">${esc(e.cidade||'')} · encerrado ${esc(diasAtras(e.ts))} · ${esc(e.por||'')}</div>${e.nota?`<div class="lastint" style="cursor:pointer">"${esc(e.nota)}"</div>`:''}</div>
+          <div class="mid"></div>
+          <div class="rcell"></div>
+        </div>`; });
+      });
+    });
     c.innerHTML=`
       <div class="kgrid">
-        ${kpi("r", allE.length, "Clientes encerrados", "arquivados, permanente")}
-        ${kpi("a", new Set(allE.map(e=>e.motivo)).size, "Motivos distintos", "editável")}
-        ${kpi("", q?arr.length:allE.length, q?"Encontrados":"No total", q?`filtro: "${esc(search)}"`:"clique p/ ver histórico / reabrir")}
+        ${kpi("r", allE.length, "Clientes encerrados", "fora do % geral de queda")}
+        ${kpi("a", encMot.length, "Classificações", "motivos distintos")}
+        ${kpi("", q?arr.length:allE.length, q?"Encontrados":"No total", q?`filtro: "${esc(search)}"`:"clique p/ histórico / reabrir")}
+      </div>
+      <div class="card" style="margin:0 0 14px;border-color:rgba(255,84,112,.3)">
+        <h3>🔒 % de encerramento por classificação <span class="tag">do total</span></h3>
+        ${motBars(encMot, allE.length, "#FF5470")}
+        <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">Não entram no <b>% geral de queda</b> do CRM. Catálogo abaixo: por mês/ano, separado por classificação.</div>
       </div>
       <div class="tabsbar" style="margin:16px 0 8px">
-        <div class="seclabel" style="margin:0">🔒 Encerrados · por mês e ano</div>
+        <div class="seclabel" style="margin:0">🔒 Catálogo · mês/ano → classificação</div>
         <input class="wlsearch" id="lupaEnc" placeholder="🔍 buscar por cliente ou motivo…" value="${esc(search)}">
       </div>
       ${allE.length ? (arr.length? body : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`) : `<div class="empty">Nenhum cliente encerrado ainda. Use <b>🔒 Encerrar contato</b> no 📞 Registrar de qualquer cliente.</div>`}`;
@@ -821,11 +847,8 @@ function renderTab(){
     const base = ativos2 + total;                         // carteira "real" + inativos
     const pctInat = base ? 100*total/base : 0;            // % de inativos sobre a base
     // % de inativação POR MOTIVO (dentro deles mesmos)
-    const porMot={}; allI.forEach(e=>{const m=e.motivo||"Outro"; porMot[m]=(porMot[m]||0)+1;});
-    const motArr=Object.entries(porMot).sort((a,b)=>b[1]-a[1]);
-    const breakdown = total ? motArr.map(([m,n])=>{const p=Math.round(100*n/total);
-      return `<div class="inatrow"><div class="inatlbl">${esc(m)}</div><div class="inatbar"><div style="width:${Math.max(4,p)}%"></div></div><div class="inatpct">${p}% <span class="t-mut">(${n})</span></div></div>`;
-    }).join("") : `<div class="t-mut" style="font-size:13px;padding:6px 0">Sem inativos ainda.</div>`;
+    const motArr=motCount(allI);
+    const breakdown = motBars(motArr, total, "#FF8A00");
     const q=search.trim().toLowerCase();
     const arr = q ? allI.filter(e=>(e.cliente||"").toLowerCase().includes(q)||(e.motivo||"").toLowerCase().includes(q)) : allI;
     let body="", curM=null;
