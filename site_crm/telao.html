@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Clientes Sensíveis · Telão</title>
+<link rel="icon" href="logo.png">
+<style>
+  :root{--bg:#0A1628;--ink:#eef2f8;--mut:#8aa2bd;--amber:#FFB020;--line:rgba(255,255,255,.12);--cyan:#00D4FF}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#102544,#0A1628 60%);color:var(--ink);
+    font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  /* ---- gate ---- */
+  #gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .gate-card{background:rgba(10,22,40,.92);border:1px solid var(--line);border-radius:18px;padding:30px 26px;width:340px;max-width:92vw;text-align:center}
+  .gate-card img{width:54px;height:54px;object-fit:contain;margin-bottom:10px}
+  .gate-card h1{font-size:18px;margin:0 0 4px}
+  .gate-card p{font-size:13px;color:var(--mut);margin:0 0 16px}
+  .gate-card input{width:100%;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:11px;padding:13px;color:var(--ink);font-size:15px;outline:none;font-family:inherit}
+  .gate-card input:focus{border-color:var(--cyan)}
+  .gate-card button{width:100%;margin-top:10px;background:var(--amber);border:none;color:#0A1628;font-weight:800;font-size:15px;border-radius:11px;padding:13px;cursor:pointer;font-family:inherit}
+  .gate-err{color:#FF8A8A;font-size:13px;margin-top:10px;min-height:16px}
+  /* ---- telão ---- */
+  #telao{display:none;padding:26px 30px}
+  .thead{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+  .thead .ttl{font-size:26px;font-weight:900;color:var(--amber);letter-spacing:.5px;display:flex;align-items:center;gap:12px}
+  .thead .ttl .blink{width:16px;height:16px;border-radius:50%;background:var(--amber);animation:dot 1.1s infinite}
+  @keyframes dot{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(255,176,32,.6)}50%{opacity:.4;box-shadow:0 0 18px 6px rgba(255,176,32,.5)}}
+  .thead .meta{font-size:14px;color:var(--mut);text-align:right}
+  .thead .meta .clk{font-size:22px;font-weight:800;color:#fff}
+  .sensgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .senscard{display:flex;align-items:center;gap:16px;border-radius:16px;padding:20px 22px;border:2px solid var(--amber);animation:senspulse 1.1s ease-in-out infinite}
+  @keyframes senspulse{0%,100%{background:rgba(255,176,32,.10);box-shadow:0 0 0 0 rgba(255,176,32,.45)}50%{background:rgba(255,176,32,.28);box-shadow:0 0 26px 5px rgba(255,176,32,.45)}}
+  .senscard .sc-ic{font-size:36px;line-height:1}
+  .senscard .sc-body{flex:1;min-width:0}
+  .senscard .sc-nome{font-size:23px;font-weight:900;color:#fff}
+  .senscard .sc-obs{font-size:15px;color:#ffe2ab;margin-top:4px}
+  .senscard .sc-meta{font-size:12px;color:var(--amber);margin-top:6px;opacity:.85}
+  .empty{margin-top:40px;text-align:center;color:var(--mut);font-size:16px}
+  .foot{margin-top:26px;text-align:center;color:var(--mut);font-size:11.5px;opacity:.7}
+</style>
+</head>
+<body>
+<div id="gate">
+  <form id="gateForm" class="gate-card">
+    <img src="logo.png" alt="Alpha Labs">
+    <h1>🚨 Clientes Sensíveis</h1>
+    <p>Telão do atendimento · senha própria</p>
+    <input id="gatePwd" type="password" placeholder="Senha do telão" autocomplete="current-password" autofocus>
+    <button id="gateBtn" type="submit">Entrar</button>
+    <div id="gateErr" class="gate-err"></div>
+  </form>
+</div>
+
+<div id="telao">
+  <div class="thead">
+    <div class="ttl"><span class="blink"></span>CLIENTES SENSÍVEIS — ATENÇÃO MÁXIMA</div>
+    <div class="meta"><div class="clk" id="clk">--:--</div><div>Agentes de IA Alpha · atualiza sozinho</div></div>
+  </div>
+  <div id="cards"></div>
+  <div class="foot">Somente leitura · sem dados financeiros · Agente CRM, frota Agentes de IA Alpha.</div>
+</div>
+
+<script src="gate-crypto.js"></script>
+<script>
+  const LS = "telao_sensiveis";
+  const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  function diasAtras(ts){ const d=Math.floor((Date.now()-ts)/864e5); return d<=0?"hoje":d===1?"ontem":`há ${d}d`; }
+  function clock(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); const e=document.getElementById("clk"); if(e) e.textContent=`${p(d.getHours())}:${p(d.getMinutes())}`; }
+  function render(arr){
+    const c=document.getElementById("cards");
+    c.innerHTML = (arr&&arr.length)
+      ? `<div class="sensgrid">${arr.map(s=>`<div class="senscard"><div class="sc-ic">⚠️</div>
+          <div class="sc-body"><div class="sc-nome">${esc(s.nome)}</div>${s.obs?`<div class="sc-obs">${esc(s.obs)}</div>`:""}
+          <div class="sc-meta">incluído ${esc(diasAtras(s.ts))} · ${esc(s.por||"")}</div></div></div>`).join("")}</div>`
+      : `<div class="empty">✅ Nenhum cliente sensível no momento.</div>`;
+  }
+  async function load(){ try{ const r=await fetch("/api/crm-sensiveis",{cache:"no-store"}); const j=await r.json(); render(j.sensiveis||[]); }catch(e){ console.warn(e); } }
+  let started=false;
+  async function unlock(pw, fromLS){
+    try{
+      await decryptEnc("telao.enc", pw);           // valida a senha do telão
+      localStorage.setItem(LS, pw);
+      document.getElementById("gate").style.display="none";
+      document.getElementById("telao").style.display="block";
+      if(!started){ started=true; load(); clock(); setInterval(load,30000); setInterval(clock,30000); }
+    }catch(e){
+      if(fromLS){ localStorage.removeItem(LS); return; }
+      document.getElementById("gateErr").textContent = /sem dados/.test(e.message) ? "Telão indisponível." : "Senha incorreta.";
+    }
+  }
+  document.getElementById("gateForm").addEventListener("submit", e=>{ e.preventDefault(); document.getElementById("gateErr").textContent=""; unlock(document.getElementById("gatePwd").value, false); });
+  const saved = localStorage.getItem(LS); if(saved) unlock(saved, true);
+</script>
+</body>
+</html>
