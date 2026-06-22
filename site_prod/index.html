@@ -187,9 +187,21 @@ body{font-family:'Inter',sans-serif;background:
 .byline{font-size:11px;color:var(--green);font-weight:700;white-space:nowrap}
 .urg2{display:inline-block;font-size:9.5px;font-weight:900;color:var(--navy);background:var(--amber);border-radius:5px;padding:1px 6px;margin-left:6px}
 .andonempty{text-align:center;color:var(--green);font-size:20px;font-weight:800;padding:60px}
-.sepcat.andon{border-color:var(--red);animation:andonblink 1s steps(1,end) infinite}
-@keyframes andonblink{0%{box-shadow:0 0 24px 2px rgba(255,84,112,.5)}50%{box-shadow:0 0 6px 0 rgba(255,84,112,.12)}}
-.sepcat.andon>.h{color:var(--red)}
+/* banner de alarme (sirene) no topo dos Atrasados */
+.andonbar{display:flex;align-items:center;gap:16px;border-radius:12px;padding:15px 22px;margin-bottom:14px;border:2px solid #fff;animation:andonbar .45s steps(1,end) infinite}
+@keyframes andonbar{0%{background:linear-gradient(90deg,#FF2D55,#FF8A00);box-shadow:0 0 38px 7px rgba(255,45,85,.8)}50%{background:linear-gradient(90deg,#FF8A00,#FF2D55);box-shadow:0 0 10px 0 rgba(255,138,0,.35)}}
+.andonbar .ico{font-size:32px;line-height:1;animation:sirene .45s ease-in-out infinite}
+.andonbar .ttl{font-weight:900;color:#fff;font-size:23px;letter-spacing:.03em;text-shadow:0 2px 6px rgba(0,0,0,.5)}
+/* card frenético */
+.sepcat.andon{border:2px solid #FF2D55;animation:andonfren .45s steps(1,end) infinite}
+@keyframes andonfren{0%{box-shadow:0 0 34px 8px rgba(255,45,85,.9);border-color:#FF2D55}50%{box-shadow:0 0 4px 0 rgba(255,45,85,.12);border-color:rgba(255,84,112,.3)}}
+.sepcat.andon>.h{color:#FF5470;font-size:17px}
+.sepcat.andon>.h .cnt{color:#FF8A8A}
+/* placar — campeão piscando azul com fogos */
+.plrow.winner{border:2px solid var(--cyan);animation:celebra .8s ease-in-out infinite}
+@keyframes celebra{0%,100%{box-shadow:0 0 30px 6px rgba(0,212,255,.85)}50%{box-shadow:0 0 8px 0 rgba(0,212,255,.22)}}
+.champ{display:inline-block;margin-left:10px;font-size:12px;font-weight:900;color:var(--navy);background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:20px;padding:3px 12px;animation:champflash .8s ease-in-out infinite;vertical-align:middle}
+@keyframes champflash{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(1.07)}}
 .plrow{display:grid;grid-template-columns:54px 1fr 130px 96px;gap:14px;align-items:center;background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:10px}
 .plrow .pos{font-size:24px;font-weight:900;text-align:center}
 .plrow .nm{font-size:16px;font-weight:800}
@@ -233,7 +245,7 @@ body{font-family:'Inter',sans-serif;background:
     <div class="barright">
       <div class="modesw" id="modesw">
         <button class="msbtn on" data-m="tv">📺 Produção</button>
-        <button class="msbtn alt" data-m="sep">🧪 Separação</button>
+        <button class="msbtn alt" data-m="sep">🔬 Triagem de Amostras</button>
       </div>
       <div class="refresh"><span class="dot"></span><span id="upd">—</span></div>
       <div class="clock"><div class="t" id="clk">--:--</div><div class="d" id="dat">—</div></div>

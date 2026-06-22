@@ -155,7 +155,9 @@
     const strip = cats.map(c => `<div class="catpill haslate ${c === selCatA ? 'on' : ''}" data-ca="${esc2(c)}">
         <span class="nm">${esc2(c)}</span><span class="cc late">${byCat[c].length}</span></div>`).join('');
     const arr = byCat[selCatA];
-    return `<div class="catstrip">${strip}</div>
+    const tot = late.length;
+    const bar = `<div class="andonbar"><span class="ico">🚨</span><span class="ttl">${tot} AMOSTRA${tot > 1 ? 'S' : ''} ATRASADA${tot > 1 ? 'S' : ''} — SEPARAR AGORA</span></div>`;
+    return bar + `<div class="catstrip">${strip}</div>
       <div class="sepcat andon"><div class="h"><span>🚨 ${esc2(selCatA)}</span>
         <span class="cnt">${arr.length} amostra${arr.length > 1 ? 's' : ''} não separada${arr.length > 1 ? 's' : ''}</span></div>
         ${arr.map(rowSeparar).join('')}</div>`;
@@ -185,14 +187,15 @@
       <div class="perbtn ${period === 'hoje' ? 'on' : ''}" data-per="hoje">Hoje</div>
       <div class="perbtn ${period === '7d' ? 'on' : ''}" data-per="7d">7 dias</div>
       <div class="perbtn ${period === 'tudo' ? 'on' : ''}" data-per="tudo">Tudo</div></div>`;
-    const body = rows.length ? rows.map((r) => `<div class="plrow">
+    const champCat = (rows.find(r => r.total > 0) || {}).cat;
+    const body = rows.length ? rows.map((r) => { const win = r.cat && r.cat === champCat; return `<div class="plrow ${win ? 'winner' : ''}">
         <div class="pos">${medal(r)}</div>
-        <div><div class="nm">${esc2(r.cat)}</div>
+        <div><div class="nm">${esc2(r.cat)}${win ? ' 🎆🎉<span class="champ">PARABÉNS!</span>' : ''}</div>
           <div class="barwrap"><i style="width:${r.pct}%"></i></div>
           <div class="sub">${r.ok}/${r.total} no prazo${r.aberto ? ` · <b style="color:var(--red)">${r.aberto} em aberto atrasado</b>` : ''}</div></div>
         <div></div>
         <div><div class="pct" style="color:${r.pct >= 80 ? 'var(--green)' : r.pct >= 50 ? 'var(--amber)' : 'var(--red)'}">${r.pct}%</div><div class="sub">no prazo</div></div>
-      </div>`).join('') : `<div class="sepwait">Sem separações registradas no período.</div>`;
+      </div>`; }).join('') : `<div class="sepwait">Sem separações registradas no período.</div>`;
     return `<div class="histfilt"><b style="font-size:15px">🏆 Pontualidade da separação por setor</b>${per}</div>${body}`;
   }
 
