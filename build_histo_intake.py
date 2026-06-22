@@ -12,7 +12,9 @@ PWD  = os.environ["MYSQL_PWD"];  DB   = os.environ["MYSQL_DB"]
 TOKEN  = os.environ["HISTO_INTAKE_TOKEN"]
 SUPA_URL = os.environ.get("SUPA_URL", "https://lrwjcdvporaivxvfuiwt.supabase.co")
 SUPA_KEY = os.environ.get("SUPA_ANON_KEY", "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8")  # chave publica (anon)
-START  = os.environ.get("HF_START", "2026-06-20")   # so requisicoes a partir desta data
+# MARCO: so importa requisicoes criadas a partir daqui (CodNumeroSequencialTela e sempre crescente).
+# Definido em 22/06/2026 14:29 para "comecar do zero" sem reimportar as 34 que o Eduardo ja trabalhou.
+MIN_ID = int(os.environ.get("HF_MIN_ID", "912749"))
 
 SQL = (
     "SELECT r.NumeroSequencial AS hf, r.Animal AS animal, r.Proprietario AS tutor, "
@@ -21,7 +23,7 @@ SQL = (
     "FROM TabExameNumeroSolicitado s "
     "JOIN `TabExameNumeroRequisiçao` r ON r.CodNumeroSequencialTela = s.CodNumeroSequencialTela "
     "WHERE s.CodCategoria = 15 AND (s.Exame LIKE 'Histologia%%' OR s.Exame LIKE '%%Cell Block%%') "
-    "AND s.Exame NOT LIKE 'Solicita%%' AND r.DataEntrada >= %s "
+    "AND s.Exame NOT LIKE 'Solicita%%' AND r.CodNumeroSequencialTela > %s "
     "GROUP BY r.CodNumeroSequencialTela"
 )
 
@@ -29,7 +31,7 @@ def main():
     conn = pymysql.connect(host=HOST, user=USER, password=PWD, database=DB,
                            connect_timeout=20, read_timeout=180, charset="utf8mb4",
                            cursorclass=pymysql.cursors.DictCursor)
-    cur = conn.cursor(); cur.execute(SQL, (START,)); rows = cur.fetchall(); conn.close()
+    cur = conn.cursor(); cur.execute(SQL, (MIN_ID,)); rows = cur.fetchall(); conn.close()
     items = []
     for r in rows:
         cliente = (r.get("cliente") or ""); tutor = (r.get("tutor") or ""); animal = (r.get("animal") or "")
