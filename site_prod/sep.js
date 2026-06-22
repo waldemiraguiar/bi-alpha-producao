@@ -5,6 +5,9 @@
 (function () {
   const API = '/api/separacao';
   const MEK = 'sep_me', USK = 'sep_users';
+  // Contagem OFICIAL começa 23/jun/2026 (22/jun é treino e NÃO conta no placar/histórico).
+  // Para começar a contar de outro dia, mude esta data (ano, mês-1, dia).
+  const PISO_OFICIAL = new Date(2026, 5, 23, 0, 0, 0).getTime();
   let MODE = 'tv', view = 'separar', period = 'hoje';
   let marks = {};                 // chave -> marcação
   let selCat = '';                // categoria selecionada (abas do Separar)
@@ -169,7 +172,7 @@
     // numerador/denominador a partir das marcações (pontualidade da separação)
     const agg = {};
     Object.values(marks).forEach(m => {
-      if (!m.ts_sep) return;
+      if (!m.ts_sep || m.ts_sep < PISO_OFICIAL) return;   // treino (antes do piso) não conta
       const dia = new Date(m.ts_sep).toISOString().slice(0, 10);
       if (dia < cut) return;
       const a = agg[m.cat] = agg[m.cat] || { cat: m.cat, total: 0, ok: 0 };
@@ -204,7 +207,7 @@
     const cut = histPer === 'dia' ? new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00').getTime()
       : histPer === 'semana' ? now - 7 * 864e5
         : histPer === 'mes' ? now - 30 * 864e5 : 0;
-    let ms = Object.values(marks).filter(m => m.ts_sep && m.ts_sep >= cut).sort((a, b) => b.ts_sep - a.ts_sep);
+    let ms = Object.values(marks).filter(m => m.ts_sep && m.ts_sep >= PISO_OFICIAL && m.ts_sep >= cut).sort((a, b) => b.ts_sep - a.ts_sep);
     const byCat = {}; ms.forEach(m => { (byCat[m.cat] = byCat[m.cat] || []).push(m); });
     const cats = orderedCats(byCat);
     const perLbl = { dia: 'Dia', semana: 'Semana', mes: 'Mês', tudo: 'Tudo' };
