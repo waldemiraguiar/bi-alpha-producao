@@ -1,0 +1,2278 @@
+{
+  "gerado": "2026-06-22T19:44:48.697Z",
+  "total_classificados": 284,
+  "itens": [
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 840,
+      "exame": "Cultura e Antibiograma Aeróbios - Urina",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 563,
+      "exame": "Cultura e Antibiograma Aeróbios",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 736,
+      "exame": "Cultura Fungica",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 396,
+      "exame": "Exame Direto para Sarna e Fungo",
+      "classe": "nao"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 1134,
+      "exame": "Exame Direto para Sarna - Fungo",
+      "classe": "nao"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 894,
+      "exame": "Cultura e Antibiograma - Auricular Esquerdo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 895,
+      "exame": "Cultura e Antibiograma - Auricular Direito",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 299,
+      "exame": "Cultura e Antibiograma Aeróbios",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 393,
+      "exame": "Cultura Fúngica",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 951,
+      "exame": "Tricograma",
+      "classe": "nao"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 816,
+      "exame": "Cultura e Antibiograma Anaeróbios",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 1070,
+      "exame": "Cultura Fungica com Antifungigrama",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 45,
+      "exame": "Coprocultura e Antibiograma",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( Exame Direto para Sarna - Fungo )",
+      "classe": "nao"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 246,
+      "exame": "Hemocultura com Antibiograma",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 1066,
+      "exame": "Coprocultura  e  Antibiograma",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 300,
+      "exame": "Cultura e Antibiograma Anaeróbios",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 688,
+      "exame": "Cultura Fúngica com Antifungigrama",
+      "classe": "interno"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 797,
+      "exame": "Coloração de GRAM",
+      "classe": "nao"
+    },
+    {
+      "cat": "BACTERIOLOGIA - CULTURA",
+      "setor": "Laboratório",
+      "cod": 4,
+      "codex": 395,
+      "exame": "Exame Direto para Fungos Dermatófitos",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 504,
+      "exame": "PCR Babesia spp.",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 498,
+      "exame": "PCR Ehrlichia spp.",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 499,
+      "exame": "PCR FeLV - RNA",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 500,
+      "exame": "PCR FIV - RNA",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 967,
+      "exame": "PCR Anaplasma platys",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1021,
+      "exame": "PCR Babesia Canis",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 495,
+      "exame": "PCR Anaplasma spp.",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 497,
+      "exame": "PCR Ehrlichia Canis",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 881,
+      "exame": "PCR Giardia spp.",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 502,
+      "exame": "PCR Leishmania sp.",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 496,
+      "exame": "PCR Cinomose",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 503,
+      "exame": "PCR Mycoplasma Haemofelis",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 829,
+      "exame": "PCR FeLV - DNA PROVIRAL",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( PCR Giardia spp. )",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 776,
+      "exame": "PCR Leptospira spp.",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 687,
+      "exame": "PCR Dirofilária",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 735,
+      "exame": "PCR PIF - Coronavírus Felino",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 737,
+      "exame": "PCR Leishmania sp. - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 876,
+      "exame": "PCR Parvovírus canino",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 948,
+      "exame": "PCR FeLV - RNA - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 505,
+      "exame": "Sexagem de Aves",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 861,
+      "exame": "PCR FeLV - DNA PROVIRAL - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 830,
+      "exame": "PCR FIV - DNA PROVIRAL",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1158,
+      "exame": "PCR Babesia spp. - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 803,
+      "exame": "PCR Toxoplasma Gondii",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 814,
+      "exame": "PCR Herpesvirus Felino (FHV-1)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1132,
+      "exame": "PCR Coronavirus canino (CCV)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 994,
+      "exame": "PCR Ehrlichia spp. - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 899,
+      "exame": "PCR Bordetella bronchiseptica",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 878,
+      "exame": "PCR Salmonella spp.",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 818,
+      "exame": "PCR Mycoplasma spp.",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 815,
+      "exame": "PCR Calicivírus Felino (FCV)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 681,
+      "exame": "PCR Neospora caninum",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 501,
+      "exame": "PCR Hepatozoon",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1225,
+      "exame": "PCR Babesia gibsoni",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1184,
+      "exame": "PCR Neorickettsia risticii",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1083,
+      "exame": "PCR Chlamydophila felis",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1036,
+      "exame": "PCR Mycobacterium spp.",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 947,
+      "exame": "PCR FIV - RNA - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 130,
+      "exame": "Creatinina Sérica",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 149,
+      "exame": "Uréia",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 121,
+      "exame": "ALT/TGP",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 136,
+      "exame": "Fosfatase Alcalina",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 119,
+      "exame": "Albumina",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 912,
+      "exame": "Proteína Total",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 911,
+      "exame": "Globulina",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 124,
+      "exame": "AST/TGO",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 139,
+      "exame": "Glicose",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 138,
+      "exame": "GGT",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 892,
+      "exame": "Potássio",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 867,
+      "exame": "Sódio",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 137,
+      "exame": "Fósforo",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 128,
+      "exame": "Colesterol Total",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 148,
+      "exame": "Triglicerídeos",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 125,
+      "exame": "Bilirrubina Total",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 173,
+      "exame": "Bilirrubina Direta",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 172,
+      "exame": "Bilirrubina Indireta",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 126,
+      "exame": "Cálcio",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1117,
+      "exame": "Creatinina Urinária",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1119,
+      "exame": "PUCU",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1118,
+      "exame": "Proteína Urinária",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 376,
+      "exame": "Cálcio Iônico",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 264,
+      "exame": "Frutosamina",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1101,
+      "exame": "Colesterol VLDL",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1100,
+      "exame": "Colesterol LDL",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1099,
+      "exame": "Colesterol HDL",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1102,
+      "exame": "Lipideos Totais",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( ALT/TGP )",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 142,
+      "exame": "Lipase",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 122,
+      "exame": "Amilase",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 144,
+      "exame": "Magnésio",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 132,
+      "exame": "Creatinaquinase",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 127,
+      "exame": "Cloretos",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 135,
+      "exame": "Ferro",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 908,
+      "exame": "Fosfatase Alcalina (FAL) Total e Frações",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 652,
+      "exame": "Hemoglobina Glicosilada",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 691,
+      "exame": "Lipase Pancreática Específica - QUALITATIVA Canino",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 177,
+      "exame": "Ácidos Biliares",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 117,
+      "exame": "Ácido Úrico",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 949,
+      "exame": "Lactato",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 919,
+      "exame": "Lipase Pancreática Específica - QUANTITATIVA Canino",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 512,
+      "exame": "Lipase Pancreática Específica - QUANTITATIVA Felino",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1010,
+      "exame": "Ácidos Biliares (Basal + Estímulo)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 123,
+      "exame": "Amônia",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 907,
+      "exame": "Lipase Pancreática Específica - QUALITATIVA - Felino",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 141,
+      "exame": "Ldh",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 913,
+      "exame": "Dessorar - 1 Tubo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1022,
+      "exame": "Relação Albumina-Globulina",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 1079,
+      "exame": "Ácidos Biliares Pós Prandial",
+      "classe": "apoio"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 965,
+      "exame": "Relação Sódio Potássio",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "Laboratório",
+      "cod": 16,
+      "codex": 585,
+      "exame": "Creatinina - líquido cavitário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 678,
+      "exame": "Citologia Neoplásica - 1 Região",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 440,
+      "exame": "Histologia - 1 Fragmento",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 262,
+      "exame": "Citologia Otológica",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 539,
+      "exame": "Citologia Dermatológica",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 441,
+      "exame": "Histologia - 2 Fragmentos",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1024,
+      "exame": "Citologia Otológica - Ouvido Esquerdo",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1025,
+      "exame": "Citologia Otológica - Ouvido Direito",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 247,
+      "exame": "Análise de Líquidos Cavitários com Análise Físico-Química",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 231,
+      "exame": "Citologia Neoplásica - 2 Regiões",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 166,
+      "exame": "Imprint para Esporotricose",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 442,
+      "exame": "Histologia - 3 Fragmentos",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1156,
+      "exame": "Citologia de Liquido Cavitário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 944,
+      "exame": "Citologia Neoplásica - 3 Regiões",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 930,
+      "exame": "Citologia Dermatológica - 2 Regiões",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( Citologia Neoplásica - 1 Região )",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1174,
+      "exame": "Imunoistoquímica - Painel Diagnostico de Neoplasias",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 710,
+      "exame": "Histologia - 4 Fragmentos",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 770,
+      "exame": "Mielograma",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1039,
+      "exame": "Histologia 1 Fragmento - Provitta",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 756,
+      "exame": "Cell Block",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1068,
+      "exame": "Histologia - 6 Fragmentos",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1136,
+      "exame": "Imunoistoquímica - Prognostico para Mastocitoma",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 932,
+      "exame": "Citologia Dermatológica - 3 Regiões",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 694,
+      "exame": "Histologia - 5 Fragmentos",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1000,
+      "exame": "Citologia Neoplásica - 4 Regiões",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 115,
+      "exame": "Citologia Vaginal - 1ª Coleta",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1209,
+      "exame": "Imunoistoquímica - Prognóstico para Tumor Mamário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1086,
+      "exame": "PARR - Diagnóstico e Imunofenotipagem de Linfomas",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1064,
+      "exame": "Citologia Neoplásica - 5 Regiões",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1040,
+      "exame": "Histologia 2 Fragmentos - Provitta",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 933,
+      "exame": "Citologia de Líquido Cavitário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 923,
+      "exame": "Imunoistoquímica - Painel prognóstico para tumores mamários (Ki67, COX2, RE, RP e HER-2)",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 325,
+      "exame": "TSH",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 322,
+      "exame": "T4 Livre Por Diálise",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 616,
+      "exame": "T4 Total - RIE",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 595,
+      "exame": "Cortisol - RIE",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 323,
+      "exame": "T4 Total",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 782,
+      "exame": "Cobalamina",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 311,
+      "exame": "Cortisol",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 613,
+      "exame": "Cortisol (8hs) - RIE",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 799,
+      "exame": "Folato",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 722,
+      "exame": "Cortisol Pós ACTH - RIE",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 592,
+      "exame": "T4 Livre - RIE",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 321,
+      "exame": "T4 Livre",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 344,
+      "exame": "Fenobarbital",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 317,
+      "exame": "Progesterona",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 615,
+      "exame": "Cortisol 8hs",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( Cobalamina )",
+      "classe": "nao"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 778,
+      "exame": "T4 Total Pós Levotiroxina-RIE",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 320,
+      "exame": "T3 Total",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 790,
+      "exame": "Proteina C. Reativa",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 314,
+      "exame": "Cortisol Pós ACTH",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 312,
+      "exame": "Cortisol 4hs",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 577,
+      "exame": "Ferritina",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 612,
+      "exame": "Cortisol4hs-RIE",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 316,
+      "exame": "Insulina",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 366,
+      "exame": "T4 Total Pós Levotiroxina",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 704,
+      "exame": "Relação Cortisol - Creatinina Urinária",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 786,
+      "exame": "Anticorpo Anti-Tireoglobulinas (Tgaa)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 341,
+      "exame": "Dimero D",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 319,
+      "exame": "PTH",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 371,
+      "exame": "Estradiol",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 368,
+      "exame": "Testosterona",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 310,
+      "exame": "ACTH",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 348,
+      "exame": "Imunoglobulina A",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 957,
+      "exame": "Hidroxiprogesterona - RIE",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 327,
+      "exame": "Hidroxiprogesterona",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 309,
+      "exame": "Aldosterona",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 1238,
+      "exame": "Cortisol Urinario",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 315,
+      "exame": "Eritropoetina",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 1202,
+      "exame": "Hidroxiprogesterona Pos ACTH - RIE",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 1075,
+      "exame": "Troponina I",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 868,
+      "exame": "IGF1 - SOMATOMEDINA C",
+      "classe": "apoio"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 361,
+      "exame": "Zinco",
+      "classe": "apoio"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 377,
+      "exame": "Hemograma 2",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 2,
+      "exame": "Hemograma 1",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 4,
+      "exame": "Hemograma 3",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( Hemograma 2 )",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 925,
+      "exame": "Hemograma 2 - Reenvio Coagulado",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 228,
+      "exame": "Coagulograma",
+      "classe": "interno"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 1020,
+      "exame": "Contagem de Reticulocitos",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 920,
+      "exame": "Pesquisa de Microfilária - KNOTT Modificado",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 909,
+      "exame": "Hematoscopia Simples",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 943,
+      "exame": "Pesquisa de Hmtz (esfregaço sanguíneo + capa leucocitária + sangue periférico)",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 378,
+      "exame": "Hemograma 5",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 379,
+      "exame": "Fibrinogênio",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 3,
+      "exame": "Hemograma 4",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 924,
+      "exame": "Hemograma 1 - Reenvio Coagulado",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 83,
+      "exame": "Compatibilidade Sanguínea - Prova Cruzada",
+      "classe": "interno"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 926,
+      "exame": "Hemograma 3 - Reenvio Coagulado",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 9,
+      "exame": "Teste de COOMBS - Canino",
+      "classe": "apoio"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 844,
+      "exame": "Aglutinação em Salina",
+      "classe": "interno"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 256,
+      "exame": "Pesquisa de Sinegaglia Lentz",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 956,
+      "exame": "Plaquetometria",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 961,
+      "exame": "Teste de Compatibilidade - Nofaro",
+      "classe": "interno"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 903,
+      "exame": "Hematócritos (VG) + PPT + Plaquetas",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 676,
+      "exame": "Compatibilidade Sanguínea - Prova Cruzada",
+      "classe": "interno"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 1033,
+      "exame": "Hemograma 2 - Silvestres",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 904,
+      "exame": "Hematócrito (VG) + PPT + Reticulócitos",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 1032,
+      "exame": "Hemograma 1 - Silvestres",
+      "classe": "nao"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 942,
+      "exame": "Pesquisa de Hmtz + Microfilárias",
+      "classe": "nao"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 295,
+      "exame": "Doença de Lyme, Ehrlichiose, Dirofilariose e Anaplasmose - 4DX",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 666,
+      "exame": "FIV + FELV - ELISA Snap",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 674,
+      "exame": "Dirofilária (Ag)",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 725,
+      "exame": "Leishmaniose Canina - ELISA e RIFI - Diluição Plena",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 784,
+      "exame": "Calcidiol - Vit D3 (25-H)",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 230,
+      "exame": "Giardia Ag",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 746,
+      "exame": "SDMA - Dimetilarginina Simétrica",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1038,
+      "exame": "Babesia sp - IgG",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 67,
+      "exame": "Cinomose Ag",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 562,
+      "exame": "Babesia Canis - IgG",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1048,
+      "exame": "Ehrlichia SP IgG",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1029,
+      "exame": "Babesia SP - IgM",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( Leishmaniose Canina - ELISA e RIFI - Diluição Plena )",
+      "classe": "nao"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1047,
+      "exame": "Ehrlichia SP IgM",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 679,
+      "exame": "Anaplasma - IgG",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 960,
+      "exame": "Babesia Canis - IgM",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 671,
+      "exame": "Leishmaniose Canina - ELISA e RIFI",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 754,
+      "exame": "Ehrlichia Canis IgG",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1011,
+      "exame": "Anaplasma - IgM",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 753,
+      "exame": "Ehrlichia Canis IgM",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 714,
+      "exame": "Leishmaniose Anti - rK 39",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 292,
+      "exame": "A.I.E. (Anemia Infecciosa Equina) - ELISA",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 575,
+      "exame": "Cinomose IgG - Elisa",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 66,
+      "exame": "Parvovírus - (Ag)",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 576,
+      "exame": "Cinomose IgM - Elisa",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 668,
+      "exame": "Parvovírus + Coronavírus (Ag)",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 672,
+      "exame": "Leptospirose - SAM",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 730,
+      "exame": "Tripsinogênio (TLI) - Canino",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 738,
+      "exame": "Raiva (Trânsito Iternacional) - União Europeia",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 227,
+      "exame": "Proteínas - ELETROFORESE",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 810,
+      "exame": "Anticorpos Vacinais (Hepatite-Cinomose-Parvoviose Caninos) IGG - Avaliacao Vacinal",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 554,
+      "exame": "Leptospirose (IgG) - ELISA - com Titulação",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1121,
+      "exame": "Toxoplasmose RIFI Felino - (IgG - IgM)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 71,
+      "exame": "Toxoplasmose RIFI Canino - (IgG - IgM)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 768,
+      "exame": "Calcitriol - Vit D3 (1-25-H)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 623,
+      "exame": "Neospora Caninum - IgG + IgM - ELISA",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 827,
+      "exame": "Parvovírus (IgM)",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 761,
+      "exame": "Leptospirose (IgM) - ELISA",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 828,
+      "exame": "Esporotricose - Sporothrix spp - Titulação IgG",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 802,
+      "exame": "Parvovírus (IgG)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 851,
+      "exame": "Teste de Rivalta",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 750,
+      "exame": "Coronavírus PIF - IgG",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1217,
+      "exame": "A.I.E. (Anemia Infecciosa Equina) - IDGA",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1172,
+      "exame": "Panleucopenia Felina Ag",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 621,
+      "exame": "Leishmaniose Felina - ELISA e RIFI",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1235,
+      "exame": "NT-ProBNT Canino",
+      "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 745,
+      "exame": "Cryptococcus Neoformans - (Ag)",
+      "classe": "apoio"
+    },
+    {
+      "cat": "NECRÓPSIA",
+      "setor": "HISTOPATOLOGIA",
+      "cod": 58,
+      "codex": 969,
+      "exame": "Necrópsia - Até 05Kg",
+      "classe": "interno"
+    },
+    {
+      "cat": "NECRÓPSIA",
+      "setor": "HISTOPATOLOGIA",
+      "cod": 58,
+      "codex": 979,
+      "exame": "Cremação Coletiva - Até 05Kg",
+      "classe": "interno"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 11,
+      "exame": "Parasitológico - Fezes - Simples",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 781,
+      "exame": "Coprológico Funcional com Citologia",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 12,
+      "exame": "Parasitológico - Fezes - MIF",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 940,
+      "exame": "Parasitológico - Aves e Silvestres",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 939,
+      "exame": "Pesquisa de Sangue Oculto em Fezes",
+      "classe": "interno"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 1207,
+      "exame": "Parasitológico - 3x Coproparasitologico Seriado",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 1166,
+      "exame": "OPG",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( Parasitológico - Fezes - Simples )",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 941,
+      "exame": "Parasitológico - Platynosomum",
+      "classe": "apoio"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 1183,
+      "exame": "Pesquisa de Acaros Promotores de Sarna",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 15,
+      "exame": "Pesquisa de Ácaros Promotores de Sarna",
+      "classe": "nao"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 1193,
+      "exame": "Parasitológico - Hoffman",
+      "classe": "nao"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 59,
+      "exame": "EAS",
+      "classe": "nao"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 60,
+      "exame": "Análise de Cálculo Urinário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 9999,
+      "exame": "Solicitação de Nova Amostra ( EAS )",
+      "classe": "nao"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 959,
+      "exame": "Análise de Cálculo Urinário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 813,
+      "exame": "Cálcio Urinário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 1096,
+      "exame": "Potássio Urinário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 1095,
+      "exame": "Sódio Urinário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 935,
+      "exame": "Eletroforese de Proteínas Urinárias",
+      "classe": "apoio"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 1097,
+      "exame": "Cloretos Urinário",
+      "classe": "interno"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 526,
+      "exame": "GGT Urinária",
+      "classe": "interno"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 739,
+      "exame": "Cálculo Urinário - Quantitativo",
+      "classe": "apoio"
+    }
+  ]
+}
