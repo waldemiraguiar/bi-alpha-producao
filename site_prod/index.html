@@ -152,6 +152,13 @@ body{font-family:'Inter',sans-serif;background:
 .sepme{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut)}
 .sepme select{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 10px;font-family:inherit;font-weight:700;font-size:13px;outline:none}
 .sepme select:focus{border-color:var(--cyan)}
+.catstrip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.catpill{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 13px;cursor:pointer;font-weight:700;font-size:13px;color:var(--ink)}
+.catpill:hover{background:var(--card2)}
+.catpill.on{background:var(--card2);border-color:var(--cyan);color:var(--cyan)}
+.catpill.haslate.on{border-color:var(--red);color:var(--red)}
+.catpill .cc{font-size:11px;font-weight:800;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 8px}
+.catpill .cc.late{background:var(--red);color:#fff}
 .sepbody{flex:1;overflow-y:auto;min-height:0;padding-right:6px}
 .sepbody::-webkit-scrollbar{width:7px}.sepbody::-webkit-scrollbar-thumb{background:rgba(0,212,255,.2);border-radius:3px}
 .sepcat{margin-bottom:14px;background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:14px;overflow:hidden}

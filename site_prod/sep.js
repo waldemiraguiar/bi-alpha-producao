@@ -7,7 +7,7 @@
   const MEK = 'sep_me', USK = 'sep_users';
   let MODE = 'tv', view = 'separar', period = 'hoje';
   let marks = {};                 // chave -> marcação
-  let collapsed = {};             // categoria recolhida (aba Separar)
+  let selCat = '';                // categoria selecionada (abas dentro do Separar)
   let histCat = '', histDay = '';
   let timer = null;
 
@@ -114,28 +114,35 @@
     return `<div class="seprow">${head}<div class="right2">${badge}<button class="sepbtn go" data-act="separar" data-k="${k}">✓ Separar</button></div></div>`;
   }
 
+  // ordena categorias seguindo a ORDEM da TV (familiaridade); fallback alfabético
+  function catIdx(name) {
+    try { if (typeof ORDER !== 'undefined' && typeof slug === 'function') { const i = ORDER.findIndex(o => slug(name).includes(slug(o))); return i < 0 ? 99 : i; } } catch (e) {}
+    return 99;
+  }
+  function orderedCats(byCat) { return Object.keys(byCat).sort((a, b) => catIdx(a) - catIdx(b) || a.localeCompare(b)); }
+  const rankSt = s => s === 'atrasado' ? 0 : s === 'noprazo' ? 1 : 2;
+
   function viewSeparar() {
     const byCat = {};
     itens().forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
-    const cats = Object.keys(byCat).sort();
+    const cats = orderedCats(byCat);
     if (!cats.length) return `<div class="sepwait">✓ Nada para separar no momento.</div>`;
-    return cats.map(cat => {
-      const arr = byCat[cat];
-      const pend = arr.filter(x => statusOf(x).st !== 'feito');
+    if (!selCat || !byCat[selCat]) selCat = cats[0];
+    const strip = cats.map(c => {
+      const arr = byCat[c];
+      const pend = arr.filter(x => statusOf(x).st !== 'feito').length;
       const late = arr.filter(x => statusOf(x).st === 'atrasado').length;
-      const cl = collapsed[cat];
-      // pendentes primeiro (atrasado no topo), depois feitos
-      const ordered = [...arr].sort((a, b) => {
-        const sa = statusOf(a).st, sb = statusOf(b).st;
-        const rank = s => s === 'atrasado' ? 0 : s === 'noprazo' ? 1 : 2;
-        return rank(sa) - rank(sb);
-      });
-      const rows = cl ? '' : ordered.map(rowSeparar).join('');
-      return `<div class="sepcat"><div class="h" data-cat="${esc2(cat)}">
-          <span>${esc2(cat)}</span>
-          <span class="cnt">${pend.length} a separar${late ? ` · <b style="color:var(--red)">${late} atrasado${late > 1 ? 's' : ''}</b>` : ''} · ${arr.length} total ${cl ? '▸' : '▾'}</span>
-        </div>${rows}</div>`;
+      return `<div class="catpill ${c === selCat ? 'on' : ''} ${late ? 'haslate' : ''}" data-c="${esc2(c)}">
+        <span class="nm">${esc2(c)}</span><span class="cc ${late ? 'late' : ''}">${pend}</span></div>`;
     }).join('');
+    const arr = byCat[selCat];
+    const pend = arr.filter(x => statusOf(x).st !== 'feito');
+    const late = arr.filter(x => statusOf(x).st === 'atrasado').length;
+    const ordered = [...arr].sort((a, b) => rankSt(statusOf(a).st) - rankSt(statusOf(b).st));
+    return `<div class="catstrip">${strip}</div>
+      <div class="sepcat"><div class="h"><span>${esc2(selCat)}</span>
+        <span class="cnt">${pend.length} a separar${late ? ` · <b style="color:var(--red)">${late} atrasado${late > 1 ? 's' : ''}</b>` : ''} · ${arr.length} total</span></div>
+        ${ordered.map(rowSeparar).join('')}</div>`;
   }
 
   function viewAndon() {
@@ -230,7 +237,7 @@
       if (sm.value === '__novo__') { const n = prompt('Seu nome ou iniciais:'); if (n && n.trim()) addUser(n); render(); return; }
       localStorage.setItem(MEK, sm.value); render();
     };
-    el.querySelectorAll('.sepcat>.h[data-cat]').forEach(h => h.onclick = () => { const c = h.dataset.cat; collapsed[c] = !collapsed[c]; render(); });
+    el.querySelectorAll('.catpill[data-c]').forEach(p => p.onclick = () => { selCat = p.dataset.c; render(); });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
