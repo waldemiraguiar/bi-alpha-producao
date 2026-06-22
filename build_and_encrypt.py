@@ -25,6 +25,19 @@ SLA = {16:1, 1:1, 9:2, 15:1, 34:2, 31:3, 4:5, 7:1, 2:1, 58:30, 62:15}
 SLA_DEFAULT = 3
 JUNK = {55,56,60,24,25,35,36,37,50,52,54}   # CANCELADO/DINHEIRO/FAKE/Z NAO UTILIZAR
 
+# Cortes diários (horas) p/ a "baixa" da separação — editar aqui muda os dois cortes
+CORTES = [15, 21]
+# Cofre de separação de amostras (CodExame -> "interno"|"apoio"); fora do cofre = não separa
+COFRE_PATH = os.path.join(ROOT, "cofre_separacao.json")
+def load_cofre():
+    try:
+        d = json.load(open(COFRE_PATH, encoding="utf-8"))
+        m = {int(i["codex"]): i["classe"] for i in d.get("itens", []) if i.get("classe") in ("interno", "apoio")}
+        print(f"[cofre] {len(m)} exames exigem separação"); return m
+    except Exception as e:
+        print(f"[cofre] AVISO: não carregou ({e}); separação ficará vazia"); return {}
+COFRE = load_cofre()
+
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql,p=()): c.execute(sql,p); return c.fetchall()
@@ -58,6 +71,41 @@ def build():
         WHERE s.DataExame>=DATE_SUB(CURDATE(),INTERVAL 30 DAY) AND s.DataExame IS NOT NULL
           AND DATEDIFF(s.DataExame,r.DataEntrada)>=0
         GROUP BY s.CodCategoria""")
+
+    # --- SEPARAÇÃO DE AMOSTRA: exames abertos que exigem separar (cruzado com o cofre) ---
+    sep_itens = []
+    if COFRE:
+        codes = ",".join(str(k) for k in COFRE)
+        sep_rows = q(f"""SELECT s.CodCategoria cod, s.CodExame codex, s.Exame exame,
+            r.NumeroSequencial req, r.AnoRequisiçao ano,
+            r.Animal paciente, r.Proprietario tutor, r.Requisitante vet, r.Cliente clinica,
+            r.DataEntrada entrada, r.UsuarioDataEntrada udata, r.UsuarioHoraEntrada uhora,
+            s.Urgencia urg, DATEDIFF(CURDATE(), r.DataEntrada) dias
+            FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+            WHERE s.DataExame IS NULL AND s.CodExame IN ({codes})
+              AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 10 DAY)
+            ORDER BY r.DataEntrada DESC, r.NumeroSequencial DESC LIMIT 1500""")
+        for r in sep_rows:
+            if r["cod"] in JUNK: continue
+            classe = COFRE.get(r["codex"])
+            if not classe: continue
+            ud = r["udata"] or r["entrada"]; uh = r["uhora"]   # uhora vem como timedelta
+            ent_dt = None
+            if ud is not None:
+                base = datetime.datetime(ud.year, ud.month, ud.day)
+                if isinstance(uh, datetime.timedelta): base = base + uh
+                ent_dt = base.strftime("%Y-%m-%dT%H:%M:%S")
+            sep_itens.append({
+                "req": r["req"], "ano": r["ano"], "codex": r["codex"],
+                "exame": r["exame"], "cat": nome(r["cod"]), "cod": r["cod"],
+                "paciente": (r["paciente"] or "").strip() or "—",
+                "tutor": (r["tutor"] or "").strip(),
+                "vet": (r["vet"] or "").strip(),
+                "clinica": (r["clinica"] or "").strip(),
+                "entrada": str(r["entrada"]) if r["entrada"] else None,
+                "entrada_dt": ent_dt, "classe": classe,
+                "urgente": (r["urg"] == 1), "dias": r["dias"] or 0,
+            })
 
     cat = {}
     def C(cod):
@@ -121,7 +169,10 @@ def build():
 
     D={"meta":{"gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
                "obs":"Painel operacional — fila e prazos (últimos 10 dias). Sem valores e sem volumes."},
-       "resumo":resumo,"categorias":categorias,"atrasados":atrasados}
+       "resumo":resumo,"categorias":categorias,"atrasados":atrasados,
+       "separacao":{"cutoffs":CORTES,
+                    "gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
+                    "itens":sep_itens}}
     conn.close()
     return D
 
@@ -140,7 +191,7 @@ def encrypt(D):
          "iv":base64.b64encode(iv).decode(),"ct":base64.b64encode(ct).decode()}
     os.makedirs(os.path.dirname(OUT_ENC),exist_ok=True)
     json.dump(env,open(OUT_ENC,"w"),separators=(",",":"))
-    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])}")
+    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])} separacao={len(D.get('separacao',{}).get('itens',[]))}")
 
 if __name__=="__main__":
     last=None
