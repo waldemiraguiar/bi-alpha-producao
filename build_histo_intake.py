@@ -15,7 +15,7 @@ SUPA_KEY = os.environ.get("SUPA_ANON_KEY", "sb_publishable_fcodHc3AxR_HQ-aduMGzl
 START  = os.environ.get("HF_START", "2026-06-20")   # so requisicoes a partir desta data
 
 SQL = (
-    "SELECT r.CodNumeroSequencialTela AS hf, r.Animal AS animal, r.Proprietario AS tutor, "
+    "SELECT r.NumeroSequencial AS hf, r.Animal AS animal, r.Proprietario AS tutor, "
     "r.Especie AS especie, r.Cliente AS cliente, r.DataEntrada AS entrada, r.Urgencia AS urgencia, "
     "GROUP_CONCAT(DISTINCT s.Exame SEPARATOR ' | ') AS exames "
     "FROM TabExameNumeroSolicitado s "
