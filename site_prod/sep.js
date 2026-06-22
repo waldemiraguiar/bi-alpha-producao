@@ -7,8 +7,9 @@
   const MEK = 'sep_me', USK = 'sep_users';
   let MODE = 'tv', view = 'separar', period = 'hoje';
   let marks = {};                 // chave -> marcação
-  let selCat = '';                // categoria selecionada (abas dentro do Separar)
-  let histCat = '', histDay = '';
+  let selCat = '';                // categoria selecionada (abas do Separar)
+  let selCatA = '';               // categoria selecionada (abas do Atrasados/Andon)
+  let histCat = '', histPer = 'dia'; // filtro do Histórico: categoria + período (dia/semana/mes/tudo)
   let timer = null;
 
   const $ = id => document.getElementById(id);
@@ -149,11 +150,15 @@
     const late = itens().filter(x => statusOf(x).st === 'atrasado');
     if (!late.length) return `<div class="andonempty">✓ Nenhuma amostra atrasada. Tudo separado no prazo! 🎉</div>`;
     const byCat = {}; late.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
-    return Object.keys(byCat).sort((a, b) => byCat[b].length - byCat[a].length).map(cat => {
-      const arr = byCat[cat];
-      return `<div class="sepcat andon"><div class="h"><span>🚨 ${esc2(cat)}</span><span class="cnt">${arr.length} amostra${arr.length > 1 ? 's' : ''} não separada${arr.length > 1 ? 's' : ''}</span></div>
+    const cats = orderedCats(byCat);
+    if (!selCatA || !byCat[selCatA]) selCatA = cats[0];
+    const strip = cats.map(c => `<div class="catpill haslate ${c === selCatA ? 'on' : ''}" data-ca="${esc2(c)}">
+        <span class="nm">${esc2(c)}</span><span class="cc late">${byCat[c].length}</span></div>`).join('');
+    const arr = byCat[selCatA];
+    return `<div class="catstrip">${strip}</div>
+      <div class="sepcat andon"><div class="h"><span>🚨 ${esc2(selCatA)}</span>
+        <span class="cnt">${arr.length} amostra${arr.length > 1 ? 's' : ''} não separada${arr.length > 1 ? 's' : ''}</span></div>
         ${arr.map(rowSeparar).join('')}</div>`;
-    }).join('');
   }
 
   function viewPlacar() {
@@ -192,19 +197,25 @@
   }
 
   function viewHist() {
-    let ms = Object.values(marks).filter(m => m.ts_sep).sort((a, b) => b.ts_sep - a.ts_sep);
-    const cats = [...new Set(ms.map(m => m.cat))].sort();
-    if (histCat) ms = ms.filter(m => m.cat === histCat);
-    if (histDay) ms = ms.filter(m => new Date(m.ts_sep).toISOString().slice(0, 10) === histDay);
-    const catOpts = `<option value="">Todas as categorias</option>` + cats.map(c => `<option value="${esc2(c)}"${c === histCat ? ' selected' : ''}>${esc2(c)}</option>`).join('');
-    const filt = `<div class="histfilt">
-      <select id="histcat">${catOpts}</select>
-      <input type="date" id="histday" value="${histDay}">
-      ${histDay || histCat ? '<button class="perbtn" id="histclr">limpar filtro</button>' : ''}
-      <span style="margin-left:auto;color:var(--mut);font-size:12px">${ms.length} registro${ms.length !== 1 ? 's' : ''}</span></div>`;
-    if (!ms.length) return filt + `<div class="sepwait">Nenhuma separação registrada${histCat || histDay ? ' com esse filtro' : ' ainda'}.</div>`;
+    const now = Date.now();
+    const cut = histPer === 'dia' ? new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00').getTime()
+      : histPer === 'semana' ? now - 7 * 864e5
+        : histPer === 'mes' ? now - 30 * 864e5 : 0;
+    let ms = Object.values(marks).filter(m => m.ts_sep && m.ts_sep >= cut).sort((a, b) => b.ts_sep - a.ts_sep);
+    const byCat = {}; ms.forEach(m => { (byCat[m.cat] = byCat[m.cat] || []).push(m); });
+    const cats = orderedCats(byCat);
+    const perLbl = { dia: 'Dia', semana: 'Semana', mes: 'Mês', tudo: 'Tudo' };
+    const perBtns = `<div class="perbtns">${['dia', 'semana', 'mes', 'tudo'].map(p => `<div class="perbtn ${histPer === p ? 'on' : ''}" data-hper="${p}">${perLbl[p]}</div>`).join('')}</div>`;
+    const pills = `<div class="catstrip">
+      <div class="catpill ${!histCat ? 'on' : ''}" data-hc=""><span class="nm">Todas</span><span class="cc">${ms.length}</span></div>`
+      + cats.map(c => `<div class="catpill ${histCat === c ? 'on' : ''}" data-hc="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc">${byCat[c].length}</span></div>`).join('') + `</div>`;
+    const shown = histCat ? ms.filter(m => m.cat === histCat) : ms;
+    const head = `<div class="histfilt"><b style="font-size:15px">📋 Histórico de separações</b>${perBtns}
+      <span style="margin-left:auto;color:var(--mut);font-size:12px">${shown.length} registro${shown.length !== 1 ? 's' : ''}</span></div>${pills}`;
+    if (!shown.length) return head + `<div class="sepwait">Nenhuma separação registrada nesse período${histCat ? ' nessa categoria' : ''}.</div>`;
     const fmt = ts => { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toTimeString().slice(0, 5); };
-    const rows = ms.map(m => `<tr>
+    const ms2 = shown;
+    const rows = ms2.map(m => `<tr>
       <td style="white-space:nowrap">${fmt(m.ts_sep)}</td>
       <td style="color:var(--cyan);font-weight:700">${esc2(m.req)}/${esc2(m.ano)}</td>
       <td>${esc2(m.paciente)}</td>
@@ -214,7 +225,7 @@
       <td>${esc2(m.por)}${m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}</td>
       <td><span class="est ${m.estado}">${m.estado}</span>${m.data_env ? `<div style="font-size:10px;color:var(--mut)">env ${m.data_env}</div>` : ''}</td>
     </tr>`).join('');
-    return filt + `<table class="htable"><thead><tr>
+    return head + `<table class="htable"><thead><tr>
       <th>Quando</th><th>Req</th><th>Paciente</th><th>Exame</th><th>Categoria</th><th>Tipo</th><th>Quem separou</th><th>Estado</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
   }
@@ -238,6 +249,9 @@
       localStorage.setItem(MEK, sm.value); render();
     };
     el.querySelectorAll('.catpill[data-c]').forEach(p => p.onclick = () => { selCat = p.dataset.c; render(); });
+    el.querySelectorAll('.catpill[data-ca]').forEach(p => p.onclick = () => { selCatA = p.dataset.ca; render(); });
+    el.querySelectorAll('.catpill[data-hc]').forEach(p => p.onclick = () => { histCat = p.dataset.hc; render(); });
+    el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
@@ -246,9 +260,6 @@
       else if (act === 'voltar') step('voltar', k, 'Desfazer o último passo desta amostra?');
     });
     el.querySelectorAll('.perbtn[data-per]').forEach(p => p.onclick = () => { period = p.dataset.per; render(); });
-    const hc = $('histcat'); if (hc) hc.onchange = () => { histCat = hc.value; render(); };
-    const hd = $('histday'); if (hd) hd.onchange = () => { histDay = hd.value; render(); };
-    const cl = $('histclr'); if (cl) cl.onclick = () => { histCat = ''; histDay = ''; render(); };
   }
 
   /* ---- modo ---- */
