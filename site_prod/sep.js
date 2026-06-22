@@ -271,19 +271,23 @@
   /* ---- modo ---- */
   async function setMode(m) {
     MODE = m;
-    $('tabs').style.display = m === 'tv' ? '' : 'none';
-    $('content').style.display = m === 'tv' ? '' : 'none';
+    const isTv = m === 'tv';
+    $('tabs').style.display = isTv ? '' : 'none';
+    $('content').style.display = isTv ? '' : 'none';
     $('sep').style.display = m === 'sep' ? '' : 'none';
+    const cliEl = $('cli'); if (cliEl) cliEl.style.display = m.indexOf('cli-') === 0 ? '' : 'none';
     document.querySelectorAll('#modesw .msbtn').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+    // rotação só roda na TV
+    try { if (typeof ROT !== 'undefined' && ROT) clearInterval(ROT); } catch (e) {}
+    if (isTv && typeof startRotation === 'function') startRotation();
+    // timer da Triagem só no modo sep
     if (m === 'sep') {
-      try { if (typeof ROT !== 'undefined' && ROT) clearInterval(ROT); } catch (e) {}
       await loadMarks(); render();
       if (timer) clearInterval(timer);
       timer = setInterval(async () => { if (MODE === 'sep') { await loadMarks(); render(); } }, 30000);
-    } else {
-      if (timer) { clearInterval(timer); timer = null; }
-      if (typeof startRotation === 'function') startRotation();
-    }
+    } else if (timer) { clearInterval(timer); timer = null; }
+    // delega os modos de cliente
+    if (window.CLI) await window.CLI.onMode(m);
   }
 
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
