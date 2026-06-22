@@ -44,7 +44,7 @@ def main():
             "especie": r.get("especie") or "",
             "tipo_material": r.get("exames") or "",
             "observacoes": ("Cliente: " + cliente) if cliente else "",
-            "urgente": bool(r.get("urgencia")),
+            "urgente": (r.get("urgencia") == 1),   # HF: 1=urgente, 2=normal/rotina
             "pet_love": pet,
             "data_entrada": ent.isoformat() if hasattr(ent, "isoformat") else (str(ent) if ent else None),
         })
