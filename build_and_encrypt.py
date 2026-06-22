@@ -107,6 +107,28 @@ def build():
                 "urgente": (r["urg"] == 1), "dias": r["dias"] or 0,
             })
 
+    # --- CLIENTES (clínicas): lista p/ busca + requisições recentes p/ acender alerta ---
+    cli_lista = q("""SELECT CodCliente cod, MAX(Cliente) nome
+        FROM `TabExameNumeroRequisiçao`
+        WHERE Cliente IS NOT NULL AND TRIM(Cliente)<>'' AND DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 365 DAY)
+        GROUP BY CodCliente ORDER BY nome""")
+    cli_lista = [{"cod": r["cod"], "nome": (r["nome"] or "").strip()} for r in cli_lista if r["nome"]]
+    cli_reqs_raw = q("""SELECT CodCliente cod, Cliente cliente, NumeroSequencial req, AnoRequisiçao ano,
+        Animal paciente, Requisitante vet, DataEntrada entrada, UsuarioDataEntrada udata, UsuarioHoraEntrada uhora
+        FROM `TabExameNumeroRequisiçao`
+        WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 2 DAY)
+        ORDER BY DataEntrada DESC, NumeroSequencial DESC LIMIT 2000""")
+    cli_reqs = []
+    for r in cli_reqs_raw:
+        ud = r["udata"] or r["entrada"]; uh = r["uhora"]; dt = None
+        if ud is not None:
+            base = datetime.datetime(ud.year, ud.month, ud.day)
+            if isinstance(uh, datetime.timedelta): base = base + uh
+            dt = base.strftime("%Y-%m-%dT%H:%M:%S")
+        cli_reqs.append({"cod": r["cod"], "cliente": (r["cliente"] or "").strip(),
+                         "req": r["req"], "ano": r["ano"], "paciente": (r["paciente"] or "").strip() or "—",
+                         "vet": (r["vet"] or "").strip(), "dt": dt})
+
     cat = {}
     def C(cod):
         if cod not in cat:
@@ -172,7 +194,8 @@ def build():
        "resumo":resumo,"categorias":categorias,"atrasados":atrasados,
        "separacao":{"cutoffs":CORTES,
                     "gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
-                    "itens":sep_itens}}
+                    "itens":sep_itens},
+       "clientes":{"lista":cli_lista,"reqs":cli_reqs}}
     conn.close()
     return D
 
@@ -191,7 +214,7 @@ def encrypt(D):
          "iv":base64.b64encode(iv).decode(),"ct":base64.b64encode(ct).decode()}
     os.makedirs(os.path.dirname(OUT_ENC),exist_ok=True)
     json.dump(env,open(OUT_ENC,"w"),separators=(",",":"))
-    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])} separacao={len(D.get('separacao',{}).get('itens',[]))}")
+    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])} separacao={len(D.get('separacao',{}).get('itens',[]))} clientes_lista={len(D.get('clientes',{}).get('lista',[]))} clientes_reqs={len(D.get('clientes',{}).get('reqs',[]))}")
 
 if __name__=="__main__":
     last=None
