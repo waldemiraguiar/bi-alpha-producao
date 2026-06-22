@@ -51,9 +51,11 @@
     const dt = r.dt ? new Date(r.dt.replace(' ', 'T')) : null;
     const when = dt && !isNaN(dt) ? dt.toLocaleDateString('pt-BR') + ' ' + dt.toTimeString().slice(0, 5) : '';
     const chave = `${r.req}-${r.ano}`;
+    const ic = classe === 'sensivel' ? '🔴' : '🟡';
     return `<div class="alertcard ${classe}">
-      <div><div class="cli">${esc2(r.cliente)}</div>
-        <div class="meta">Req <b>${esc2(r.req)}/${esc2(r.ano)}</b> · paciente <b>${esc2(r.paciente)}</b>${r.vet ? ` · vet ${esc2(r.vet)}` : ''} · ${when}</div></div>
+      <div><div class="cli">${ic} ${esc2(r.cliente)}</div>
+        <div class="big2">🐾 ${esc2(r.paciente)} &nbsp; <span class="reg">Reg ${esc2(r.req)}/${esc2(r.ano)}</span></div>
+        <div class="meta">${r.vet ? `vet ${esc2(r.vet)} · ` : ''}${when}</div></div>
       <button class="baixab" data-baixa="${chave}" data-cod="${escA(r.cod)}" data-cliente="${escA(r.cliente)}" data-req="${escA(r.req)}" data-ano="${escA(r.ano)}" data-paciente="${escA(r.paciente)}">✓ baixa</button>
     </div>`;
   }
