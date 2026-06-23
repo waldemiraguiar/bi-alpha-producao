@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 BASE = "https://agente-crm-matriz.netlify.app"
+MESA = "https://sophia-lab-alpha.netlify.app/mesa-de-comando.html"
 WA_PHONE = os.environ.get("CALLMEBOT_PHONE", "5521997842246")
 _brt = datetime.datetime.utcnow() - datetime.timedelta(hours=3)   # runner roda em UTC; BRT = UTC-3
 hoje_d = _brt.date()
@@ -87,7 +88,7 @@ wpp = (f"{EMOJI} *{TITULO}* — {diasem}, {hoje}\n{SAUD}, Wal!\n\n"
        f"*🎯 Radar do CRM*\n"
        f"• Parados: {parados}\n• Em queda: {queda}\n• Em alta: {alta}\n"
        f"• Carteira ativa: {carteira} · {risco}% em risco (sem parados)\n\n"
-       f"Painel: {BASE}")
+       f"Painel: {BASE}\n📅 Minha agenda: {MESA}")
 wa_link = "https://wa.me/" + WA_PHONE + "?text=" + quote(wpp)
 
 # ---- e-mail HTML ----
@@ -115,7 +116,9 @@ html = f"""<div style='font-family:Arial;max-width:680px;margin:auto;color:#1a1a
 <div style='text-align:center;margin:22px 0'>
   <a href='{BASE}' style='display:inline-block;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#0A1628;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px'>🎯 Abrir o CRM</a>
   &nbsp;
-  <a href='{wa_link}' style='display:inline-block;background:#25D366;color:#fff;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px'>📲 Mandar no meu WhatsApp</a></div>
+  <a href='{wa_link}' style='display:inline-block;background:#25D366;color:#fff;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px'>📲 Mandar no meu WhatsApp</a>
+  &nbsp;
+  <a href='{MESA}' style='display:inline-block;background:#0A1628;color:#fff;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px;border:1px solid #00D4FF'>📅 Minha agenda</a></div>
 <h3 style='margin:18px 0 6px'>🤖 Frota</h3><div style='font-size:13px;line-height:1.8'>{frota_html}</div>
 <p style='color:#888;font-size:12px;margin-top:16px'>Briefing automático · todo dia 7h · Darwin / Agentes de IA Alpha.</p></div>"""
 
