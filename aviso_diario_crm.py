@@ -113,13 +113,13 @@ def agenda_hoje():
         if ev == hoje_d: evs.append((hhmm or "00:00", summ))
     return sorted(evs)
 
-# ---- 2) TAREFAS do dia (input do Wal via gatilho "Tarefas de hoje") ----
+# ---- 2) TAREFAS do dia (fonte única na Mesa de Comando; input via gatilho "Tarefas de hoje") ----
+TAREFAS_URL = "https://sophia-lab-alpha.netlify.app/tarefas.json"
 def tarefas_hoje():
     try:
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tarefas.json"), encoding="utf-8") as f:
-            T = json.load(f)
-    except Exception:
-        return []
+        T = json.loads(fetch(TAREFAS_URL).decode("utf-8", "replace"))
+    except Exception as e:
+        print("Tarefas: falha ao ler:", e); return []
     itens = list(T.get(hoje_iso, []))
     for x in T.get("fixas", []):
         if x not in itens: itens.append(x)
