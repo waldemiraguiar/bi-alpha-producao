@@ -95,8 +95,8 @@ def kpi(v, l, cor="#0A1628"):
 frota_html = " · ".join(f"<a href='https://{u}' style='color:#0A7'>{n}</a>" for n, u in FROTA)
 html = f"""<div style='font-family:Arial;max-width:680px;margin:auto;color:#1a1a1a'>
 <div style='background:#0A1628;color:#fff;padding:18px 22px;border-radius:10px'>
-  <h2 style='margin:0'>☀️ Bom dia, Wal!</h2>
-  <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>{diasem.capitalize()}, {hoje} · briefing 7h · Agentes de IA Alpha</div></div>
+  <h2 style='margin:0'>☀️ Briefing Matinal</h2>
+  <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>Bom dia, Wal · {diasem.capitalize()}, {hoje} · 7h · Agentes de IA Alpha</div></div>
 <h3 style='margin:18px 0 2px'>📞 Contatos do dia ({len(contatos)})</h3>
 <div style='color:#777;font-size:12.5px'>clientes com retorno agendado p/ hoje ou atrasado</div>
 {contatos_html}
@@ -121,7 +121,13 @@ def enviar_whatsapp(texto):
     try:
         u = ("https://api.callmebot.com/whatsapp.php?phone=" + quote(ph) + "&text=" + quote(texto) + "&apikey=" + quote(ak))
         with urllib.request.urlopen(u, timeout=30) as r:
-            print(f"WhatsApp -> {ph}: HTTP {r.status}")
+            body = r.read().decode("utf-8", "replace")
+            # CallMeBot devolve 200 mesmo quando falha; o motivo real vem no corpo.
+            import re as _re
+            clean = _re.sub("<[^>]+>", " ", body)
+            clean = _re.sub(r"\s+", " ", clean).strip()[:400]
+            ok = ("message queued" in body.lower()) or ("message sent" in body.lower()) or ("enviado" in body.lower())
+            print(f"WhatsApp -> {ph}: HTTP {r.status} | {'OK' if ok else 'CHECAR'} | {clean}")
     except Exception as e:
         print("WhatsApp FALHOU (e-mail seguiu):", e)
 
@@ -133,7 +139,7 @@ if os.environ.get("DRY_RUN"):
     raise SystemExit(0)
 if GU and GP and TO:
     msg = MIMEText(html, "html", "utf-8")
-    msg["Subject"] = f"☀️ Bom dia, Wal — {len(contatos)} contato(s) hoje · {parados} parados ({hoje})"
+    msg["Subject"] = f"☀️ Briefing Matinal — {diasem.capitalize()}, {hoje}"
     msg["From"] = GU; msg["To"] = TO
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as s:
         s.login(GU, GP); s.sendmail(GU, [t.strip() for t in TO.split(",") if t.strip()], msg.as_string())
