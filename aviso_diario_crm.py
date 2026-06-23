@@ -81,36 +81,13 @@ def atras(iso):
         return "hoje" if d == 0 else (f"atrasado {d}d" if d > 0 else f"em {-d}d")
     except Exception: return ""
 
-# ---- 1) AGENDA do dia (Google Calendar via iCal secreto, se configurado) ----
+# ---- 1) AGENDA do dia (lida da store da Mesa de Comando; Darwin mantém via MCP do Google) ----
 def agenda_hoje():
-    url = os.environ.get("CAL_ICS_URL", "").strip()
-    if not url:
-        return None  # agenda ainda nao conectada
     try:
-        raw = fetch(url).decode("utf-8", "replace")
+        T = json.loads(fetch(TAREFAS_URL).decode("utf-8", "replace"))
     except Exception as e:
-        print("Agenda: falha ao ler iCal:", e); return None
-    raw = raw.replace("\r\n", "\n").replace("\n ", "").replace("\n\t", "")
-    evs = []
-    for blk in raw.split("BEGIN:VEVENT")[1:]:
-        body = blk.split("END:VEVENT")[0]; ds = ""; summ = ""
-        for line in body.split("\n"):
-            if line.startswith("DTSTART"): ds = line.split(":", 1)[-1].strip()
-            elif line.startswith("SUMMARY"): summ = line.split(":", 1)[-1].strip()
-        if len(ds) < 8: continue
-        try: ev = datetime.date(int(ds[:4]), int(ds[4:6]), int(ds[6:8]))
-        except Exception: continue
-        hhmm = ""
-        if "T" in ds:
-            t = ds.split("T")[1]
-            try:
-                hh = int(t[:2]); mm = int(t[2:4])
-                if ds.endswith("Z"):   # UTC -> BRT
-                    b = datetime.datetime(ev.year, ev.month, ev.day, hh, mm) - datetime.timedelta(hours=3)
-                    ev = b.date(); hh = b.hour; mm = b.minute
-                hhmm = f"{hh:02d}:{mm:02d}"
-            except Exception: pass
-        if ev == hoje_d: evs.append((hhmm or "00:00", summ))
+        print("Agenda: falha:", e); return None
+    evs = [(e.get("time", ""), e.get("title", "")) for e in T.get("agenda", []) if e.get("date") == hoje_iso]
     return sorted(evs)
 
 # ---- 2) TAREFAS do dia (fonte única = store da Mesa via Netlify Blobs; input pelo celular) ----
