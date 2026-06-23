@@ -1,8 +1,10 @@
-name: Aviso diário 7h (briefing — e-mail + WhatsApp)
+name: Briefing 3x/dia (7h · 12h · 17h — e-mail + WhatsApp)
 
 on:
   schedule:
-    - cron: '0 10 * * *'    # 10:00 UTC = 07:00 BRT — TODO dia (domingo a domingo)
+    - cron: '0 10 * * *'    # 10:00 UTC = 07:00 BRT — Matinal
+    - cron: '0 15 * * *'    # 15:00 UTC = 12:00 BRT — Meio-dia
+    - cron: '0 20 * * *'    # 20:00 UTC = 17:00 BRT — Fim de tarde
   workflow_dispatch:
 
 env:

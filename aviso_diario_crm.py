@@ -15,10 +15,16 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 BASE = "https://agente-crm-matriz.netlify.app"
 WA_PHONE = os.environ.get("CALLMEBOT_PHONE", "5521997842246")
-hoje_d = datetime.date.today()
+_brt = datetime.datetime.utcnow() - datetime.timedelta(hours=3)   # runner roda em UTC; BRT = UTC-3
+hoje_d = _brt.date()
 hoje = hoje_d.strftime("%d/%m/%Y")
 DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 diasem = DIAS[hoje_d.weekday()]
+# Título/saudação conforme a hora do disparo (7h / 12h / 17h)
+_h = _brt.hour
+if _h < 12:   TITULO, SAUD, EMOJI = "Briefing Matinal", "Bom dia", "☀️"
+elif _h < 16: TITULO, SAUD, EMOJI = "Briefing do Meio-dia", "Boa tarde", "🌤️"
+else:         TITULO, SAUD, EMOJI = "Briefing de Fim de Tarde", "Boa tarde", "🌆"
 
 FROTA = [
     ("🧲 CRM — Matriz", "agente-crm-matriz.netlify.app"),
@@ -76,7 +82,7 @@ def atras(iso):
 
 # ---- texto WhatsApp (curto) ----
 cont_top = "\n".join(f"• {c['cliente']} ({atras(c['data'])})" for c in contatos[:8]) or "• nenhum retorno marcado p/ hoje"
-wpp = (f"☀️ *Briefing Matinal* — {diasem}, {hoje}\nBom dia, Wal!\n\n"
+wpp = (f"{EMOJI} *{TITULO}* — {diasem}, {hoje}\n{SAUD}, Wal!\n\n"
        f"*📞 Contatos do dia ({len(contatos)})*\n{cont_top}\n\n"
        f"*🎯 Radar do CRM*\n"
        f"• Parados: {parados}\n• Em queda: {queda}\n• Em alta: {alta}\n"
@@ -95,8 +101,8 @@ def kpi(v, l, cor="#0A1628"):
 frota_html = " · ".join(f"<a href='https://{u}' style='color:#0A7'>{n}</a>" for n, u in FROTA)
 html = f"""<div style='font-family:Arial;max-width:680px;margin:auto;color:#1a1a1a'>
 <div style='background:#0A1628;color:#fff;padding:18px 22px;border-radius:10px'>
-  <h2 style='margin:0'>☀️ Briefing Matinal</h2>
-  <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>Bom dia, Wal · {diasem.capitalize()}, {hoje} · 7h · Agentes de IA Alpha</div></div>
+  <h2 style='margin:0'>{EMOJI} {TITULO}</h2>
+  <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>{SAUD}, Wal · {diasem.capitalize()}, {hoje} · Agentes de IA Alpha</div></div>
 <h3 style='margin:18px 0 2px'>📞 Contatos do dia ({len(contatos)})</h3>
 <div style='color:#777;font-size:12.5px'>clientes com retorno agendado p/ hoje ou atrasado</div>
 {contatos_html}
@@ -139,7 +145,7 @@ if os.environ.get("DRY_RUN"):
     raise SystemExit(0)
 if GU and GP and TO:
     msg = MIMEText(html, "html", "utf-8")
-    msg["Subject"] = f"☀️ Briefing Matinal — {diasem.capitalize()}, {hoje}"
+    msg["Subject"] = f"{EMOJI} {TITULO} — {diasem.capitalize()}, {hoje}"
     msg["From"] = GU; msg["To"] = TO
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as s:
         s.login(GU, GP); s.sendmail(GU, [t.strip() for t in TO.split(",") if t.strip()], msg.as_string())
