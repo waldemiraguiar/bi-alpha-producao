@@ -28,4 +28,5 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+          CAL_ICS_URL: ${{ secrets.CAL_ICS_URL }}
         run: python aviso_diario_crm.py

@@ -81,46 +81,101 @@ def atras(iso):
         return "hoje" if d == 0 else (f"atrasado {d}d" if d > 0 else f"em {-d}d")
     except Exception: return ""
 
-# ---- texto WhatsApp (curto) ----
-cont_top = "\n".join(f"• {c['cliente']} ({atras(c['data'])})" for c in contatos[:8]) or "• nenhum retorno marcado p/ hoje"
+# ---- 1) AGENDA do dia (Google Calendar via iCal secreto, se configurado) ----
+def agenda_hoje():
+    url = os.environ.get("CAL_ICS_URL", "").strip()
+    if not url:
+        return None  # agenda ainda nao conectada
+    try:
+        raw = fetch(url).decode("utf-8", "replace")
+    except Exception as e:
+        print("Agenda: falha ao ler iCal:", e); return None
+    raw = raw.replace("\r\n", "\n").replace("\n ", "").replace("\n\t", "")
+    evs = []
+    for blk in raw.split("BEGIN:VEVENT")[1:]:
+        body = blk.split("END:VEVENT")[0]; ds = ""; summ = ""
+        for line in body.split("\n"):
+            if line.startswith("DTSTART"): ds = line.split(":", 1)[-1].strip()
+            elif line.startswith("SUMMARY"): summ = line.split(":", 1)[-1].strip()
+        if len(ds) < 8: continue
+        try: ev = datetime.date(int(ds[:4]), int(ds[4:6]), int(ds[6:8]))
+        except Exception: continue
+        hhmm = ""
+        if "T" in ds:
+            t = ds.split("T")[1]
+            try:
+                hh = int(t[:2]); mm = int(t[2:4])
+                if ds.endswith("Z"):   # UTC -> BRT
+                    b = datetime.datetime(ev.year, ev.month, ev.day, hh, mm) - datetime.timedelta(hours=3)
+                    ev = b.date(); hh = b.hour; mm = b.minute
+                hhmm = f"{hh:02d}:{mm:02d}"
+            except Exception: pass
+        if ev == hoje_d: evs.append((hhmm or "00:00", summ))
+    return sorted(evs)
+
+# ---- 2) TAREFAS do dia (input do Wal via gatilho "Tarefas de hoje") ----
+def tarefas_hoje():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tarefas.json"), encoding="utf-8") as f:
+            T = json.load(f)
+    except Exception:
+        return []
+    itens = list(T.get(hoje_iso, []))
+    for x in T.get("fixas", []):
+        if x not in itens: itens.append(x)
+    return itens
+
+ag = agenda_hoje()
+tarefas = tarefas_hoje()
+
+# ---- texto WhatsApp (ordem: agenda -> tarefas -> CRM resumido) ----
+if ag is None:   ag_wpp = "• (conecte sua agenda — abra a Mesa de Comando)"
+elif not ag:     ag_wpp = "• sem compromissos hoje 👌"
+else:            ag_wpp = "\n".join(f"• {h}  {s}" for h, s in ag)
+tar_wpp = "\n".join(f"• {t}" for t in tarefas) if tarefas else "• nada anotado — diga: \"Tarefas de hoje: ...\""
 wpp = (f"{EMOJI} *{TITULO}* — {diasem}, {hoje}\n{SAUD}, Wal!\n\n"
-       f"*📞 Contatos do dia ({len(contatos)})*\n{cont_top}\n\n"
-       f"*🎯 Radar do CRM*\n"
-       f"• Parados: {parados}\n• Em queda: {queda}\n• Em alta: {alta}\n"
-       f"• Carteira ativa: {carteira} · {risco}% em risco (sem parados)\n\n"
-       f"Painel: {BASE}\n📅 Minha agenda: {MESA}")
+       f"*📅 Minha agenda*\n{ag_wpp}\n\n"
+       f"*✅ Minhas tarefas*\n{tar_wpp}\n\n"
+       f"*🎯 CRM (resumo)*\n"
+       f"• {len(contatos)} p/ retornar · Parados {parados} · Queda {queda} · Alta {alta}\n"
+       f"• Carteira {carteira} · {risco}% em risco\n\n"
+       f"🎛️ Mesa de Comando: {MESA}")
 wa_link = "https://wa.me/" + WA_PHONE + "?text=" + quote(wpp)
 
 # ---- e-mail HTML ----
 def li(c): return f"<li><b>{c['cliente']}</b> <span style='color:#888'>· retorno {br(c['data'])} ({atras(c['data'])})</span></li>"
-contatos_html = ("<ul style='margin:6px 0 0;padding-left:18px;line-height:1.7'>" + "".join(li(c) for c in contatos[:20]) + "</ul>") \
+contatos_html = ("<ul style='margin:6px 0 0;padding-left:18px;line-height:1.6'>" + "".join(li(c) for c in contatos[:8]) + "</ul>") \
     if contatos else "<p style='color:#888;margin:6px 0 0'>Nenhum retorno agendado para hoje. 👌</p>"
 def kpi(v, l, cor="#0A1628"):
-    return (f"<td style='padding:14px 8px;text-align:center;border:1px solid #e6e9ef;border-radius:10px'>"
-            f"<div style='font-size:26px;font-weight:800;color:{cor}'>{v}</div>"
-            f"<div style='font-size:12px;color:#777;margin-top:3px'>{l}</div></td>")
-frota_html = " · ".join(f"<a href='https://{u}' style='color:#0A7'>{n}</a>" for n, u in FROTA)
+    return (f"<td style='padding:12px 6px;text-align:center;border:1px solid #e6e9ef;border-radius:10px'>"
+            f"<div style='font-size:22px;font-weight:800;color:{cor}'>{v}</div>"
+            f"<div style='font-size:11px;color:#777;margin-top:3px'>{l}</div></td>")
+if ag is None:   ag_html = f"<p style='color:#888;margin:6px 0 0'>🔧 Conecte sua agenda — veja ao vivo na <a href='{MESA}'>Mesa de Comando</a>.</p>"
+elif not ag:     ag_html = "<p style='color:#888;margin:6px 0 0'>Sem compromissos hoje. 👌</p>"
+else:            ag_html = "<ul style='margin:6px 0 0;padding-left:18px;line-height:1.9'>" + "".join(f"<li><b>{h}</b> &nbsp; {s}</li>" for h, s in ag) + "</ul>"
+tar_html = ("<ul style='margin:6px 0 0;padding-left:18px;line-height:1.9'>" + "".join(f"<li>{t}</li>" for t in tarefas) + "</ul>") \
+    if tarefas else "<p style='color:#888;margin:6px 0 0'>Nada anotado. Diga: <i>\"Darwin, tarefas de hoje: …\"</i></p>"
 html = f"""<div style='font-family:Arial;max-width:680px;margin:auto;color:#1a1a1a'>
 <div style='background:#0A1628;color:#fff;padding:18px 22px;border-radius:10px'>
   <h2 style='margin:0'>{EMOJI} {TITULO}</h2>
-  <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>{SAUD}, Wal · {diasem.capitalize()}, {hoje} · Agentes de IA Alpha</div></div>
-<h3 style='margin:18px 0 2px'>📞 Contatos do dia ({len(contatos)})</h3>
-<div style='color:#777;font-size:12.5px'>clientes com retorno agendado p/ hoje ou atrasado</div>
-{contatos_html}
-<h3 style='margin:20px 0 8px'>🎯 Radar / panorama do CRM</h3>
-<table style='width:100%;border-collapse:separate;border-spacing:8px'><tr>
-  {kpi(parados, "Parados", "#FF5470")}{kpi(queda, "Em queda", "#FF8A00")}
-  {kpi(alta, "Em alta", "#0A7")}{kpi(carteira, "Carteira ativa")}{kpi(f"{risco}%", "Em risco (s/ parados)", "#FF5470")}
-</tr></table>
-<p style='color:#888;font-size:12px;margin:6px 0 0'>Inativos e encerrados não entram nestas contagens.</p>
+  <div style='color:#8aa2bd;font-size:13px;margin-top:4px'>{SAUD}, Wal · {diasem.capitalize()}, {hoje} · 🎛️ Mesa de Comando</div></div>
+<h3 style='margin:20px 0 2px'>📅 Minha agenda de hoje</h3>
+{ag_html}
+<h3 style='margin:20px 0 2px'>✅ Minhas tarefas de hoje</h3>
+{tar_html}
 <div style='text-align:center;margin:22px 0'>
-  <a href='{BASE}' style='display:inline-block;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#0A1628;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px'>🎯 Abrir o CRM</a>
-  &nbsp;
-  <a href='{wa_link}' style='display:inline-block;background:#25D366;color:#fff;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px'>📲 Mandar no meu WhatsApp</a>
-  &nbsp;
-  <a href='{MESA}' style='display:inline-block;background:#0A1628;color:#fff;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px;border:1px solid #00D4FF'>📅 Minha agenda</a></div>
-<h3 style='margin:18px 0 6px'>🤖 Frota</h3><div style='font-size:13px;line-height:1.8'>{frota_html}</div>
-<p style='color:#888;font-size:12px;margin-top:16px'>Briefing automático · todo dia 7h · Darwin / Agentes de IA Alpha.</p></div>"""
+  <a href='{MESA}' style='display:inline-block;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#0A1628;font-weight:800;text-decoration:none;border-radius:10px;padding:12px 22px'>🎛️ Abrir Mesa de Comando</a></div>
+<hr style='border:none;border-top:1px solid #e6e9ef;margin:24px 0'>
+<h3 style='margin:10px 0 2px;color:#555'>🎯 CRM — resumo ({len(contatos)} p/ retornar)</h3>
+<div style='color:#999;font-size:12px'>controle da carteira · detalhe no painel</div>
+{contatos_html}
+<table style='width:100%;border-collapse:separate;border-spacing:6px;margin-top:10px'><tr>
+  {kpi(parados, "Parados", "#FF5470")}{kpi(queda, "Em queda", "#FF8A00")}
+  {kpi(alta, "Em alta", "#0A7")}{kpi(carteira, "Carteira")}{kpi(f"{risco}%", "Em risco", "#FF5470")}
+</tr></table>
+<div style='text-align:center;margin:14px 0'>
+  <a href='{BASE}' style='display:inline-block;background:#0A1628;color:#fff;font-weight:700;text-decoration:none;border-radius:9px;padding:9px 18px;font-size:13px'>🎯 Abrir o CRM</a></div>
+<p style='color:#888;font-size:12px;margin-top:16px'>Briefing automático · 7h · 12h · 17h · Darwin / Mesa de Comando.</p></div>"""
 
 # ---- WhatsApp automático (CallMeBot) ----
 def enviar_whatsapp(texto):

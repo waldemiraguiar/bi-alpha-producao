@@ -1,0 +1,8 @@
+{
+  "_doc": "Tarefas do Wal por dia. Chave = data ISO (YYYY-MM-DD). 'fixas' = aparecem todo dia. O Darwin edita via gatilho 'Tarefas de hoje: ...'.",
+  "fixas": [],
+  "2026-06-23": [
+    "Pegar o link iCal secreto da agenda no computador (p/ agenda dentro do briefing)",
+    "Decidir qual fornecedor de scanner chamar p/ teste em 40x"
+  ]
+}
