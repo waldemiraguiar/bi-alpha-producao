@@ -76,7 +76,7 @@ def atras(iso):
 
 # ---- texto WhatsApp (curto) ----
 cont_top = "\n".join(f"• {c['cliente']} ({atras(c['data'])})" for c in contatos[:8]) or "• nenhum retorno marcado p/ hoje"
-wpp = (f"*Bom dia, Wal!* ☀️ {diasem}, {hoje}\n\n"
+wpp = (f"☀️ *Briefing Matinal* — {diasem}, {hoje}\nBom dia, Wal!\n\n"
        f"*📞 Contatos do dia ({len(contatos)})*\n{cont_top}\n\n"
        f"*🎯 Radar do CRM*\n"
        f"• Parados: {parados}\n• Em queda: {queda}\n• Em alta: {alta}\n"
