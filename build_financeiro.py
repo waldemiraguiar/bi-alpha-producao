@@ -340,6 +340,12 @@ def build():
     except Exception as e:
         D["estudo"]={"erro":str(e)}
 
+    # ---------- ANÁLISE DE CUSTOS — Agentes de IA (aba admin) ----------
+    try:
+        D["custos"]=json.load(open(os.path.join(ROOT,"data_custos","custos.json"),encoding="utf-8"))
+    except Exception as e:
+        D["custos"]={"erro":str(e)}
+
     # ---------- ANÁLISES PONTUAIS (janelas 5/10/15/20 dias + mês a mês) ----------
     import calendar
     serie=q(f"SELECT DataExame d, COUNT(*) q, ROUND(SUM(ValorExame)) f FROM {EX} "

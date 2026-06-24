@@ -1,0 +1,38 @@
+{
+  "titulo": "Análise de Custos — Agentes de IA",
+  "atualizado": "24/06/2026",
+  "objetivo": "Entender e reduzir ao mínimo o custo de hospedagem dos agentes de IA da Alpha Labs (Netlify), garantindo que o custo VIABILIZE — e não inviabilize — a operação. Princípio: tudo o mais real possível, com o menor custo possível.",
+  "plano": {
+    "nome": "Netlify Pro (modelo de créditos)",
+    "creditos_inclusos": 3000,
+    "valor_credito_usd": 0.00667,
+    "recarga": "1.500 créditos = US$ 10",
+    "base_mes_usd": 19,
+    "apps": 13
+  },
+  "numeros": [
+    { "label": "Banda usada", "valor": "2,17 GB", "sub": "de ~1 TB — irrelevante" },
+    { "label": "Build", "valor": "89 min", "sub": "irrelevante" },
+    { "label": "Ralo real", "valor": "Funções", "sub": "as telas faziam polling 24/7" }
+  ],
+  "cascata": [
+    { "etapa": "Antes (config original)", "usd_min": 50, "usd_max": 55, "desc": "polling 30s 24/7 + 3 funções separadas + deploy 10min — estourou 3.000 créditos em ~11 dias" },
+    { "etapa": "+ Camada 0 (otimização)", "usd_min": 20, "usd_max": 30, "desc": "pausa o polling com a aba oculta, 30s→60s, cron só em horário útil" },
+    { "etapa": "+ Consolidação (3 funções → 1)", "usd_min": 18, "usd_max": 25, "desc": "uma só chamada por ciclo; só o modo ativo consulta" },
+    { "etapa": "+ Supabase (estado vivo + Realtime)", "usd_min": 19, "usd_max": 19, "desc": "função Netlify ~0; push em vez de polling; tendência ao piso, talvez plano grátis" }
+  ],
+  "achados": [
+    "O custo NÃO era banda nem build (ambos baixíssimos) — era invocação de função: as telas \"perguntando\" pro servidor a cada 30s, o dia inteiro.",
+    "A conta zerou 3.000 créditos em ~11 dias na config antiga (~270/dia ≈ US$ 1,80/dia).",
+    "Deploy frequente NÃO custa crédito — o build roda no GitHub, não no Netlify.",
+    "O auto-topup é US$ 10 (1.500 créditos) por recarga — não US$ 1.500 (susto desfeito).",
+    "O Supabase (Realtime + banco) já é pago pela Alpha Labs → mover o \"vivo\" pra lá é custo afundado, zero gasto novo."
+  ],
+  "conclusao": "Movendo o estado vivo (marcações, alertas, flags) das funções Netlify pro Supabase, o custo de função vai a ~zero, o painel fica MAIS ao vivo (push) e acaba o ponto único de falha (Netlify cair não derruba o dado). Estimativa de fechamento do mês: de ~US$ 50-55 para ~US$ 20-30/mês hoje, com tendência ao piso (~US$ 19 ou plano grátis).",
+  "vigiar": [
+    "Ligar alerta de crédito (~80%) e limite de gasto no painel Netlify → Billing (o freio de mão, pra nunca ter surpresa).",
+    "Após alguns dias estável, desligar as funções Netlify (a rede de segurança) de vez.",
+    "Releitura financeira automática em 26/jun confirma a queda real com os números do painel."
+  ],
+  "fonte": "API do Netlify (conta ALPHA LABS) + contagem de deploys, em 24/06/2026. O saldo exato de crédito só aparece no painel Netlify → Billing → Usage."
+}

@@ -359,6 +359,7 @@ function render(D){
   renderPetlove(D);
   renderMargem(D);
   renderEstudo(D);
+  renderCustos(D);
   wireFTabs();
   wireTools();
 }
@@ -431,7 +432,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -1004,6 +1005,32 @@ function renderEstudo(D){
   html+=`<div class="card"><h3>📅 Acompanhamento mensal <span class="cap">fechar no fim de cada mês</span></h3>
     <table class="atab"><thead><tr><th>Mês</th><th class="num">Lab exames</th><th class="num">Pet Carioca exames</th><th class="num">Pet Love R$</th><th class="num">Pet Love atend.</th></tr></thead><tbody>${trow}</tbody></table>
     <div style="color:var(--mut);font-size:11px;margin-top:8px">${esc(E.obs||'')}</div></div>`;
+  wrap.innerHTML=html;
+}
+function renderCustos(D){
+  const wrap=document.getElementById('custos'); if(!wrap) return;
+  const C=D.custos||{};
+  if(C.erro){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--red)">Falha ao carregar custos: ${esc(C.erro)}</div>`; return; }
+  if(!C.titulo){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--mut)">Sem dados de custo.</div>`; return; }
+  const p=C.plano||{}; const lst=a=>(a||[]).map(x=>`<li style="margin:6px 0">${esc(x)}</li>`).join('');
+  let html=`<div class="card" style="margin-bottom:16px"><h3>💸 ${esc(C.titulo)} <span class="cap">atualizado ${esc(C.atualizado||'')}</span></h3>
+    <div style="color:var(--mut);font-size:13px;line-height:1.6">${esc(C.objetivo||'')}</div></div>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Onde estava o dinheiro</h3>
+    <div style="display:flex;gap:32px;flex-wrap:wrap">${(C.numeros||[]).map(n=>`<div><div class="acmp-l">${esc(n.label)}</div><div class="acmp-v">${esc(n.valor)}</div><div class="acmp-s">${esc(n.sub)}</div></div>`).join('')}</div></div>`;
+  const cas=C.cascata||[]; const mx=Math.max(...cas.map(c=>c.usd_max||0),1);
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Cascata de economia <span class="cap">custo/mês estimado por etapa — quanto mais baixo, melhor</span></h3>${cas.map((c,i)=>{
+    const w=Math.round(100*(c.usd_max||0)/mx); const col=i===0?'var(--red)':(i===cas.length-1?'var(--green)':'var(--amber)');
+    return `<div style="margin:11px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><b>${esc(c.etapa)}</b><b style="color:${col}">US$ ${c.usd_min}${c.usd_max!==c.usd_min?'–'+c.usd_max:''}/mês</b></div>
+      <div style="height:22px;background:rgba(255,255,255,.07);border-radius:7px;overflow:hidden"><div style="width:${w}%;height:100%;background:${col};transition:width .4s"></div></div>
+      <div style="color:var(--mut);font-size:11.5px;margin-top:4px">${esc(c.desc)}</div></div>`;
+  }).join('')}</div>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Plano & economia da conta</h3><div style="font-size:13px;line-height:1.8">
+    <b>${esc(p.nome||'')}</b> · ${num(p.creditos_inclusos)} créditos inclusos (≈ US$ ${Math.round((p.creditos_inclusos||0)*(p.valor_credito_usd||0))}) · base ~US$ ${p.base_mes_usd}/mês · ${p.apps} apps na conta<br>
+    1 crédito = US$ ${p.valor_credito_usd} · recarga = ${esc(p.recarga||'')}</div></div>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>🔎 Achados</h3><ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.6">${lst(C.achados)}</ul></div>`;
+  html+=`<div class="alert-card warn" style="margin-bottom:16px"><div class="ai">🎯</div><div><div class="at">Conclusão</div><div class="ax">${esc(C.conclusao||'')}</div></div></div>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>👀 O que vigiar / próximos passos</h3><ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.6">${lst(C.vigiar)}</ul></div>`;
+  html+=`<div class="card"><div style="color:var(--mut);font-size:11px">Fonte: ${esc(C.fonte||'')}</div></div>`;
   wrap.innerHTML=html;
 }
 function drawEstudoChart(){
