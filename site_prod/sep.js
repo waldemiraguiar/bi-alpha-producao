@@ -10,11 +10,16 @@
   const PISO_OFICIAL = new Date(2026, 5, 23, 0, 0, 0).getTime();
   let MODE = 'tv', view = 'separar', period = 'hoje';
   let marks = {};                 // chave -> marcação
-  let descartes = new Set();      // chaves apagadas (não-separados que o admin removeu)
+  let descartes = new Set();      // chaves apagadas (p/ filtrar do histórico/placar)
+  let descartesList = [];         // arquivo COMPLETO dos apagados (histórico do histórico)
   let selCat = '';                // categoria selecionada (abas do Separar)
   let selCatA = '';               // categoria selecionada (abas do Atrasados/Andon)
   let histCat = '', histPer = 'dia', histFiltro = 'todos'; // Histórico: categoria + período + (todos/separados/nao)
+  let apCat = '', apPer = 'mes';  // Apagados: categoria + período (dia/semana/mes/ano/tudo)
   let timer = null;
+  const ADMK = 'sep_admin';
+  const adminPin = () => localStorage.getItem(ADMK) || '';
+  const isAdmin = () => !!adminPin();
 
   const $ = id => document.getElementById(id);
   const esc2 = s => (typeof esc === 'function' ? esc(s) : String(s == null ? '' : s));
@@ -49,7 +54,7 @@
 
   /* ---- rede ---- */
   async function loadMarks() {
-    try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); descartes = new Set((j.descartes || []).map(d => d.chave)); } } catch (e) {}
+    try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); descartesList = j.descartes || []; descartes = new Set(descartesList.map(d => d.chave)); } } catch (e) {}
   }
   async function post(payload) {
     try {
@@ -59,14 +64,28 @@
       marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); return true;
     } catch (e) { alert('Erro de conexão.'); return false; }
   }
-  // apagar não-separados (unitário ou lote) — undo=true desfaz
-  async function descartar(chaves, undo) {
+  // apagar não-separados (unitário ou lote) — SÓ ADMIN. itens = objetos completos; undo passa só chaves
+  async function descartar(itens, undo) {
+    if (!isAdmin()) { alert('Só o admin pode apagar/restaurar. Destrave com o PIN (botão 🔓 Admin no topo).'); return false; }
     try {
-      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: undo ? 'undescartar' : 'descartar', chaves, por: me(), senha: window.__pwd }) });
+      const body = undo
+        ? { acao: 'undescartar', chaves: itens.map(i => i.chave || i) }
+        : { acao: 'descartar', itens: itens.map(i => ({ chave: i.chave, req: i.req, ano: i.ano, codex: i.codex, exame: i.exame, cat: i.cat, paciente: i.paciente, dt: i.dt })) };
+      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, admin: adminPin(), por: me() || 'admin', senha: window.__pwd }) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) { alert(j.erro || 'Não foi possível apagar.'); return false; }
-      descartes = new Set((j.descartes || []).map(d => d.chave)); render(); return true;
+      if (!r.ok) { alert(j.erro || 'Não foi possível apagar.'); if (/admin/i.test(j.erro || '')) { localStorage.removeItem(ADMK); render(); } return false; }
+      descartesList = j.descartes || []; descartes = new Set(descartesList.map(d => d.chave)); render(); return true;
     } catch (e) { alert('Erro de conexão.'); return false; }
+  }
+  async function adminUnlock() {
+    if (isAdmin()) { if (confirm('Travar o modo admin neste aparelho?')) { localStorage.removeItem(ADMK); render(); } return; }
+    const pin = prompt('PIN de admin (para apagar e restaurar não-separados):'); if (!pin) return;
+    try {
+      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'admincheck', admin: pin, senha: window.__pwd }) });
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) { localStorage.setItem(ADMK, pin); render(); }
+      else alert('PIN de admin incorreto.');
+    } catch (e) { alert('Erro de conexão.'); }
   }
 
   /* ---- ações ---- */
@@ -92,15 +111,18 @@
     const andon = it.filter(x => statusOf(x).st === 'atrasado').length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
+    const apN = descartesList.length;
     return `<div class="sephead">
       <div class="septabs">
         <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar <span class="c">${pend}</span></div>
         <div class="septab andon ${view === 'andon' ? 'on' : ''}" data-v="andon">🚨 Atrasados <span class="c">${andon}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
+        <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
       </div>
-      <div class="sepme">Você:
-        <select id="sepme"><option value="">— escolher —</option>${opts}<option value="__novo__">＋ adicionar nome…</option></select>
+      <div class="sepme">
+        <button class="adminbtn ${isAdmin() ? 'on' : ''}" id="adminbtn" title="apagar/restaurar não-separados">${isAdmin() ? '🔓 Admin' : '🔒 Admin'}</button>
+        Você: <select id="sepme"><option value="">— escolher —</option>${opts}<option value="__novo__">＋ adicionar nome…</option></select>
       </div>
     </div>`;
   }
@@ -222,7 +244,7 @@
       const dia = (u.dt || '').slice(0, 10); if (!dia || dia < floor) return;
       const k = chaveOf(u); if (descartes.has(k)) return;
       const m = marks[k];
-      rows.push({ chave: k, req: u.req, ano: u.ano, cat: u.cat, exame: u.exame, paciente: u.paciente, dt: u.dt, sep: !!(m && m.estado), m });
+      rows.push({ chave: k, req: u.req, ano: u.ano, codex: u.codex, cat: u.cat, exame: u.exame, paciente: u.paciente, dt: u.dt, sep: !!(m && m.estado), m });
     });
     rows.sort((a, b) => (a.sep !== b.sep) ? (a.sep ? 1 : -1) : (a.dt < b.dt ? 1 : a.dt > b.dt ? -1 : 0)); // não-separados primeiro
     return rows;
@@ -246,7 +268,7 @@
       <div class="catpill ${!histCat ? 'on' : ''}" data-hc=""><span class="nm">Todas</span><span class="cc">${all.length}</span></div>`
       + cats.map(c => `<div class="catpill ${histCat === c ? 'on' : ''}" data-hc="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc">${byCat[c].length}</span></div>`).join('') + `</div>`;
     const misses = shown.filter(r => !r.sep);
-    const batch = misses.length ? `<button class="perbtn" id="histdelbatch" style="border-color:var(--red);color:var(--red);font-weight:800">🗑 Apagar ${misses.length} não-separado${misses.length > 1 ? 's' : ''} (deste filtro)</button>` : '';
+    const batch = (isAdmin() && misses.length) ? `<button class="perbtn" id="histdelbatch" style="border-color:var(--red);color:var(--red);font-weight:800">🗑 Apagar ${misses.length} não-separado${misses.length > 1 ? 's' : ''} (deste filtro)</button>` : '';
     const head = `<div class="histfilt"><b style="font-size:15px">📋 Histórico</b>${perBtns}${fBtns}
       <span style="margin-left:auto;color:var(--mut);font-size:12px">✓ ${nSep} separados · <b style="color:var(--red)">✗ ${nNao} não</b></span></div>${pills}
       ${batch ? `<div class="histfilt">${batch}</div>` : ''}`;
@@ -260,7 +282,7 @@
         : `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`;
       const del = r.sep
         ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="mark" title="desfazer marcação">↩</button>`
-        : `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="miss" title="apagar este não-separado">✕</button>`;
+        : (isAdmin() ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="miss" title="apagar este não-separado (admin)">✕</button>` : `<span style="color:var(--mut);font-size:13px" title="só admin apaga">🔒</span>`);
       return `<tr style="${r.sep ? '' : 'background:rgba(255,84,112,.06)'}">
         <td style="white-space:nowrap">${when}</td>
         <td style="color:var(--cyan);font-weight:700">${esc2(r.req)}/${esc2(r.ano)}</td>
@@ -276,6 +298,37 @@
       </tr></thead><tbody>${rowsHtml}</tbody></table>`;
   }
 
+  // 🗑 APAGADOS (histórico do histórico) — todos veem; só admin restaura
+  function viewApagados() {
+    const now = Date.now();
+    const cut = apPer === 'dia' ? new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00').getTime()
+      : apPer === 'semana' ? now - 7 * 864e5 : apPer === 'mes' ? now - 30 * 864e5 : apPer === 'ano' ? now - 365 * 864e5 : 0;
+    const within = descartesList.filter(d => (d.ts || 0) >= cut);
+    const byCat = {}; within.forEach(d => { (byCat[d.cat] = byCat[d.cat] || []).push(d); });
+    const cats = orderedCats(byCat);
+    let list = (apCat ? within.filter(d => d.cat === apCat) : within).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const perLbl = { dia: 'Dia', semana: 'Semana', mes: 'Mês', ano: 'Ano', tudo: 'Tudo' };
+    const perBtns = `<div class="perbtns">${['dia', 'semana', 'mes', 'ano', 'tudo'].map(p => `<div class="perbtn ${apPer === p ? 'on' : ''}" data-apper="${p}">${perLbl[p]}</div>`).join('')}</div>`;
+    const pills = `<div class="catstrip"><div class="catpill ${!apCat ? 'on' : ''}" data-apc=""><span class="nm">Todas</span><span class="cc">${within.length}</span></div>`
+      + cats.map(c => `<div class="catpill ${apCat === c ? 'on' : ''}" data-apc="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc">${byCat[c].length}</span></div>`).join('') + `</div>`;
+    const head = `<div class="histfilt"><b style="font-size:15px">🗑 Apagados <span style="color:var(--mut);font-weight:400;font-size:12px">(histórico do histórico — nada se perde)</span></b>${perBtns}
+      <span style="margin-left:auto;color:var(--mut);font-size:12px">${list.length} registro${list.length !== 1 ? 's' : ''}</span></div>${pills}`;
+    if (!list.length) return head + `<div class="sepwait">Nenhum item apagado nesse período.</div>`;
+    const fmtTs = ts => { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toTimeString().slice(0, 5); };
+    const fmtD = d => { const p = String(d || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : ''; };
+    const rows = list.map(d => `<tr>
+      <td style="white-space:nowrap">${fmtTs(d.ts)}</td>
+      <td style="color:var(--cyan);font-weight:700">${esc2(d.req)}/${esc2(d.ano)}</td>
+      <td>${esc2(d.paciente)}</td>
+      <td style="color:var(--mut)">${esc2(d.exame)}</td>
+      <td>${esc2(d.cat)}</td>
+      <td>${fmtD(d.dt)}</td>
+      <td><b>${esc2(d.por || '')}</b></td>
+      <td style="text-align:right">${isAdmin() ? `<button class="sepbtn undo" data-restore="${esc2(d.chave)}" title="restaurar (volta pro histórico)">↩ restaurar</button>` : ''}</td>
+    </tr>`).join('');
+    return head + `<table class="htable"><thead><tr><th>Apagado em</th><th>Req</th><th>Paciente</th><th>Exame</th><th>Setor</th><th>Data orig.</th><th>Quem apagou</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
   function render() {
     const el = $('sep'); if (!el) return;
     if (!sepData()) { el.innerHTML = header() + `<div class="sepwait">Aguardando a próxima atualização dos dados (o robô gera a lista de separação a cada 10 min).</div>`; wire(el); return; }
@@ -283,6 +336,7 @@
     if (view === 'separar') body = viewSeparar();
     else if (view === 'andon') body = viewAndon();
     else if (view === 'placar') body = viewPlacar();
+    else if (view === 'apagados') body = viewApagados();
     else body = viewHist();
     el.innerHTML = header() + `<div class="sepbody">${body}</div>`;
     wire(el);
@@ -299,15 +353,19 @@
     el.querySelectorAll('.catpill[data-hc]').forEach(p => p.onclick = () => { histCat = p.dataset.hc; render(); });
     el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
     el.querySelectorAll('.perbtn[data-hf]').forEach(p => p.onclick = () => { histFiltro = p.dataset.hf; render(); });
+    const ab = $('adminbtn'); if (ab) ab.onclick = adminUnlock;
     el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
       const k = b.dataset.del;
       if (b.dataset.delkind === 'mark') { if (confirm('Desfazer esta marcação de "separado"? Volta a contar como não-separado.') && await post({ acao: 'desfazer', chave: k })) render(); }
-      else { if (confirm('Apagar este NÃO-separado? Some do histórico e do placar (não dá pra recuperar o tempo perdido, mas tira da contagem).')) descartar([k]); }
+      else { const row = histRows().find(r => r.chave === k); if (row && confirm('Apagar este NÃO-separado? Vai pro arquivo de Apagados (não some de vez). Sai do histórico e do placar.')) descartar([row]); }
     });
     const bb = $('histdelbatch'); if (bb) bb.onclick = () => {
       const all = histRows(); let m = histCat ? all.filter(r => r.cat === histCat) : all; m = m.filter(r => !r.sep);
-      if (m.length && confirm(`Apagar ${m.length} não-separado(s) deste filtro de uma vez? Some do histórico e do placar.`)) descartar(m.map(r => r.chave));
+      if (m.length && confirm(`Apagar ${m.length} não-separado(s) deste filtro de uma vez? Vão pro arquivo de Apagados.`)) descartar(m);
     };
+    el.querySelectorAll('.perbtn[data-apper]').forEach(p => p.onclick = () => { apPer = p.dataset.apper; render(); });
+    el.querySelectorAll('.catpill[data-apc]').forEach(p => p.onclick = () => { apCat = p.dataset.apc; render(); });
+    el.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => { if (confirm('Restaurar este item? Volta pro histórico normal (como não-separado).')) descartar([{ chave: b.dataset.restore }], true); });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
