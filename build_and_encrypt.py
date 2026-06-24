@@ -136,12 +136,15 @@ def build():
     flagged_cods = set()
     try:
         import urllib.request
-        with urllib.request.urlopen("https://producao-lab-alpha.netlify.app/api/clientes", timeout=20) as _r:
-            for f in json.loads(_r.read().decode()).get("flags", []):
-                if f.get("cod") is not None: flagged_cods.add(int(f["cod"]))
-        print(f"[clientes] {len(flagged_cods)} clínicas vigiadas (janela {CLI_DIAS}d)")
+        _SK = "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8"
+        _rq = urllib.request.Request("https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1/cli_flags?select=cod",
+                                     headers={"apikey": _SK, "Authorization": "Bearer " + _SK})
+        for f in json.loads(urllib.request.urlopen(_rq, timeout=20).read().decode()):
+            try: flagged_cods.add(int(f["cod"]))   # cods de teste (texto) são ignorados
+            except Exception: pass
+        print(f"[clientes] {len(flagged_cods)} clínicas vigiadas no Supabase (janela {CLI_DIAS}d)")
     except Exception as e:
-        print(f"[clientes] aviso: não leu flags ({e}); fallback 2 dias")
+        print(f"[clientes] aviso: não leu flags do Supabase ({e}); fallback 2 dias")
     if flagged_cods:
         _where = f"CodCliente IN ({','.join(str(c) for c in flagged_cods)}) AND DataEntrada>=DATE_SUB(CURDATE(),INTERVAL {CLI_DIAS} DAY)"
     else:
