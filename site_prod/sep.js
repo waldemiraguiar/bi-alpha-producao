@@ -22,12 +22,11 @@
   let marks = {};                 // chave -> marcação
   let descartes = new Set();      // chaves apagadas (p/ filtrar do histórico/placar)
   let descartesList = [];         // arquivo COMPLETO dos apagados (histórico do histórico)
-  let selByView = { separar: '', atrasado: '', urgente: '', hist: '', apagados: '' }; // categoria selecionada por aba
+  let selByView = { separar: '', urgente: '', hist: '', apagados: '' }; // categoria selecionada por aba
   let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
   let subSep = null;             // canal Realtime do Supabase
   const useSupa = () => window.SUPA && window.SUPA.ok;
-  const URG_CORTE = 1;            // Atrasado vai até 1 dia; a partir do 2º dia -> Última Chamada
   let timer = null;
   const ADMK = 'sep_admin';
   const adminPin = () => localStorage.getItem(ADMK) || '';
@@ -137,14 +136,13 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = ageItems(0, 0).length, atrN = ageItems(1, URG_CORTE).length, urgN = ageItems(URG_CORTE + 1, null).length;
+    const sepN = ageItems(0, 0).length, urgN = ageItems(1, null).length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
     return `<div class="sephead">
       <div class="septabs">
         <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar <span class="c">${sepN}</span></div>
-        <div class="septab ${view === 'atrasado' ? 'on' : ''}" data-v="atrasado">⏰ Atrasado <span class="c">${atrN}</span></div>
         <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
@@ -212,7 +210,7 @@
     }).join('') + `</div>`;
   }
 
-  /* ---- ciclo da amostra: Separar(hoje) -> Atrasado(1–2d) -> Atrasados Urgente(+2d) ---- */
+  /* ---- ciclo da amostra (2 chamadas, sem meio-termo): Separar(hoje) -> Última Chamada(1 dia+) ---- */
   const notFeito = it => { const m = marks[chaveOf(it)]; return !(m && m.estado); };
   const ageItems = (lo, hi) => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && notFeito(it) && (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
   function worklistView(viewKey, items, opts) {
@@ -228,10 +226,9 @@
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
   const viewSeparar = () => worklistView('separar', ageItems(0, 0), { empty: '✓ Nada para separar hoje.', noun: 'a separar (hoje)', lateFn: it => statusOf(it).st === 'atrasado' });
-  const viewAtrasado = () => worklistView('atrasado', ageItems(1, URG_CORTE), { empty: '✓ Nada atrasado de ontem.', noun: 'atrasado(s) · 1 dia', icon: '⏰ ', cardClass: 'atrasocard', lateFn: () => true });
-  const viewUrgente = () => worklistView('urgente', ageItems(URG_CORTE + 1, null), {
-    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · 2+ dias', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
-    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} PARADA${n > 1 ? 'S' : ''} 2+ DIAS · SEPARAR ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
+  const viewUrgente = () => worklistView('urgente', ageItems(1, null), {
+    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não separada(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
+    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO SEPARADA${n > 1 ? 'S' : ''} · SEPARAR ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
   });
 
   function viewPlacar() {
@@ -362,8 +359,7 @@
   // legenda curta e autoexplicativa por aba (pros colaboradores)
   const LEGENDS = {
     separar: '🧪 Amostras que chegaram hoje — separe a amostra e marque aqui.',
-    atrasado: '⏰ Não separadas de ontem — ainda dá tempo, separe hoje.',
-    urgente: '🚨 Paradas há 2 dias ou mais — última chance de separar antes de perder!',
+    urgente: '🚨 Não separadas de ontem ou antes — última chamada, separe antes de perder!',
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
@@ -373,7 +369,6 @@
     if (!sepData()) { el.innerHTML = header() + `<div class="sepwait">Aguardando a próxima atualização dos dados (o robô gera a lista de separação a cada 10 min).</div>`; wire(el); return; }
     let body = '';
     if (view === 'separar') body = viewSeparar();
-    else if (view === 'atrasado') body = viewAtrasado();
     else if (view === 'urgente') body = viewUrgente();
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
