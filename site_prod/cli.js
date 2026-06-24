@@ -53,7 +53,7 @@
 
   function viewAlertas() {
     if (classe === 'sensivel') {
-      const leg = `<div class="seplegend">🟡 Clínicas sensíveis monitoradas. Em <b style="color:var(--amber)">amarelo</b> = só de olho · vira <b style="color:var(--red)">vermelho + fogos</b> quando entra exame no HF. Baixa volta pro amarelo.</div>`;
+      const leg = `<div class="seplegend"><b style="color:var(--amber)">🟡 Amarelo</b> = clínica sensível só de olho · <b style="color:var(--red)">🔴 vermelho + fogos</b> = entrou exame no HF. A baixa volta pro amarelo.</div>`;
       const regs = myFlags();
       if (!regs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhuma clínica sensível cadastrada. Vá na aba <b>📋 Cadastrados</b> para adicionar.</div>`;
       const byCod = {}; alertByClinic().forEach(g => byCod[String(g.cod)] = g);
@@ -75,7 +75,7 @@
       const watchHtml = watch.length ? `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">🟡 Monitoradas — sem entrada no HF agora (${watch.length})</h3><div class="watchgrid">` + watch.map(f => `<div class="senswatch">🟡 ${esc2(f.nome)}</div>`).join('') + `</div>` : '';
       return leg + (activeHtml || '') + watchHtml;
     }
-    const leg = `<div class="seplegend atrasado">🟡 Confira cada exame antes de liberar (check-in) e dê baixa <b>manual</b>. O que não for liberado vira <b style="color:var(--red)">🔴 loucura total</b> e fica piscando até alguém liberar.</div>`;
+    const leg = `<div class="seplegend atrasado">🟡 Confira e libere cada exame (check-in, baixa <b>manual</b>). Não liberou → <b style="color:var(--red)">🔴 loucura total</b> até alguém liberar.</div>`;
     const reqs = alertReqs();
     if (!reqs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum cliente com atenção ativo agora. Quando um cadastrar no HF, acende aqui (~10 min).</div>`;
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -102,8 +102,8 @@
   }
 
   function viewCadastrados() {
-    const lbl = classe === 'sensivel' ? 'sensível' : 'com atenção';
-    const leg = `<div class="seplegend">📋 Clínicas já cadastradas como <b>${lbl}</b>. Qualquer um pode cadastrar ou remover.</div>`;
+    const lbl = classe === 'sensivel' ? 'sensível' : 'atenção';
+    const leg = `<div class="seplegend">📋 O que já está cadastrado como <b>${lbl}</b> — qualquer um cadastra ou remove. Use a busca pra adicionar.</div>`;
     const srch = `<div class="srch"><input id="clisearch" placeholder="🔎 buscar clínica no HF para cadastrar como ${lbl}..." value="${escA(term)}" autocomplete="off">${resultsHtml()}</div>`;
     const reg = myFlags().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
     const regHtml = reg.length ? `<div class="regwrap">` + reg.map(f => `<span class="regchip ${classe}">${esc2(f.nome || ('Cliente ' + f.cod))} <button class="x" data-desflag="${escA(f.cod)}" title="remover">✕</button></span>`).join('') + `</div>`
