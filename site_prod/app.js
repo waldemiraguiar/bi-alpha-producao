@@ -8,7 +8,7 @@ let ENC=null,REFRESH=null,ROT=null,DATA=null,active=0,locked=null,pinned=false;
 const URG_API='/api/urgentes';
 let manual=new Set(), baixados=new Set(), baixasInfo=[];
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{const r=await fetch(URG_API+'?_='+Date.now()); if(r.ok) setOverlays(await r.json());}catch(e){} }
+async function loadManual(){ try{const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -133,8 +133,9 @@ async function boot(D){
   REFRESH=setInterval(async()=>{if(document.hidden)return;try{DATA=await decrypt(window.__pwd);await loadManual();buildTabs();renderActive();}catch(e){console.warn(e);}},10*60*1000);
   // urgentes manuais propagam entre TVs em ~90s (só com a aba visível — poupa créditos)
   if(window.__muref)clearInterval(window.__muref);
-  window.__muref=setInterval(async()=>{if(document.hidden)return;const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},90000);
-  if(!window.__visref){window.__visref=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.getElementById('tv').style.display!=='none'){loadManual().then(renderActive).catch(()=>{});}});}
+  // urgentes só importam no modo TV → não chama a função quando estiver em outro modo (Triagem/Clientes)
+  window.__muref=setInterval(async()=>{if(document.hidden||document.getElementById('content').style.display==='none')return;const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},90000);
+  if(!window.__visref){window.__visref=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.getElementById('content').style.display!=='none'){loadManual().then(renderActive).catch(()=>{});}});}
 }
 
 function buildTabs(){

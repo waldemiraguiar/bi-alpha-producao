@@ -1,0 +1,18 @@
+{
+ "titulo": "Estudo Pet Love × Copa do Mundo 2026",
+ "objetivo": "Entender a queda de produção/faturamento Pet Love a partir de jun/2026 e SEPARAR o que é temporário (Copa do Mundo + feriado) do que é estrutural (Pet Carioca abriu laboratório próprio). Fechar no fim de cada mês e acompanhar a evolução.",
+ "achados": [
+  "Pet Love (plano) jun 1–23 vs mai 1–23: −24% em volume, atendimentos e repasse (uniforme = queda de VOLUME, não preço).",
+  "Decomposição (produção do sistema, janela 1–23): lab inteiro −9%; clínica que NÃO migrou ≈ −4,7% (Copa+feriado puro); Pet Carioca −57%.",
+  "Split da queda do lab em junho: ~52% Copa/feriado (temporário) · ~48% Pet Carioca lab próprio (estrutural). Dentro da Pet Carioca: ~5% Copa, ~95% migração.",
+  "Pet Carioca: a REDE INTEIRA cortou envio em ~06–07/jun (corte seco, ANTES da Copa em 11/jun) → é o lab próprio. Ipanema e Americas = maiores em volume. ~2.800–3.300 exames/mês perdidos (recorrente).",
+  "Pet Love mai/26 real fechado = R$388.548 (repasse). Projeção jun ≈ R$297k (−24%)."
+ ],
+ "conclusao": "Metade da queda de junho é TEMPORÁRIA (Copa/feriado — deve reverter em ago/set) e metade é ESTRUTURAL (Pet Carioca migrou pro lab próprio — não volta sozinho).",
+ "vigiar": [
+  "Pet Carioca volta a enviar? Win-back via exames que o lab interno deles NÃO faz (especializados, PCR, histopato, culturas).",
+  "Copa reverte em jul/ago? Se o 'resto do lab' voltar ao normal, confirma que aquela metade era temporária.",
+  "Outras redes seguindo o mesmo caminho (cair a ~zero de um dia pro outro) — sinal de novo lab próprio."
+ ],
+ "obs": "Produção = volume de exames do sistema (HF conta Pet Love mas zera valor). Janela 1–N comparável (N = último dia do mês corrente no sistema). Repasse Pet Love vem dos relatórios de pagamento."
+}

@@ -307,6 +307,39 @@ def build():
     except Exception as e:
         D["petlove_margem"]={"erro":str(e)}
 
+    # ---------- ESTUDO Pet Love × Copa (aba admin) ----------
+    try:
+        PLDIR2=os.path.join(ROOT,"data_petlove")
+        est=json.load(open(os.path.join(PLDIR2,"petlove_estudo.json"),encoding="utf-8"))
+        PCJOIN=(f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                f"JOIN TabCliente cl ON r.CodCliente=cl.CodCliente WHERE cl.Cliente LIKE 'Pet Carioca%%' ")
+        # produção Pet Carioca mensal (volume) desde 2025
+        pcm=q("SELECT DATE_FORMAT(s.DataExame,'%%Y-%%m') ym, COUNT(*) ex, "
+              "COUNT(DISTINCT r.CodNumeroSequencialTela) at "+PCJOIN+
+              f"AND s.DataExame>='2025-01-01' AND s.DataExame<='{maxd}' GROUP BY ym ORDER BY ym")
+        est["petcarioca_mensal"]=[{"ym":r["ym"],"ex":r["ex"],"at":r["at"]} for r in pcm if r["ym"]]
+        # decomposição da janela 1..N do mês corrente vs mês anterior
+        N=int(maxd[8:10]); curYm=maxd[:7]
+        yy,mm=int(maxd[:4]),int(maxd[5:7]); pmm=mm-1 or 12; pyy=yy if mm>1 else yy-1; prevYm=f"{pyy}-{pmm:02d}"
+        labc=q1(f"SELECT COUNT(*) n FROM {EX} WHERE DataExame BETWEEN '{curYm}-01' AND '{maxd}'") or 0
+        labp=q1(f"SELECT COUNT(*) n FROM {EX} WHERE DataExame BETWEEN '{prevYm}-01' AND '{prevYm}-{N:02d}'") or 0
+        pcc=q1("SELECT COUNT(*) n "+PCJOIN+f"AND s.DataExame BETWEEN '{curYm}-01' AND '{maxd}'") or 0
+        pcp=q1("SELECT COUNT(*) n "+PCJOIN+f"AND s.DataExame BETWEEN '{prevYm}-01' AND '{prevYm}-{N:02d}'") or 0
+        rc,rp=labc-pcc,labp-pcp
+        copa=(rp-rc)/rp if rp else 0
+        pc_exp=pcp*(1-copa); mig=pc_exp-pcc; tot=labp-labc; copa_loss=tot-mig
+        est["decomp"]={"cur_ym":curYm,"prev_ym":prevYm,"ate_dia":N,
+            "lab_prev":labp,"lab_cur":labc,"lab_pct":round(100*(labc/labp-1),1) if labp else None,
+            "resto_pct":round(100*(rc/rp-1),1) if rp else None,
+            "pc_prev":pcp,"pc_cur":pcc,"pc_pct":round(100*(pcc/pcp-1),1) if pcp else None,
+            "queda_total":round(tot),"mig":round(mig),"copa_loss":round(copa_loss),
+            "split_pc_pct":round(100*mig/tot) if tot>0 else None,
+            "split_copa_pct":round(100*copa_loss/tot) if tot>0 else None,
+            "pc_mig_pct":round(100*mig/(pcp-pcc)) if (pcp-pcc)>0 else None}
+        D["estudo"]=est
+    except Exception as e:
+        D["estudo"]={"erro":str(e)}
+
     # ---------- ANÁLISES PONTUAIS (janelas 5/10/15/20 dias + mês a mês) ----------
     import calendar
     serie=q(f"SELECT DataExame d, COUNT(*) q, ROUND(SUM(ValorExame)) f FROM {EX} "
