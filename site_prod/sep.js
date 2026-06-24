@@ -8,6 +8,16 @@
   // Contagem OFICIAL começa 23/jun/2026 (22/jun é treino e NÃO conta no placar/histórico).
   // Para começar a contar de outro dia, mude esta data (ano, mês-1, dia).
   const PISO_OFICIAL = new Date(2026, 5, 23, 0, 0, 0).getTime();
+  const PISO_DAY = '2026-06-23';     // piso oficial original (string p/ comparar com dt)
+  // RESET à MEIA-NOITE de 25/jun: a equipe recomeça LIMPA. Quando o relógio (BRT) virar 25/jun, tudo de
+  // antes some da separação / histórico / placar — EXCETO "EXAMES ESPECIALIZADOS" (o time já trabalha
+  // desde ontem, mantém o piso original 23/jun). Hoje (24/jun) fica INTACTO; zera sozinho à meia-noite.
+  const RESET_DAY = '2026-06-25';
+  const pisoDay = cat => {
+    const hojeBRT = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // data em BRT (UTC-3)
+    if (hojeBRT < RESET_DAY) return PISO_DAY;                       // antes da meia-noite de 25/jun: nada muda
+    return /especializ/i.test(cat || '') ? PISO_DAY : RESET_DAY;    // 25/jun em diante: zera tudo menos especializados
+  };
   let MODE = 'tv', view = 'separar', period = 'hoje';
   let marks = {};                 // chave -> marcação
   let descartes = new Set();      // chaves apagadas (p/ filtrar do histórico/placar)
@@ -204,7 +214,7 @@
 
   /* ---- ciclo da amostra: Separar(hoje) -> Atrasado(1–2d) -> Atrasados Urgente(+2d) ---- */
   const notFeito = it => { const m = marks[chaveOf(it)]; return !(m && m.estado); };
-  const ageItems = (lo, hi) => itens().filter(it => (it.entrada || '') >= PISO_DAY && notFeito(it) && (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
+  const ageItems = (lo, hi) => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && notFeito(it) && (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
   function worklistView(viewKey, items, opts) {
     if (!items.length) return `<div class="${opts.emptyClass || 'sepwait'}">${opts.empty}</div>`;
     const byCat = {}; items.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
@@ -224,16 +234,14 @@
     bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} PARADA${n > 1 ? 'S' : ''} 2+ DIAS · SEPARAR ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
   });
 
-  const PISO_DAY = '2026-06-23';   // contagem oficial (string p/ comparar com dt)
-
   function viewPlacar() {
     const now = new Date(); const today = now.toISOString().slice(0, 10);
     const cutDay = period === 'hoje' ? today : period === '7d' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : '0';
-    const floor = cutDay > PISO_DAY ? cutDay : PISO_DAY;
     // denominador = UNIVERSO (tudo que precisava separar); numerador = separado no prazo. Não-separados PUXAM a nota pra baixo.
     const agg = {};
     universo().forEach(u => {
-      const dia = (u.dt || '').slice(0, 10); if (!dia || dia < floor) return;
+      const fl = cutDay > pisoDay(u.cat) ? cutDay : pisoDay(u.cat);
+      const dia = (u.dt || '').slice(0, 10); if (!dia || dia < fl) return;
       const k = chaveOf(u); if (descartes.has(k)) return;
       const a = agg[u.cat] = agg[u.cat] || { cat: u.cat, total: 0, sep: 0, ok: 0 };
       a.total++;
@@ -263,10 +271,10 @@
   function histRows() {
     const now = Date.now(); const today = new Date().toISOString().slice(0, 10);
     const cutDay = histPer === 'dia' ? today : histPer === 'semana' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : histPer === 'mes' ? new Date(now - 30 * 864e5).toISOString().slice(0, 10) : '0';
-    const floor = cutDay > PISO_DAY ? cutDay : PISO_DAY;
     const rows = [];
     universo().forEach(u => {
-      const dia = (u.dt || '').slice(0, 10); if (!dia || dia < floor) return;
+      const fl = cutDay > pisoDay(u.cat) ? cutDay : pisoDay(u.cat);
+      const dia = (u.dt || '').slice(0, 10); if (!dia || dia < fl) return;
       const k = chaveOf(u); if (descartes.has(k)) return;
       const m = marks[k];
       rows.push({ chave: k, req: u.req, ano: u.ano, codex: u.codex, cat: u.cat, exame: u.exame, paciente: u.paciente, dt: u.dt, sep: !!(m && m.estado), m });
