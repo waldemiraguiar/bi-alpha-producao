@@ -769,6 +769,18 @@ function renderPetlove(D){
     <div class="b"><div class="v">${brlk(ultV)}</div><div class="l">último mês (${ult?ymLabel(ult):'—'})</div></div>
     <div class="b"><div class="v" style="color:var(--green)">${pctUlt.toFixed(1)}%</div><div class="l">do faturamento total do lab</div></div>
     <div class="b"><div class="v" style="color:${Y.ytdPct==null?'var(--mut)':(Y.ytdPct>=0?AZUL2:'var(--red)')}">${Y.ytdPct==null?'—':(Y.ytdPct>=0?'▲ +':'▼ ')+Y.ytdPct.toFixed(0)+'%'}</div><div class="l">${Y.curY} vs ${Y.prevY} (mesmo período, jan–${MESFULL[Y.lastM]})</div></div></div>`;
+  const pj=pl.proj_atual;
+  if(pj){
+    const vc=pj.vs_mes_ant_pct>=0?AZUL2:'var(--red)';
+    html+=`<div class="card" style="margin:6px 0 16px;border-color:rgba(255,176,32,.45)">
+      <h3>📅 Projeção de fechamento — ${ymLabel(pj.ym)} <span class="cap">parcial até dia ${pj.ate_dia} · base: ${esc(pj.base)}</span></h3>
+      <div style="display:flex;gap:30px;flex-wrap:wrap">
+        <div><div class="acmp-l">Repasse projetado (fim do mês)</div><div class="acmp-v" style="color:var(--amber)">${brl(pj.proj_repasse)}</div><div class="acmp-s" style="color:${vc}">${pj.vs_mes_ant_pct>=0?'+':''}${pj.vs_mes_ant_pct}% vs mês anterior · faixa ${brlk(pj.piso_repasse)}–${brlk(pj.proj_repasse)}</div></div>
+        <div><div class="acmp-l">Realizado até dia ${pj.ate_dia}</div><div class="acmp-v">${brl(pj.parcial_repasse)}</div><div class="acmp-s">${num(pj.parcial_atend)} atend · ${num(pj.parcial_exames)} exames</div></div>
+        <div><div class="acmp-l">Produção projetada (mês)</div><div class="acmp-v">${num(pj.proj_atend)} <span style="font-size:13px;color:var(--mut)">atend</span></div><div class="acmp-s">${num(pj.proj_exames)} exames</div></div>
+      </div>
+      <div style="color:var(--mut);font-size:11px;margin-top:8px">${esc(pj.obs||'')}</div></div>`;
+  }
   html+=`<div class="alert-card info" style="margin:6px 0 16px"><div class="ai">🐾</div><div><div class="at">Receita externa que ENTRA no total dos meses</div>
     <div class="ax">O sistema (HF) conta os exames Pet Love mas zera o valor (reembolso vem por fora). Estes R$ — Contas Médicas + Recurso de Glosa, por competência — são somados ao faturamento total do laboratório. ${esc(pl.obs||'')}</div></div></div>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Love dentro do faturamento total <span class="cap">barras (R$, eixo esq.): cinza = produção interna (sistema HF) · ciano = Pet Love · linha verde (eixo dir.) = % Pet Love no total · últimos 24 meses</span></h3>
