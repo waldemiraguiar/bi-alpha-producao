@@ -284,12 +284,15 @@
     if (m === 'sep') {
       await loadMarks(); render();
       if (timer) clearInterval(timer);
-      timer = setInterval(async () => { if (MODE === 'sep') { await loadMarks(); render(); } }, 30000);
+      // poupa créditos: só consulta com a aba VISÍVEL, a cada 60s (cliques continuam instantâneos via POST)
+      timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden) { await loadMarks(); render(); } }, 60000);
     } else if (timer) { clearInterval(timer); timer = null; }
     // delega os modos de cliente
     if (window.CLI) await window.CLI.onMode(m);
   }
 
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
+  // ao voltar o foco na aba, atualiza na hora (sensação de "ao vivo" sem ficar consultando à toa)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && MODE === 'sep') loadMarks().then(render); });
   window.SEP = { setMode, render };
 })();
