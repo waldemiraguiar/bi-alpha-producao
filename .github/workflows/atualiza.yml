@@ -40,8 +40,10 @@ jobs:
       - name: Config + dependências da função
         env:
           PROD_PWD: ${{ secrets.PROD_PWD }}
+          ADMIN_PWD: ${{ secrets.ADMIN_PWD }}
         run: |
           node -e "require('fs').writeFileSync('site_prod/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.PROD_PWD||'')+';\n')"
+          node -e "require('fs').writeFileSync('site_prod/functions/admin.mjs','export const ADMIN='+JSON.stringify(process.env.ADMIN_PWD||'')+';\n')"
           cd site_prod/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
 
       - name: Publicar no Netlify

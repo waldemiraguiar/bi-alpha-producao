@@ -5,3 +5,4 @@ __pycache__/
 node_modules/
 site_prod/functions/package*.json
 site_prod/functions/secret.mjs
+site_prod/functions/admin.mjs

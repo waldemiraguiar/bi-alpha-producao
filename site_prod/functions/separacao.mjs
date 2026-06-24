@@ -6,6 +6,7 @@
    chave = `${req}-${codex}` (única por exame da requisição). Segredo = PROD_PWD (secret.mjs). */
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
+import { ADMIN } from "./admin.mjs";
 
 const KEY = "marks";
 const PRUNE = 366 * 864e5; // descarta marcações com mais de ~1 ano (limita tamanho)
@@ -30,13 +31,24 @@ export default async (req) => {
     if (!SECRET || b.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
 
-    // APAGAR não-separados (descartes) — unitário {chave} ou lote {chaves:[...]}
+    // ADMIN: validar PIN (não altera nada)
+    if (b.acao === "admincheck")
+      return Response.json({ ok: !!ADMIN && b.admin === ADMIN }, { headers: cors });
+
+    // APAGAR / RESTAURAR não-separados — SÓ ADMIN (PIN validado no servidor). Guarda o item completo (arquivo).
     if (b.acao === "descartar" || b.acao === "undescartar") {
+      if (!ADMIN || b.admin !== ADMIN)
+        return new Response(JSON.stringify({ erro: "PIN de admin inválido" }), { status: 403, headers: cors });
       const DK = "descartes";
-      const chaves = Array.isArray(b.chaves) ? b.chaves : (b.chave ? [b.chave] : []);
       let desc = (await store.get(DK, { type: "json", consistency: "strong" })) || [];
-      if (b.acao === "undescartar") desc = desc.filter((d) => !chaves.includes(d.chave));
-      else { const set = new Set(desc.map((d) => d.chave)); chaves.forEach((k) => { if (!set.has(k)) desc.push({ chave: k, por: b.por || "equipe", ts: Date.now() }); }); }
+      if (b.acao === "undescartar") {
+        const chaves = Array.isArray(b.chaves) ? b.chaves : (b.chave ? [b.chave] : []);
+        desc = desc.filter((d) => !chaves.includes(d.chave));
+      } else {
+        const itens = Array.isArray(b.itens) ? b.itens : [];
+        const set = new Set(desc.map((d) => d.chave));
+        itens.forEach((it) => { if (it && it.chave && !set.has(it.chave)) desc.push({ ...it, por: b.por || "admin", ts: Date.now() }); });
+      }
       await store.setJSON(DK, desc);
       return Response.json({ ok: true, descartes: desc }, { headers: cors });
     }
