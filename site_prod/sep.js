@@ -12,10 +12,10 @@
   let marks = {};                 // chave -> marcação
   let descartes = new Set();      // chaves apagadas (p/ filtrar do histórico/placar)
   let descartesList = [];         // arquivo COMPLETO dos apagados (histórico do histórico)
-  let selCat = '';                // categoria selecionada (abas do Separar)
-  let selCatA = '';               // categoria selecionada (abas do Atrasados/Andon)
-  let histCat = '', histPer = 'dia', histFiltro = 'todos'; // Histórico: categoria + período + (todos/separados/nao)
-  let apCat = '', apPer = 'mes';  // Apagados: categoria + período (dia/semana/mes/ano/tudo)
+  let selByView = { separar: '', atrasado: '', urgente: '', hist: '', apagados: '' }; // categoria selecionada por aba
+  let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
+  let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
+  const URG_CORTE = 2;            // dias atrasado p/ escalar de Atrasado -> Atrasados Urgente
   let timer = null;
   const ADMK = 'sep_admin';
   const adminPin = () => localStorage.getItem(ADMK) || '';
@@ -107,15 +107,15 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const it = itens(); const pend = it.filter(x => statusOf(x).st !== 'feito').length;
-    const andon = it.filter(x => statusOf(x).st === 'atrasado').length;
+    const sepN = ageItems(0, 0).length, atrN = ageItems(1, URG_CORTE).length, urgN = ageItems(URG_CORTE + 1, null).length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
     return `<div class="sephead">
       <div class="septabs">
-        <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar <span class="c">${pend}</span></div>
-        <div class="septab andon ${view === 'andon' ? 'on' : ''}" data-v="andon">🚨 Atrasados <span class="c">${andon}</span></div>
+        <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar <span class="c">${sepN}</span></div>
+        <div class="septab ${view === 'atrasado' ? 'on' : ''}" data-v="atrasado">⏰ Atrasado <span class="c">${atrN}</span></div>
+        <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Atrasados / Não separou? <span class="c">${urgN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
@@ -159,45 +159,50 @@
   function orderedCats(byCat) { return Object.keys(byCat).sort((a, b) => catIdx(a) - catIdx(b) || a.localeCompare(b)); }
   const rankSt = s => s === 'atrasado' ? 0 : s === 'noprazo' ? 1 : 2;
 
-  function viewSeparar() {
-    const byCat = {};
-    itens().forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
-    const cats = orderedCats(byCat);
-    if (!cats.length) return `<div class="sepwait">✓ Nada para separar no momento.</div>`;
-    if (!selCat || !byCat[selCat]) selCat = cats[0];
-    const strip = cats.map(c => {
-      const arr = byCat[c];
-      const pend = arr.filter(x => statusOf(x).st !== 'feito').length;
-      const late = arr.filter(x => statusOf(x).st === 'atrasado').length;
-      return `<div class="catpill ${c === selCat ? 'on' : ''} ${late ? 'haslate' : ''}" data-c="${esc2(c)}">
-        <span class="nm">${esc2(c)}</span><span class="cc ${late ? 'late' : ''}">${pend}</span></div>`;
-    }).join('');
-    const arr = byCat[selCat];
-    const pend = arr.filter(x => statusOf(x).st !== 'feito');
-    const late = arr.filter(x => statusOf(x).st === 'atrasado').length;
-    const ordered = [...arr].sort((a, b) => rankSt(statusOf(a).st) - rankSt(statusOf(b).st));
-    return `<div class="catstrip">${strip}</div>
-      <div class="sepcat"><div class="h"><span>${esc2(selCat)}</span>
-        <span class="cnt">${pend.length} a separar${late ? ` · <b style="color:var(--red)">${late} atrasado${late > 1 ? 's' : ''}</b>` : ''} · ${arr.length} total</span></div>
-        ${ordered.map(rowSeparar).join('')}</div>`;
+  /* ---- TÓPICOS: agrupa categorias por setor (fácil de reorganizar aqui) ---- */
+  const TOPICS = [
+    { t: '🧬 Biologia Molecular', cats: ['BIOLOGIA MOLECULAR - PCR'] },
+    { t: '🔬 Patologia', cats: ['Citopatologia', 'NECRÓPSIA'] },
+    { t: '⚗️ Análises Clínicas', cats: ['BIOQUÍMICA', 'Uroanálise', 'Hematologia'] },
+    { t: '🦠 Micro & Parasito', cats: ['BACTERIOLOGIA - CULTURA', 'Parasitologia'] },
+    { t: '💉 Imunologia & Endócrino', cats: ['IMUNOLOGIA', 'EXAMES ESPECIALIZADOS'] },
+  ];
+  const topicOf = cat => { const t = TOPICS.find(x => x.cats.some(c => slug(c) === slug(cat))); return t ? t.t : '📋 Outros'; };
+  // pílulas de categoria AGRUPADAS por tópico. withAll => acrescenta "Todas".
+  function topicStrip(byCat, viewKey, sel, lateFn, withAll) {
+    const groups = {}; Object.keys(byCat).forEach(cat => { const t = topicOf(cat); (groups[t] = groups[t] || []).push(cat); });
+    const order = TOPICS.map(x => x.t).concat(['📋 Outros']).filter(t => groups[t]);
+    const total = Object.values(byCat).reduce((s, a) => s + a.length, 0);
+    const all = withAll ? `<div class="topicgrp"><div class="catstrip"><div class="catpill ${!sel ? 'on' : ''}" data-selview="${viewKey}" data-selcat=""><span class="nm">Todas</span><span class="cc">${total}</span></div></div></div>` : '';
+    return `<div class="topicwrap">` + all + order.map(t => {
+      const cats = groups[t].sort((a, b) => catIdx(a) - catIdx(b));
+      const pills = cats.map(c => { const arr = byCat[c]; const late = lateFn ? arr.filter(lateFn).length : 0;
+        return `<div class="catpill ${c === sel ? 'on' : ''} ${late ? 'haslate' : ''}" data-selview="${viewKey}" data-selcat="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc ${late ? 'late' : ''}">${arr.length}</span></div>`; }).join('');
+      return `<div class="topicgrp"><div class="topiclbl">${t}</div><div class="catstrip">${pills}</div></div>`;
+    }).join('') + `</div>`;
   }
 
-  function viewAndon() {
-    const late = itens().filter(x => statusOf(x).st === 'atrasado');
-    if (!late.length) return `<div class="andonempty">✓ Nenhuma amostra atrasada. Tudo separado no prazo! 🎉</div>`;
-    const byCat = {}; late.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
+  /* ---- ciclo da amostra: Separar(hoje) -> Atrasado(1–2d) -> Atrasados Urgente(+2d) ---- */
+  const notFeito = it => { const m = marks[chaveOf(it)]; return !(m && m.estado); };
+  const ageItems = (lo, hi) => itens().filter(it => (it.entrada || '') >= PISO_DAY && notFeito(it) && (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
+  function worklistView(viewKey, items, opts) {
+    if (!items.length) return `<div class="${opts.emptyClass || 'sepwait'}">${opts.empty}</div>`;
+    const byCat = {}; items.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
     const cats = orderedCats(byCat);
-    if (!selCatA || !byCat[selCatA]) selCatA = cats[0];
-    const strip = cats.map(c => `<div class="catpill haslate ${c === selCatA ? 'on' : ''}" data-ca="${esc2(c)}">
-        <span class="nm">${esc2(c)}</span><span class="cc late">${byCat[c].length}</span></div>`).join('');
-    const arr = byCat[selCatA];
-    const tot = late.length;
-    const bar = `<div class="andonbar"><span class="ico">🚨</span><span class="ttl">${tot} AMOSTRA${tot > 1 ? 'S' : ''} ATRASADA${tot > 1 ? 'S' : ''} — SEPARAR AGORA</span></div>`;
-    return bar + `<div class="catstrip">${strip}</div>
-      <div class="sepcat andon"><div class="h"><span>🚨 ${esc2(selCatA)}</span>
-        <span class="cnt">${arr.length} amostra${arr.length > 1 ? 's' : ''} não separada${arr.length > 1 ? 's' : ''}</span></div>
-        ${arr.map(rowSeparar).join('')}</div>`;
+    let sel = selByView[viewKey]; if (!sel || !byCat[sel]) sel = selByView[viewKey] = cats[0];
+    const strip = topicStrip(byCat, viewKey, sel, opts.lateFn);
+    const arr = byCat[sel];
+    const ordered = [...arr].sort((a, b) => (b.dias || 0) - (a.dias || 0) || rankSt(statusOf(a).st) - rankSt(statusOf(b).st));
+    const bar = opts.bar ? opts.bar(items.length) : '';
+    return bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(sel)}</span>
+      <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
+  const viewSeparar = () => worklistView('separar', ageItems(0, 0), { empty: '✓ Nada para separar hoje.', noun: 'a separar (hoje)', lateFn: it => statusOf(it).st === 'atrasado' });
+  const viewAtrasado = () => worklistView('atrasado', ageItems(1, URG_CORTE), { empty: '✓ Nada atrasado (1 a 2 dias).', noun: 'atrasado(s) · 1 a 2 dias', icon: '⏰ ', cardClass: 'atrasocard', lateFn: () => true });
+  const viewUrgente = () => worklistView('urgente', ageItems(URG_CORTE + 1, null), {
+    empty: '✓ Tudo certo! Nenhuma amostra parada há mais de 2 dias. 🎉', noun: 'não separado(s) · +2 dias', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
+    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">NÃO SEPAROU? · ${n} AMOSTRA${n > 1 ? 'S' : ''} PARADA${n > 1 ? 'S' : ''} +2 DIAS · SEPARAR JÁ!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
+  });
 
   const PISO_DAY = '2026-06-23';   // contagem oficial (string p/ comparar com dt)
 
@@ -253,7 +258,7 @@
   function viewHist() {
     const all = histRows();
     const byCat = {}; all.forEach(r => { (byCat[r.cat] = byCat[r.cat] || []).push(r); });
-    const cats = orderedCats(byCat);
+    const histCat = selByView.hist;
     let shown = histCat ? all.filter(r => r.cat === histCat) : all;
     if (histFiltro === 'separados') shown = shown.filter(r => r.sep);
     else if (histFiltro === 'nao') shown = shown.filter(r => !r.sep);
@@ -264,9 +269,7 @@
       <div class="perbtn ${histFiltro === 'todos' ? 'on' : ''}" data-hf="todos">Todos</div>
       <div class="perbtn ${histFiltro === 'separados' ? 'on' : ''}" data-hf="separados">✓ Separados</div>
       <div class="perbtn ${histFiltro === 'nao' ? 'on' : ''}" data-hf="nao" style="${histFiltro === 'nao' ? 'border-color:var(--red);color:var(--red)' : ''}">✗ Não separados</div></div>`;
-    const pills = `<div class="catstrip">
-      <div class="catpill ${!histCat ? 'on' : ''}" data-hc=""><span class="nm">Todas</span><span class="cc">${all.length}</span></div>`
-      + cats.map(c => `<div class="catpill ${histCat === c ? 'on' : ''}" data-hc="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc">${byCat[c].length}</span></div>`).join('') + `</div>`;
+    const pills = topicStrip(byCat, 'hist', histCat, null, true);
     const misses = shown.filter(r => !r.sep);
     const batch = (isAdmin() && misses.length) ? `<button class="perbtn" id="histdelbatch" style="border-color:var(--red);color:var(--red);font-weight:800">🗑 Apagar ${misses.length} não-separado${misses.length > 1 ? 's' : ''} (deste filtro)</button>` : '';
     const head = `<div class="histfilt"><b style="font-size:15px">📋 Histórico</b>${perBtns}${fBtns}
@@ -305,12 +308,11 @@
       : apPer === 'semana' ? now - 7 * 864e5 : apPer === 'mes' ? now - 30 * 864e5 : apPer === 'ano' ? now - 365 * 864e5 : 0;
     const within = descartesList.filter(d => (d.ts || 0) >= cut);
     const byCat = {}; within.forEach(d => { (byCat[d.cat] = byCat[d.cat] || []).push(d); });
-    const cats = orderedCats(byCat);
+    const apCat = selByView.apagados;
     let list = (apCat ? within.filter(d => d.cat === apCat) : within).sort((a, b) => (b.ts || 0) - (a.ts || 0));
     const perLbl = { dia: 'Dia', semana: 'Semana', mes: 'Mês', ano: 'Ano', tudo: 'Tudo' };
     const perBtns = `<div class="perbtns">${['dia', 'semana', 'mes', 'ano', 'tudo'].map(p => `<div class="perbtn ${apPer === p ? 'on' : ''}" data-apper="${p}">${perLbl[p]}</div>`).join('')}</div>`;
-    const pills = `<div class="catstrip"><div class="catpill ${!apCat ? 'on' : ''}" data-apc=""><span class="nm">Todas</span><span class="cc">${within.length}</span></div>`
-      + cats.map(c => `<div class="catpill ${apCat === c ? 'on' : ''}" data-apc="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc">${byCat[c].length}</span></div>`).join('') + `</div>`;
+    const pills = topicStrip(byCat, 'apagados', apCat, null, true);
     const head = `<div class="histfilt"><b style="font-size:15px">🗑 Apagados <span style="color:var(--mut);font-weight:400;font-size:12px">(histórico do histórico — nada se perde)</span></b>${perBtns}
       <span style="margin-left:auto;color:var(--mut);font-size:12px">${list.length} registro${list.length !== 1 ? 's' : ''}</span></div>${pills}`;
     if (!list.length) return head + `<div class="sepwait">Nenhum item apagado nesse período.</div>`;
@@ -334,7 +336,8 @@
     if (!sepData()) { el.innerHTML = header() + `<div class="sepwait">Aguardando a próxima atualização dos dados (o robô gera a lista de separação a cada 10 min).</div>`; wire(el); return; }
     let body = '';
     if (view === 'separar') body = viewSeparar();
-    else if (view === 'andon') body = viewAndon();
+    else if (view === 'atrasado') body = viewAtrasado();
+    else if (view === 'urgente') body = viewUrgente();
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
     else body = viewHist();
@@ -348,9 +351,7 @@
       if (sm.value === '__novo__') { const n = prompt('Seu nome ou iniciais:'); if (n && n.trim()) addUser(n); render(); return; }
       localStorage.setItem(MEK, sm.value); render();
     };
-    el.querySelectorAll('.catpill[data-c]').forEach(p => p.onclick = () => { selCat = p.dataset.c; render(); });
-    el.querySelectorAll('.catpill[data-ca]').forEach(p => p.onclick = () => { selCatA = p.dataset.ca; render(); });
-    el.querySelectorAll('.catpill[data-hc]').forEach(p => p.onclick = () => { histCat = p.dataset.hc; render(); });
+    el.querySelectorAll('[data-selcat]').forEach(p => p.onclick = () => { selByView[p.dataset.selview] = p.dataset.selcat; render(); });
     el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
     el.querySelectorAll('.perbtn[data-hf]').forEach(p => p.onclick = () => { histFiltro = p.dataset.hf; render(); });
     const ab = $('adminbtn'); if (ab) ab.onclick = adminUnlock;
@@ -360,11 +361,10 @@
       else { const row = histRows().find(r => r.chave === k); if (row && confirm('Apagar este NÃO-separado? Vai pro arquivo de Apagados (não some de vez). Sai do histórico e do placar.')) descartar([row]); }
     });
     const bb = $('histdelbatch'); if (bb) bb.onclick = () => {
-      const all = histRows(); let m = histCat ? all.filter(r => r.cat === histCat) : all; m = m.filter(r => !r.sep);
+      const hc = selByView.hist; const all = histRows(); let m = hc ? all.filter(r => r.cat === hc) : all; m = m.filter(r => !r.sep);
       if (m.length && confirm(`Apagar ${m.length} não-separado(s) deste filtro de uma vez? Vão pro arquivo de Apagados.`)) descartar(m);
     };
     el.querySelectorAll('.perbtn[data-apper]').forEach(p => p.onclick = () => { apPer = p.dataset.apper; render(); });
-    el.querySelectorAll('.catpill[data-apc]').forEach(p => p.onclick = () => { apCat = p.dataset.apc; render(); });
     el.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => { if (confirm('Restaurar este item? Volta pro histórico normal (como não-separado).')) descartar([{ chave: b.dataset.restore }], true); });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
