@@ -15,7 +15,7 @@
   let selByView = { separar: '', atrasado: '', urgente: '', hist: '', apagados: '' }; // categoria selecionada por aba
   let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
-  const URG_CORTE = 2;            // dias atrasado p/ escalar de Atrasado -> Atrasados Urgente
+  const URG_CORTE = 1;            // Atrasado vai até 1 dia; a partir do 2º dia -> Última Chamada
   let timer = null;
   const ADMK = 'sep_admin';
   const adminPin = () => localStorage.getItem(ADMK) || '';
@@ -115,7 +115,7 @@
       <div class="septabs">
         <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar <span class="c">${sepN}</span></div>
         <div class="septab ${view === 'atrasado' ? 'on' : ''}" data-v="atrasado">⏰ Atrasado <span class="c">${atrN}</span></div>
-        <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Atrasados / Não separou? <span class="c">${urgN}</span></div>
+        <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
@@ -198,10 +198,10 @@
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
   const viewSeparar = () => worklistView('separar', ageItems(0, 0), { empty: '✓ Nada para separar hoje.', noun: 'a separar (hoje)', lateFn: it => statusOf(it).st === 'atrasado' });
-  const viewAtrasado = () => worklistView('atrasado', ageItems(1, URG_CORTE), { empty: '✓ Nada atrasado (1 a 2 dias).', noun: 'atrasado(s) · 1 a 2 dias', icon: '⏰ ', cardClass: 'atrasocard', lateFn: () => true });
+  const viewAtrasado = () => worklistView('atrasado', ageItems(1, URG_CORTE), { empty: '✓ Nada atrasado de ontem.', noun: 'atrasado(s) · 1 dia', icon: '⏰ ', cardClass: 'atrasocard', lateFn: () => true });
   const viewUrgente = () => worklistView('urgente', ageItems(URG_CORTE + 1, null), {
-    empty: '✓ Tudo certo! Nenhuma amostra parada há mais de 2 dias. 🎉', noun: 'não separado(s) · +2 dias', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
-    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">NÃO SEPAROU? · ${n} AMOSTRA${n > 1 ? 'S' : ''} PARADA${n > 1 ? 'S' : ''} +2 DIAS · SEPARAR JÁ!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
+    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · 2+ dias', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
+    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} PARADA${n > 1 ? 'S' : ''} 2+ DIAS · SEPARAR ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
   });
 
   const PISO_DAY = '2026-06-23';   // contagem oficial (string p/ comparar com dt)
