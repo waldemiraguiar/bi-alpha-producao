@@ -331,6 +331,15 @@
     return head + `<table class="htable"><thead><tr><th>Apagado em</th><th>Req</th><th>Paciente</th><th>Exame</th><th>Setor</th><th>Data orig.</th><th>Quem apagou</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
+  // legenda curta e autoexplicativa por aba (pros colaboradores)
+  const LEGENDS = {
+    separar: '🧪 Amostras que chegaram hoje — separe a amostra e marque aqui.',
+    atrasado: '⏰ Não separadas de ontem — ainda dá tempo, separe hoje.',
+    urgente: '🚨 Paradas há 2 dias ou mais — última chance de separar antes de perder!',
+    placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
+    hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
+    apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
+  };
   function render() {
     const el = $('sep'); if (!el) return;
     if (!sepData()) { el.innerHTML = header() + `<div class="sepwait">Aguardando a próxima atualização dos dados (o robô gera a lista de separação a cada 10 min).</div>`; wire(el); return; }
@@ -341,7 +350,8 @@
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
     else body = viewHist();
-    el.innerHTML = header() + `<div class="sepbody">${body}</div>`;
+    const leg = LEGENDS[view] || LEGENDS.hist;
+    el.innerHTML = header() + `<div class="seplegend ${view}">${leg}</div>` + `<div class="sepbody">${body}</div>`;
     wire(el);
   }
 
