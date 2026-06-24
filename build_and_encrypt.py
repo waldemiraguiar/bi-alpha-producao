@@ -83,7 +83,7 @@ def build():
             s.Urgencia urg, DATEDIFF(CURDATE(), r.DataEntrada) dias
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
             WHERE s.DataExame IS NULL AND s.CodExame IN ({codes})
-              AND r.DataEntrada>=CURDATE()
+              AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 5 DAY)
             ORDER BY r.DataEntrada DESC, r.NumeroSequencial DESC LIMIT 1500""")
         for r in sep_rows:
             if r["cod"] in JUNK: continue

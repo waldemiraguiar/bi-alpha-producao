@@ -156,6 +156,24 @@ body{font-family:'Inter',sans-serif;background:
 .adminbtn:hover{background:var(--card2)}
 .adminbtn.on{color:var(--green);border-color:rgba(0,229,160,.5);background:rgba(0,229,160,.08)}
 .catstrip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.topicwrap{display:flex;flex-direction:column;gap:9px;margin-bottom:12px}
+.topicgrp{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.topiclbl{font-size:11px;font-weight:800;color:var(--cyan);text-transform:uppercase;letter-spacing:.03em;min-width:172px;flex:0 0 auto;padding-top:9px}
+.topicgrp .catstrip{margin-bottom:0;flex:1}
+.sepcat.atrasocard{border:1px solid rgba(255,176,32,.5);box-shadow:0 0 18px 1px rgba(255,176,32,.12)}
+.sepcat.atrasocard>.h{color:var(--amber)}
+/* ATRASADOS / URGENTE — atenção máxima (vermelho piscante + fogos) */
+.andonbar.urg{position:relative;overflow:hidden;animation:flashred .4s steps(1,end) infinite;border:2px solid #fff;justify-content:center;gap:12px}
+.andonbar.urg .ttl{font-size:24px;text-align:center}
+@keyframes fwpop{0%{transform:scale(.4) rotate(-12deg);opacity:.35}45%{transform:scale(1.6) rotate(12deg);opacity:1}100%{transform:scale(.85) rotate(0);opacity:.6}}
+.andonbar.urg .fw1,.andonbar.urg .fw2,.andonbar.urg .fw3{font-size:32px;line-height:1;display:inline-block;animation:fwpop .65s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(255,255,255,.6))}
+.andonbar.urg .fw2{animation-delay:.2s;font-size:36px}
+.andonbar.urg .fw3{animation-delay:.42s}
+.sepcat.andon.urgmax{animation:flashred .4s steps(1,end) infinite;border:3px solid #fff}
+.sepcat.andon.urgmax>.h{color:#fff;font-size:18px;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.septab.urgpulse{animation:tabpulse .5s ease-in-out infinite}
+@keyframes tabpulse{0%,100%{background:rgba(255,45,85,.25);box-shadow:0 0 0 0 rgba(255,45,85,.65)}50%{background:rgba(255,45,85,.5);box-shadow:0 0 0 7px rgba(255,45,85,0)}}
+.septab.urgpulse .tn,.septab.urgpulse{color:#FF5470!important}
 .catpill{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 13px;cursor:pointer;font-weight:700;font-size:13px;color:var(--ink)}
 .catpill:hover{background:var(--card2)}
 .catpill.on{background:var(--card2);border-color:var(--cyan);color:var(--cyan)}
