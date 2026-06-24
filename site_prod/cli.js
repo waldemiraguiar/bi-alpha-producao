@@ -75,7 +75,7 @@
       const watchHtml = watch.length ? `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">🟡 Monitoradas — sem entrada no HF agora (${watch.length})</h3><div class="watchgrid">` + watch.map(f => `<div class="senswatch">🟡 ${esc2(f.nome)}</div>`).join('') + `</div>` : '';
       return leg + (activeHtml || '') + watchHtml;
     }
-    const leg = `<div class="seplegend atrasado">🟡 Confira cada exame antes de liberar (check-in) e dê baixa <b>manual</b>. O que ficar de ontem vira <b style="color:var(--red)">🔴 loucura total</b>.</div>`;
+    const leg = `<div class="seplegend atrasado">🟡 Confira cada exame antes de liberar (check-in) e dê baixa <b>manual</b>. O que não for liberado vira <b style="color:var(--red)">🔴 loucura total</b> e fica piscando até alguém liberar.</div>`;
     const reqs = alertReqs();
     if (!reqs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum cliente com atenção ativo agora. Quando um cadastrar no HF, acende aqui (~10 min).</div>`;
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -85,7 +85,9 @@
       const dt = r.dt ? new Date(r.dt.replace(' ', 'T')) : null;
       const when = dt && !isNaN(dt) ? dt.toLocaleDateString('pt-BR') + ' ' + dt.toTimeString().slice(0, 5) : '';
       const chave = `${r.req}-${r.ano}`;
-      const flag = esquecido ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ESQUECIDO DE ONTEM — LIBERE AGORA!</span><span class="fw3">🎆</span></div>` : '';
+      const diasAtras = dt && !isNaN(dt) ? Math.max(1, Math.floor((Date.now() - dt.getTime()) / 864e5)) : 1;
+      const txtEsq = diasAtras === 1 ? 'ESQUECIDO DE ONTEM' : `ESQUECIDO HÁ ${diasAtras} DIAS`;
+      const flag = esquecido ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ${txtEsq} — LIBERE AGORA!</span><span class="fw3">🎆</span></div>` : '';
       return `<div class="alertcard atencao ${esquecido ? 'esquecido' : ''}">
         <div style="min-width:0">${flag}<div class="cli">🟡 ${esc2(r.cliente)}</div>
           <div class="big2">🐾 ${esc2(r.paciente)} &nbsp; <span class="reg">Reg ${esc2(r.req)}/${esc2(r.ano)}</span></div>

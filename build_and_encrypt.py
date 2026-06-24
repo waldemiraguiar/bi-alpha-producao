@@ -130,10 +130,26 @@ def build():
         WHERE Cliente IS NOT NULL AND TRIM(Cliente)<>'' AND DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 365 DAY)
         GROUP BY CodCliente ORDER BY nome""")
     cli_lista = [{"cod": r["cod"], "nome": (r["nome"] or "").strip()} for r in cli_lista if r["nome"]]
-    cli_reqs_raw = q("""SELECT CodCliente cod, Cliente cliente, NumeroSequencial req, AnoRequisiçao ano,
+    # Clínicas VIGIADAS (flags do app) → janela LONGA p/ o alerta persistir até alguém dar baixa.
+    # Como são poucas clínicas, isso até reduz o payload. Fallback = 2 dias (todas) se não ler as flags.
+    CLI_DIAS = 14
+    flagged_cods = set()
+    try:
+        import urllib.request
+        with urllib.request.urlopen("https://producao-lab-alpha.netlify.app/api/clientes", timeout=20) as _r:
+            for f in json.loads(_r.read().decode()).get("flags", []):
+                if f.get("cod") is not None: flagged_cods.add(int(f["cod"]))
+        print(f"[clientes] {len(flagged_cods)} clínicas vigiadas (janela {CLI_DIAS}d)")
+    except Exception as e:
+        print(f"[clientes] aviso: não leu flags ({e}); fallback 2 dias")
+    if flagged_cods:
+        _where = f"CodCliente IN ({','.join(str(c) for c in flagged_cods)}) AND DataEntrada>=DATE_SUB(CURDATE(),INTERVAL {CLI_DIAS} DAY)"
+    else:
+        _where = "DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 2 DAY)"
+    cli_reqs_raw = q(f"""SELECT CodCliente cod, Cliente cliente, NumeroSequencial req, AnoRequisiçao ano,
         Animal paciente, Requisitante vet, DataEntrada entrada, UsuarioDataEntrada udata, UsuarioHoraEntrada uhora
         FROM `TabExameNumeroRequisiçao`
-        WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 2 DAY)
+        WHERE {_where}
         ORDER BY DataEntrada DESC, NumeroSequencial DESC LIMIT 2000""")
     cli_reqs = []
     for r in cli_reqs_raw:
