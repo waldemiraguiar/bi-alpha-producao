@@ -29,7 +29,9 @@ PETLOVE = {
     "2025-05": 189860.70, "2025-06": 172860.61, "2025-07": 233484.67, "2025-08": 271239.38,
     "2025-09": 261968.80, "2025-10": 257761.96, "2025-11": 272728.27, "2025-12": 295313.79,
     "2026-01": 312785.29, "2026-02": 300037.20, "2026-03": 369282.17, "2026-04": 357062.83,
-    "2026-05": 399000.00,
+    "2026-05": 388548.42,   # real (Contas Médicas mai/26, Valor Repasse); antes estimado em 399k
+    # 2026-06 fica FORA do dict de propósito: mês parcial não entra na projeção/YTD.
+    # Produção parcial de jun (atend.) está em data_petlove/petlove_mensal.json p/ a coluna do quadro.
 }
 
 def build():
