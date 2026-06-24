@@ -1019,7 +1019,7 @@ function mesesRecentes(D,fromYm){
   const yms=s.map(x=>x.ym).filter(ym=>ym>=fromYm).sort().reverse();
   const rows=yms.map(ym=>{const c=by[ym],p=by[prevYm(ym)],y=by[yoyYm(ym)];const part=ym===partYm;
     const dmq=p?pc(c.q,p.q):null,dmf=p?pc(c.f,p.f):null,dyf=y?pc(c.f,y.f):null;
-    const plf=plm[ym]||0, pln=(pla[ym]||{}).n_atend;
+    const plf=plm[ym]||((pla[ym]||{}).valor)||0, pln=(pla[ym]||{}).n_atend;
     return `<tr${part?' style="opacity:.6"':''}><td>${ymLabel(ym)}${part?' <span style="color:var(--amber);font-size:10px;font-weight:700">parcial</span>':''}</td>
       <td class="num">${num(c.q)}</td><td class="num" style="color:${gcol(dmq==null?null:+dmq.toFixed(1))};font-weight:700">${gtxt(dmq==null?null:+dmq.toFixed(1))}</td>
       <td class="num">${brl(c.f)}</td><td class="num" style="color:${gcol(dmf==null?null:+dmf.toFixed(1))};font-weight:700">${gtxt(dmf==null?null:+dmf.toFixed(1))}</td>

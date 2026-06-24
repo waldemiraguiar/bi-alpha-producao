@@ -29,7 +29,9 @@ PETLOVE = {
     "2025-05": "REMOVIDO", "2025-06": "REMOVIDO", "2025-07": "REMOVIDO", "2025-08": "REMOVIDO",
     "2025-09": "REMOVIDO", "2025-10": "REMOVIDO", "2025-11": "REMOVIDO", "2025-12": "REMOVIDO",
     "2026-01": "REMOVIDO", "2026-02": "REMOVIDO", "2026-03": "REMOVIDO", "2026-04": "REMOVIDO",
-    "2026-05": "REMOVIDO",
+    "2026-05": "REMOVIDO",   # real (Contas Médicas mai/26, Valor Repasse); antes estimado em 399k
+    # 2026-06 fica FORA do dict de propósito: mês parcial não entra na projeção/YTD.
+    # Produção parcial de jun (atend.) está em data_petlove/petlove_mensal.json p/ a coluna do quadro.
 }
 
 def build():
