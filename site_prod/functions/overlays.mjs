@@ -15,13 +15,14 @@ export default async (req) => {
   const get = async (store, key) => (await store.get(key, { type: "json", consistency: "strong" })) || [];
   const now = Date.now();
   try {
-    const [lista, ubaixas, marks, flags, cbaixas] = await Promise.all([
-      get(u, "lista"), get(u, "baixas"), get(s, "marks"), get(c, "flags"), get(c, "baixas"),
+    const [lista, ubaixas, marks, descartes, flags, cbaixas] = await Promise.all([
+      get(u, "lista"), get(u, "baixas"), get(s, "marks"), get(s, "descartes"), get(c, "flags"), get(c, "baixas"),
     ]);
     return Response.json({
       urgentes: lista.filter(x => x && x.ts > now - AGE.lista),
       urg_baixas: ubaixas.filter(x => x && x.ts > now - AGE.baixas),
       marks,
+      descartes,
       flags,
       cli_baixas: cbaixas.filter(x => x && x.ts > now - AGE.cli_baixas),
     }, { headers: cors });

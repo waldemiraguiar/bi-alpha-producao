@@ -10,9 +10,10 @@
   const PISO_OFICIAL = new Date(2026, 5, 23, 0, 0, 0).getTime();
   let MODE = 'tv', view = 'separar', period = 'hoje';
   let marks = {};                 // chave -> marcação
+  let descartes = new Set();      // chaves apagadas (não-separados que o admin removeu)
   let selCat = '';                // categoria selecionada (abas do Separar)
   let selCatA = '';               // categoria selecionada (abas do Atrasados/Andon)
-  let histCat = '', histPer = 'dia'; // filtro do Histórico: categoria + período (dia/semana/mes/tudo)
+  let histCat = '', histPer = 'dia', histFiltro = 'todos'; // Histórico: categoria + período + (todos/separados/nao)
   let timer = null;
 
   const $ = id => document.getElementById(id);
@@ -20,6 +21,7 @@
   const sepData = () => (typeof DATA !== 'undefined' && DATA && DATA.separacao) ? DATA.separacao : null;
   const cutoffs = () => { const d = sepData(); return (d && d.cutoffs && d.cutoffs.length) ? [...d.cutoffs].sort((a, b) => a - b) : [15, 21]; };
   const itens = () => { const d = sepData(); return d && d.itens ? d.itens : []; };
+  const universo = () => { const d = sepData(); return d && d.historico ? d.historico : []; };  // últimos 7 dias (p/ histórico/placar)
   const chaveOf = it => `${it.req}-${it.codex}`;
 
   /* ---- quem está marcando (por aparelho) ---- */
@@ -47,7 +49,7 @@
 
   /* ---- rede ---- */
   async function loadMarks() {
-    try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); } } catch (e) {}
+    try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); descartes = new Set((j.descartes || []).map(d => d.chave)); } } catch (e) {}
   }
   async function post(payload) {
     try {
@@ -55,6 +57,15 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { alert(j.erro || 'Não foi possível salvar.'); return false; }
       marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); return true;
+    } catch (e) { alert('Erro de conexão.'); return false; }
+  }
+  // apagar não-separados (unitário ou lote) — undo=true desfaz
+  async function descartar(chaves, undo) {
+    try {
+      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: undo ? 'undescartar' : 'descartar', chaves, por: me(), senha: window.__pwd }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(j.erro || 'Não foi possível apagar.'); return false; }
+      descartes = new Set((j.descartes || []).map(d => d.chave)); render(); return true;
     } catch (e) { alert('Erro de conexão.'); return false; }
   }
 
@@ -166,74 +177,103 @@
         ${arr.map(rowSeparar).join('')}</div>`;
   }
 
+  const PISO_DAY = '2026-06-23';   // contagem oficial (string p/ comparar com dt)
+
   function viewPlacar() {
     const now = new Date(); const today = now.toISOString().slice(0, 10);
-    const cut = period === 'hoje' ? today : period === '7d' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : '0';
-    // numerador/denominador a partir das marcações (pontualidade da separação)
+    const cutDay = period === 'hoje' ? today : period === '7d' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : '0';
+    const floor = cutDay > PISO_DAY ? cutDay : PISO_DAY;
+    // denominador = UNIVERSO (tudo que precisava separar); numerador = separado no prazo. Não-separados PUXAM a nota pra baixo.
     const agg = {};
-    Object.values(marks).forEach(m => {
-      if (!m.ts_sep || m.ts_sep < PISO_OFICIAL) return;   // treino (antes do piso) não conta
-      const dia = new Date(m.ts_sep).toISOString().slice(0, 10);
-      if (dia < cut) return;
-      const a = agg[m.cat] = agg[m.cat] || { cat: m.cat, total: 0, ok: 0 };
-      a.total++; if (m.no_prazo) a.ok++;
+    universo().forEach(u => {
+      const dia = (u.dt || '').slice(0, 10); if (!dia || dia < floor) return;
+      const k = chaveOf(u); if (descartes.has(k)) return;
+      const a = agg[u.cat] = agg[u.cat] || { cat: u.cat, total: 0, sep: 0, ok: 0 };
+      a.total++;
+      const m = marks[k]; if (m && m.estado) { a.sep++; if (m.no_prazo) a.ok++; }
     });
-    // atrasados em aberto agora (não separados) por categoria — pra ninguém esconder
-    const open = {}; itens().forEach(it => { if (statusOf(it).st === 'atrasado') open[it.cat] = (open[it.cat] || 0) + 1; });
-    Object.keys(open).forEach(c => { agg[c] = agg[c] || { cat: c, total: 0, ok: 0 }; });
-    const rows = Object.values(agg).map(a => ({ ...a, pct: a.total ? Math.round(100 * a.ok / a.total) : (open[a.cat] ? 0 : 100), aberto: open[a.cat] || 0 }))
-      .sort((x, y) => y.pct - x.pct || y.total - x.total || x.aberto - y.aberto);
-    // medalha só para quem realmente separou algo no período; senão, posição numérica
+    const rows = Object.values(agg).map(a => ({ ...a, naoSep: a.total - a.sep, pct: a.total ? Math.round(100 * a.ok / a.total) : 100 }))
+      .sort((x, y) => y.pct - x.pct || y.total - x.total);
     let podium = 0;
     const medal = r => (r.total > 0 && ++podium <= 3) ? (podium === 1 ? '🥇' : podium === 2 ? '🥈' : '🥉') : '·';
     const per = `<div class="perbtns">
       <div class="perbtn ${period === 'hoje' ? 'on' : ''}" data-per="hoje">Hoje</div>
       <div class="perbtn ${period === '7d' ? 'on' : ''}" data-per="7d">7 dias</div>
       <div class="perbtn ${period === 'tudo' ? 'on' : ''}" data-per="tudo">Tudo</div></div>`;
-    const champCat = (rows.find(r => r.total > 0) || {}).cat;
-    const body = rows.length ? rows.map((r) => { const win = r.cat && r.cat === champCat; return `<div class="plrow ${win ? 'winner' : ''}">
+    const champ = rows.find(r => r.total > 0 && r.pct >= 70);   // só comemora quem realmente está bem
+    const body = rows.length ? rows.map((r) => { const win = champ && r.cat === champ.cat; return `<div class="plrow ${win ? 'winner' : ''}">
         <div class="pos">${medal(r)}</div>
         <div><div class="nm">${esc2(r.cat)}${win ? ' 🎆🎉<span class="champ">PARABÉNS!</span>' : ''}</div>
           <div class="barwrap"><i style="width:${r.pct}%"></i></div>
-          <div class="sub">${r.ok}/${r.total} no prazo${r.aberto ? ` · <b style="color:var(--red)">${r.aberto} em aberto atrasado</b>` : ''}</div></div>
+          <div class="sub">${r.ok}/${r.total} no prazo${r.naoSep ? ` · <b style="color:var(--red)">${r.naoSep} não separado${r.naoSep > 1 ? 's' : ''}</b>` : ''}</div></div>
         <div></div>
         <div><div class="pct" style="color:${r.pct >= 80 ? 'var(--green)' : r.pct >= 50 ? 'var(--amber)' : 'var(--red)'}">${r.pct}%</div><div class="sub">no prazo</div></div>
-      </div>`; }).join('') : `<div class="sepwait">Sem separações registradas no período.</div>`;
+      </div>`; }).join('') : `<div class="sepwait">Sem itens no período (contagem oficial desde 23/jun).</div>`;
     return `<div class="histfilt"><b style="font-size:15px">🏆 Pontualidade da separação por setor</b>${per}</div>${body}`;
   }
 
+  // universo (7 dias) cruzado com marcações: cada item vira separado OU não-separado
+  function histRows() {
+    const now = Date.now(); const today = new Date().toISOString().slice(0, 10);
+    const cutDay = histPer === 'dia' ? today : histPer === 'semana' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : histPer === 'mes' ? new Date(now - 30 * 864e5).toISOString().slice(0, 10) : '0';
+    const floor = cutDay > PISO_DAY ? cutDay : PISO_DAY;
+    const rows = [];
+    universo().forEach(u => {
+      const dia = (u.dt || '').slice(0, 10); if (!dia || dia < floor) return;
+      const k = chaveOf(u); if (descartes.has(k)) return;
+      const m = marks[k];
+      rows.push({ chave: k, req: u.req, ano: u.ano, cat: u.cat, exame: u.exame, paciente: u.paciente, dt: u.dt, sep: !!(m && m.estado), m });
+    });
+    rows.sort((a, b) => (a.sep !== b.sep) ? (a.sep ? 1 : -1) : (a.dt < b.dt ? 1 : a.dt > b.dt ? -1 : 0)); // não-separados primeiro
+    return rows;
+  }
+
   function viewHist() {
-    const now = Date.now();
-    const cut = histPer === 'dia' ? new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00').getTime()
-      : histPer === 'semana' ? now - 7 * 864e5
-        : histPer === 'mes' ? now - 30 * 864e5 : 0;
-    let ms = Object.values(marks).filter(m => m.ts_sep && m.ts_sep >= PISO_OFICIAL && m.ts_sep >= cut).sort((a, b) => b.ts_sep - a.ts_sep);
-    const byCat = {}; ms.forEach(m => { (byCat[m.cat] = byCat[m.cat] || []).push(m); });
+    const all = histRows();
+    const byCat = {}; all.forEach(r => { (byCat[r.cat] = byCat[r.cat] || []).push(r); });
     const cats = orderedCats(byCat);
+    let shown = histCat ? all.filter(r => r.cat === histCat) : all;
+    if (histFiltro === 'separados') shown = shown.filter(r => r.sep);
+    else if (histFiltro === 'nao') shown = shown.filter(r => !r.sep);
+    const nSep = shown.filter(r => r.sep).length, nNao = shown.length - nSep;
     const perLbl = { dia: 'Dia', semana: 'Semana', mes: 'Mês', tudo: 'Tudo' };
     const perBtns = `<div class="perbtns">${['dia', 'semana', 'mes', 'tudo'].map(p => `<div class="perbtn ${histPer === p ? 'on' : ''}" data-hper="${p}">${perLbl[p]}</div>`).join('')}</div>`;
+    const fBtns = `<div class="perbtns">
+      <div class="perbtn ${histFiltro === 'todos' ? 'on' : ''}" data-hf="todos">Todos</div>
+      <div class="perbtn ${histFiltro === 'separados' ? 'on' : ''}" data-hf="separados">✓ Separados</div>
+      <div class="perbtn ${histFiltro === 'nao' ? 'on' : ''}" data-hf="nao" style="${histFiltro === 'nao' ? 'border-color:var(--red);color:var(--red)' : ''}">✗ Não separados</div></div>`;
     const pills = `<div class="catstrip">
-      <div class="catpill ${!histCat ? 'on' : ''}" data-hc=""><span class="nm">Todas</span><span class="cc">${ms.length}</span></div>`
+      <div class="catpill ${!histCat ? 'on' : ''}" data-hc=""><span class="nm">Todas</span><span class="cc">${all.length}</span></div>`
       + cats.map(c => `<div class="catpill ${histCat === c ? 'on' : ''}" data-hc="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc">${byCat[c].length}</span></div>`).join('') + `</div>`;
-    const shown = histCat ? ms.filter(m => m.cat === histCat) : ms;
-    const head = `<div class="histfilt"><b style="font-size:15px">📋 Histórico de separações</b>${perBtns}
-      <span style="margin-left:auto;color:var(--mut);font-size:12px">${shown.length} registro${shown.length !== 1 ? 's' : ''}</span></div>${pills}`;
-    if (!shown.length) return head + `<div class="sepwait">Nenhuma separação registrada nesse período${histCat ? ' nessa categoria' : ''}.</div>`;
-    const fmt = ts => { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toTimeString().slice(0, 5); };
-    const ms2 = shown;
-    const rows = ms2.map(m => `<tr>
-      <td style="white-space:nowrap">${fmt(m.ts_sep)}</td>
-      <td style="color:var(--cyan);font-weight:700">${esc2(m.req)}/${esc2(m.ano)}</td>
-      <td>${esc2(m.paciente)}</td>
-      <td style="color:var(--mut)">${esc2(m.exame)}</td>
-      <td>${esc2(m.cat)}</td>
-      <td><span class="cl ${m.classe}">${m.classe === 'apoio' ? '📦' : '🏠'}</span></td>
-      <td>${esc2(m.por)}${m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}</td>
-      <td><span class="est ${m.estado}">${m.estado}</span>${m.data_env ? `<div style="font-size:10px;color:var(--mut)">env ${m.data_env}</div>` : ''}</td>
-    </tr>`).join('');
+    const misses = shown.filter(r => !r.sep);
+    const batch = misses.length ? `<button class="perbtn" id="histdelbatch" style="border-color:var(--red);color:var(--red);font-weight:800">🗑 Apagar ${misses.length} não-separado${misses.length > 1 ? 's' : ''} (deste filtro)</button>` : '';
+    const head = `<div class="histfilt"><b style="font-size:15px">📋 Histórico</b>${perBtns}${fBtns}
+      <span style="margin-left:auto;color:var(--mut);font-size:12px">✓ ${nSep} separados · <b style="color:var(--red)">✗ ${nNao} não</b></span></div>${pills}
+      ${batch ? `<div class="histfilt">${batch}</div>` : ''}`;
+    if (!shown.length) return head + `<div class="sepwait">Nada nesse período/filtro (contagem oficial desde 23/jun).</div>`;
+    const fmtTs = ts => { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toTimeString().slice(0, 5); };
+    const fmtD = d => { const p = String(d || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : (d || ''); };
+    const rowsHtml = shown.map(r => {
+      const when = r.sep ? fmtTs(r.m.ts_sep) : fmtD(r.dt);
+      const status = r.sep
+        ? `<span class="est separado">separado</span> <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}`
+        : `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`;
+      const del = r.sep
+        ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="mark" title="desfazer marcação">↩</button>`
+        : `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="miss" title="apagar este não-separado">✕</button>`;
+      return `<tr style="${r.sep ? '' : 'background:rgba(255,84,112,.06)'}">
+        <td style="white-space:nowrap">${when}</td>
+        <td style="color:var(--cyan);font-weight:700">${esc2(r.req)}/${esc2(r.ano)}</td>
+        <td>${esc2(r.paciente)}</td>
+        <td style="color:var(--mut)">${esc2(r.exame)}</td>
+        <td>${esc2(r.cat)}</td>
+        <td>${status}</td>
+        <td style="text-align:right">${del}</td>
+      </tr>`;
+    }).join('');
     return head + `<table class="htable"><thead><tr>
-      <th>Quando</th><th>Req</th><th>Paciente</th><th>Exame</th><th>Categoria</th><th>Tipo</th><th>Quem separou</th><th>Estado</th>
-      </tr></thead><tbody>${rows}</tbody></table>`;
+      <th>Quando</th><th>Req</th><th>Paciente</th><th>Exame</th><th>Setor</th><th>Status</th><th></th>
+      </tr></thead><tbody>${rowsHtml}</tbody></table>`;
   }
 
   function render() {
@@ -258,6 +298,16 @@
     el.querySelectorAll('.catpill[data-ca]').forEach(p => p.onclick = () => { selCatA = p.dataset.ca; render(); });
     el.querySelectorAll('.catpill[data-hc]').forEach(p => p.onclick = () => { histCat = p.dataset.hc; render(); });
     el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
+    el.querySelectorAll('.perbtn[data-hf]').forEach(p => p.onclick = () => { histFiltro = p.dataset.hf; render(); });
+    el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      const k = b.dataset.del;
+      if (b.dataset.delkind === 'mark') { if (confirm('Desfazer esta marcação de "separado"? Volta a contar como não-separado.') && await post({ acao: 'desfazer', chave: k })) render(); }
+      else { if (confirm('Apagar este NÃO-separado? Some do histórico e do placar (não dá pra recuperar o tempo perdido, mas tira da contagem).')) descartar([k]); }
+    });
+    const bb = $('histdelbatch'); if (bb) bb.onclick = () => {
+      const all = histRows(); let m = histCat ? all.filter(r => r.cat === histCat) : all; m = m.filter(r => !r.sep);
+      if (m.length && confirm(`Apagar ${m.length} não-separado(s) deste filtro de uma vez? Some do histórico e do placar.`)) descartar(m.map(r => r.chave));
+    };
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }

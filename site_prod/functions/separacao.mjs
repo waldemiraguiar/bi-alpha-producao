@@ -29,6 +29,18 @@ export default async (req) => {
     const b = await req.json().catch(() => ({}));
     if (!SECRET || b.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
+
+    // APAGAR não-separados (descartes) — unitário {chave} ou lote {chaves:[...]}
+    if (b.acao === "descartar" || b.acao === "undescartar") {
+      const DK = "descartes";
+      const chaves = Array.isArray(b.chaves) ? b.chaves : (b.chave ? [b.chave] : []);
+      let desc = (await store.get(DK, { type: "json", consistency: "strong" })) || [];
+      if (b.acao === "undescartar") desc = desc.filter((d) => !chaves.includes(d.chave));
+      else { const set = new Set(desc.map((d) => d.chave)); chaves.forEach((k) => { if (!set.has(k)) desc.push({ chave: k, por: b.por || "equipe", ts: Date.now() }); }); }
+      await store.setJSON(DK, desc);
+      return Response.json({ ok: true, descartes: desc }, { headers: cors });
+    }
+
     if (!b.chave)
       return new Response(JSON.stringify({ erro: "sem chave" }), { status: 400, headers: cors });
 
