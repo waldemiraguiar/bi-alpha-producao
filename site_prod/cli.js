@@ -105,8 +105,10 @@
       classe = m === 'cli-sensivel' ? 'sensivel' : 'atencao'; term = '';
       await load(); render();
       if (timer) clearInterval(timer);
-      timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none') { await load(); render(); } }, 30000);
+      // poupa créditos: só consulta com a aba VISÍVEL, a cada 60s
+      timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) { await load(); render(); } }, 60000);
     } else if (timer) { clearInterval(timer); timer = null; }
   }
+  document.addEventListener('visibilitychange', () => { const el = $('cli'); if (!document.hidden && el && el.style.display !== 'none') load().then(render); });
   window.CLI = { onMode, render };
 })();
