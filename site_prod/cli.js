@@ -53,16 +53,27 @@
 
   function viewAlertas() {
     if (classe === 'sensivel') {
-      const leg = `<div class="seplegend urgente">🔔 Clínicas sensíveis que acabaram de entrar no HF — dê atenção. Some quando você dá baixa.</div>`;
-      const groups = alertByClinic();
-      if (!groups.length) return leg + `<div class="sepwait" style="padding:30px">Nenhuma clínica sensível ativa agora. Quando uma cadastrar no HF, acende aqui (~10 min).</div>`;
-      return leg + groups.map(g => {
+      const leg = `<div class="seplegend">🟡 Clínicas sensíveis monitoradas. Em <b style="color:var(--amber)">amarelo</b> = só de olho · vira <b style="color:var(--red)">vermelho + fogos</b> quando entra exame no HF. Baixa volta pro amarelo.</div>`;
+      const regs = myFlags();
+      if (!regs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhuma clínica sensível cadastrada. Vá na aba <b>📋 Cadastrados</b> para adicionar.</div>`;
+      const byCod = {}; alertByClinic().forEach(g => byCod[String(g.cod)] = g);
+      const active = [], watch = [];
+      regs.forEach(f => { const g = byCod[String(f.cod)]; if (g) active.push({ f, g }); else watch.push(f); });
+      active.sort((a, b) => (b.g.lastDt || '').localeCompare(a.g.lastDt || ''));
+      watch.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+      const activeHtml = active.map(({ f, g }) => {
         const chaves = g.reqs.map(r => `${r.req}-${r.ano}`).join(',');
-        return `<div class="alertcard sensivel" style="grid-template-columns:1fr auto">
-          <div class="cli" style="font-size:23px">🔴 ${esc2(g.cliente)}${g.reqs.length > 1 ? ` <span style="font-size:13px;font-weight:700;opacity:.85">(${g.reqs.length} novas)</span>` : ''}</div>
-          <button class="baixab" data-baixaclin="${escA(chaves)}" data-cod="${escA(g.cod)}" data-cliente="${escA(g.cliente)}">✓ baixa</button>
+        return `<div class="alertcard sensivel">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0">
+            <span class="fw1">🎆</span><span class="fw2">🎇</span>
+            <div class="cli" style="font-size:22px">🔴 ${esc2(f.nome)}${g.reqs.length > 1 ? ` <span style="font-size:13px;opacity:.85">(${g.reqs.length} novas)</span>` : ''}
+              <div style="font-size:12.5px;font-weight:800;letter-spacing:.03em">⚠️ TEM EXAME NA CASA — DÊ ATENÇÃO!</div></div>
+            <span class="fw3">🎆</span></div>
+          <button class="baixab" data-baixaclin="${escA(chaves)}" data-cod="${escA(f.cod)}" data-cliente="${escA(f.nome)}">✓ baixa</button>
         </div>`;
       }).join('');
+      const watchHtml = watch.length ? `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">🟡 Monitoradas — sem entrada no HF agora (${watch.length})</h3><div class="watchgrid">` + watch.map(f => `<div class="senswatch">🟡 ${esc2(f.nome)}</div>`).join('') + `</div>` : '';
+      return leg + (activeHtml || '') + watchHtml;
     }
     const leg = `<div class="seplegend atrasado">🟡 Confira cada exame antes de liberar (check-in). Some quando você dá baixa.</div>`;
     const reqs = alertReqs();
