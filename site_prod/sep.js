@@ -15,6 +15,8 @@
   let selByView = { separar: '', atrasado: '', urgente: '', hist: '', apagados: '' }; // categoria selecionada por aba
   let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
+  let subSep = null;             // canal Realtime do Supabase
+  const useSupa = () => window.SUPA && window.SUPA.ok;
   const URG_CORTE = 1;            // Atrasado vai até 1 dia; a partir do 2º dia -> Última Chamada
   let timer = null;
   const ADMK = 'sep_admin';
@@ -53,21 +55,39 @@
   }
 
   /* ---- rede ---- */
+  function ingest(j) { marks = {}; (j.marks || []).forEach(m => marks[m.chave] = { ...m, ts_sep: m.ts_sep != null ? Number(m.ts_sep) : m.ts_sep }); descartesList = (j.descartes || []).map(d => ({ ...d, ts: d.ts != null ? Number(d.ts) : d.ts })); descartes = new Set(descartesList.map(d => d.chave)); }
   async function loadMarks() {
-    try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); descartesList = j.descartes || []; descartes = new Set(descartesList.map(d => d.chave)); } } catch (e) {}
+    try {
+      if (useSupa()) { ingest(await window.SUPA.loadSep()); return; }
+      const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) ingest(await r.json());
+    } catch (e) {}
   }
   async function post(payload) {
     try {
+      if (useSupa()) {
+        const a = payload.acao, k = payload.chave;
+        if (a === 'separar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'separado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: payload.no_prazo !== false, corte: payload.corte || null });
+        else if (a === 'enviar') await window.SUPA.updateMark(k, { estado: 'enviado', por_env: payload.por || 'equipe', ts_env: Date.now(), data_env: new Date().toISOString().slice(0, 10) });
+        else if (a === 'receber') await window.SUPA.updateMark(k, { estado: 'recebido', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
+        else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
+        else if (a === 'desfazer') await window.SUPA.delMark(k);
+        await loadMarks(); return true;
+      }
       const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, senha: window.__pwd }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { alert(j.erro || 'Não foi possível salvar.'); return false; }
-      marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); return true;
-    } catch (e) { alert('Erro de conexão.'); return false; }
+      ingest(j); return true;
+    } catch (e) { alert('Erro ao salvar (Supabase).'); return false; }
   }
   // apagar não-separados (unitário ou lote) — SÓ ADMIN. itens = objetos completos; undo passa só chaves
   async function descartar(itens, undo) {
     if (!isAdmin()) { alert('Só o admin pode apagar/restaurar. Destrave com o PIN (botão 🔓 Admin no topo).'); return false; }
     try {
+      if (useSupa()) {
+        if (undo) await window.SUPA.undescartar(itens.map(i => i.chave || i), adminPin());
+        else await window.SUPA.descartar(itens.map(i => ({ chave: i.chave, req: i.req, ano: i.ano, codex: i.codex, exame: i.exame, cat: i.cat, paciente: i.paciente, dt: i.dt })), adminPin(), me() || 'admin');
+        await loadMarks(); render(); return true;
+      }
       const body = undo
         ? { acao: 'undescartar', chaves: itens.map(i => i.chave || i) }
         : { acao: 'descartar', itens: itens.map(i => ({ chave: i.chave, req: i.req, ano: i.ano, codex: i.codex, exame: i.exame, cat: i.cat, paciente: i.paciente, dt: i.dt })) };
@@ -75,16 +95,16 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { alert(j.erro || 'Não foi possível apagar.'); if (/admin/i.test(j.erro || '')) { localStorage.removeItem(ADMK); render(); } return false; }
       descartesList = j.descartes || []; descartes = new Set(descartesList.map(d => d.chave)); render(); return true;
-    } catch (e) { alert('Erro de conexão.'); return false; }
+    } catch (e) { if (/pin/i.test(e.message || '')) { alert('PIN de admin inválido.'); localStorage.removeItem(ADMK); render(); } else alert('Erro ao apagar (Supabase).'); return false; }
   }
   async function adminUnlock() {
     if (isAdmin()) { if (confirm('Travar o modo admin neste aparelho?')) { localStorage.removeItem(ADMK); render(); } return; }
     const pin = prompt('PIN de admin (para apagar e restaurar não-separados):'); if (!pin) return;
     try {
-      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'admincheck', admin: pin, senha: window.__pwd }) });
-      const j = await r.json().catch(() => ({}));
-      if (j.ok) { localStorage.setItem(ADMK, pin); render(); }
-      else alert('PIN de admin incorreto.');
+      let ok;
+      if (useSupa()) ok = await window.SUPA.admincheck(pin);
+      else { const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'admincheck', admin: pin, senha: window.__pwd }) }); ok = (await r.json().catch(() => ({}))).ok; }
+      if (ok) { localStorage.setItem(ADMK, pin); render(); } else alert('PIN de admin incorreto.');
     } catch (e) { alert('Erro de conexão.'); }
   }
 
@@ -398,13 +418,14 @@
     // rotação só roda na TV
     try { if (typeof ROT !== 'undefined' && ROT) clearInterval(ROT); } catch (e) {}
     if (isTv && typeof startRotation === 'function') startRotation();
-    // timer da Triagem só no modo sep
+    // Triagem: Supabase Realtime (push, zero polling) — fallback p/ polling 60s se não tiver Supabase
+    if (subSep) { window.SUPA && window.SUPA.unsub(subSep); subSep = null; }
+    if (timer) { clearInterval(timer); timer = null; }
     if (m === 'sep') {
       await loadMarks(); render();
-      if (timer) clearInterval(timer);
-      // poupa créditos: só consulta com a aba VISÍVEL, a cada 60s (cliques continuam instantâneos via POST)
-      timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden) { await loadMarks(); render(); } }, 60000);
-    } else if (timer) { clearInterval(timer); timer = null; }
+      if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep') { await loadMarks(); render(); } });
+      else timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden) { await loadMarks(); render(); } }, 60000);
+    }
     // delega os modos de cliente
     if (window.CLI) await window.CLI.onMode(m);
   }
