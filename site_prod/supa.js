@@ -1,0 +1,40 @@
+/* Camada de dados Supabase — substitui as funções Netlify (Blobs) pelo estado vivo + Realtime (push).
+   Lê/escreve direto nas tabelas (chave anon, RLS); apagar não-separado vai por RPC com PIN.
+   Expõe window.SUPA. Se a lib não carregar, .ok=false e o app cai no fallback das funções Netlify. */
+(function () {
+  const URL = 'https://lrwjcdvporaivxvfuiwt.supabase.co';
+  const KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8';
+  const lib = window.supabase;
+  const SB = (lib && lib.createClient) ? lib.createClient(URL, KEY, { realtime: { params: { eventsPerSecond: 5 } } }) : null;
+  const arr = r => (r && r.data) ? r.data : [];
+
+  window.SUPA = {
+    ok: !!SB,
+    // ---- leitura ----
+    async loadCli() { if (!SB) return { flags: [], cli_baixas: [] }; const [f, b] = await Promise.all([SB.from('cli_flags').select('*'), SB.from('cli_baixas').select('*')]); return { flags: arr(f), cli_baixas: arr(b) }; },
+    async loadSep() { if (!SB) return { marks: [], descartes: [] }; const [m, d] = await Promise.all([SB.from('sep_marks').select('*'), SB.from('sep_descartes').select('*')]); return { marks: arr(m), descartes: arr(d) }; },
+    async loadUrg() { if (!SB) return { urgentes: [], baixas: [] }; const [l, b] = await Promise.all([SB.from('urg_lista').select('*'), SB.from('urg_baixas').select('*')]); return { urgentes: arr(l), baixas: arr(b) }; },
+    // ---- escrita: clientes ----
+    upsertFlag(row) { return SB.from('cli_flags').upsert(row); },
+    delFlag(cod) { return SB.from('cli_flags').delete().eq('cod', String(cod)); },
+    baixaCli(rows) { return SB.from('cli_baixas').upsert(rows); },
+    // ---- escrita: triagem ----
+    upsertMark(row) { return SB.from('sep_marks').upsert(row); },
+    delMark(chave) { return SB.from('sep_marks').delete().eq('chave', chave); },
+    async admincheck(pin) { try { const { data } = await SB.rpc('sep_admincheck', { p_pin: pin }); return !!data; } catch (e) { return false; } },
+    async descartar(itens, pin, por) { const { error } = await SB.rpc('sep_descartar', { p_itens: itens, p_pin: pin, p_por: por || 'admin' }); if (error) throw new Error(error.message || 'PIN'); },
+    async undescartar(chaves, pin) { const { error } = await SB.rpc('sep_undescartar', { p_chaves: chaves, p_pin: pin }); if (error) throw new Error(error.message || 'PIN'); },
+    // ---- escrita: urgentes ----
+    upsertUrg(table, row) { return SB.from(table).upsert(row); },
+    delUrg(table, registro) { return SB.from(table).delete().eq('registro', String(registro)); },
+    // ---- Realtime (push) ----
+    subscribe(tables, cb) {
+      if (!SB) return null;
+      const ch = SB.channel('rt_' + tables.join('_') + '_' + Math.floor(performance.now()));
+      tables.forEach(t => ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, cb));
+      ch.subscribe();
+      return ch;
+    },
+    unsub(ch) { try { if (SB && ch) SB.removeChannel(ch); } catch (e) {} },
+  };
+})();

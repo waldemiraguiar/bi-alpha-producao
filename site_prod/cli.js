@@ -7,7 +7,8 @@
   const API = '/api/clientes';
   const MEK = 'sep_me';
   let classe = null, cliView = 'alertas';
-  let flags = [], baixas = [], term = '', timer = null;
+  let flags = [], baixas = [], term = '', timer = null, sub = null;
+  const useSupa = () => window.SUPA && window.SUPA.ok;
 
   const $ = id => document.getElementById(id);
   const esc2 = s => (typeof esc === 'function' ? esc(s) : String(s == null ? '' : s));
@@ -15,14 +16,28 @@
   const cliData = () => (typeof DATA !== 'undefined' && DATA && DATA.clientes) ? DATA.clientes : null;
   const me = () => localStorage.getItem(MEK) || 'equipe';
 
-  async function load() { try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); flags = j.flags || []; baixas = j.cli_baixas || []; } } catch (e) {} }
+  async function load() {
+    try {
+      if (useSupa()) { const j = await window.SUPA.loadCli(); flags = j.flags || []; baixas = j.cli_baixas || []; return; }
+      const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); flags = j.flags || []; baixas = j.cli_baixas || []; }
+    } catch (e) {}
+  }
   async function post(p) {
     try {
+      if (useSupa()) {
+        if (p.acao === 'flag') await window.SUPA.upsertFlag({ cod: String(p.cod), nome: p.nome || '', classe: p.classe, por: p.por || 'equipe', ts: Date.now() });
+        else if (p.acao === 'desflag') await window.SUPA.delFlag(p.cod);
+        else if (p.acao === 'baixa') {
+          const chaves = p.chaves || [p.chave];
+          await window.SUPA.baixaCli(chaves.map(ch => ({ chave: ch, cod: String(p.cod || ''), classe: p.classe, cliente: p.cliente || '', req: p.req || null, ano: p.ano || null, paciente: p.paciente || '', por: p.por || 'equipe', ts: Date.now() })));
+        }
+        await load(); return true;
+      }
       const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...p, senha: window.__pwd }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { alert(j.erro || 'Não foi possível salvar.'); return false; }
       flags = j.flags || flags; baixas = j.baixas || baixas; return true;
-    } catch (e) { alert('Erro de conexão.'); return false; }
+    } catch (e) { alert('Erro ao salvar (Supabase).'); return false; }
   }
 
   const myFlags = () => flags.filter(f => f.classe === classe);
@@ -150,9 +165,15 @@
     if (m === 'cli-sensivel' || m === 'cli-atencao') {
       classe = m === 'cli-sensivel' ? 'sensivel' : 'atencao'; term = ''; cliView = 'alertas';
       await load(); render();
-      if (timer) clearInterval(timer);
-      timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) { await load(); render(); } }, 60000);
-    } else if (timer) { clearInterval(timer); timer = null; }
+      if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; }
+      if (timer) { clearInterval(timer); timer = null; }
+      if (useSupa()) {
+        // Realtime: re-renderiza quando flags/baixas mudam (push, ZERO polling)
+        sub = window.SUPA.subscribe(['cli_flags', 'cli_baixas'], async () => { await load(); render(); });
+      } else {
+        timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) { await load(); render(); } }, 60000);
+      }
+    } else { if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; } if (timer) { clearInterval(timer); timer = null; } }
   }
   document.addEventListener('visibilitychange', () => { const el = $('cli'); if (!document.hidden && el && el.style.display !== 'none') load().then(render); });
   window.CLI = { onMode, render };
