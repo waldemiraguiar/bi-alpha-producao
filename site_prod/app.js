@@ -252,3 +252,15 @@ function renderActive(){
 }
 function fmtD(d){if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}`:d;}
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+/* Auto-reload na virada do dia (meia-noite BRT): a TV/PC fica ligada a noite toda;
+   isso garante que ela pegue o codigo novo + o reset diario da Triagem sem F5 manual. */
+(function(){
+  function msAteMeiaNoiteBRT(){
+    const now=Date.now();
+    const brt=new Date(now-3*3600e3);                                            // relogio em BRT (UTC-3)
+    const alvo=Date.UTC(brt.getUTCFullYear(),brt.getUTCMonth(),brt.getUTCDate()+1)+3*3600e3; // proxima 00:00 BRT em UTC
+    return alvo-now;
+  }
+  setTimeout(function(){ location.reload(); }, msAteMeiaNoiteBRT()+8000);         // +8s de folga p/ a data ja ter virado
+})();
