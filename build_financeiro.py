@@ -284,6 +284,8 @@ def build():
         plex=json.load(open(os.path.join(PLDIR,"petlove_exames.json"),encoding="utf-8"))
         try: D["petlove"]["atend_mensal"]=json.load(open(os.path.join(PLDIR,"petlove_mensal.json"),encoding="utf-8"))
         except Exception: pass
+        try: D["petlove"]["proj_atual"]=json.load(open(os.path.join(PLDIR,"petlove_proj.json"),encoding="utf-8"))
+        except Exception: pass
         mt=[r for r in marg if r.get("tabela")]
         rev_pl=sum(r["volume"]*r["petlove"] for r in mt)
         rev_tb=sum(r["volume"]*r["tabela"] for r in mt)

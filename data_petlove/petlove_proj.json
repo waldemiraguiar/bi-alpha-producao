@@ -1,0 +1,14 @@
+{
+ "ym": "2026-06",
+ "ate_dia": 23,
+ "parcial_repasse": 213661,
+ "parcial_exames": 7262,
+ "parcial_atend": 1532,
+ "base": "curva de maio/26 (72% rodado até o dia 23)",
+ "proj_repasse": 296871,
+ "piso_repasse": 278688,
+ "proj_exames": 9977,
+ "proj_atend": 2110,
+ "vs_mes_ant_pct": -23.6,
+ "obs": "Projeção proporcional à curva intra-mês de maio (mês fechado). Queda ~24% provavelmente puxada pela Copa do Mundo 2026. Faixa: piso linear R$279k → base proporcional R$297k. Número definitivo quando o mês fechar."
+}
