@@ -167,9 +167,10 @@ body{font-family:'Inter',sans-serif;background:
 .andonbar.urg .ttl{font-size:24px;text-align:center}
 @keyframes fwpop{0%{transform:scale(.4) rotate(-12deg);opacity:.35}45%{transform:scale(1.6) rotate(12deg);opacity:1}100%{transform:scale(.85) rotate(0);opacity:.6}}
 .andonbar.urg .fw1,.andonbar.urg .fw2,.andonbar.urg .fw3,
-.alertcard.sensivel .fw1,.alertcard.sensivel .fw2,.alertcard.sensivel .fw3{font-size:30px;line-height:1;display:inline-block;animation:fwpop .65s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(255,255,255,.6))}
-.andonbar.urg .fw2,.alertcard.sensivel .fw2{animation-delay:.2s;font-size:34px}
-.andonbar.urg .fw3,.alertcard.sensivel .fw3{animation-delay:.42s}
+.alertcard .fw1,.alertcard .fw2,.alertcard .fw3{font-size:28px;line-height:1;display:inline-block;animation:fwpop .65s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(255,255,255,.6))}
+.andonbar.urg .fw2,.alertcard .fw2{animation-delay:.2s;font-size:32px}
+.andonbar.urg .fw3,.alertcard .fw3{animation-delay:.42s}
+.alertcard.atencao.esquecido{animation:flashred .4s steps(1,end) infinite;border:2px solid #fff}
 /* clínica sensível "só de olho" — amarelo piscando suave (vira vermelho+fogos qd entra exame) */
 .senswatch{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:800;padding:11px 16px;border-radius:10px;border:1.5px solid var(--amber);background:rgba(255,176,32,.1);color:var(--ink);animation:watchblink 1.3s ease-in-out infinite}
 @keyframes watchblink{0%,100%{box-shadow:0 0 0 0 rgba(255,176,32,.5);border-color:var(--amber);background:rgba(255,176,32,.12)}50%{box-shadow:0 0 0 5px rgba(255,176,32,0);border-color:rgba(255,176,32,.35);background:rgba(255,176,32,.04)}}

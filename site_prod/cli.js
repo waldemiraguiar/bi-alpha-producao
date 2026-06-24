@@ -75,20 +75,28 @@
       const watchHtml = watch.length ? `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">🟡 Monitoradas — sem entrada no HF agora (${watch.length})</h3><div class="watchgrid">` + watch.map(f => `<div class="senswatch">🟡 ${esc2(f.nome)}</div>`).join('') + `</div>` : '';
       return leg + (activeHtml || '') + watchHtml;
     }
-    const leg = `<div class="seplegend atrasado">🟡 Confira cada exame antes de liberar (check-in). Some quando você dá baixa.</div>`;
+    const leg = `<div class="seplegend atrasado">🟡 Confira cada exame antes de liberar (check-in) e dê baixa <b>manual</b>. O que ficar de ontem vira <b style="color:var(--red)">🔴 loucura total</b>.</div>`;
     const reqs = alertReqs();
     if (!reqs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum cliente com atenção ativo agora. Quando um cadastrar no HF, acende aqui (~10 min).</div>`;
-    return leg + reqs.map(r => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const esq = [], hj = [];
+    reqs.forEach(r => { const d = (r.dt || '').slice(0, 10); (d && d < todayStr ? esq : hj).push(r); });
+    const card = (r, esquecido) => {
       const dt = r.dt ? new Date(r.dt.replace(' ', 'T')) : null;
       const when = dt && !isNaN(dt) ? dt.toLocaleDateString('pt-BR') + ' ' + dt.toTimeString().slice(0, 5) : '';
       const chave = `${r.req}-${r.ano}`;
-      return `<div class="alertcard atencao">
-        <div><div class="cli">🟡 ${esc2(r.cliente)}</div>
+      const flag = esquecido ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ESQUECIDO DE ONTEM — LIBERE AGORA!</span><span class="fw3">🎆</span></div>` : '';
+      return `<div class="alertcard atencao ${esquecido ? 'esquecido' : ''}">
+        <div style="min-width:0">${flag}<div class="cli">🟡 ${esc2(r.cliente)}</div>
           <div class="big2">🐾 ${esc2(r.paciente)} &nbsp; <span class="reg">Reg ${esc2(r.req)}/${esc2(r.ano)}</span></div>
           <div class="meta">${r.vet ? `vet ${esc2(r.vet)} · ` : ''}${when}</div></div>
         <button class="baixab" data-baixa="${chave}" data-cod="${escA(r.cod)}" data-cliente="${escA(r.cliente)}" data-req="${escA(r.req)}" data-ano="${escA(r.ano)}" data-paciente="${escA(r.paciente)}">✓ liberar</button>
       </div>`;
-    }).join('');
+    };
+    let html = leg;
+    if (esq.length) html += `<h3 style="font-size:13px;font-weight:900;color:var(--red);margin:6px 0 10px;letter-spacing:.03em">🔴 ${esq.length} ESQUECIDO${esq.length > 1 ? 'S' : ''} DE ONTEM — LIBERE JÁ!</h3>` + esq.map(r => card(r, true)).join('');
+    if (hj.length) html += `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">🟡 De hoje (${hj.length})</h3>` + hj.map(r => card(r, false)).join('');
+    return html;
   }
 
   function viewCadastrados() {
