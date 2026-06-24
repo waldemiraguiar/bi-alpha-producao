@@ -107,6 +107,23 @@ def build():
                 "urgente": (r["urg"] == 1), "dias": r["dias"] or 0,
             })
 
+    # --- HISTÓRICO: universo cofre dos últimos N dias (p/ ver separados E NÃO-separados por setor) ---
+    HIST_DIAS = 7
+    hist_itens = []
+    if COFRE:
+        codes_h = ",".join(str(k) for k in COFRE)
+        hist_rows = q(f"""SELECT s.CodCategoria cod, s.CodExame codex, s.Exame exame,
+            r.NumeroSequencial req, r.AnoRequisiçao ano, r.Animal paciente, r.DataEntrada entrada
+            FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+            WHERE s.CodExame IN ({codes_h}) AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL {HIST_DIAS} DAY)
+            ORDER BY r.DataEntrada DESC, r.NumeroSequencial DESC LIMIT 3000""")
+        for r in hist_rows:
+            if r["cod"] in JUNK or r["codex"] not in COFRE: continue
+            hist_itens.append({"req": r["req"], "ano": r["ano"], "codex": r["codex"],
+                "exame": r["exame"], "cat": nome(r["cod"]), "cod": r["cod"],
+                "paciente": (r["paciente"] or "").strip() or "—",
+                "dt": str(r["entrada"]) if r["entrada"] else None})
+
     # --- CLIENTES (clínicas): lista p/ busca + requisições recentes p/ acender alerta ---
     cli_lista = q("""SELECT CodCliente cod, MAX(Cliente) nome
         FROM `TabExameNumeroRequisiçao`
@@ -194,7 +211,7 @@ def build():
        "resumo":resumo,"categorias":categorias,"atrasados":atrasados,
        "separacao":{"cutoffs":CORTES,
                     "gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
-                    "itens":sep_itens},
+                    "itens":sep_itens,"historico":hist_itens},
        "clientes":{"lista":cli_lista,"reqs":cli_reqs}}
     conn.close()
     return D
@@ -214,7 +231,7 @@ def encrypt(D):
          "iv":base64.b64encode(iv).decode(),"ct":base64.b64encode(ct).decode()}
     os.makedirs(os.path.dirname(OUT_ENC),exist_ok=True)
     json.dump(env,open(OUT_ENC,"w"),separators=(",",":"))
-    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])} separacao={len(D.get('separacao',{}).get('itens',[]))} clientes_lista={len(D.get('clientes',{}).get('lista',[]))} clientes_reqs={len(D.get('clientes',{}).get('reqs',[]))}")
+    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])} separacao={len(D.get('separacao',{}).get('itens',[]))} historico={len(D.get('separacao',{}).get('historico',[]))} clientes_lista={len(D.get('clientes',{}).get('lista',[]))} clientes_reqs={len(D.get('clientes',{}).get('reqs',[]))}")
 
 if __name__=="__main__":
     last=None
