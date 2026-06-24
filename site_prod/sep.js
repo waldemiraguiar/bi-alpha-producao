@@ -47,7 +47,7 @@
 
   /* ---- rede ---- */
   async function loadMarks() {
-    try { const r = await fetch(API + '?_=' + Date.now()); if (r.ok) { const j = await r.json(); marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); } } catch (e) {}
+    try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); marks = {}; (j.marks || []).forEach(m => marks[m.chave] = m); } } catch (e) {}
   }
   async function post(payload) {
     try {

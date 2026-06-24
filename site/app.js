@@ -358,6 +358,7 @@ function render(D){
   renderAlertas(D);
   renderPetlove(D);
   renderMargem(D);
+  renderEstudo(D);
   wireFTabs();
   wireTools();
 }
@@ -430,7 +431,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -438,6 +439,7 @@ function wireFTabs(){
     if(v==='projecao') drawProjCharts();
     if(v==='analises'){ drawAnalisesChart(); drawDailyChart(); }
     if(v==='petlove'){ drawPetloveChart(); drawPetloveYearChart(); }
+    if(v==='estudo') drawEstudoChart();
   });});
 }
 
@@ -962,6 +964,55 @@ async function enviarRenegociacao(M){
     else { if(st){st.style.color='var(--red)';st.textContent='❌ '+(j.erro||('falha '+r.status))+(j.detalhe?' — '+j.detalhe:'');} }
   }catch(e){ if(st){st.style.color='var(--red)';st.textContent='❌ erro de rede: '+e.message;} }
   finally{ if(bt) bt.disabled=false; }
+}
+
+/* ===================== ABA ESTUDO PET LOVE × COPA (admin) ===================== */
+let _estChart=null;
+function renderEstudo(D){
+  const wrap=document.getElementById('estudo'); if(!wrap) return;
+  const E=D.estudo||{};
+  if(E.erro){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--red)">Falha ao carregar estudo: ${esc(E.erro)}</div>`; return; }
+  const dc=E.decomp||{};
+  let html=`<div class="card" style="margin-bottom:16px"><h3>📚 ${esc(E.titulo||'Estudo')}</h3>
+    <div style="color:var(--mut);font-size:13px;line-height:1.55">${esc(E.objetivo||'')}</div></div>`;
+  if(dc.split_pc_pct!=null){
+    const copa=dc.split_copa_pct, pc=dc.split_pc_pct;
+    html+=`<div class="card" style="margin-bottom:16px"><h3>Decomposição da queda — ${ymLabel(dc.cur_ym)} (dias 1–${dc.ate_dia}) <span class="cap">vs ${ymLabel(dc.prev_ym)} mesma janela · atualiza sozinha</span></h3>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:14px">
+        <div><div class="acmp-l">Lab inteiro</div><div class="acmp-v" style="color:${gcol(dc.lab_pct)}">${gtxt(dc.lab_pct)}</div><div class="acmp-s">${num(dc.lab_prev)}→${num(dc.lab_cur)} exames</div></div>
+        <div><div class="acmp-l">Resto do lab (sem Pet Carioca)</div><div class="acmp-v" style="color:${gcol(dc.resto_pct)}">${gtxt(dc.resto_pct)}</div><div class="acmp-s">= Copa+feriado puro</div></div>
+        <div><div class="acmp-l">Pet Carioca</div><div class="acmp-v" style="color:${gcol(dc.pc_pct)}">${gtxt(dc.pc_pct)}</div><div class="acmp-s">${num(dc.pc_prev)}→${num(dc.pc_cur)} · ${dc.pc_mig_pct}% migração</div></div>
+      </div>
+      <div style="font-size:13px;margin-bottom:6px">Split da queda total (${num(dc.queda_total)} exames):</div>
+      <div style="display:flex;height:28px;border-radius:7px;overflow:hidden;font-size:12px;font-weight:700">
+        <div style="width:${copa}%;background:var(--cyan);color:#0A1628;display:flex;align-items:center;justify-content:center">Copa/feriado ${copa}%</div>
+        <div style="width:${pc}%;background:var(--amber);color:#0A1628;display:flex;align-items:center;justify-content:center">Pet Carioca ${pc}%</div>
+      </div>
+      <div style="color:var(--mut);font-size:11px;margin-top:6px">🔵 Copa/feriado = temporário (deve reverter) · 🟠 Pet Carioca lab próprio = estrutural (não volta sozinho).</div></div>`;
+  }
+  html+=`<div class="card" style="margin-bottom:16px"><h3>Pet Carioca — produção mensal (exames) <span class="cap">o degrau de junho = corte da rede pro laboratório próprio</span></h3>
+    <div class="chartbox lg"><canvas id="estChart"></canvas></div></div>`;
+  const lst=arr=>(arr||[]).map(x=>`<li style="margin:5px 0">${esc(x)}</li>`).join('');
+  html+=`<div class="card" style="margin-bottom:16px"><h3>🔎 Achados</h3><ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.55">${lst(E.achados)}</ul></div>`;
+  html+=`<div class="alert-card warn" style="margin-bottom:16px"><div class="ai">🎯</div><div><div class="at">Conclusão</div><div class="ax">${esc(E.conclusao||'')}</div></div></div>`;
+  html+=`<div class="card" style="margin-bottom:16px"><h3>👀 O que vigiar nos próximos meses</h3><ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.55">${lst(E.vigiar)}</ul></div>`;
+  const pcm={}; (E.petcarioca_mensal||[]).forEach(x=>pcm[x.ym]=x);
+  const labm={}; (D.mensal||[]).forEach(x=>labm[x.ym]=x);
+  const plm=(D.petlove||{}).mensal||{}, pla=(D.petlove||{}).atend_mensal||{};
+  const yms=[...new Set([...Object.keys(pcm),...Object.keys(plm)])].filter(y=>y>='2026-01').sort().reverse();
+  const trow=yms.map(ym=>`<tr><td>${ymLabel(ym)}</td><td class="num">${labm[ym]?num(labm[ym].qtd):'—'}</td><td class="num" style="color:var(--amber)">${pcm[ym]?num(pcm[ym].ex):'—'}</td><td class="num" style="color:var(--cyan)">${plm[ym]?brl(plm[ym]):((pla[ym]||{}).valor?brl(pla[ym].valor):'—')}</td><td class="num">${(pla[ym]||{}).n_atend?num(pla[ym].n_atend):'—'}</td></tr>`).join('');
+  html+=`<div class="card"><h3>📅 Acompanhamento mensal <span class="cap">fechar no fim de cada mês</span></h3>
+    <table class="atab"><thead><tr><th>Mês</th><th class="num">Lab exames</th><th class="num">Pet Carioca exames</th><th class="num">Pet Love R$</th><th class="num">Pet Love atend.</th></tr></thead><tbody>${trow}</tbody></table>
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">${esc(E.obs||'')}</div></div>`;
+  wrap.innerHTML=html;
+}
+function drawEstudoChart(){
+  const D=window.__D; if(!D||!D.estudo) return; const cv=document.getElementById('estChart'); if(!cv||typeof Chart==='undefined') return;
+  if(_estChart) _estChart.destroy();
+  const s=D.estudo.petcarioca_mensal||[]; const cur=(D.estudo.decomp||{}).cur_ym;
+  _estChart=new Chart(cv,{type:'bar',data:{labels:s.map(x=>ymLabel(x.ym)),datasets:[{label:'Exames Pet Carioca',data:s.map(x=>x.ex),backgroundColor:s.map(x=>x.ym===cur?'#FFB020':'#00D4FF')}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+num(c.raw)+' exames'}}},
+      scales:{x:{ticks:{color:'#7f90a8',maxRotation:90,minRotation:90,font:{size:9}},grid:{display:false}},y:{ticks:{color:'#7f90a8',callback:v=>num(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
 }
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
