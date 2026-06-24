@@ -1,20 +1,19 @@
-/* Modos CLIENTES VIGIADOS (🔴 sensível / 🟡 com atenção) — isolados do painel.
-   Busca clínicas do HF (DATA.clientes.lista), cadastra como sensível/atenção (persiste em /api/clientes),
-   e ACENDE alerta quando o cliente cadastra requisição no HF (DATA.clientes.reqs, atualiza 10/10min).
-   Baixa MANUAL nos dois. Reaproveita window.__pwd, DATA, esc, e o nome do colaborador (sep_me). */
+/* Modos CLIENTES VIGIADOS — isolados do painel.
+   🔴 Sensível  = time de ATENDIMENTO/call center → alerta mostra SÓ o nome da clínica (sem produção).
+   🟡 Atenção   = time de PRODUÇÃO → alerta mostra TODOS os dados (paciente/registro/vet) p/ check-in antes de liberar.
+   Sub-abas: 🔔 Alertas (acende quando a clínica cadastrada entra no HF) · 📋 Cadastrados (público: qualquer um cadastra/remove).
+   Acende via DATA.clientes.reqs (10/10 min). Baixa manual. Persiste em /api/clientes. */
 (function () {
   const API = '/api/clientes';
-  const MEK = 'sep_me', USK = 'sep_users';   // mesma identidade da Triagem
-  let classe = null;                          // 'sensivel' | 'atencao'
+  const MEK = 'sep_me';
+  let classe = null, cliView = 'alertas';
   let flags = [], baixas = [], term = '', timer = null;
 
   const $ = id => document.getElementById(id);
   const esc2 = s => (typeof esc === 'function' ? esc(s) : String(s == null ? '' : s));
   const escA = s => esc2(s).replace(/"/g, '&quot;');
   const cliData = () => (typeof DATA !== 'undefined' && DATA && DATA.clientes) ? DATA.clientes : null;
-  const me = () => localStorage.getItem(MEK) || '';
-  const users = () => { try { return JSON.parse(localStorage.getItem(USK) || '[]'); } catch (e) { return []; } };
-  function addUser(n) { n = (n || '').trim(); if (!n) return; const u = users(); if (!u.includes(n)) { u.push(n); u.sort(); localStorage.setItem(USK, JSON.stringify(u)); } localStorage.setItem(MEK, n); }
+  const me = () => localStorage.getItem(MEK) || 'equipe';
 
   async function load() { try { const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) { const j = await r.json(); flags = j.flags || []; baixas = j.cli_baixas || []; } } catch (e) {} }
   async function post(p) {
@@ -29,11 +28,15 @@
   const myFlags = () => flags.filter(f => f.classe === classe);
   const flaggedCods = () => new Set(myFlags().map(f => String(f.cod)));
   const baixadas = () => new Set(baixas.map(b => b.chave));
-  function alertas() {
+  function alertReqs() {
     const d = cliData(); if (!d) return [];
     const cods = flaggedCods(), bx = baixadas();
-    return (d.reqs || []).filter(r => cods.has(String(r.cod)) && !bx.has(`${r.req}-${r.ano}`))
-      .sort((a, b) => (b.dt || '').localeCompare(a.dt || ''));
+    return (d.reqs || []).filter(r => cods.has(String(r.cod)) && !bx.has(`${r.req}-${r.ano}`)).sort((a, b) => (b.dt || '').localeCompare(a.dt || ''));
+  }
+  // sensível: agrupado por clínica (só o nome importa p/ o call center)
+  function alertByClinic() {
+    const g = {}; alertReqs().forEach(r => { const k = String(r.cod); (g[k] = g[k] || { cod: r.cod, cliente: r.cliente, reqs: [], lastDt: '' }); g[k].reqs.push(r); if ((r.dt || '') > g[k].lastDt) g[k].lastDt = r.dt; });
+    return Object.values(g).sort((a, b) => (b.lastDt || '').localeCompare(a.lastDt || ''));
   }
 
   function resultsHtml() {
@@ -47,65 +50,86 @@
         <span class="add" style="background:${has ? 'rgba(255,255,255,.1)' : (classe === 'sensivel' ? 'var(--red)' : 'var(--amber)')};color:${has ? 'var(--mut)' : (classe === 'sensivel' ? '#fff' : '#2a1c00')}">${has ? 'já cadastrado' : '+ adicionar'}</span></div>`;
     }).join('')}</div>`;
   }
-  function alertCard(r) {
-    const dt = r.dt ? new Date(r.dt.replace(' ', 'T')) : null;
-    const when = dt && !isNaN(dt) ? dt.toLocaleDateString('pt-BR') + ' ' + dt.toTimeString().slice(0, 5) : '';
-    const chave = `${r.req}-${r.ano}`;
-    const ic = classe === 'sensivel' ? '🔴' : '🟡';
-    return `<div class="alertcard ${classe}">
-      <div><div class="cli">${ic} ${esc2(r.cliente)}</div>
-        <div class="big2">🐾 ${esc2(r.paciente)} &nbsp; <span class="reg">Reg ${esc2(r.req)}/${esc2(r.ano)}</span></div>
-        <div class="meta">${r.vet ? `vet ${esc2(r.vet)} · ` : ''}${when}</div></div>
-      <button class="baixab" data-baixa="${chave}" data-cod="${escA(r.cod)}" data-cliente="${escA(r.cliente)}" data-req="${escA(r.req)}" data-ano="${escA(r.ano)}" data-paciente="${escA(r.paciente)}">✓ baixa</button>
-    </div>`;
+
+  function viewAlertas() {
+    if (classe === 'sensivel') {
+      const leg = `<div class="seplegend urgente">🔔 Clínicas sensíveis que acabaram de entrar no HF — dê atenção. Some quando você dá baixa.</div>`;
+      const groups = alertByClinic();
+      if (!groups.length) return leg + `<div class="sepwait" style="padding:30px">Nenhuma clínica sensível ativa agora. Quando uma cadastrar no HF, acende aqui (~10 min).</div>`;
+      return leg + groups.map(g => {
+        const chaves = g.reqs.map(r => `${r.req}-${r.ano}`).join(',');
+        return `<div class="alertcard sensivel" style="grid-template-columns:1fr auto">
+          <div class="cli" style="font-size:23px">🔴 ${esc2(g.cliente)}${g.reqs.length > 1 ? ` <span style="font-size:13px;font-weight:700;opacity:.85">(${g.reqs.length} novas)</span>` : ''}</div>
+          <button class="baixab" data-baixaclin="${escA(chaves)}" data-cod="${escA(g.cod)}" data-cliente="${escA(g.cliente)}">✓ baixa</button>
+        </div>`;
+      }).join('');
+    }
+    const leg = `<div class="seplegend atrasado">🟡 Confira cada exame antes de liberar (check-in). Some quando você dá baixa.</div>`;
+    const reqs = alertReqs();
+    if (!reqs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum cliente com atenção ativo agora. Quando um cadastrar no HF, acende aqui (~10 min).</div>`;
+    return leg + reqs.map(r => {
+      const dt = r.dt ? new Date(r.dt.replace(' ', 'T')) : null;
+      const when = dt && !isNaN(dt) ? dt.toLocaleDateString('pt-BR') + ' ' + dt.toTimeString().slice(0, 5) : '';
+      const chave = `${r.req}-${r.ano}`;
+      return `<div class="alertcard atencao">
+        <div><div class="cli">🟡 ${esc2(r.cliente)}</div>
+          <div class="big2">🐾 ${esc2(r.paciente)} &nbsp; <span class="reg">Reg ${esc2(r.req)}/${esc2(r.ano)}</span></div>
+          <div class="meta">${r.vet ? `vet ${esc2(r.vet)} · ` : ''}${when}</div></div>
+        <button class="baixab" data-baixa="${chave}" data-cod="${escA(r.cod)}" data-cliente="${escA(r.cliente)}" data-req="${escA(r.req)}" data-ano="${escA(r.ano)}" data-paciente="${escA(r.paciente)}">✓ liberar</button>
+      </div>`;
+    }).join('');
+  }
+
+  function viewCadastrados() {
+    const lbl = classe === 'sensivel' ? 'sensível' : 'com atenção';
+    const leg = `<div class="seplegend">📋 Clínicas já cadastradas como <b>${lbl}</b>. Qualquer um pode cadastrar ou remover.</div>`;
+    const srch = `<div class="srch"><input id="clisearch" placeholder="🔎 buscar clínica no HF para cadastrar como ${lbl}..." value="${escA(term)}" autocomplete="off">${resultsHtml()}</div>`;
+    const reg = myFlags().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    const regHtml = reg.length ? `<div class="regwrap">` + reg.map(f => `<span class="regchip ${classe}">${esc2(f.nome || ('Cliente ' + f.cod))} <button class="x" data-desflag="${escA(f.cod)}" title="remover">✕</button></span>`).join('') + `</div>`
+      : `<div class="sepwait" style="padding:24px">Nenhuma clínica cadastrada ainda. Use a busca acima.</div>`;
+    return leg + srch + `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">${reg.length} cadastrada${reg.length !== 1 ? 's' : ''}</h3>` + regHtml;
   }
 
   function render() {
     const el = $('cli'); if (!el) return;
     const titulo = classe === 'sensivel' ? '🔴 Clientes Sensíveis' : '🟡 Clientes com Atenção';
-    const lbl = classe === 'sensivel' ? 'sensível' : 'com atenção';
-    const us = users(), cur = me();
-    const opts = us.map(u => `<option ${u === cur ? 'selected' : ''}>${esc2(u)}</option>`).join('');
-    const head = `<div class="clihead"><h2>${titulo}</h2>
-      <div class="you">Você: <select id="clime"><option value="">— escolher —</option>${opts}<option value="__novo__">＋ adicionar nome…</option></select></div></div>`;
-    if (!cliData()) { el.innerHTML = head + `<div class="sepwait">Aguardando a próxima atualização dos dados (lista de clientes vem do HF a cada 10 min).</div>`; wire(el); return; }
-    const srch = `<div class="srch"><input id="clisearch" placeholder="🔎 buscar clínica no HF para adicionar..." value="${escA(term)}" autocomplete="off">${resultsHtml()}</div>`;
-    const al = alertas();
-    const alHtml = al.length ? al.map(alertCard).join('') : `<div class="sepwait" style="padding:24px">Nenhum cliente ${lbl} cadastrou no momento. Quando um cliente monitorado entrar no HF, acende aqui em ~10 min.</div>`;
-    const reg = myFlags().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-    const regHtml = reg.length ? reg.map(f => `<span class="regchip ${classe}">${esc2(f.nome || ('Cliente ' + f.cod))} <button class="x" data-desflag="${escA(f.cod)}" title="remover da lista">✕</button></span>`).join('')
-      : `<span class="clicount">nenhum cliente cadastrado ainda — use a busca acima para adicionar.</span>`;
-    el.innerHTML = head + `<div class="clibody">${srch}
-      <div class="clihalf"><h3>🔔 Acendeu agora <span class="clicount">(${al.length})</span></h3>${alHtml}</div>
-      <div class="clihalf"><h3>📋 Clientes monitorados <span class="clicount">(${reg.length})</span></h3>${regHtml}</div>
+    const sub = classe === 'sensivel' ? 'Atendimento ao cliente · só o nome da clínica' : 'Produção · check-in antes de liberar o exame';
+    const nAl = classe === 'sensivel' ? alertByClinic().length : alertReqs().length;
+    const nReg = myFlags().length;
+    const subtabs = `<div class="septabs" style="margin:0 0 12px">
+      <div class="septab ${cliView === 'alertas' ? 'on' : ''}" data-cliview="alertas">🔔 Alertas ${nAl ? `<span class="c">${nAl}</span>` : ''}</div>
+      <div class="septab ${cliView === 'cadastrados' ? 'on' : ''}" data-cliview="cadastrados">📋 Cadastrados <span class="c">${nReg}</span></div>
     </div>`;
+    const head = `<div class="clihead"><div><h2>${titulo}</h2><div class="clisub">${sub}</div></div></div>${subtabs}`;
+    if (!cliData()) { el.innerHTML = head + `<div class="sepwait">Aguardando dados (lista de clínicas vem do HF a cada 10 min).</div>`; wire(el); return; }
+    el.innerHTML = head + `<div class="clibody">${cliView === 'cadastrados' ? viewCadastrados() : viewAlertas()}</div>`;
     wire(el);
   }
 
   function wire(el) {
+    el.querySelectorAll('.septab[data-cliview]').forEach(t => t.onclick = () => { cliView = t.dataset.cliview; render(); });
     const s = $('clisearch');
     if (s) s.oninput = () => { term = s.value; render(); const n = $('clisearch'); if (n) { n.focus(); try { n.setSelectionRange(n.value.length, n.value.length); } catch (e) {} } };
-    const mesel = $('clime');
-    if (mesel) mesel.onchange = () => { if (mesel.value === '__novo__') { const n = prompt('Seu nome ou iniciais:'); if (n && n.trim()) addUser(n); render(); return; } localStorage.setItem(MEK, mesel.value); render(); };
     el.querySelectorAll('[data-add]').forEach(r => r.onclick = async () => {
-      if (!me()) { alert('Selecione/insira seu nome no topo (campo "Você") antes.'); return; }
       if (await post({ acao: 'flag', cod: r.dataset.add, nome: r.dataset.nome, classe, por: me() })) { term = ''; render(); }
     });
     el.querySelectorAll('[data-desflag]').forEach(b => b.onclick = async () => {
-      if (confirm('Remover este cliente da lista de monitorados?') && await post({ acao: 'desflag', cod: b.dataset.desflag })) render();
+      if (confirm('Remover esta clínica da lista?') && await post({ acao: 'desflag', cod: b.dataset.desflag })) render();
     });
     el.querySelectorAll('[data-baixa]').forEach(b => b.onclick = async () => {
-      if (!me()) { alert('Selecione/insira seu nome no topo (campo "Você") antes.'); return; }
       if (await post({ acao: 'baixa', chave: b.dataset.baixa, cod: b.dataset.cod, classe, cliente: b.dataset.cliente, req: b.dataset.req, ano: b.dataset.ano, paciente: b.dataset.paciente, por: me() })) render();
+    });
+    el.querySelectorAll('[data-baixaclin]').forEach(b => b.onclick = async () => {
+      const chaves = b.dataset.baixaclin.split(',').filter(Boolean);
+      if (await post({ acao: 'baixa', chaves, cod: b.dataset.cod, classe, cliente: b.dataset.cliente, por: me() })) render();
     });
   }
 
   async function onMode(m) {
     if (m === 'cli-sensivel' || m === 'cli-atencao') {
-      classe = m === 'cli-sensivel' ? 'sensivel' : 'atencao'; term = '';
+      classe = m === 'cli-sensivel' ? 'sensivel' : 'atencao'; term = ''; cliView = 'alertas';
       await load(); render();
       if (timer) clearInterval(timer);
-      // poupa créditos: só consulta com a aba VISÍVEL, a cada 60s
       timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) { await load(); render(); } }, 60000);
     } else if (timer) { clearInterval(timer); timer = null; }
   }

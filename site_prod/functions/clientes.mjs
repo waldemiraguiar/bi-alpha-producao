@@ -44,9 +44,11 @@ export default async (req) => {
       return Response.json({ ok: true, flags, baixas: await load(store, BK) }, { headers: cors });
     }
     if (b.acao === "baixa") {
-      if (!b.chave) return new Response(JSON.stringify({ erro: "sem chave" }), { status: 400, headers: cors });
-      let baixas = (await load(store, BK)).filter(x => x.chave !== b.chave);
-      baixas.push({ chave: b.chave, cod: b.cod, classe: b.classe, cliente: b.cliente || "", req: b.req, ano: b.ano, paciente: b.paciente || "", por: b.por || "equipe", ts: now });
+      // unitário {chave} ou lote {chaves:[...]} (sensível dá baixa na clínica inteira)
+      const chaves = Array.isArray(b.chaves) ? b.chaves : (b.chave ? [b.chave] : []);
+      if (!chaves.length) return new Response(JSON.stringify({ erro: "sem chave" }), { status: 400, headers: cors });
+      let baixas = (await load(store, BK)).filter(x => !chaves.includes(x.chave));
+      chaves.forEach(ch => baixas.push({ chave: ch, cod: b.cod, classe: b.classe, cliente: b.cliente || "", req: b.req, ano: b.ano, paciente: b.paciente || "", por: b.por || "equipe", ts: now }));
       await store.setJSON(BK, baixas);
       return Response.json({ ok: true, flags: await load(store, FK), baixas }, { headers: cors });
     }
