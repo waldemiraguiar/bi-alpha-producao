@@ -153,11 +153,13 @@
       <label>Colaborador</label><select id="opnome">${opts}</select>
       <label>Senha</label><input id="oppin" type="password" inputmode="numeric" autocomplete="off" placeholder="sua senha">
       <div class="opmsg" id="opmsg"></div>
-      <div class="opbtns"><button class="opb cancel" id="opcancel">Cancelar</button><button class="opb ok" id="opgo">Entrar</button></div></div>`;
+      <div class="opbtns"><button class="opb cancel" id="opcancel">Cancelar</button><button class="opb ok" id="opgo">Entrar</button></div>
+      <div class="opreg">Primeiro acesso? <button class="oplink" id="opnew">Criar meu login</button></div></div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
     wrap.onclick = e => { if (e.target === wrap) close(); };
     wrap.querySelector('#opcancel').onclick = close;
+    wrap.querySelector('#opnew').onclick = () => { close(); openRegister(); };
     const pin = wrap.querySelector('#oppin'); pin.focus();
     const go = async () => {
       const nome = wrap.querySelector('#opnome').value, p = pin.value;
@@ -170,6 +172,38 @@
     wrap.querySelector('#opgo').onclick = go;
     pin.onkeydown = e => { if (e.key === 'Enter') go(); };
   }
+  // PRIMEIRO ACESSO: cada um cria o próprio login (nome + time + senha) sem depender do admin
+  function openRegister() {
+    const old = document.querySelector('.oplogin'); if (old) old.remove();
+    const wrap = document.createElement('div'); wrap.className = 'oplogin';
+    wrap.innerHTML = `<div class="oplbox"><h3>➕ Criar meu acesso</h3>
+      <label>Seu nome / iniciais (aparece nos carimbos)</label><input id="rgnome" autocomplete="off" placeholder="ex.: Ana, ou A. Silva">
+      <label>Seu time</label><select id="rgpapel"><option value="separacao">Separação</option><option value="recebidos">Recebidos</option><option value="ambos">Separação + Recebidos</option></select>
+      <label>Crie uma senha (só sua)</label><input id="rgpin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="senha">
+      <label>Repita a senha</label><input id="rgpin2" type="password" inputmode="numeric" autocomplete="new-password" placeholder="confirme">
+      <div class="opmsg" id="rgmsg"></div>
+      <div class="opbtns"><button class="opb cancel" id="rgback">Voltar</button><button class="opb ok" id="rggo">Criar e entrar</button></div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.onclick = e => { if (e.target === wrap) close(); };
+    wrap.querySelector('#rgback').onclick = () => { close(); openLogin(); };
+    wrap.querySelector('#rgnome').focus();
+    const go = async () => {
+      const nome = wrap.querySelector('#rgnome').value.trim(), pp = wrap.querySelector('#rgpapel').value;
+      const p1 = wrap.querySelector('#rgpin').value, p2 = wrap.querySelector('#rgpin2').value;
+      const msg = wrap.querySelector('#rgmsg');
+      if (!nome || !p1) { msg.textContent = 'Preencha nome e senha.'; return; }
+      if (p1 !== p2) { msg.textContent = 'As senhas não conferem.'; return; }
+      msg.textContent = 'Criando…';
+      try {
+        const r = await window.SUPA.register(nome, pp, p1);
+        if (r.ok) { saveOp({ nome, papel: pp }); close(); await loadTeam(); render(); }
+        else { msg.textContent = '❌ ' + (r.erro || 'Não foi possível criar.'); }
+      } catch (e) { msg.textContent = 'Erro de conexão.'; }
+    };
+    wrap.querySelector('#rggo').onclick = go;
+    wrap.querySelector('#rgpin2').onkeydown = e => { if (e.key === 'Enter') go(); };
+  }
   /* ---- gestão da equipe (admin) ---- */
   async function openTeam() {
     if (!isAdmin()) { alert('Só o admin cadastra a equipe. Destrave no botão 🔒 Admin.'); return; }
@@ -178,7 +212,7 @@
     if (list == null) { alert('Não consegui carregar a equipe (PIN admin?).'); return; }
     const old = document.querySelector('.oplogin'); if (old) old.remove();
     const wrap = document.createElement('div'); wrap.className = 'oplogin';
-    const rows = list.length ? list.map(u => `<div class="eqrow"><span class="eqn">${esc2(u.nome)}</span><span class="eqp ${u.papel}">${papelLbl(u.papel)}</span><button class="eqdel" data-del="${esc2(u.nome)}">remover</button></div>`).join('') : '<div class="opmsg">Ninguém cadastrado ainda — adicione abaixo.</div>';
+    const rows = list.length ? list.map(u => `<div class="eqrow"><span class="eqn">${esc2(u.nome)}</span><span class="eqp ${u.papel}">${papelLbl(u.papel)}</span><button class="eqreset" data-reset="${esc2(u.nome)}" data-papel="${esc2(u.papel)}">🔑 nova senha</button><button class="eqdel" data-del="${esc2(u.nome)}">remover</button></div>`).join('') : '<div class="opmsg">Ninguém cadastrado ainda — cada um pode criar o próprio acesso na tela de login, ou adicione aqui.</div>';
     wrap.innerHTML = `<div class="oplbox wide"><h3>👥 Equipe da Triagem</h3>
       <div class="eqlist">${rows}</div>
       <div class="eqadd"><input id="eqnome" placeholder="nome / iniciais">
@@ -190,6 +224,10 @@
     const close = () => wrap.remove();
     wrap.onclick = e => { if (e.target === wrap) close(); };
     wrap.querySelector('#eqclose').onclick = close;
+    wrap.querySelectorAll('.eqreset').forEach(b => b.onclick = async () => {
+      const np = prompt(`Nova senha para "${b.dataset.reset}":`); if (!np || !np.trim()) return;
+      try { const ok = await window.SUPA.teamSave(adminPin(), b.dataset.reset, b.dataset.papel, np.trim()); if (!ok) { alert('PIN admin inválido.'); return; } close(); render(); openTeam(); alert(`Senha de ${b.dataset.reset} resetada.`); } catch (e) { alert('Erro ao resetar.'); }
+    });
     wrap.querySelectorAll('.eqdel').forEach(b => b.onclick = async () => {
       if (!confirm(`Remover ${b.dataset.del} da equipe? (carimbos antigos continuam no histórico)`)) return;
       try { await window.SUPA.teamRemove(adminPin(), b.dataset.del); close(); await loadTeam(); render(); openTeam(); } catch (e) { alert('Erro ao remover.'); }
@@ -577,6 +615,9 @@
 .eqrow .eqp{font-size:12px;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#075985}
 .eqrow .eqp.recebidos{background:#fef3c7;color:#92400e}.eqrow .eqp.ambos{background:#ede9fe;color:#5b21b6}
 .eqdel{font-size:12px;color:#b91c1c;background:none;border:0;cursor:pointer;text-decoration:underline}
+.eqreset{font-size:12px;color:#2563eb;background:none;border:0;cursor:pointer;text-decoration:underline;margin-right:6px}
+.opreg{margin-top:12px;font-size:14px;text-align:center;color:#475569}
+.oplink{background:none;border:0;color:#2563eb;text-decoration:underline;cursor:pointer;font-size:14px;font-weight:700;padding:0}
 .eqadd{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;margin-top:6px}
 .eqadd input,.eqadd select{padding:9px;font-size:14px;border:1.5px solid #cbd5e1;border-radius:8px}
 .eqadd .opb{padding:9px 12px;flex:none}
