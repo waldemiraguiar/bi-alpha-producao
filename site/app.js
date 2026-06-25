@@ -148,11 +148,16 @@ function render(D){
   const tickPrev=_p12('qtd')?_p12('fat')/_p12('qtd'):null;
   const tickYoY=tickPrev?100*(tick12-tickPrev)/tickPrev:null;
   const novosTrend=(D.novos_clientes||[]).slice(-12).map(x=>x.novos);
+  // ---- faturamento TOTAL (sistema + Pet Love) p/ os KPIs headline ----
+  const plL12 = _mmS.slice(-12).reduce((a,x)=>a+(x.petlove||0),0);
+  const totRev12 = k.faturamento_l12 + plL12;
+  const pl2025 = (D.mensal||[]).filter(x=>x.ym>='2025-01'&&x.ym<='2025-12').reduce((a,x)=>a+(x.petlove||0),0);
+  const tot2025 = k.faturamento_2025 + pl2025;
   const kpis = el('div','kpis');
   const kdata = [
-    {l:'Faturamento · últ. 12m', v:brlk(k.faturamento_l12), d:`${num(k.exames_l12)} exames · sistema (com Pet Love no card de composição)`, c:'',  yoy:f12.yoy, spark:f12.spark, col:C.cyan},
+    {l:'Faturamento total · 12m', v:brlk(totRev12), d:`sistema ${brlk(k.faturamento_l12)} + Pet Love ${brlk(plL12)} · ${num(k.exames_l12)} exames`, c:'',  yoy:f12.yoy, spark:f12.spark, col:C.cyan},
     {l:'Exames · últ. 12m',      v:num(k.exames_l12),       d:`${k.exames_por_req_l12} por requisição · vs 12m anterior`, c:'g', yoy:e12.yoy, spark:e12.spark, col:C.green},
-    {l:'Faturamento 2025',       v:brlk(k.faturamento_2025),d:`${num(k.exames_2025)} exames · vs 2024 · sistema`, c:'',  yoy:an2025.yoy_fat, spark:spark2025, col:C.cyan},
+    {l:'Faturamento total · 2025',v:brlk(tot2025),d:`sistema ${brlk(k.faturamento_2025)} + Pet Love ${brlk(pl2025)}`, c:'',  yoy:an2025.yoy_fat, spark:spark2025, col:C.cyan},
     {l:'Ticket médio / exame',   v:brl(tick12),             d:`requisição: ${brl(k.ticket_medio_req_l12)} · vs 12m anterior`, c:'a', yoy:tickYoY},
     {l:'Clientes ativos · 12m',  v:num(k.clientes_ativos_l12), d:`de ${num(k.clientes_total)} cadastrados`, c:'p', spark:novosTrend, col:C.purple},
     {l:'Faturamento histórico',  v:brlk(k.total_faturamento), d:`desde 2014 · sistema (direto)`, c:'a'},
@@ -165,8 +170,6 @@ function render(D){
   /* ---------- Destaques executivos ---------- */
   const conc=D.concentracao||{}, pe=D.perdidos||{}, nvres=D.novos||{};
   const yoyTxt = f12.yoy!=null ? `<b>${f12.yoy>=0?'▲ ':'▼ '}${Math.abs(f12.yoy).toFixed(1)}%</b> vs 12m anterior` : 'janela em produção';
-  const plL12 = _mmS.slice(-12).reduce((a,x)=>a+(x.petlove||0),0);
-  const totRev12 = k.faturamento_l12 + plL12;
   const insArr=[{ic:'💰', cls:'good', h:brlk(totRev12),
     t: plL12>0 ? `<b>Receita total 12m</b> (sistema + Pet Love) · orgânico ${yoyTxt}` : `Receita dos últimos 12 meses · ${yoyTxt}`}];
   if(plL12>0) insArr.push({ic:'🐾', cls:'', h:brlk(plL12),
