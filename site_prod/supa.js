@@ -25,6 +25,12 @@
     async admincheck(pin) { try { const { data } = await SB.rpc('sep_admincheck', { p_pin: pin }); return !!data; } catch (e) { return false; } },
     async descartar(itens, pin, por) { const { error } = await SB.rpc('sep_descartar', { p_itens: itens, p_pin: pin, p_por: por || 'admin' }); if (error) throw new Error(error.message || 'PIN'); },
     async undescartar(chaves, pin) { const { error } = await SB.rpc('sep_undescartar', { p_chaves: chaves, p_pin: pin }); if (error) throw new Error(error.message || 'PIN'); },
+    // ---- equipe / login de operador (senha conferida no servidor) ----
+    async teamNames() { if (!SB) return []; try { const { data, error } = await SB.rpc('sep_team_names'); if (error) return []; return data || []; } catch (e) { return []; } },
+    async login(nome, pin) { if (!SB) return { ok: false }; try { const { data, error } = await SB.rpc('sep_login', { p_nome: nome, p_pin: pin }); if (error) return { ok: false }; const r = (data && data[0]) || {}; return { ok: !!r.ok, papel: r.papel || '' }; } catch (e) { return { ok: false }; } },
+    async teamAdminList(pin) { if (!SB) return null; try { const { data, error } = await SB.rpc('sep_team_admin_list', { p_admin: pin }); if (error) return null; return data || []; } catch (e) { return null; } },
+    async teamSave(pin, nome, papel, npin) { const { data, error } = await SB.rpc('sep_team_save', { p_admin: pin, p_nome: nome, p_papel: papel, p_pin: npin }); if (error) throw new Error(error.message || 'erro'); return !!data; },
+    async teamRemove(pin, nome) { const { data, error } = await SB.rpc('sep_team_remove', { p_admin: pin, p_nome: nome }); if (error) throw new Error(error.message || 'erro'); return !!data; },
     // ---- escrita: urgentes ----
     upsertUrg(table, row) { return SB.from(table).upsert(row); },
     delUrg(table, registro) { return SB.from(table).delete().eq('registro', String(registro)); },
