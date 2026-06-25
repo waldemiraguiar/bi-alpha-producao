@@ -204,6 +204,38 @@
     wrap.querySelector('#rggo').onclick = go;
     wrap.querySelector('#rgpin2').onkeydown = e => { if (e.key === 'Enter') go(); };
   }
+  // TROCAR A PRÓPRIA SENHA (exige a senha atual) — vale pra equipe e pro próprio Val
+  function openChangePin() {
+    if (!me()) { openLogin(); return; }
+    const old = document.querySelector('.oplogin'); if (old) old.remove();
+    const wrap = document.createElement('div'); wrap.className = 'oplogin';
+    wrap.innerHTML = `<div class="oplbox"><h3>🔑 Trocar minha senha</h3>
+      <div style="font-size:14px;margin-bottom:6px">Logado como <b>${esc2(me())}</b></div>
+      <label>Senha atual</label><input id="cpold" type="password" inputmode="numeric" autocomplete="off" placeholder="senha de agora">
+      <label>Nova senha</label><input id="cpnew" type="password" inputmode="numeric" autocomplete="new-password" placeholder="nova">
+      <label>Repita a nova senha</label><input id="cpnew2" type="password" inputmode="numeric" autocomplete="new-password" placeholder="confirme">
+      <div class="opmsg" id="cpmsg"></div>
+      <div class="opbtns"><button class="opb cancel" id="cpcancel">Cancelar</button><button class="opb ok" id="cpgo">Salvar</button></div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.onclick = e => { if (e.target === wrap) close(); };
+    wrap.querySelector('#cpcancel').onclick = close;
+    wrap.querySelector('#cpold').focus();
+    const go = async () => {
+      const o = wrap.querySelector('#cpold').value, n1 = wrap.querySelector('#cpnew').value, n2 = wrap.querySelector('#cpnew2').value;
+      const msg = wrap.querySelector('#cpmsg');
+      if (!o || !n1) { msg.textContent = 'Preencha as senhas.'; return; }
+      if (n1 !== n2) { msg.textContent = 'A nova senha não confere.'; return; }
+      msg.textContent = 'Salvando…';
+      try {
+        const r = await window.SUPA.changePin(me(), o, n1);
+        if (r.ok) { close(); alert('Senha trocada! Use a nova no próximo login.'); }
+        else { msg.textContent = '❌ ' + (r.erro || 'Não foi possível trocar.'); }
+      } catch (e) { msg.textContent = 'Erro de conexão.'; }
+    };
+    wrap.querySelector('#cpgo').onclick = go;
+    wrap.querySelector('#cpnew2').onkeydown = e => { if (e.key === 'Enter') go(); };
+  }
   /* ---- gestão da equipe (admin) ---- */
   async function openTeam() {
     if (!isAdmin()) { alert('Só o admin cadastra a equipe. Destrave no botão 🔒 Admin.'); return; }
@@ -270,7 +302,7 @@
     // identidade: login de operador (teamMode) OU seletor de nome antigo (fallback)
     const opbox = teamMode
       ? (me()
-        ? `<span class="opnow ${papel()}">👤 ${esc2(me())} · ${papelLbl(papel())}</span><button class="opbtn2" id="opswitch">trocar</button><button class="opbtn2" id="oplogout">sair</button>`
+        ? `<span class="opnow ${papel()}">👤 ${esc2(me())} · ${papelLbl(papel())}</span><button class="opbtn2" id="oppwd">🔑 senha</button><button class="opbtn2" id="opswitch">trocar</button><button class="opbtn2" id="oplogout">sair</button>`
         : `<button class="opbtn2 enter" id="oplogin">🔑 Entrar</button>`)
       : `Você: <select id="sepme"><option value="">— escolher —</option>${opts}<option value="__novo__">＋ adicionar nome…</option></select>`;
     const eqbtn = isAdmin() ? `<button class="adminbtn" id="eqbtn" title="cadastrar/editar a equipe">👥 Equipe</button>` : '';
@@ -538,6 +570,7 @@
     const ol = $('oplogin'); if (ol) ol.onclick = openLogin;
     const osw = $('opswitch'); if (osw) osw.onclick = openLogin;
     const olo = $('oplogout'); if (olo) olo.onclick = logout;
+    const opw = $('oppwd'); if (opw) opw.onclick = openChangePin;
     el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
       const k = b.dataset.del;
       if (b.dataset.delkind === 'mark') {
