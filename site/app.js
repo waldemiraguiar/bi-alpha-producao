@@ -1141,28 +1141,33 @@ function renderManual(){
   const Nd=isCur?+_maxd.slice(8,10):diM;
   let mFat=0,mEx=0; for(let d=1;d<=Nd;d++){const v=_dayMap[ateYm+'-'+String(d).padStart(2,'0')]; if(v){mFat+=v.f;mEx+=v.q;}}
   const perDia=Nd?mFat/Nd:0, faltam=diM-Nd;
-  const projFat=isCur?Math.round(mFat/Nd*diM):mFat;   // curva do próprio mês
+  const projSys=isCur?Math.round(mFat/Nd*diM):mFat;   // faturamento DIRETO (sistema), curva do próprio mês
   const projEx =isCur?Math.round(mEx/Nd*diM):mEx;
+  // Pet Love do mês (externo — sistema zera o ValorExame): soma p/ faturamento TOTAL real
+  const _pl=_AD.petlove||{};
+  const plOf=ym=>(_pl.mensal&&_pl.mensal[ym])|| (_pl.proj_atual&&_pl.proj_atual.ym===ym&&_pl.proj_atual.proj_repasse)|| ((_pl.atend_mensal&&_pl.atend_mensal[ym]&&_pl.atend_mensal[ym].valor)||0);
+  const plMonth=plOf(ateYm);
+  const projTot=projSys+plMonth;
   const projbox=`<div class="projbox">
     <div class="projttl">◆ PROJEÇÃO ESTIMADA</div>
     <div class="projsub">${isCur?`fechamento de ${MESFULL[PM]}/${String(PY).slice(2)} · curva do mês (dia ${Nd}/${diM})`:`${MESFULL[PM]}/${String(PY).slice(2)} · mês fechado`}</div>
-    <div class="projrow"><span style="color:var(--mut)">Faturamento</span><b>${brl(projFat)}</b></div>
+    <div class="projrow"><span style="color:var(--mut)">Faturamento</span><b>${brl(projTot)}</b></div>
     <div class="projrow"><span style="color:var(--mut)">Produção</span><b>${num(projEx)} ex.</b></div>
-    ${isCur?`<div class="projfaixa">ritmo do mês ${brlk(perDia)}/dia · faltam ${faltam} dias</div>`:'<div class="projfaixa">valor realizado (mês completo)</div>'}
+    <div class="projfaixa">sistema ${brlk(projSys)} + Pet Love ${brlk(plMonth)}${isCur?` · ritmo ${brlk(perDia)}/dia · faltam ${faltam} dias`:' · realizado'}</div>
   </div>`;
   // pareamento rápido: projeção do mês vs faturamento REAL fechado dos últimos meses + mesmo mês ano passado
   let pareamento='';
   if(isCur){
-    const sm=(_AD.serie_mensal_full||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1); const byym={}; sm.forEach(x=>byym[x.ym]=x.fat);
-    const hist=sm.filter(x=>x.ym<ateYm).slice(-6).map(x=>({ym:x.ym,v:x.fat,proj:false}));
-    const yoyYm=(+PY-1)+'-'+String(PM).padStart(2,'0'); const yoy=byym[yoyYm];
-    const bars=hist.concat([{ym:ateYm,v:projFat,proj:true}]);
+    const sm=(_AD.serie_mensal_full||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1); const tot={}; sm.forEach(x=>tot[x.ym]=x.fat+plOf(x.ym));
+    const hist=sm.filter(x=>x.ym<ateYm).slice(-6).map(x=>({ym:x.ym,v:tot[x.ym],proj:false}));
+    const yoyYm=(+PY-1)+'-'+String(PM).padStart(2,'0'); const yoy=tot[yoyYm];
+    const bars=hist.concat([{ym:ateYm,v:projTot,proj:true}]);
     const mxb=Math.max(...bars.map(b=>b.v),1);
     const prevC=hist.length?hist[hist.length-1]:null;
-    const vsPrev=prevC&&prevC.v?Math.round(100*(projFat/prevC.v-1)):null;
-    const vsYoy=yoy?Math.round(100*(projFat/yoy-1)):null;
+    const vsPrev=prevC&&prevC.v?Math.round(100*(projTot/prevC.v-1)):null;
+    const vsYoy=yoy?Math.round(100*(projTot/yoy-1)):null;
     pareamento=`<div style="margin:12px 0 4px;border-top:1px solid var(--line);padding-top:12px">
-      <div style="font-weight:700;font-size:13px;margin-bottom:8px">📊 Projeção × outros meses <span style="color:var(--mut);font-weight:400;font-size:11px">— onde o fechamento estimado (★) se encaixa · faturamento mensal</span></div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px">📊 Projeção × outros meses <span style="color:var(--mut);font-weight:400;font-size:11px">— onde o fechamento estimado (★) se encaixa · faturamento mensal TOTAL (sistema + Pet Love)</span></div>
       ${bars.map(b=>`<div style="display:flex;align-items:center;gap:10px;margin:4px 0">
         <span style="width:52px;color:${b.proj?'var(--cyan)':'var(--mut)'};font-size:12px;font-weight:${b.proj?800:400}">${ymLabel(b.ym)}${b.proj?' ★':''}</span>
         <div style="flex:1;background:rgba(255,255,255,.05);border-radius:6px;height:18px;overflow:hidden"><div style="height:18px;width:${Math.round(100*b.v/mxb)}%;background:${b.proj?'var(--cyan)':'rgba(120,140,170,.5)'};border-radius:6px"></div></div>
@@ -1197,7 +1202,7 @@ function renderManual(){
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;margin-bottom:6px">
       <div style="display:flex;gap:26px;flex-wrap:wrap;flex:1;align-items:flex-start">
         ${kpi('Produção (exames)',num(cur.q),de===ate?'no dia':`${len} dias · ${(cur.q/len).toFixed(0)}/dia`)}
-        ${kpi('Faturamento',brl(cur.f),`ticket ${cur.q?brl(cur.f/cur.q):'—'}/exame`)}
+        ${kpi('Faturamento (direto)',brl(cur.f),`sem Pet Love · ticket ${cur.q?brl(cur.f/cur.q):'—'}/exame`)}
         ${kpi('Média diária',brl(cur.f/len),`${cur.n} dias com produção`)}
       </div>
       ${projbox}
