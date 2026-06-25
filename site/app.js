@@ -1134,24 +1134,42 @@ function renderManual(){
   const pc=(a,b)=>b>0?100*(a/b-1):null;
   const kpi=(l,v,s)=>`<div><div class="acmp-l">${l}</div><div class="acmp-v">${v}</div><div class="acmp-s">${s}</div></div>`;
   const cmp=(l,a,b)=>{const p=pc(a,b);return `<div><div class="acmp-l">${l}</div><div class="acmp-v" style="color:${gcol(p)}">${gtxt(p==null?null:+p.toFixed(1))}</div><div class="acmp-s">base ${num(b)}</div></div>`;};
-  // ---- PROJEÇÃO de fechamento do mês de 'ate' (corrida do mês atual + curva histórica) ----
+  // ---- PROJEÇÃO de fechamento: BASE = curva do PRÓPRIO mês (run-rate), pareada com outros meses ----
   const _maxd=(_AD&&_AD.meta&&_AD.meta.max_data)||ate;
   const ateYm=ate.slice(0,7), PY=+ateYm.slice(0,4), PM=+ateYm.slice(5,7);
   const diM=_daysInMonth(ateYm), isCur=ateYm===_maxd.slice(0,7);
   const Nd=isCur?+_maxd.slice(8,10):diM;
   let mFat=0,mEx=0; for(let d=1;d<=Nd;d++){const v=_dayMap[ateYm+'-'+String(d).padStart(2,'0')]; if(v){mFat+=v.f;mEx+=v.q;}}
-  // curva intra-mês: quanto do mês (R$) já costuma estar rodado até o dia N, mediana dos últimos 6 meses
-  const _months=[...new Set(Object.keys(_dayMap).map(k=>k.slice(0,7)))].filter(m=>m<ateYm).sort().slice(-6);
-  const _sh=[]; _months.forEach(m=>{const dd=_daysInMonth(m);let s=0,full=0;for(let d=1;d<=dd;d++){const v=_dayMap[m+'-'+String(d).padStart(2,'0')];if(v){full+=v.f;if(d<=Nd)s+=v.f;}}if(full>0)_sh.push(s/full);});
-  _sh.sort((a,b)=>a-b); const shareN=_sh.length?_sh[Math.floor(_sh.length/2)]:(Nd/diM);
-  const projFat=(isCur&&shareN>0)?mFat/shareN:mFat, projEx=(isCur&&shareN>0)?mEx/shareN:mEx, linFat=isCur?mFat/Nd*diM:mFat;
+  const perDia=Nd?mFat/Nd:0, faltam=diM-Nd;
+  const projFat=isCur?Math.round(mFat/Nd*diM):mFat;   // curva do próprio mês
+  const projEx =isCur?Math.round(mEx/Nd*diM):mEx;
   const projbox=`<div class="projbox">
     <div class="projttl">◆ PROJEÇÃO ESTIMADA</div>
-    <div class="projsub">${isCur?`fechamento de ${MESFULL[PM]}/${String(PY).slice(2)} · corrida do mês (dia ${Nd}/${diM})`:`${MESFULL[PM]}/${String(PY).slice(2)} · mês fechado`}</div>
+    <div class="projsub">${isCur?`fechamento de ${MESFULL[PM]}/${String(PY).slice(2)} · curva do mês (dia ${Nd}/${diM})`:`${MESFULL[PM]}/${String(PY).slice(2)} · mês fechado`}</div>
     <div class="projrow"><span style="color:var(--mut)">Faturamento</span><b>${brl(projFat)}</b></div>
     <div class="projrow"><span style="color:var(--mut)">Produção</span><b>${num(projEx)} ex.</b></div>
-    ${isCur?`<div class="projfaixa">faixa ${brlk(linFat)}–${brlk(projFat)} · ~${Math.round(shareN*100)}% do mês já rodou (curva de ${_months.length} meses)</div>`:'<div class="projfaixa">valor realizado (mês completo)</div>'}
+    ${isCur?`<div class="projfaixa">ritmo do mês ${brlk(perDia)}/dia · faltam ${faltam} dias</div>`:'<div class="projfaixa">valor realizado (mês completo)</div>'}
   </div>`;
+  // pareamento rápido: projeção do mês vs faturamento REAL fechado dos últimos meses + mesmo mês ano passado
+  let pareamento='';
+  if(isCur){
+    const sm=(_AD.serie_mensal_full||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1); const byym={}; sm.forEach(x=>byym[x.ym]=x.fat);
+    const hist=sm.filter(x=>x.ym<ateYm).slice(-6).map(x=>({ym:x.ym,v:x.fat,proj:false}));
+    const yoyYm=(+PY-1)+'-'+String(PM).padStart(2,'0'); const yoy=byym[yoyYm];
+    const bars=hist.concat([{ym:ateYm,v:projFat,proj:true}]);
+    const mxb=Math.max(...bars.map(b=>b.v),1);
+    const prevC=hist.length?hist[hist.length-1]:null;
+    const vsPrev=prevC&&prevC.v?Math.round(100*(projFat/prevC.v-1)):null;
+    const vsYoy=yoy?Math.round(100*(projFat/yoy-1)):null;
+    pareamento=`<div style="margin:12px 0 4px;border-top:1px solid var(--line);padding-top:12px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px">📊 Projeção × outros meses <span style="color:var(--mut);font-weight:400;font-size:11px">— onde o fechamento estimado (★) se encaixa · faturamento mensal</span></div>
+      ${bars.map(b=>`<div style="display:flex;align-items:center;gap:10px;margin:4px 0">
+        <span style="width:52px;color:${b.proj?'var(--cyan)':'var(--mut)'};font-size:12px;font-weight:${b.proj?800:400}">${ymLabel(b.ym)}${b.proj?' ★':''}</span>
+        <div style="flex:1;background:rgba(255,255,255,.05);border-radius:6px;height:18px;overflow:hidden"><div style="height:18px;width:${Math.round(100*b.v/mxb)}%;background:${b.proj?'var(--cyan)':'rgba(120,140,170,.5)'};border-radius:6px"></div></div>
+        <span style="width:66px;text-align:right;font-size:12px;font-weight:${b.proj?800:400};color:${b.proj?'#fff':'var(--mut)'}">${brlk(b.v)}</span></div>`).join('')}
+      <div style="color:var(--mut);font-size:11px;margin-top:7px">★ projeção do mês · ${vsPrev!=null?`vs ${ymLabel(prevC.ym)}: <b style="color:${gcol(vsPrev)}">${gtxt(vsPrev)}</b>`:''}${vsYoy!=null?` · vs ${ymLabel(yoyYm)} (ano passado): <b style="color:${gcol(vsYoy)}">${gtxt(vsYoy)}</b>`:''}. Meses fechados = faturamento real do sistema.</div>
+    </div>`;
+  }
   // mesmo trecho de dias nos meses anteriores (desde jan/26) — só faz sentido p/ intervalo dentro de 1 mês
   const sameMonth=de.slice(0,7)===ate.slice(0,7);
   let sliceHtml='';
@@ -1184,6 +1202,7 @@ function renderManual(){
       </div>
       ${projbox}
     </div>
+    ${pareamento}
     <div style="display:flex;gap:26px;flex-wrap:wrap;margin:10px 0 6px;border-top:1px solid var(--line);padding-top:12px">
       ${cmp(`vs período anterior (exames)`,cur.q,prev.q)}
       ${cmp(`vs período anterior (fat.)`,cur.f,prev.f)}
