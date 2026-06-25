@@ -410,9 +410,12 @@
     const fmtD = d => { const p = String(d || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : (d || ''); };
     const rowsHtml = shown.map(r => {
       const when = r.sep ? fmtTs(r.m.ts_sep) : fmtD(r.dt);
-      const status = r.sep
-        ? `<span class="est separado">separado</span> <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}${r.m.estado === 'recebido' ? ` · <span class="est separado" style="background:#fef3c7;color:#92400e">✓ recebido</span> <b>${esc2(r.m.por_receb || '')}</b>` : ''}`
-        : `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`;
+      const recebido = r.sep && r.m.estado === 'recebido';
+      const status = !r.sep
+        ? `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`
+        : recebido
+          ? `<span class="est separado" style="background:#dcfce7;color:#166534">✓ recebido (finalizado)</span> sep. <b>${esc2(r.m.por || '')}</b> · receb. <b>${esc2(r.m.por_receb || '')}</b>`
+          : `<span class="est separado" style="background:#fef9c3;color:#854d0e">⏳ separado — aguardando receber</span> por <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}`;
       const del = r.sep
         ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="mark" title="desfazer marcação">↩</button>`
         : (isAdmin() ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="miss" title="apagar este não-separado (admin)">✕</button>` : `<span style="color:var(--mut);font-size:13px" title="só admin apaga">🔒</span>`);
