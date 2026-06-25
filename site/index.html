@@ -101,6 +101,13 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 .ftab.on{color:var(--cyan);border-color:rgba(0,212,255,.5);background:rgba(0,212,255,.08)}
 .ftabs{align-items:center}
 .tools{margin-left:auto;display:flex;gap:8px}
+@keyframes pulseBlue{0%,100%{box-shadow:0 0 0 0 rgba(0,212,255,0),0 0 12px rgba(0,212,255,.22)}50%{box-shadow:0 0 0 3px rgba(0,212,255,.16),0 0 26px rgba(0,212,255,.6)}}
+.projbox{min-width:236px;background:linear-gradient(160deg,rgba(0,212,255,.14),rgba(10,22,40,.55));border:1.5px solid var(--cyan);border-radius:12px;padding:12px 16px;animation:pulseBlue 2.2s ease-in-out infinite}
+.projttl{color:var(--cyan);font-weight:800;font-size:13px;letter-spacing:.4px}
+.projsub{color:var(--mut);font-size:11px;margin-bottom:9px}
+.projrow{display:flex;justify-content:space-between;gap:14px;font-size:15px;margin:4px 0}
+.projrow b{color:#fff;font-weight:800}
+.projfaixa{color:var(--mut);font-size:10px;margin-top:7px;line-height:1.35}
 .toolbtn{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:10px;padding:9px 14px;
   background:var(--card);border:1px solid var(--line);color:var(--mut);transition:all .15s}
 .toolbtn:hover{color:var(--ink);border-color:rgba(0,212,255,.4)}
