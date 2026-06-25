@@ -150,12 +150,12 @@ function render(D){
   const novosTrend=(D.novos_clientes||[]).slice(-12).map(x=>x.novos);
   const kpis = el('div','kpis');
   const kdata = [
-    {l:'Faturamento · últ. 12m', v:brlk(k.faturamento_l12), d:`${num(k.exames_l12)} exames · vs 12m anterior`, c:'',  yoy:f12.yoy, spark:f12.spark, col:C.cyan},
+    {l:'Faturamento · últ. 12m', v:brlk(k.faturamento_l12), d:`${num(k.exames_l12)} exames · sistema (com Pet Love no card de composição)`, c:'',  yoy:f12.yoy, spark:f12.spark, col:C.cyan},
     {l:'Exames · últ. 12m',      v:num(k.exames_l12),       d:`${k.exames_por_req_l12} por requisição · vs 12m anterior`, c:'g', yoy:e12.yoy, spark:e12.spark, col:C.green},
-    {l:'Faturamento 2025',       v:brlk(k.faturamento_2025),d:`${num(k.exames_2025)} exames · vs 2024`, c:'',  yoy:an2025.yoy_fat, spark:spark2025, col:C.cyan},
+    {l:'Faturamento 2025',       v:brlk(k.faturamento_2025),d:`${num(k.exames_2025)} exames · vs 2024 · sistema`, c:'',  yoy:an2025.yoy_fat, spark:spark2025, col:C.cyan},
     {l:'Ticket médio / exame',   v:brl(tick12),             d:`requisição: ${brl(k.ticket_medio_req_l12)} · vs 12m anterior`, c:'a', yoy:tickYoY},
     {l:'Clientes ativos · 12m',  v:num(k.clientes_ativos_l12), d:`de ${num(k.clientes_total)} cadastrados`, c:'p', spark:novosTrend, col:C.purple},
-    {l:'Faturamento histórico',  v:brlk(k.total_faturamento), d:`desde 2014 · ${num(k.total_exames)} exames`, c:'a'},
+    {l:'Faturamento histórico',  v:brlk(k.total_faturamento), d:`desde 2014 · sistema (direto)`, c:'a'},
   ];
   kdata.forEach(d=>{ const e=el('div','kpi'+(d.c?' '+d.c:''));
     e.innerHTML=`<div class="lbl">${d.l}</div><div class="krow"><div class="val">${d.v}</div>${chip(d.yoy)}</div><div class="delta">${d.d}</div>${d.spark?kspark(d.spark,d.col):''}`;
@@ -1064,7 +1064,7 @@ function renderAnalises(D){
   const days=(D.serie_diaria||[]).map(x=>x.d); const dMin=days[0]||'2023-01-01', dMax=days[days.length-1]||'';
   const dDe=dMax?dMax.slice(0,7)+'-01':dMin;  // default = mês corrente até a data (mostra a comparação com meses anteriores)
   wrap.innerHTML=`
-    <div class="card" style="margin-bottom:16px"><h3>Faturamento e produção mensal desde 2014 <span class="cap">${(D.serie_mensal_full||[]).length} meses · área = faturamento · linha = exames (eixo dir.)</span></h3>
+    <div class="card" style="margin-bottom:16px"><h3>Faturamento total e produção desde 2014 <span class="cap">${(D.serie_mensal_full||[]).length} meses · área = faturamento (sistema + Pet Love) · linha = exames (eixo dir.)</span></h3>
       <div class="chartbox lg"><canvas id="anHist"></canvas></div></div>
     <div class="card" style="margin-bottom:16px"><h3>📅 Período manual · produção por dia <span class="cap">escolha as datas (ou um atalho) e veja produção e faturamento do intervalo, comparado</span></h3>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:4px">
@@ -1260,17 +1260,18 @@ function renderAnTable(){
     <td class="num">${num(x.qtd)}</td><td class="num">${brl(x.fat)}</td>
     <td class="num" style="color:${gcol(x.mom_fat)};font-weight:700">${gtxt(x.mom_fat)}</td>
     <td class="num" style="color:${gcol(x.yoy_fat)};font-weight:700">${gtxt(x.yoy_fat)}</td></tr>`).join('');
-  el.innerHTML=head+`<div class="card"><h3>${selWin==='mes'?'Mês a mês':'Blocos de '+selWin+' dias'} <span class="cap">azul = crescimento · vermelho = queda · vs mesma janela</span></h3>
+  el.innerHTML=head+`<div class="card"><h3>${selWin==='mes'?'Mês a mês':'Blocos de '+selWin+' dias'} <span class="cap">azul = crescimento · vermelho = queda · vs mesma janela · faturamento DIRETO do sistema (Pet Love não entra aqui)</span></h3>
     <table class="atab"><thead><tr><th>Período</th><th class="num">Exames</th><th class="num">Faturamento</th><th class="num">vs mês ant.</th><th class="num">vs ano ant.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function drawAnalisesChart(){
   const D=_AD; if(!D) return; const cv=document.getElementById('anHist'); if(!cv||typeof Chart==='undefined') return;
   if(_achart) _achart.destroy();
   const s=D.serie_mensal_full||[];
+  const _pl={}; (D.mensal||[]).forEach(x=>_pl[x.ym]=x.petlove||0);   // Pet Love por mês (só 2025+)
   _achart=new Chart(cv,{data:{labels:s.map(x=>x.ym),datasets:[
-    {type:'line',label:'Faturamento',data:s.map(x=>x.fat),borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',fill:true,tension:.3,pointRadius:0,borderWidth:2,yAxisID:'f'},
+    {type:'line',label:'Faturamento total (sist.+Pet Love)',data:s.map(x=>x.fat+(_pl[x.ym]||0)),borderColor:'#00D4FF',backgroundColor:'rgba(0,212,255,.10)',fill:true,tension:.3,pointRadius:0,borderWidth:2,yAxisID:'f'},
     {type:'line',label:'Exames',data:s.map(x=>x.qtd),borderColor:'#00E5A0',backgroundColor:'#00E5A0',fill:false,tension:.3,pointRadius:0,borderWidth:1.5,yAxisID:'q'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='q'?' Exames: '+num(c.raw):' Faturamento: '+brl(c.raw)}}},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9fb0c8'}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='q'?' Exames: '+num(c.raw):' Faturamento total: '+brl(c.raw)}}},
       scales:{x:{ticks:{maxTicksLimit:14,color:'#8aa2bd'},grid:{display:false}},
         f:{position:'left',ticks:{callback:v=>brlk(v),color:'#00D4FF'},grid:{color:'rgba(255,255,255,.05)'}},
         q:{position:'right',ticks:{callback:v=>num(v),color:'#00E5A0'},grid:{display:false}}}}});
