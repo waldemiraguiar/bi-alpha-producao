@@ -22,7 +22,7 @@
   let marks = {};                 // chave -> marcação
   let descartes = new Set();      // chaves apagadas (p/ filtrar do histórico/placar)
   let descartesList = [];         // arquivo COMPLETO dos apagados (histórico do histórico)
-  let selByView = { separar: '', urgente: '', hist: '', apagados: '' }; // categoria selecionada por aba
+  let selByView = { separar: '', urgente: '', receber: '', hist: '', apagados: '' }; // categoria selecionada por aba
   let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
   let subSep = null;             // canal Realtime do Supabase
@@ -40,10 +40,31 @@
   const universo = () => { const d = sepData(); return d && d.historico ? d.historico : []; };  // últimos 7 dias (p/ histórico/placar)
   const chaveOf = it => `${it.req}-${it.codex}`;
 
-  /* ---- quem está marcando (por aparelho) ---- */
-  const me = () => localStorage.getItem(MEK) || '';
+  /* ---- quem está marcando: LOGIN DE OPERADOR (2 times) c/ fallback ao seletor antigo ---- */
+  const OPK = 'sep_op';
+  let op = (() => { try { return JSON.parse(localStorage.getItem(OPK) || 'null'); } catch (e) { return null; } })(); // {nome,papel}
+  let teamList = [];        // [{nome,papel}] cadastrados no Supabase
+  let teamMode = false;     // havendo ≥1 colaborador -> login exigido; senão, seletor antigo
+  const papelLbl = p => p === 'recebidos' ? 'Recebidos' : p === 'ambos' ? 'Separação + Recebidos' : 'Separação';
+  const meName = () => localStorage.getItem(MEK) || '';
+  const me = () => teamMode ? (op ? op.nome : '') : meName();
+  const papel = () => teamMode ? (op ? op.papel : '') : 'ambos';
+  const canSep = () => !teamMode || papel() === 'separacao' || papel() === 'ambos';
+  const canRec = () => !teamMode || papel() === 'recebidos' || papel() === 'ambos';
   const users = () => { try { return JSON.parse(localStorage.getItem(USK) || '[]'); } catch (e) { return []; } };
   function addUser(n) { n = (n || '').trim(); if (!n) return; const u = users(); if (!u.includes(n)) { u.push(n); u.sort(); localStorage.setItem(USK, JSON.stringify(u)); } localStorage.setItem(MEK, n); }
+  function saveOp(o) { op = o; if (o) localStorage.setItem(OPK, JSON.stringify(o)); else localStorage.removeItem(OPK); }
+  async function loadTeam() {
+    if (!useSupa()) { teamMode = false; return; }
+    try { teamList = await window.SUPA.teamNames(); teamMode = teamList.length > 0; if (teamMode && op && !teamList.some(u => u.nome === op.nome)) saveOp(null); }
+    catch (e) { teamMode = false; }
+  }
+  const dayTs = ts => { const n = Number(ts); return n ? new Date(n - 3 * 3600e3).toISOString().slice(0, 10) : ''; }; // dia BRT de um timestamp
+  // fila do 2º checkpoint: amostras já separadas, aguardando o time de Recebidos (respeita o piso/reset)
+  const aReceber = () => Object.values(marks)
+    .filter(m => m.estado === 'separado' || m.estado === 'enviado')
+    .filter(m => !descartes.has(m.chave))
+    .filter(m => { const d = dayTs(m.ts_sep); return !d || d >= pisoDay(m.cat); });
 
   /* ---- prazo (corte) relativo à hora de entrada ---- */
   function deadline(it) {
@@ -117,9 +138,71 @@
     } catch (e) { alert('Erro de conexão.'); }
   }
 
+  /* ---- login de operador (modal) ---- */
+  function logout() { saveOp(null); render(); }
+  function openLogin() {
+    if (!teamList.length) { alert('Nenhum colaborador cadastrado ainda. Peça ao admin (botão 🔓 Admin → 👥 Equipe).'); return; }
+    const old = document.querySelector('.oplogin'); if (old) old.remove();
+    const wrap = document.createElement('div'); wrap.className = 'oplogin';
+    const opts = teamList.slice().sort((a, b) => a.nome.localeCompare(b.nome)).map(u => `<option value="${esc2(u.nome)}">${esc2(u.nome)} · ${papelLbl(u.papel)}</option>`).join('');
+    wrap.innerHTML = `<div class="oplbox"><h3>👤 Entrar na Triagem</h3>
+      <label>Colaborador</label><select id="opnome">${opts}</select>
+      <label>Senha</label><input id="oppin" type="password" inputmode="numeric" autocomplete="off" placeholder="sua senha">
+      <div class="opmsg" id="opmsg"></div>
+      <div class="opbtns"><button class="opb cancel" id="opcancel">Cancelar</button><button class="opb ok" id="opgo">Entrar</button></div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.onclick = e => { if (e.target === wrap) close(); };
+    wrap.querySelector('#opcancel').onclick = close;
+    const pin = wrap.querySelector('#oppin'); pin.focus();
+    const go = async () => {
+      const nome = wrap.querySelector('#opnome').value, p = pin.value;
+      if (!p) { pin.focus(); return; }
+      wrap.querySelector('#opmsg').textContent = 'Conferindo…';
+      const r = await window.SUPA.login(nome, p);
+      if (r.ok) { saveOp({ nome, papel: r.papel }); close(); render(); }
+      else { wrap.querySelector('#opmsg').textContent = '❌ Senha incorreta.'; pin.value = ''; pin.focus(); }
+    };
+    wrap.querySelector('#opgo').onclick = go;
+    pin.onkeydown = e => { if (e.key === 'Enter') go(); };
+  }
+  /* ---- gestão da equipe (admin) ---- */
+  async function openTeam() {
+    if (!isAdmin()) { alert('Só o admin cadastra a equipe. Destrave no botão 🔒 Admin.'); return; }
+    if (!useSupa()) { alert('A gestão de equipe exige o Supabase ativo.'); return; }
+    const list = await window.SUPA.teamAdminList(adminPin());
+    if (list == null) { alert('Não consegui carregar a equipe (PIN admin?).'); return; }
+    const old = document.querySelector('.oplogin'); if (old) old.remove();
+    const wrap = document.createElement('div'); wrap.className = 'oplogin';
+    const rows = list.length ? list.map(u => `<div class="eqrow"><span class="eqn">${esc2(u.nome)}</span><span class="eqp ${u.papel}">${papelLbl(u.papel)}</span><button class="eqdel" data-del="${esc2(u.nome)}">remover</button></div>`).join('') : '<div class="opmsg">Ninguém cadastrado ainda — adicione abaixo.</div>';
+    wrap.innerHTML = `<div class="oplbox wide"><h3>👥 Equipe da Triagem</h3>
+      <div class="eqlist">${rows}</div>
+      <div class="eqadd"><input id="eqnome" placeholder="nome / iniciais">
+        <select id="eqpapel"><option value="separacao">Separação</option><option value="recebidos">Recebidos</option><option value="ambos">Sep + Receb</option></select>
+        <input id="eqpin" type="text" inputmode="numeric" placeholder="senha"><button class="opb ok" id="eqsave">Salvar</button></div>
+      <div class="opmsg" id="eqmsg">Dica: a senha pode ser repetida depois sem perder o histórico de quem carimbou.</div>
+      <div class="opbtns"><button class="opb cancel" id="eqclose">Fechar</button></div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.onclick = e => { if (e.target === wrap) close(); };
+    wrap.querySelector('#eqclose').onclick = close;
+    wrap.querySelectorAll('.eqdel').forEach(b => b.onclick = async () => {
+      if (!confirm(`Remover ${b.dataset.del} da equipe? (carimbos antigos continuam no histórico)`)) return;
+      try { await window.SUPA.teamRemove(adminPin(), b.dataset.del); close(); await loadTeam(); render(); openTeam(); } catch (e) { alert('Erro ao remover.'); }
+    });
+    wrap.querySelector('#eqsave').onclick = async () => {
+      const nome = wrap.querySelector('#eqnome').value.trim(), pp = wrap.querySelector('#eqpapel').value, pn = wrap.querySelector('#eqpin').value.trim();
+      const msg = wrap.querySelector('#eqmsg');
+      if (!nome || !pn) { msg.textContent = 'Preencha nome e senha.'; return; }
+      try { const ok = await window.SUPA.teamSave(adminPin(), nome, pp, pn); if (!ok) { msg.textContent = 'PIN admin inválido.'; return; } close(); await loadTeam(); render(); openTeam(); } catch (e) { msg.textContent = 'Erro ao salvar.'; }
+    };
+  }
+
   /* ---- ações ---- */
   async function doSeparar(it) {
+    if (teamMode && !me()) { openLogin(); return; }
     if (!me()) { alert('Selecione/insira o seu nome no topo (campo "Você") antes de marcar.'); return; }
+    if (!canSep()) { alert('Você entrou como time de RECEBIDOS. Só o time de Separação pode separar — toque em "trocar" pra entrar como separação.'); return; }
     const dl = deadline(it); const noPrazo = !dl || Date.now() <= dl.getTime();
     const ok = await post({
       acao: 'separar', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex,
@@ -129,28 +212,38 @@
     if (ok) render();
   }
   async function step(acao, chave, confirmMsg) {
-    if (confirmMsg && !confirm(confirmMsg)) return;
+    if (teamMode && !me()) { openLogin(); return; }
+    if ((acao === 'receber' || acao === 'enviar') && !canRec()) { alert('Você entrou como time de SEPARAÇÃO. Só o time de Recebidos dá o recebido — toque em "trocar" pra entrar como recebidos.'); return; }
     if ((acao === 'enviar' || acao === 'receber') && !me()) { alert('Selecione o seu nome no topo antes.'); return; }
+    if (confirmMsg && !confirm(confirmMsg)) return;
     if (await post({ acao, chave, por: me() })) render();
   }
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = ageItems(0, 0).length, urgN = ageItems(1, null).length;
+    const sepN = ageItems(0, 0).length, urgN = ageItems(1, null).length, recN = aReceber().length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
+    // identidade: login de operador (teamMode) OU seletor de nome antigo (fallback)
+    const opbox = teamMode
+      ? (me()
+        ? `<span class="opnow ${papel()}">👤 ${esc2(me())} · ${papelLbl(papel())}</span><button class="opbtn2" id="opswitch">trocar</button><button class="opbtn2" id="oplogout">sair</button>`
+        : `<button class="opbtn2 enter" id="oplogin">🔑 Entrar</button>`)
+      : `Você: <select id="sepme"><option value="">— escolher —</option>${opts}<option value="__novo__">＋ adicionar nome…</option></select>`;
+    const eqbtn = isAdmin() ? `<button class="adminbtn" id="eqbtn" title="cadastrar/editar a equipe">👥 Equipe</button>` : '';
     return `<div class="sephead">
       <div class="septabs">
         <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar <span class="c">${sepN}</span></div>
         <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
+        <div class="septab rectab ${recN ? 'hasrec' : ''} ${view === 'receber' ? 'on' : ''}" data-v="receber">📥 A Receber <span class="c">${recN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
       </div>
       <div class="sepme">
         <button class="adminbtn ${isAdmin() ? 'on' : ''}" id="adminbtn" title="apagar/restaurar não-separados">${isAdmin() ? '🔓 Admin' : '🔒 Admin'}</button>
-        Você: <select id="sepme"><option value="">— escolher —</option>${opts}<option value="__novo__">＋ adicionar nome…</option></select>
+        ${eqbtn}${opbox}
       </div>
     </div>`;
   }
@@ -231,6 +324,33 @@
     bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO SEPARADA${n > 1 ? 'S' : ''} · SEPARAR ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
   });
 
+  /* ---- 2º checkpoint: time de Recebidos confirma o material separado ---- */
+  function rowReceber(m) {
+    const k = m.chave;
+    const cl = `<span class="cl ${m.classe}">${m.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
+    const d = dayTs(m.ts_sep); const quando = d ? ` · sep. ${d.slice(8, 10)}/${d.slice(5, 7)}` : '';
+    const env = m.estado === 'enviado' ? `<span class="dl ok">enviado ${m.data_env || ''}</span>` : `<span class="dl ok">separado</span>`;
+    const head = `<div class="req">${esc2(m.req)}<span class="y">/${esc2(m.ano)}</span></div>
+      <div><div class="pac">${esc2(m.paciente)}${cl}</div>
+      <div class="meta">${esc2(m.exame)} · por <b>${esc2(m.por || '')}</b>${quando}</div></div>`;
+    const recbtn = canRec()
+      ? `<button class="sepbtn rec" data-act="receber" data-k="${k}">✓ Recebido</button>`
+      : `<span class="dl lock" title="entre como time de Recebidos">🔒 Recebidos</span>`;
+    const undo = `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer (volta a separar)">↩</button>`;
+    return `<div class="seprow">${head}<div class="right2">${env}${recbtn}${undo}</div></div>`;
+  }
+  function viewReceber() {
+    const items = aReceber();
+    if (!items.length) return `<div class="sepwait">✓ Nada aguardando recebimento agora. 👍</div>`;
+    const byCat = {}; items.forEach(m => { const c = m.cat || '—'; (byCat[c] = byCat[c] || []).push(m); });
+    const cats = orderedCats(byCat);
+    let sel = selByView.receber; if (!sel || !byCat[sel]) sel = selByView.receber = cats[0];
+    const strip = topicStrip(byCat, 'receber', sel, null);
+    const arr = byCat[sel].slice().sort((a, b) => (Number(a.ts_sep) || 0) - (Number(b.ts_sep) || 0)); // mais antigo primeiro
+    const bar = `<div class="andonbar rec"><span class="ico">📥</span><span class="ttl">${items.length} AMOSTRA${items.length > 1 ? 'S' : ''} SEPARADA${items.length > 1 ? 'S' : ''} AGUARDANDO RECEBIMENTO</span></div>`;
+    return bar + strip + `<div class="sepcat reccat"><div class="h"><span>📥 ${esc2(sel)}</span><span class="cnt">${arr.length} a receber</span></div>${arr.map(rowReceber).join('')}</div>`;
+  }
+
   function viewPlacar() {
     const now = new Date(); const today = now.toISOString().slice(0, 10);
     const cutDay = period === 'hoje' ? today : period === '7d' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : '0';
@@ -306,7 +426,7 @@
     const rowsHtml = shown.map(r => {
       const when = r.sep ? fmtTs(r.m.ts_sep) : fmtD(r.dt);
       const status = r.sep
-        ? `<span class="est separado">separado</span> <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}`
+        ? `<span class="est separado">separado</span> <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}${r.m.estado === 'recebido' ? ` · <span class="est separado" style="background:#fef3c7;color:#92400e">✓ recebido</span> <b>${esc2(r.m.por_receb || '')}</b>` : ''}`
         : `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`;
       const del = r.sep
         ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="mark" title="desfazer marcação">↩</button>`
@@ -360,6 +480,7 @@
   const LEGENDS = {
     separar: '🧪 Amostras que chegaram hoje — separe a amostra e marque aqui.',
     urgente: '🚨 Não separadas de ontem ou antes — última chamada, separe antes de perder!',
+    receber: '📥 Material já separado, aguardando o time de Recebidos confirmar. Toque em "✓ Recebido".',
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
@@ -370,6 +491,7 @@
     let body = '';
     if (view === 'separar') body = viewSeparar();
     else if (view === 'urgente') body = viewUrgente();
+    else if (view === 'receber') body = viewReceber();
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
     else body = viewHist();
@@ -388,9 +510,17 @@
     el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
     el.querySelectorAll('.perbtn[data-hf]').forEach(p => p.onclick = () => { histFiltro = p.dataset.hf; render(); });
     const ab = $('adminbtn'); if (ab) ab.onclick = adminUnlock;
+    const eb = $('eqbtn'); if (eb) eb.onclick = openTeam;
+    const ol = $('oplogin'); if (ol) ol.onclick = openLogin;
+    const osw = $('opswitch'); if (osw) osw.onclick = openLogin;
+    const olo = $('oplogout'); if (olo) olo.onclick = logout;
     el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
       const k = b.dataset.del;
-      if (b.dataset.delkind === 'mark') { if (confirm('Desfazer esta marcação de "separado"? Volta a contar como não-separado.') && await post({ acao: 'desfazer', chave: k })) render(); }
+      if (b.dataset.delkind === 'mark') {
+        const mk = marks[k];
+        if (mk && mk.estado === 'recebido') { if (confirm('Desfazer o RECEBIDO? Volta para a fila "A Receber" (a separação continua valendo).') && await post({ acao: 'voltar', chave: k })) render(); }
+        else if (confirm('Desfazer esta marcação de "separado"? Volta a contar como não-separado.') && await post({ acao: 'desfazer', chave: k })) render();
+      }
       else { const row = histRows().find(r => r.chave === k); if (row && confirm('Apagar este NÃO-separado? Vai pro arquivo de Apagados (não some de vez). Sai do histórico e do placar.')) descartar([row]); }
     });
     const bb = $('histdelbatch'); if (bb) bb.onclick = () => {
@@ -425,7 +555,7 @@
     if (subSep) { window.SUPA && window.SUPA.unsub(subSep); subSep = null; }
     if (timer) { clearInterval(timer); timer = null; }
     if (m === 'sep') {
-      await loadMarks(); render();
+      await loadTeam(); await loadMarks(); render();
       if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep') { await loadMarks(); render(); } });
       else timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden) { await loadMarks(); render(); } }, 60000);
     }
@@ -433,6 +563,40 @@
     if (window.CLI) await window.CLI.onMode(m);
   }
 
+  // estilos do login de operador + gestão de equipe + aba A Receber
+  (function injectCss() {
+    if (document.getElementById('sepopcss')) return;
+    const s = document.createElement('style'); s.id = 'sepopcss';
+    s.textContent = `
+.oplogin{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
+.oplbox{background:#fff;color:#1a1a1a;border-radius:16px;padding:22px;width:min(92vw,360px);box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:16px}
+.oplbox.wide{width:min(94vw,500px)}
+.oplbox h3{margin:0 0 14px;font-size:20px}
+.oplbox label{display:block;font-size:13px;opacity:.7;margin:10px 0 4px}
+.oplbox select,.oplbox input{width:100%;padding:11px 12px;font-size:17px;border:1.5px solid #cbd5e1;border-radius:10px;box-sizing:border-box}
+.opmsg{min-height:18px;font-size:14px;color:#b91c1c;margin:8px 0 2px}
+.opbtns{display:flex;gap:10px;margin-top:14px}
+.opb{flex:1;padding:12px;font-size:16px;font-weight:700;border:0;border-radius:10px;cursor:pointer}
+.opb.ok{background:#16a34a;color:#fff}.opb.cancel{background:#e5e7eb;color:#333}
+.opnow{font-weight:700;padding:5px 10px;border-radius:999px;background:#e0f2fe;color:#075985}
+.opnow.recebidos{background:#fef3c7;color:#92400e}.opnow.ambos{background:#ede9fe;color:#5b21b6}
+.opbtn2{margin-left:6px;padding:5px 10px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#333;cursor:pointer;font-size:13px}
+.opbtn2.enter{background:#16a34a;color:#fff;border:0;font-weight:700;font-size:15px;padding:7px 14px}
+.eqlist{max-height:42vh;overflow:auto;margin-bottom:10px}
+.eqrow{display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid #eee}
+.eqrow .eqn{font-weight:700;flex:1}
+.eqrow .eqp{font-size:12px;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#075985}
+.eqrow .eqp.recebidos{background:#fef3c7;color:#92400e}.eqrow .eqp.ambos{background:#ede9fe;color:#5b21b6}
+.eqdel{font-size:12px;color:#b91c1c;background:none;border:0;cursor:pointer;text-decoration:underline}
+.eqadd{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;margin-top:6px}
+.eqadd input,.eqadd select{padding:9px;font-size:14px;border:1.5px solid #cbd5e1;border-radius:8px}
+.eqadd .opb{padding:9px 12px;flex:none}
+.septab.rectab.hasrec{box-shadow:inset 0 -3px 0 #f59e0b}
+.dl.lock{opacity:.75;font-size:12px}
+.andonbar.rec{background:#fffbeb;color:#92400e;border:1.5px solid #fcd34d;border-radius:12px;padding:10px 14px;font-weight:800;display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sepbtn.rec{background:#f59e0b;color:#fff}`;
+    document.head.appendChild(s);
+  })();
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
   // ao voltar o foco na aba, atualiza na hora (sensação de "ao vivo" sem ficar consultando à toa)
   document.addEventListener('visibilitychange', () => { if (!document.hidden && MODE === 'sep') loadMarks().then(render); });
