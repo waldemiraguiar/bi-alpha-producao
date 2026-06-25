@@ -1134,6 +1134,24 @@ function renderManual(){
   const pc=(a,b)=>b>0?100*(a/b-1):null;
   const kpi=(l,v,s)=>`<div><div class="acmp-l">${l}</div><div class="acmp-v">${v}</div><div class="acmp-s">${s}</div></div>`;
   const cmp=(l,a,b)=>{const p=pc(a,b);return `<div><div class="acmp-l">${l}</div><div class="acmp-v" style="color:${gcol(p)}">${gtxt(p==null?null:+p.toFixed(1))}</div><div class="acmp-s">base ${num(b)}</div></div>`;};
+  // ---- PROJEÇÃO de fechamento do mês de 'ate' (corrida do mês atual + curva histórica) ----
+  const _maxd=(_AD&&_AD.meta&&_AD.meta.max_data)||ate;
+  const ateYm=ate.slice(0,7), PY=+ateYm.slice(0,4), PM=+ateYm.slice(5,7);
+  const diM=_daysInMonth(ateYm), isCur=ateYm===_maxd.slice(0,7);
+  const Nd=isCur?+_maxd.slice(8,10):diM;
+  let mFat=0,mEx=0; for(let d=1;d<=Nd;d++){const v=_dayMap[ateYm+'-'+String(d).padStart(2,'0')]; if(v){mFat+=v.f;mEx+=v.q;}}
+  // curva intra-mês: quanto do mês (R$) já costuma estar rodado até o dia N, mediana dos últimos 6 meses
+  const _months=[...new Set(Object.keys(_dayMap).map(k=>k.slice(0,7)))].filter(m=>m<ateYm).sort().slice(-6);
+  const _sh=[]; _months.forEach(m=>{const dd=_daysInMonth(m);let s=0,full=0;for(let d=1;d<=dd;d++){const v=_dayMap[m+'-'+String(d).padStart(2,'0')];if(v){full+=v.f;if(d<=Nd)s+=v.f;}}if(full>0)_sh.push(s/full);});
+  _sh.sort((a,b)=>a-b); const shareN=_sh.length?_sh[Math.floor(_sh.length/2)]:(Nd/diM);
+  const projFat=(isCur&&shareN>0)?mFat/shareN:mFat, projEx=(isCur&&shareN>0)?mEx/shareN:mEx, linFat=isCur?mFat/Nd*diM:mFat;
+  const projbox=`<div class="projbox">
+    <div class="projttl">◆ PROJEÇÃO ESTIMADA</div>
+    <div class="projsub">${isCur?`fechamento de ${MESFULL[PM]}/${String(PY).slice(2)} · corrida do mês (dia ${Nd}/${diM})`:`${MESFULL[PM]}/${String(PY).slice(2)} · mês fechado`}</div>
+    <div class="projrow"><span style="color:var(--mut)">Faturamento</span><b>${brl(projFat)}</b></div>
+    <div class="projrow"><span style="color:var(--mut)">Produção</span><b>${num(projEx)} ex.</b></div>
+    ${isCur?`<div class="projfaixa">faixa ${brlk(linFat)}–${brlk(projFat)} · ~${Math.round(shareN*100)}% do mês já rodou (curva de ${_months.length} meses)</div>`:'<div class="projfaixa">valor realizado (mês completo)</div>'}
+  </div>`;
   // mesmo trecho de dias nos meses anteriores (desde jan/26) — só faz sentido p/ intervalo dentro de 1 mês
   const sameMonth=de.slice(0,7)===ate.slice(0,7);
   let sliceHtml='';
@@ -1158,10 +1176,13 @@ function renderManual(){
     sliceHtml=`<div style="margin-top:12px;color:var(--mut);font-size:12px;border-top:1px solid var(--line);padding-top:10px">💡 Selecione um intervalo <b>dentro de um mesmo mês</b> (ex.: atalho "Este mês") para comparar o mesmo trecho de dias com os meses anteriores. Para meses inteiros, veja o quadro "📊 Meses desde jan/26" abaixo.</div>`;
   }
   out.innerHTML=`
-    <div style="display:flex;gap:26px;flex-wrap:wrap;margin-bottom:6px">
-      ${kpi('Produção (exames)',num(cur.q),de===ate?'no dia':`${len} dias · ${(cur.q/len).toFixed(0)}/dia`)}
-      ${kpi('Faturamento',brl(cur.f),`ticket ${cur.q?brl(cur.f/cur.q):'—'}/exame`)}
-      ${kpi('Média diária',brl(cur.f/len),`${cur.n} dias com produção`)}
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;margin-bottom:6px">
+      <div style="display:flex;gap:26px;flex-wrap:wrap;flex:1;align-items:flex-start">
+        ${kpi('Produção (exames)',num(cur.q),de===ate?'no dia':`${len} dias · ${(cur.q/len).toFixed(0)}/dia`)}
+        ${kpi('Faturamento',brl(cur.f),`ticket ${cur.q?brl(cur.f/cur.q):'—'}/exame`)}
+        ${kpi('Média diária',brl(cur.f/len),`${cur.n} dias com produção`)}
+      </div>
+      ${projbox}
     </div>
     <div style="display:flex;gap:26px;flex-wrap:wrap;margin:10px 0 6px;border-top:1px solid var(--line);padding-top:12px">
       ${cmp(`vs período anterior (exames)`,cur.q,prev.q)}
