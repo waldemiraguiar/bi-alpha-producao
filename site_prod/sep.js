@@ -225,7 +225,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = ageItems(0, 0).length + aReceber().length, urgN = ageItems(1, null).length;
+    const sepN = ageItems(0, 0).length, urgN = ageItems(1, null).length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -313,7 +313,11 @@
 
   /* ---- ciclo da amostra (2 chamadas, sem meio-termo): Separar(hoje) -> Última Chamada(1 dia+) ---- */
   const notFeito = it => { const m = marks[chaveOf(it)]; return !(m && m.estado); };
-  const ageItems = (lo, hi) => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && notFeito(it) && (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
+  const isRecebido = it => { const m = marks[chaveOf(it)]; return !!(m && m.estado === 'recebido'); };
+  // PENDENTE = não finalizado. A FINALIZAÇÃO do processo é o RECEBER (não o separar):
+  // enquanto não for recebida, a amostra segue na fila e, no dia seguinte, vai pra Última Chamada.
+  const pendentes = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !isRecebido(it));
+  const ageItems = (lo, hi) => pendentes().filter(it => (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
   function worklistView(viewKey, items, opts) {
     if (!items.length) return `<div class="${opts.emptyClass || 'sepwait'}">${opts.empty}</div>`;
     const byCat = {}; items.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
@@ -326,12 +330,10 @@
     return bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(sel)}</span>
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
-  // pseudo-itens das amostras já separadas aguardando recebimento (qualquer idade) — entram na MESMA lista
-  const toReceberItems = () => aReceber().map(m => ({ req: m.req, ano: m.ano, codex: m.codex, exame: m.exame, cat: m.cat, classe: m.classe, paciente: m.paciente, tutor: m.tutor, vet: m.vet }));
-  const viewSeparar = () => worklistView('separar', ageItems(0, 0).concat(toReceberItems()), { empty: '✓ Nada para separar ou receber agora. 👍', noun: 'na fila (separar → receber)', lateFn: it => statusOf(it).st === 'atrasado' });
+  const viewSeparar = () => worklistView('separar', ageItems(0, 0), { empty: '✓ Nada para separar ou receber hoje. 👍', noun: 'na fila de hoje (separar → receber)', lateFn: it => statusOf(it).st === 'atrasado' });
   const viewUrgente = () => worklistView('urgente', ageItems(1, null), {
-    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não separada(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
-    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO SEPARADA${n > 1 ? 'S' : ''} · SEPARAR ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
+    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não finalizada(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
+    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO FINALIZADA${n > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
   });
 
   function viewPlacar() {
@@ -462,7 +464,7 @@
   // legenda curta e autoexplicativa por aba (pros colaboradores)
   const LEGENDS = {
     separar: '🧪 Cada amostra tem 2 passos na mesma linha: 1·Separar (time de Separação) → 2·Receber (time de Recebidos).',
-    urgente: '🚨 Não separadas de ontem ou antes — última chamada, separe antes de perder!',
+    urgente: '🚨 Não FINALIZADAS de ontem ou antes (faltou separar OU receber) — última chamada, feche antes de perder!',
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
