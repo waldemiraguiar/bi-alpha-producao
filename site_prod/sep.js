@@ -221,7 +221,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = ageItems(0, 0).length, urgN = ageItems(1, null).length, recN = aReceber().length;
+    const sepN = ageItems(0, 0).length + aReceber().length, urgN = ageItems(1, null).length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -234,9 +234,8 @@
     const eqbtn = isAdmin() ? `<button class="adminbtn" id="eqbtn" title="cadastrar/editar a equipe">👥 Equipe</button>` : '';
     return `<div class="sephead">
       <div class="septabs">
-        <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar <span class="c">${sepN}</span></div>
+        <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar / Receber <span class="c">${sepN}</span></div>
         <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
-        <div class="septab rectab ${recN ? 'hasrec' : ''} ${view === 'receber' ? 'on' : ''}" data-v="receber">📥 A Receber <span class="c">${recN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
@@ -248,8 +247,9 @@
     </div>`;
   }
 
+  // LINHA com os 2 PASSOS na mesma tela: [1·Separar] → [2·Receber] (gateados por papel)
   function rowSeparar(it) {
-    const s = statusOf(it); const k = chaveOf(it);
+    const s = statusOf(it); const k = chaveOf(it); const m = s.m;
     const tut = it.tutor ? ` · tutor <b>${esc2(it.tutor)}</b>` : '';
     const vet = it.vet ? ` · vet <b>${esc2(it.vet)}</b>` : '';
     const cl = `<span class="cl ${it.classe}">${it.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
@@ -257,19 +257,23 @@
     const head = `<div class="req">${esc2(it.req)}<span class="y">/${esc2(it.ano)}</span></div>
       <div><div class="pac">${esc2(it.paciente)}${cl}${urg}</div>
       <div class="meta">${esc2(it.exame)}${tut}${vet}</div></div>`;
-    if (s.st === 'feito') {
-      const m = s.m; let act = '', tag = '';
-      if (it.classe === 'apoio') {
-        if (m.estado === 'separado') { tag = `<span class="dl ok">separado</span>`; act = `<button class="sepbtn env" data-act="enviar" data-k="${k}">📦 Enviar p/ apoio</button>`; }
-        else if (m.estado === 'enviado') { tag = `<span class="dl ok">enviado ${m.data_env || ''}</span>`; act = `<button class="sepbtn rec" data-act="receber" data-k="${k}">✓ Resultado recebido</button>`; }
-        else { tag = `<span class="dl done">✓ recebido</span>`; }
-      } else { tag = `<span class="dl ok">✓ separado</span>`; }
-      const undo = `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>`;
-      return `<div class="seprow donerow">${head}<div class="right2"><span class="byline">${esc2(m.por || '')}</span>${tag}${act}${undo}</div></div>`;
-    }
-    const dl = s.dl;
-    const badge = s.st === 'atrasado' ? `<span class="dl late">⏰ atrasado</span>` : `<span class="dl ok">vence ${hhmm(dl)}</span>`;
-    return `<div class="seprow">${head}<div class="right2">${badge}<button class="sepbtn go" data-act="separar" data-k="${k}">✓ Separar</button></div></div>`;
+    const separated = !!(m && m.estado);            // separado / enviado / recebido
+    const received = !!(m && m.estado === 'recebido');
+    // PASSO 1 — SEPARAR
+    let b1;
+    if (separated) b1 = `<span class="step done" title="por ${esc2(m.por || '')}">✓ Separado</span>`;
+    else if (canSep()) b1 = `<button class="sepbtn go" data-act="separar" data-k="${k}">1 · Separar</button>`;
+    else b1 = `<span class="step lock" title="entre como time de Separação">🔒 Separar</span>`;
+    // PASSO 2 — RECEBER
+    let b2;
+    if (received) b2 = `<span class="step done rec" title="por ${esc2(m.por_receb || '')}">✓ Recebido</span>`;
+    else if (!separated) b2 = `<span class="step wait">2 · Receber</span>`;             // só libera após separar
+    else if (canRec()) b2 = `<button class="sepbtn rec" data-act="receber" data-k="${k}">2 · Receber</button>`;
+    else b2 = `<span class="step lock" title="entre como time de Recebidos">🔒 Receber</span>`;
+    // prazo só enquanto não separou
+    const badge = !separated ? (s.st === 'atrasado' ? `<span class="dl late">⏰ atrasado</span>` : (s.dl ? `<span class="dl ok">vence ${hhmm(s.dl)}</span>` : '')) : '';
+    const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
+    return `<div class="seprow ${received ? 'donerow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${undo}</div></div>`;
   }
 
   // ordena categorias seguindo a ORDEM da TV (familiaridade); fallback alfabético
@@ -318,38 +322,13 @@
     return bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(sel)}</span>
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
-  const viewSeparar = () => worklistView('separar', ageItems(0, 0), { empty: '✓ Nada para separar hoje.', noun: 'a separar (hoje)', lateFn: it => statusOf(it).st === 'atrasado' });
+  // pseudo-itens das amostras já separadas aguardando recebimento (qualquer idade) — entram na MESMA lista
+  const toReceberItems = () => aReceber().map(m => ({ req: m.req, ano: m.ano, codex: m.codex, exame: m.exame, cat: m.cat, classe: m.classe, paciente: m.paciente, tutor: m.tutor, vet: m.vet }));
+  const viewSeparar = () => worklistView('separar', ageItems(0, 0).concat(toReceberItems()), { empty: '✓ Nada para separar ou receber agora. 👍', noun: 'na fila (separar → receber)', lateFn: it => statusOf(it).st === 'atrasado' });
   const viewUrgente = () => worklistView('urgente', ageItems(1, null), {
     empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não separada(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
     bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO SEPARADA${n > 1 ? 'S' : ''} · SEPARAR ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
   });
-
-  /* ---- 2º checkpoint: time de Recebidos confirma o material separado ---- */
-  function rowReceber(m) {
-    const k = m.chave;
-    const cl = `<span class="cl ${m.classe}">${m.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
-    const d = dayTs(m.ts_sep); const quando = d ? ` · sep. ${d.slice(8, 10)}/${d.slice(5, 7)}` : '';
-    const env = m.estado === 'enviado' ? `<span class="dl ok">enviado ${m.data_env || ''}</span>` : `<span class="dl ok">separado</span>`;
-    const head = `<div class="req">${esc2(m.req)}<span class="y">/${esc2(m.ano)}</span></div>
-      <div><div class="pac">${esc2(m.paciente)}${cl}</div>
-      <div class="meta">${esc2(m.exame)} · por <b>${esc2(m.por || '')}</b>${quando}</div></div>`;
-    const recbtn = canRec()
-      ? `<button class="sepbtn rec" data-act="receber" data-k="${k}">✓ Recebido</button>`
-      : `<span class="dl lock" title="entre como time de Recebidos">🔒 Recebidos</span>`;
-    const undo = `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer (volta a separar)">↩</button>`;
-    return `<div class="seprow">${head}<div class="right2">${env}${recbtn}${undo}</div></div>`;
-  }
-  function viewReceber() {
-    const items = aReceber();
-    if (!items.length) return `<div class="sepwait">✓ Nada aguardando recebimento agora. 👍</div>`;
-    const byCat = {}; items.forEach(m => { const c = m.cat || '—'; (byCat[c] = byCat[c] || []).push(m); });
-    const cats = orderedCats(byCat);
-    let sel = selByView.receber; if (!sel || !byCat[sel]) sel = selByView.receber = cats[0];
-    const strip = topicStrip(byCat, 'receber', sel, null);
-    const arr = byCat[sel].slice().sort((a, b) => (Number(a.ts_sep) || 0) - (Number(b.ts_sep) || 0)); // mais antigo primeiro
-    const bar = `<div class="andonbar rec"><span class="ico">📥</span><span class="ttl">${items.length} AMOSTRA${items.length > 1 ? 'S' : ''} SEPARADA${items.length > 1 ? 'S' : ''} AGUARDANDO RECEBIMENTO</span></div>`;
-    return bar + strip + `<div class="sepcat reccat"><div class="h"><span>📥 ${esc2(sel)}</span><span class="cnt">${arr.length} a receber</span></div>${arr.map(rowReceber).join('')}</div>`;
-  }
 
   function viewPlacar() {
     const now = new Date(); const today = now.toISOString().slice(0, 10);
@@ -478,9 +457,8 @@
 
   // legenda curta e autoexplicativa por aba (pros colaboradores)
   const LEGENDS = {
-    separar: '🧪 Amostras que chegaram hoje — separe a amostra e marque aqui.',
+    separar: '🧪 Cada amostra tem 2 passos na mesma linha: 1·Separar (time de Separação) → 2·Receber (time de Recebidos).',
     urgente: '🚨 Não separadas de ontem ou antes — última chamada, separe antes de perder!',
-    receber: '📥 Material já separado, aguardando o time de Recebidos confirmar. Toque em "✓ Recebido".',
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
@@ -491,7 +469,6 @@
     let body = '';
     if (view === 'separar') body = viewSeparar();
     else if (view === 'urgente') body = viewUrgente();
-    else if (view === 'receber') body = viewReceber();
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
     else body = viewHist();
@@ -591,10 +568,14 @@
 .eqadd{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;margin-top:6px}
 .eqadd input,.eqadd select{padding:9px;font-size:14px;border:1.5px solid #cbd5e1;border-radius:8px}
 .eqadd .opb{padding:9px 12px;flex:none}
-.septab.rectab.hasrec{box-shadow:inset 0 -3px 0 #f59e0b}
 .dl.lock{opacity:.75;font-size:12px}
-.andonbar.rec{background:#fffbeb;color:#92400e;border:1.5px solid #fcd34d;border-radius:12px;padding:10px 14px;font-weight:800;display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.sepbtn.rec{background:#f59e0b;color:#fff}`;
+.sepbtn.rec{background:#f59e0b;color:#fff}
+.step{font-size:13px;padding:5px 10px;border-radius:8px;font-weight:700;white-space:nowrap}
+.step.done{background:#dcfce7;color:#166534}
+.step.done.rec{background:#fef3c7;color:#92400e}
+.step.wait{background:#f1f5f9;color:#94a3b8}
+.step.lock{background:#f1f5f9;color:#64748b}
+.steparrow{color:#cbd5e1;font-weight:800;margin:0 1px}`;
     document.head.appendChild(s);
   })();
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
