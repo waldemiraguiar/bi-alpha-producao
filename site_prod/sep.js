@@ -28,6 +28,10 @@
   let subSep = null;             // canal Realtime do Supabase
   const useSupa = () => window.SUPA && window.SUPA.ok;
   let timer = null;
+  let idleTimer = null;          // logout automático por inatividade
+  let lastAct = Date.now();      // último carimbo/login (p/ contar a inatividade)
+  const IDLE_MIN = 15;           // desloga sozinho após N min parado (anti "sessão aberta do colega")
+  const touch = () => { lastAct = Date.now(); };
   const ADMK = 'sep_admin';
   const adminPin = () => localStorage.getItem(ADMK) || '';
   const isAdmin = () => !!adminPin();
@@ -53,7 +57,7 @@
   const canRec = () => !teamMode || papel() === 'recebidos' || papel() === 'ambos';
   const users = () => { try { return JSON.parse(localStorage.getItem(USK) || '[]'); } catch (e) { return []; } };
   function addUser(n) { n = (n || '').trim(); if (!n) return; const u = users(); if (!u.includes(n)) { u.push(n); u.sort(); localStorage.setItem(USK, JSON.stringify(u)); } localStorage.setItem(MEK, n); }
-  function saveOp(o) { op = o; if (o) localStorage.setItem(OPK, JSON.stringify(o)); else localStorage.removeItem(OPK); }
+  function saveOp(o) { op = o; if (o) { localStorage.setItem(OPK, JSON.stringify(o)); touch(); } else localStorage.removeItem(OPK); }
   async function loadTeam() {
     if (!useSupa()) { teamMode = false; return; }
     try { teamList = await window.SUPA.teamNames(); teamMode = teamList.length > 0; if (teamMode && op && !teamList.some(u => u.nome === op.nome)) saveOp(null); }
@@ -101,12 +105,12 @@
         else if (a === 'receber') await window.SUPA.updateMark(k, { estado: 'recebido', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
         else if (a === 'desfazer') await window.SUPA.delMark(k);
-        await loadMarks(); return true;
+        touch(); await loadMarks(); return true;
       }
       const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, senha: window.__pwd }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { alert(j.erro || 'Não foi possível salvar.'); return false; }
-      ingest(j); return true;
+      touch(); ingest(j); return true;
     } catch (e) { alert('Erro ao salvar (Supabase).'); return false; }
   }
   // apagar não-separados (unitário ou lote) — SÓ ADMIN. itens = objetos completos; undo passa só chaves
@@ -531,10 +535,13 @@
     // Triagem: Supabase Realtime (push, zero polling) — fallback p/ polling 60s se não tiver Supabase
     if (subSep) { window.SUPA && window.SUPA.unsub(subSep); subSep = null; }
     if (timer) { clearInterval(timer); timer = null; }
+    if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
     if (m === 'sep') {
       await loadTeam(); await loadMarks(); render();
       if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep') { await loadMarks(); render(); } });
       else timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden) { await loadMarks(); render(); } }, 60000);
+      // logout automático por inatividade (só faz sentido no modo equipe)
+      idleTimer = setInterval(() => { if (MODE === 'sep' && teamMode && op && Date.now() - lastAct > IDLE_MIN * 60000) { saveOp(null); render(); } }, 60000);
     }
     // delega os modos de cliente
     if (window.CLI) await window.CLI.onMode(m);
