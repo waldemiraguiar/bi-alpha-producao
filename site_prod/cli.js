@@ -49,6 +49,10 @@
     const cods = flaggedCods(), bx = baixadas();
     return (d.reqs || []).filter(r => cods.has(String(r.cod)) && !bx.has(`${r.req}-${r.ano}`)).sort((a, b) => (b.dt || '').localeCompare(a.dt || ''));
   }
+  // pendente RELEVANTE na Atenção = exame em processo E não-especializado (especializado mora na aba Especializados)
+  const pendOf = r => (r.exames || []).filter(e => e.proc && !e.esp);
+  // só mostra a req na Atenção se tiver algo pendente de 1-2 dias (ou se não veio a lista de exames = dado antigo)
+  const atencaoReqs = () => alertReqs().filter(r => !r.exames || pendOf(r).length > 0);
   // sensível: agrupado por clínica (só o nome importa p/ o call center)
   function alertByClinic() {
     const g = {}; alertReqs().forEach(r => { const k = String(r.cod); (g[k] = g[k] || { cod: r.cod, cliente: r.cliente, reqs: [], lastDt: '' }); g[k].reqs.push(r); if ((r.dt || '') > g[k].lastDt) g[k].lastDt = r.dt; });
@@ -92,8 +96,8 @@
       return leg + (activeHtml || '') + watchHtml;
     }
     const leg = `<div class="seplegend atrasado">🟡 Confira e libere cada exame (check-in, baixa <b>manual</b>). Não liberou → <b style="color:var(--red)">🔴 loucura total</b> até alguém liberar.</div>`;
-    const reqs = alertReqs();
-    if (!reqs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum cliente com atenção ativo agora. Quando um cadastrar no HF, acende aqui (~10 min).</div>`;
+    const reqs = atencaoReqs();
+    if (!reqs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum exame de liberação rápida pendente agora. (Especializados ficam na aba 🟡 Atenção·Especializados.)</div>`;
     const todayStr = new Date().toISOString().slice(0, 10);
     const esq = [], hj = [];
     reqs.forEach(r => { const d = (r.dt || '').slice(0, 10); (d && d < todayStr ? esq : hj).push(r); });
@@ -105,7 +109,10 @@
       const txtEsq = diasAtras === 1 ? 'ESQUECIDO DE ONTEM' : `ESQUECIDO HÁ ${diasAtras} DIAS`;
       const flag = esquecido ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ${txtEsq} — LIBERE AGORA!</span><span class="fw3">🎆</span></div>` : '';
       const exs = r.exames || [];
-      const exHtml = exs.length ? `<div class="meta" style="margin-top:4px">🧪 ${exs.map(e => `<span style="${e.proc ? 'font-weight:700' : 'opacity:.5;text-decoration:line-through'}">${esc2(e.exame)}</span>`).join(' · ')}</div>` : '';
+      const pendEx = exs.filter(e => e.proc && !e.esp);
+      const nLib = exs.filter(e => !e.proc).length;
+      const nEsp = exs.filter(e => e.esp && e.proc).length;
+      const exHtml = (pendEx.length || nLib || nEsp) ? `<div class="meta" style="margin-top:4px">${pendEx.length ? '🧪 ' + pendEx.map(e => `<b>${esc2(e.exame)}</b>`).join(' · ') : ''}${nLib ? ` <span style="opacity:.55">· ✅ ${nLib} liberado${nLib > 1 ? 's' : ''}</span>` : ''}${nEsp ? ` <span style="opacity:.7">· 🔬 ${nEsp} especializado${nEsp > 1 ? 's' : ''} (aba Especializados)</span>` : ''}</div>` : '';
       return `<div class="alertcard atencao ${esquecido ? 'esquecido' : ''}">
         <div style="min-width:0">${flag}<div class="cli">🟡 ${esc2(r.cliente)}</div>
           <div class="big2">🐾 ${esc2(r.paciente)} &nbsp; <span class="reg">Reg ${esc2(r.req)}/${esc2(r.ano)}</span></div>
@@ -181,7 +188,7 @@
     }
     const titulo = classe === 'sensivel' ? '🔴 Clientes Sensíveis' : '🟡 Clientes com Atenção';
     const sub = classe === 'sensivel' ? 'Atendimento ao cliente · só o nome da clínica' : 'Produção · check-in antes de liberar o exame';
-    const nAl = classe === 'sensivel' ? alertByClinic().length : alertReqs().length;
+    const nAl = classe === 'sensivel' ? alertByClinic().length : atencaoReqs().length;
     const nReg = myFlags().length;
     const subtabs = `<div class="septabs" style="margin:0 0 12px">
       <div class="septab ${cliView === 'alertas' ? 'on' : ''}" data-cliview="alertas">🔔 Alertas ${nAl ? `<span class="c">${nAl}</span>` : ''}</div>
