@@ -47,18 +47,15 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
-    # ===== DIAG TEMP: confirmar significado do campo Entrega (prazo em dias?) — remover depois =====
+    # ===== DIAG TEMP: SLA por categoria com nomes + categorias em processo (remover depois) =====
     if True:
         try:
-            dist = q("""SELECT s.CodCategoria cod, s.Entrega entrega, COUNT(*) n
-                        FROM TabExameNumeroSolicitado s WHERE s.DataExame IS NULL
-                        GROUP BY s.CodCategoria, s.Entrega ORDER BY s.CodCategoria, s.Entrega LIMIT 80""")
-            print("[DIAG Entrega dist]:", [(nome(d['cod']), d['entrega'], d['n']) for d in dist])
-            sample = q("""SELECT s.Exame exame, s.CodCategoria cod, s.Entrega entrega
-                          FROM TabExameNumeroSolicitado s WHERE s.DataExame IS NULL AND s.Entrega IS NOT NULL LIMIT 15""")
-            print("[DIAG Entrega amostra]:", [(d['exame'], nome(d['cod']), d['entrega']) for d in sample])
+            print("[DIAG SLA com nome]:", sorted([(nome(cod), dias) for cod, dias in SLA.items()], key=lambda x: x[1]))
+            emproc = q("""SELECT s.CodCategoria cod, COUNT(*) n FROM TabExameNumeroSolicitado s
+                          WHERE s.DataExame IS NULL GROUP BY s.CodCategoria ORDER BY n DESC""")
+            print("[DIAG cats em processo]:", [(d['cod'], nome(d['cod']), SLA.get(d['cod'], SLA_DEFAULT), d['n']) for d in emproc])
         except Exception as e:
-            print("[DIAG Entrega] erro:", e)
+            print("[DIAG SLA] erro:", e)
     # ===== fim DIAG =====
 
     # --- FILA EM ABERTO (DataExame NULL) por categoria x EXAME(derivação) x dias-em-aberto ---
