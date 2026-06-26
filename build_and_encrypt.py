@@ -133,14 +133,17 @@ def build():
     esp_itens = []
     if esp_codes:
         _ec = ",".join(str(c) for c in esp_codes)
+        # NÃO filtra DataExame: a baixa aqui é MANUAL (✓ conferi). Liberar no HF NÃO remove;
+        # só marca liberado=1 (front mostra). Some só com baixa manual ou ao sair da janela de 40d.
         esp_rows = q(f"""SELECT s.CodCategoria cod, s.CodExame codex, s.Exame exame,
             r.NumeroSequencial req, r.AnoRequisiçao ano, r.Animal paciente,
             r.Proprietario tutor, r.Requisitante vet, r.Cliente clinica,
-            r.DataEntrada entrada, r.UsuarioDataEntrada udata, r.UsuarioHoraEntrada uhora
+            r.DataEntrada entrada, r.UsuarioDataEntrada udata, r.UsuarioHoraEntrada uhora,
+            (s.DataExame IS NOT NULL) liberado
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-            WHERE s.DataExame IS NULL AND s.CodCategoria IN ({_ec})
+            WHERE s.CodCategoria IN ({_ec})
               AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 40 DAY)
-            ORDER BY r.DataEntrada ASC, r.NumeroSequencial ASC LIMIT 1500""")
+            ORDER BY r.DataEntrada ASC, r.NumeroSequencial ASC LIMIT 2500""")
         for r in esp_rows:
             if r["cod"] in JUNK: continue
             ud = r["udata"] or r["entrada"]; uh = r["uhora"]; ent_dt = None
@@ -156,6 +159,7 @@ def build():
                 "clinica": (r["clinica"] or "").strip(),
                 "entrada": str(r["entrada"]) if r["entrada"] else None,
                 "entrada_dt": ent_dt, "prazo": sla(r["cod"]),
+                "liberado": bool(r["liberado"]),
             })
 
     # --- CLIENTES (clínicas): lista p/ busca + requisições recentes p/ acender alerta ---
