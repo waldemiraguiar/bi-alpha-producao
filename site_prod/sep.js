@@ -110,6 +110,7 @@
         else if (a === 'receber') await window.SUPA.updateMark(k, { estado: 'recebido', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'insuf') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'insuficiente', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: null });
         else if (a === 'avisar') await window.SUPA.updateMark(k, { estado: 'insuficiente_avisado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
+        else if (a === 'desavisar') await window.SUPA.updateMark(k, { estado: 'insuficiente', por_receb: null, ts_receb: null });
         else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
         else if (a === 'desfazer') await window.SUPA.delMark(k);
         touch(); await loadMarks(); return true;
@@ -638,7 +639,8 @@
       const k = b.dataset.del;
       if (b.dataset.delkind === 'mark') {
         const mk = marks[k];
-        if (mk && (mk.estado === 'insuficiente' || mk.estado === 'insuficiente_avisado')) { if (confirm('Desfazer "amostra insuficiente"? A amostra volta pra fila de separar.') && await post({ acao: 'desfazer', chave: k })) render(); }
+        if (mk && mk.estado === 'insuficiente_avisado') { if (confirm('Desfazer o AVISO ao cliente? Volta para "falta avisar" (continua insuficiente).') && await post({ acao: 'desavisar', chave: k })) render(); }
+        else if (mk && mk.estado === 'insuficiente') { if (confirm('Desfazer "amostra insuficiente"? A amostra volta pra fila de separar.') && await post({ acao: 'desfazer', chave: k })) render(); }
         else if (mk && mk.estado === 'recebido') { if (confirm('Desfazer o RECEBIDO? Volta para a fila "A Receber" (a separação continua valendo).') && await post({ acao: 'voltar', chave: k })) render(); }
         else if (confirm('Desfazer esta marcação de "separado"? Volta a contar como não-separado.') && await post({ acao: 'desfazer', chave: k })) render();
       }
