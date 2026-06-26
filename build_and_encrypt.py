@@ -133,8 +133,10 @@ def build():
     esp_itens = []
     if esp_codes:
         _ec = ",".join(str(c) for c in esp_codes)
-        # NÃO filtra DataExame: a baixa aqui é MANUAL (✓ conferi). Liberar no HF NÃO remove;
-        # só marca liberado=1 (front mostra). Some só com baixa manual ou ao sair da janela de 40d.
+        # Baixa MANUAL (✓ conferi). Liberar no HF NÃO remove na hora (marca liberado=1, fica em verde
+        # p/ confirmar). Escopo p/ não entupir: EM PROCESSO (sempre) + liberados RECENTES (últimos
+        # ESP_LIB_GRACE dias). Liberados antigos saem sozinhos (já confirmados há tempo).
+        ESP_LIB_GRACE = 2
         esp_rows = q(f"""SELECT s.CodCategoria cod, s.CodExame codex, s.Exame exame,
             r.NumeroSequencial req, r.AnoRequisiçao ano, r.Animal paciente,
             r.Proprietario tutor, r.Requisitante vet, r.Cliente clinica,
@@ -143,6 +145,7 @@ def build():
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
             WHERE s.CodCategoria IN ({_ec})
               AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 40 DAY)
+              AND (s.DataExame IS NULL OR s.DataExame>=DATE_SUB(CURDATE(),INTERVAL {ESP_LIB_GRACE} DAY))
             ORDER BY r.DataEntrada ASC, r.NumeroSequencial ASC LIMIT 2500""")
         for r in esp_rows:
             if r["cod"] in JUNK: continue
