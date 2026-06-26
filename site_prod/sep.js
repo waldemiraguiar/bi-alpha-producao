@@ -512,20 +512,26 @@
     const byCat = {}; all.forEach(r => { (byCat[r.cat] = byCat[r.cat] || []).push(r); });
     const histCat = selByView.hist;
     let shown = histCat ? all.filter(r => r.cat === histCat) : all;
-    if (histFiltro === 'separados') shown = shown.filter(r => r.sep);
-    else if (histFiltro === 'nao') shown = shown.filter(r => !r.sep);
-    const nSep = shown.filter(r => r.sep).length, nNao = shown.length - nSep;
+    // classe de cada linha: insuficiente | separado(=sep/recebido) | não separado
+    const klassOf = r => (r.m && (r.m.estado === 'insuficiente' || r.m.estado === 'insuficiente_avisado')) ? 'insuf' : (r.sep ? 'sep' : 'nao');
+    if (histFiltro === 'separados') shown = shown.filter(r => klassOf(r) === 'sep');
+    else if (histFiltro === 'nao') shown = shown.filter(r => klassOf(r) === 'nao');
+    else if (histFiltro === 'insuf') shown = shown.filter(r => klassOf(r) === 'insuf');
+    const nSep = shown.filter(r => klassOf(r) === 'sep').length;
+    const nNao = shown.filter(r => klassOf(r) === 'nao').length;
+    const nInsuf = shown.filter(r => klassOf(r) === 'insuf').length;
     const perLbl = { dia: 'Dia', semana: 'Semana', mes: 'Mês', tudo: 'Tudo' };
     const perBtns = `<div class="perbtns">${['dia', 'semana', 'mes', 'tudo'].map(p => `<div class="perbtn ${histPer === p ? 'on' : ''}" data-hper="${p}">${perLbl[p]}</div>`).join('')}</div>`;
     const fBtns = `<div class="perbtns">
       <div class="perbtn ${histFiltro === 'todos' ? 'on' : ''}" data-hf="todos">Todos</div>
       <div class="perbtn ${histFiltro === 'separados' ? 'on' : ''}" data-hf="separados">✓ Separados</div>
-      <div class="perbtn ${histFiltro === 'nao' ? 'on' : ''}" data-hf="nao" style="${histFiltro === 'nao' ? 'border-color:var(--red);color:var(--red)' : ''}">✗ Não separados</div></div>`;
+      <div class="perbtn ${histFiltro === 'nao' ? 'on' : ''}" data-hf="nao" style="${histFiltro === 'nao' ? 'border-color:var(--red);color:var(--red)' : ''}">✗ Não separados</div>
+      <div class="perbtn ${histFiltro === 'insuf' ? 'on' : ''}" data-hf="insuf" style="${histFiltro === 'insuf' ? 'border-color:#b91c1c;color:#b91c1c' : ''}">🚫 Insuficiente</div></div>`;
     const pills = topicStrip(byCat, 'hist', histCat, null, true);
-    const misses = shown.filter(r => !r.sep);
+    const misses = shown.filter(r => klassOf(r) === 'nao');
     const batch = (isAdmin() && misses.length) ? `<button class="perbtn" id="histdelbatch" style="border-color:var(--red);color:var(--red);font-weight:800">🗑 Apagar ${misses.length} não-separado${misses.length > 1 ? 's' : ''} (deste filtro)</button>` : '';
     const head = `<div class="histfilt"><b style="font-size:15px">📋 Histórico</b>${perBtns}${fBtns}
-      <span style="margin-left:auto;color:var(--mut);font-size:12px">✓ ${nSep} separados · <b style="color:var(--red)">✗ ${nNao} não</b></span></div>${pills}
+      <span style="margin-left:auto;color:var(--mut);font-size:12px">✓ ${nSep} separados · <b style="color:var(--red)">✗ ${nNao} não</b> · <b style="color:#b91c1c">🚫 ${nInsuf} insuf.</b></span></div>${pills}
       ${batch ? `<div class="histfilt">${batch}</div>` : ''}`;
     if (!shown.length) return head + `<div class="sepwait">Nada nesse período/filtro (contagem oficial desde 23/jun).</div>`;
     const fmtTs = ts => { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toTimeString().slice(0, 5); };
