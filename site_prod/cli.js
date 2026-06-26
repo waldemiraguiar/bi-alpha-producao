@@ -135,31 +135,37 @@
   function viewEsp() {
     const done = espBaixadas();
     const items = (espItens() || []).filter(it => !done.has(`${it.req}-${it.ano}-${it.codex}`));
-    const leg = `<div class="seplegend atrasado">🟡 Prazo longo (PCR, Cultura, Anatomia, Necrópsia): entram <b>amarelos</b> e viram <b style="color:var(--red)">🔴 vermelho 2 dias antes de vencer</b>. "✓ conferi" só marca que viu (some no HF quando liberado de verdade).</div>`;
+    const leg = `<div class="seplegend atrasado">🟡 Prazo longo: entram <b>amarelos</b> → <b style="color:var(--red)">🔴 vermelho 2 dias antes de vencer</b> · <b style="color:var(--green)">✅ verde</b> = já liberado no HF. A baixa é <b>MANUAL</b>: só some quando alguém toca <b>✓ conferi</b> (não some sozinho ao liberar no HF).</div>`;
     if (!items.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum exame especializado pendente agora. 👍</div>`;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const rows = items.map(it => {
       const ent = it.entrada ? new Date(it.entrada + 'T00:00:00') : null;
       const venceMs = ent && !isNaN(ent) ? ent.getTime() + (it.prazo || 1) * 864e5 : null;
       const faltam = venceMs != null ? Math.round((venceMs - today.getTime()) / 864e5) : 99;
-      return { it, vence: venceMs != null ? new Date(venceMs).toISOString().slice(0, 10) : '', faltam, red: faltam <= 2 };
+      const lib = !!it.liberado;
+      return { it, vence: venceMs != null ? new Date(venceMs).toISOString().slice(0, 10) : '', faltam, lib, red: !lib && faltam <= 2 };
     }).sort((a, b) => a.faltam - b.faltam);
-    const reds = rows.filter(r => r.red), yellows = rows.filter(r => !r.red);
+    const reds = rows.filter(r => !r.lib && r.red), yellows = rows.filter(r => !r.lib && !r.red), libs = rows.filter(r => r.lib);
     const faltaTxt = f => f < 0 ? `VENCEU há ${-f} dia${f < -1 ? 's' : ''}` : f === 0 ? 'VENCE HOJE' : f === 1 ? 'vence amanhã' : `faltam ${f} dias`;
-    const card = ({ it, vence, faltam, red }) => {
+    const card = ({ it, vence, faltam, red, lib }) => {
       const hora = it.entrada_dt ? String(it.entrada_dt).slice(11, 16) : '';
-      const flag = red ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ${faltaTxt(faltam).toUpperCase()} — LIBERE!</span><span class="fw3">🎆</span></div>` : '';
-      return `<div class="alertcard atencao ${red ? 'esquecido' : ''}">
+      const dot = lib ? '✅' : red ? '🔴' : '🟡';
+      const flag = lib
+        ? `<div style="font-size:12.5px;font-weight:900;letter-spacing:.03em;color:var(--green);margin-bottom:3px">✅ LIBERADO NO HF — confirme a baixa</div>`
+        : (red ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ${faltaTxt(faltam).toUpperCase()} — LIBERE!</span><span class="fw3">🎆</span></div>` : '');
+      const venceLine = lib ? '' : ` · ⏳ vence ${ddmm(vence)} (${faltaTxt(faltam)})`;
+      return `<div class="alertcard atencao ${red ? 'esquecido' : ''}"${lib ? ' style="border-left:5px solid var(--green)"' : ''}>
         <div style="min-width:0">${flag}
-          <div class="cli" style="font-size:17px">${red ? '🔴' : '🟡'} ${esc2(it.exame)}</div>
+          <div class="cli" style="font-size:17px">${dot} ${esc2(it.exame)}</div>
           <div class="big2">🐾 ${esc2(it.paciente)} &nbsp; <span class="reg">Reg ${esc2(it.req)}/${esc2(it.ano)}</span></div>
-          <div class="meta"><b>${esc2(it.cat)}</b>${it.clinica ? ' · ' + esc2(it.clinica) : ''}${it.vet ? ' · vet ' + esc2(it.vet) : ''} · 📅 entrou ${ddmm(it.entrada)}${hora ? ' ' + hora : ''} · ⏳ vence ${ddmm(vence)} (${faltaTxt(faltam)})</div></div>
+          <div class="meta"><b>${esc2(it.cat)}</b>${it.clinica ? ' · ' + esc2(it.clinica) : ''}${it.vet ? ' · vet ' + esc2(it.vet) : ''} · 📅 entrou ${ddmm(it.entrada)}${hora ? ' ' + hora : ''}${venceLine}</div></div>
         <button class="baixab" data-baixa="${escA(it.req + '-' + it.ano + '-' + it.codex)}" data-cod="esp" data-cliente="${escA(it.exame)}" data-req="${escA(it.req)}" data-ano="${escA(it.ano)}" data-paciente="${escA(it.paciente)}">✓ conferi</button>
       </div>`;
     };
     let html = leg;
     if (reds.length) html += `<h3 style="font-size:13px;font-weight:900;color:var(--red);margin:6px 0 10px;letter-spacing:.03em">🔴 ${reds.length} PERTO DE VENCER (≤2 dias) — PRIORIDADE!</h3>` + reds.map(card).join('');
     if (yellows.length) html += `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">🟡 No prazo (${yellows.length})</h3>` + yellows.map(card).join('');
+    if (libs.length) html += `<h3 style="font-size:12px;color:var(--green);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">✅ Liberados no HF — confirme a baixa (${libs.length})</h3>` + libs.map(card).join('');
     return html;
   }
 
