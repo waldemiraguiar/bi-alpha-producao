@@ -199,7 +199,7 @@ def build():
     exmap = {}
     try:
         _wr = _where.replace("CodCliente", "r.CodCliente").replace("DataEntrada", "r.DataEntrada")
-        cli_ex = q(f"""SELECT r.NumeroSequencial req, r.AnoRequisiçao ano, s.Exame exame,
+        cli_ex = q(f"""SELECT r.NumeroSequencial req, r.AnoRequisiçao ano, s.Exame exame, s.CodCategoria cod,
             (s.DataExame IS NULL) em_proc
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
             WHERE {_wr} AND s.CodCategoria NOT IN ({','.join(str(j) for j in JUNK)})
@@ -207,7 +207,8 @@ def build():
         for e in cli_ex:
             nm = (e["exame"] or "").strip()
             if not nm: continue
-            exmap.setdefault((e["req"], e["ano"]), []).append({"exame": nm, "proc": bool(e["em_proc"])})
+            # esp = especializado (SLA>=3) -> mora na aba Especializados, não na Atenção normal
+            exmap.setdefault((e["req"], e["ano"]), []).append({"exame": nm, "proc": bool(e["em_proc"]), "esp": sla(e["cod"]) >= 3})
     except Exception as e:
         print(f"[clientes] aviso exames por req: {e}")
     cli_reqs = []
