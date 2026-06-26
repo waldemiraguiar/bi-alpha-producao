@@ -55,6 +55,8 @@
   const papel = () => teamMode ? (op ? op.papel : '') : 'ambos';
   const canSep = () => !teamMode || papel() === 'separacao' || papel() === 'ambos';
   const canRec = () => !teamMode || papel() === 'recebidos' || papel() === 'ambos';
+  // permissão p/ marcar AMOSTRA INSUFICIENTE — restrita: admin sempre, ou quem tiver pode_insuf (vem do login)
+  const canInsuf = () => !teamMode ? true : (isAdmin() || !!(op && op.podeInsuf));
   const users = () => { try { return JSON.parse(localStorage.getItem(USK) || '[]'); } catch (e) { return []; } };
   function addUser(n) { n = (n || '').trim(); if (!n) return; const u = users(); if (!u.includes(n)) { u.push(n); u.sort(); localStorage.setItem(USK, JSON.stringify(u)); } localStorage.setItem(MEK, n); }
   function saveOp(o) { op = o; if (o) { localStorage.setItem(OPK, JSON.stringify(o)); touch(); } else localStorage.removeItem(OPK); }
@@ -298,8 +300,8 @@
   async function doInsuf(it) {
     if (teamMode && !me()) { openLogin(); return; }
     if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
-    if (!canSep()) { alert('Quem marca amostra insuficiente é o time de Separação.'); return; }
-    if (!confirm('Marcar AMOSTRA INSUFICIENTE?\n\nNão conta como separada nem recebida — e abre a pendência "📧 Avisar cliente" (nova amostra), que fica piscando até alguém confirmar.')) return;
+    if (!canInsuf()) { alert('Você não tem permissão para marcar amostra insuficiente. Peça ao admin para liberar (👥 Equipe).'); return; }
+    if (!confirm('Marcar AMOSTRA INSUFICIENTE?\n\nEncerra a amostra (depois de recebida) e abre a pendência "📧 Avisar cliente" (nova amostra), que fica piscando até alguém confirmar.')) return;
     const ok = await post({ acao: 'insuf', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
     if (ok) render();
   }
@@ -371,8 +373,9 @@
     else if (!separated) b2 = `<span class="step wait">2 · Receber</span>`;             // só libera após separar
     else if (canRec()) b2 = `<button class="sepbtn rec" data-act="receber" data-k="${k}">2 · Receber</button>`;
     else b2 = `<span class="step lock" title="entre como time de Recebidos">🔒 Receber</span>`;
-    // 3º caminho — AMOSTRA INSUFICIENTE (só enquanto não separou; quem separa decide)
-    const b3 = (!separated && canSep()) ? `<button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="sem amostra / amostra insuficiente"><span>🚫 Insuficiente</span><small>avisar cliente</small></button>` : '';
+    // 3º caminho — AMOSTRA INSUFICIENTE só DEPOIS de recebida (governança: separar -> receber -> insuf encerra)
+    // e restrito a quem tem permissão (canInsuf)
+    const b3 = (received && canInsuf()) ? `<button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="amostra insuficiente (apos receber) - encerra e avisa o cliente"><span>🚫 Insuficiente</span><small>avisar cliente</small></button>` : '';
     // prazo / atraso: mostra a IDADE (dias parada) quando 1 dia+ ; senão o horário do corte de hoje
     const dias = it.dias || 0;
     let badge = '';
@@ -433,7 +436,9 @@
     return bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(sel)}</span>
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
-  const viewSeparar = () => worklistView('separar', ageItems(0, 0), { empty: '✓ Nada para separar ou receber hoje. 👍', noun: 'na fila de hoje (separar → receber)', lateFn: it => statusOf(it).st === 'atrasado' });
+  // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
+  const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && (it.dias || 0) === 0 && estadoDe(it) !== 'insuficiente' && estadoDe(it) !== 'insuficiente_avisado');
+  const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber)', lateFn: it => statusOf(it).st === 'atrasado' });
   const viewUrgente = () => worklistView('urgente', ageItems(1, null), {
     empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não finalizada(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
     bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO FINALIZADA${n > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
@@ -604,7 +609,7 @@
 
   // legenda curta e autoexplicativa por aba (pros colaboradores)
   const LEGENDS = {
-    separar: '🧪 2 passos na mesma linha: 1·Separar → 2·Receber. Sem amostra? Toque em 🚫 Insuficiente (abre o aviso ao cliente).',
+    separar: '🧪 Ordem: 1·Separar → 2·Receber. Só DEPOIS de recebida, quem tem permissão pode marcar 🚫 Insuficiente (encerra e avisa o cliente).',
     urgente: '🚨 Não FINALIZADAS de ontem ou antes (faltou separar OU receber) — última chamada, feche antes de perder!',
     avisar: '📧 Amostras insuficientes — avise o cliente para enviar NOVA amostra e dê o check-in "✓ cliente avisado". Fica piscando até confirmar.',
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
