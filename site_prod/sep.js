@@ -353,7 +353,8 @@
     const vet = it.vet ? ` · vet <b>${esc2(it.vet)}</b>` : '';
     const cl = `<span class="cl ${it.classe}">${it.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
     const urg = it.urgente ? '<span class="urg2">URGENTE</span>' : '';
-    const entrou = it.entrada ? ` · 📅 entrou <b>${ddmm(it.entrada)}</b>` : '';
+    const hent = it.entrada_dt ? String(it.entrada_dt).replace('T', ' ').slice(11, 16) : '';   // HH:MM da entrada
+    const entrou = it.entrada ? ` · 📅 entrou <b>${ddmm(it.entrada)}${hent ? ' ' + hent : ''}</b>` : '';
     const head = `<div class="req">${esc2(it.req)}<span class="y">/${esc2(it.ano)}</span></div>
       <div><div class="pac">${esc2(it.paciente)}${cl}${urg}</div>
       <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div></div>`;
