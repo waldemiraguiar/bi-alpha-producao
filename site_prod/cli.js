@@ -142,7 +142,7 @@
   function viewEsp() {
     const done = espBaixadas();
     const items = (espItens() || []).filter(it => !done.has(`${it.req}-${it.ano}-${it.codex}`));
-    const leg = `<div class="seplegend atrasado">🟡 Prazo longo: entram <b>amarelos</b> → <b style="color:var(--red)">🔴 vermelho 2 dias antes de vencer</b> · <b style="color:var(--green)">✅ verde</b> = já liberado no HF. A baixa é <b>MANUAL</b>: só some quando alguém toca <b>✓ conferi</b> (não some sozinho ao liberar no HF).</div>`;
+    const leg = `<div class="seplegend atrasado">🟡 Exames de <b>2 dias ou mais</b>: entram <b>amarelos</b> → <b style="color:var(--red)">🔴 vermelho 2 dias antes de vencer</b> · <b style="color:var(--green)">✅ verde</b> = já liberado no HF. A baixa é <b>MANUAL</b>: só some quando alguém toca <b>✓ conferi</b> (não some sozinho ao liberar no HF).</div>`;
     if (!items.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum exame especializado pendente agora. 👍</div>`;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const rows = items.map(it => {
