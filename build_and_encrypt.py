@@ -133,7 +133,7 @@ def build():
     esp_itens = []
     if esp_codes:
         _ec = ",".join(str(c) for c in esp_codes)
-        esp_rows = q(f"""SELECT s.CodCategoria cod, s.Exame exame,
+        esp_rows = q(f"""SELECT s.CodCategoria cod, s.CodExame codex, s.Exame exame,
             r.NumeroSequencial req, r.AnoRequisiçao ano, r.Animal paciente,
             r.Proprietario tutor, r.Requisitante vet, r.Cliente clinica,
             r.DataEntrada entrada, r.UsuarioDataEntrada udata, r.UsuarioHoraEntrada uhora
@@ -149,7 +149,7 @@ def build():
                 if isinstance(uh, datetime.timedelta): base = base + uh
                 ent_dt = base.strftime("%Y-%m-%dT%H:%M:%S")
             esp_itens.append({
-                "req": r["req"], "ano": r["ano"], "cat": nome(r["cod"]), "cod": r["cod"],
+                "req": r["req"], "ano": r["ano"], "codex": r["codex"], "cat": nome(r["cod"]), "cod": r["cod"],
                 "exame": (r["exame"] or "").strip(),
                 "paciente": (r["paciente"] or "").strip() or "—",
                 "tutor": (r["tutor"] or "").strip(), "vet": (r["vet"] or "").strip(),
@@ -188,6 +188,21 @@ def build():
         FROM `TabExameNumeroRequisiçao`
         WHERE {_where}
         ORDER BY DataEntrada DESC, NumeroSequencial DESC LIMIT 2000""")
+    # exames de cada requisição vigiada (p/ discriminar na Atenção). em_processo = DataExame NULL.
+    exmap = {}
+    try:
+        _wr = _where.replace("CodCliente", "r.CodCliente").replace("DataEntrada", "r.DataEntrada")
+        cli_ex = q(f"""SELECT r.NumeroSequencial req, r.AnoRequisiçao ano, s.Exame exame,
+            (s.DataExame IS NULL) em_proc
+            FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+            WHERE {_wr} AND s.CodCategoria NOT IN ({','.join(str(j) for j in JUNK)})
+            ORDER BY r.NumeroSequencial LIMIT 8000""")
+        for e in cli_ex:
+            nm = (e["exame"] or "").strip()
+            if not nm: continue
+            exmap.setdefault((e["req"], e["ano"]), []).append({"exame": nm, "proc": bool(e["em_proc"])})
+    except Exception as e:
+        print(f"[clientes] aviso exames por req: {e}")
     cli_reqs = []
     for r in cli_reqs_raw:
         ud = r["udata"] or r["entrada"]; uh = r["uhora"]; dt = None
@@ -197,7 +212,8 @@ def build():
             dt = base.strftime("%Y-%m-%dT%H:%M:%S")
         cli_reqs.append({"cod": r["cod"], "cliente": (r["cliente"] or "").strip(),
                          "req": r["req"], "ano": r["ano"], "paciente": (r["paciente"] or "").strip() or "—",
-                         "vet": (r["vet"] or "").strip(), "dt": dt})
+                         "vet": (r["vet"] or "").strip(), "dt": dt,
+                         "exames": exmap.get((r["req"], r["ano"]), [])})
 
     cat = {}
     def C(cod):

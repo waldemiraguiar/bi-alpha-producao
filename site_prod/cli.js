@@ -43,6 +43,7 @@
   const myFlags = () => flags.filter(f => f.classe === classe);
   const flaggedCods = () => new Set(myFlags().map(f => String(f.cod)));
   const baixadas = () => new Set(baixas.map(b => b.chave));
+  const espBaixadas = () => new Set(baixas.filter(b => b.classe === 'esp').map(b => b.chave)); // check-ins "conferi" dos especializados
   function alertReqs() {
     const d = cliData(); if (!d) return [];
     const cods = flaggedCods(), bx = baixadas();
@@ -103,10 +104,12 @@
       const diasAtras = dt && !isNaN(dt) ? Math.max(1, Math.floor((Date.now() - dt.getTime()) / 864e5)) : 1;
       const txtEsq = diasAtras === 1 ? 'ESQUECIDO DE ONTEM' : `ESQUECIDO HÁ ${diasAtras} DIAS`;
       const flag = esquecido ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ${txtEsq} — LIBERE AGORA!</span><span class="fw3">🎆</span></div>` : '';
+      const exs = r.exames || [];
+      const exHtml = exs.length ? `<div class="meta" style="margin-top:4px">🧪 ${exs.map(e => `<span style="${e.proc ? 'font-weight:700' : 'opacity:.5;text-decoration:line-through'}">${esc2(e.exame)}</span>`).join(' · ')}</div>` : '';
       return `<div class="alertcard atencao ${esquecido ? 'esquecido' : ''}">
         <div style="min-width:0">${flag}<div class="cli">🟡 ${esc2(r.cliente)}</div>
           <div class="big2">🐾 ${esc2(r.paciente)} &nbsp; <span class="reg">Reg ${esc2(r.req)}/${esc2(r.ano)}</span></div>
-          <div class="meta">${r.vet ? `vet ${esc2(r.vet)} · ` : ''}${when}</div></div>
+          <div class="meta">${r.vet ? `vet ${esc2(r.vet)} · ` : ''}${when}</div>${exHtml}</div>
         <button class="baixab" data-baixa="${chave}" data-cod="${escA(r.cod)}" data-cliente="${escA(r.cliente)}" data-req="${escA(r.req)}" data-ano="${escA(r.ano)}" data-paciente="${escA(r.paciente)}">✓ liberar</button>
       </div>`;
     };
@@ -130,9 +133,10 @@
   const ddmm = s => { const p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : (s || ''); };
   const espItens = () => (typeof DATA !== 'undefined' && DATA && DATA.especializados) ? DATA.especializados : null;
   function viewEsp() {
-    const items = espItens() || [];
-    const leg = `<div class="seplegend atrasado">🟡 Prazo longo (PCR, Cultura, Anatomia, Necrópsia): entram <b>amarelos</b> e viram <b style="color:var(--red)">🔴 vermelho 2 dias antes de vencer</b>. Some sozinho quando é liberado no HF.</div>`;
-    if (!items.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum exame especializado em processo agora. 👍</div>`;
+    const done = espBaixadas();
+    const items = (espItens() || []).filter(it => !done.has(`${it.req}-${it.ano}-${it.codex}`));
+    const leg = `<div class="seplegend atrasado">🟡 Prazo longo (PCR, Cultura, Anatomia, Necrópsia): entram <b>amarelos</b> e viram <b style="color:var(--red)">🔴 vermelho 2 dias antes de vencer</b>. "✓ conferi" só marca que viu (some no HF quando liberado de verdade).</div>`;
+    if (!items.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum exame especializado pendente agora. 👍</div>`;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const rows = items.map(it => {
       const ent = it.entrada ? new Date(it.entrada + 'T00:00:00') : null;
@@ -150,6 +154,7 @@
           <div class="cli" style="font-size:17px">${red ? '🔴' : '🟡'} ${esc2(it.exame)}</div>
           <div class="big2">🐾 ${esc2(it.paciente)} &nbsp; <span class="reg">Reg ${esc2(it.req)}/${esc2(it.ano)}</span></div>
           <div class="meta"><b>${esc2(it.cat)}</b>${it.clinica ? ' · ' + esc2(it.clinica) : ''}${it.vet ? ' · vet ' + esc2(it.vet) : ''} · 📅 entrou ${ddmm(it.entrada)}${hora ? ' ' + hora : ''} · ⏳ vence ${ddmm(vence)} (${faltaTxt(faltam)})</div></div>
+        <button class="baixab" data-baixa="${escA(it.req + '-' + it.ano + '-' + it.codex)}" data-cod="esp" data-cliente="${escA(it.exame)}" data-req="${escA(it.req)}" data-ano="${escA(it.ano)}" data-paciente="${escA(it.paciente)}">✓ conferi</button>
       </div>`;
     };
     let html = leg;
@@ -165,6 +170,7 @@
       const head = `<div class="clihead"><div><h2>🟡 Atenção — Especializados ${n ? `<span class="c" style="font-size:14px">${n}</span>` : ''}</h2><div class="clisub">Produção · exames de prazo longo · puxado do HF (some quando liberado)</div></div></div>`;
       if (!espItens()) { el.innerHTML = head + `<div class="sepwait">Aguardando dados do HF (~10 min).</div>`; return; }
       el.innerHTML = head + `<div class="clibody">${viewEsp()}</div>`;
+      wire(el);
       return;
     }
     const titulo = classe === 'sensivel' ? '🔴 Clientes Sensíveis' : '🟡 Clientes com Atenção';
@@ -213,9 +219,10 @@
         timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) { await load(); render(); } }, 60000);
       }
     } else if (m === 'cli-atencao-esp') {
-      classe = 'esp'; render();
+      classe = 'esp'; await load(); render();
       if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; }
       if (timer) { clearInterval(timer); timer = null; }
+      if (useSupa()) sub = window.SUPA.subscribe(['cli_baixas'], async () => { await load(); render(); });
       // re-renderiza a cada 60s p/ as cores acompanharem o relógio (vira vermelho 2 dias antes)
       timer = setInterval(() => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) render(); }, 60000);
     } else { if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; } if (timer) { clearInterval(timer); timer = null; } }
