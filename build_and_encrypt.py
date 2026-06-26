@@ -47,19 +47,18 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
-    # ===== DIAG TEMP: procurar campo de PRAZO/PREVISÃO de liberação no HF (remover depois) =====
+    # ===== DIAG TEMP: confirmar significado do campo Entrega (prazo em dias?) — remover depois =====
     if True:
-        for t in ("TabExame","TabExameNumeroSolicitado","TabCategoria"):
-            try: print(f"[DIAG cols {t}]:", [c['Field'] for c in q(f"SHOW COLUMNS FROM {t}")])
-            except Exception as e: print(f"[DIAG cols {t}] erro:", e)
         try:
-            cand = q("""SELECT TABLE_NAME tn, COLUMN_NAME cn, DATA_TYPE dt FROM information_schema.COLUMNS
-                        WHERE TABLE_SCHEMA=DATABASE() AND (COLUMN_NAME LIKE '%%razo%%' OR COLUMN_NAME LIKE '%%revis%%'
-                        OR COLUMN_NAME LIKE '%%ntrega%%' OR COLUMN_NAME LIKE '%%iberac%%' OR COLUMN_NAME LIKE '%%SLA%%'
-                        OR COLUMN_NAME LIKE '%%Dias%%' OR COLUMN_NAME LIKE '%%Resultado%%') ORDER BY tn,cn""")
-            print("[DIAG prazo] candidatos:", [(d['tn'],d['cn'],d['dt']) for d in cand])
+            dist = q("""SELECT s.CodCategoria cod, s.Entrega entrega, COUNT(*) n
+                        FROM TabExameNumeroSolicitado s WHERE s.DataExame IS NULL
+                        GROUP BY s.CodCategoria, s.Entrega ORDER BY s.CodCategoria, s.Entrega LIMIT 80""")
+            print("[DIAG Entrega dist]:", [(nome(d['cod']), d['entrega'], d['n']) for d in dist])
+            sample = q("""SELECT s.Exame exame, s.CodCategoria cod, s.Entrega entrega
+                          FROM TabExameNumeroSolicitado s WHERE s.DataExame IS NULL AND s.Entrega IS NOT NULL LIMIT 15""")
+            print("[DIAG Entrega amostra]:", [(d['exame'], nome(d['cod']), d['entrega']) for d in sample])
         except Exception as e:
-            print("[DIAG prazo] erro:", e)
+            print("[DIAG Entrega] erro:", e)
     # ===== fim DIAG =====
 
     # --- FILA EM ABERTO (DataExame NULL) por categoria x EXAME(derivação) x dias-em-aberto ---
