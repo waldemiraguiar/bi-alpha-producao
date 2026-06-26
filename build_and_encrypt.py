@@ -125,6 +125,39 @@ def build():
                 "paciente": (r["paciente"] or "").strip() or "—",
                 "dt": str(r["entrada"]) if r["entrada"] else None})
 
+    # --- ATENÇÃO-ESPECIALIZADOS: exames EM PROCESSO de categorias com prazo longo (SLA>=3) ---
+    # Prazo de liberação = SLA por categoria (campo Entrega do HF está vazio). Vence = entrada + SLA.
+    # Front pinta amarelo e vira vermelho 2 dias antes de vencer. Janela 40d cobre até Necrópsia(30).
+    ESP_MIN = 3
+    esp_codes = [cod for cod in cats if cod not in JUNK and sla(cod) >= ESP_MIN]
+    esp_itens = []
+    if esp_codes:
+        _ec = ",".join(str(c) for c in esp_codes)
+        esp_rows = q(f"""SELECT s.CodCategoria cod, s.Exame exame,
+            r.NumeroSequencial req, r.AnoRequisiçao ano, r.Animal paciente,
+            r.Proprietario tutor, r.Requisitante vet, r.Cliente clinica,
+            r.DataEntrada entrada, r.UsuarioDataEntrada udata, r.UsuarioHoraEntrada uhora
+            FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+            WHERE s.DataExame IS NULL AND s.CodCategoria IN ({_ec})
+              AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 40 DAY)
+            ORDER BY r.DataEntrada ASC, r.NumeroSequencial ASC LIMIT 1500""")
+        for r in esp_rows:
+            if r["cod"] in JUNK: continue
+            ud = r["udata"] or r["entrada"]; uh = r["uhora"]; ent_dt = None
+            if ud is not None:
+                base = datetime.datetime(ud.year, ud.month, ud.day)
+                if isinstance(uh, datetime.timedelta): base = base + uh
+                ent_dt = base.strftime("%Y-%m-%dT%H:%M:%S")
+            esp_itens.append({
+                "req": r["req"], "ano": r["ano"], "cat": nome(r["cod"]), "cod": r["cod"],
+                "exame": (r["exame"] or "").strip(),
+                "paciente": (r["paciente"] or "").strip() or "—",
+                "tutor": (r["tutor"] or "").strip(), "vet": (r["vet"] or "").strip(),
+                "clinica": (r["clinica"] or "").strip(),
+                "entrada": str(r["entrada"]) if r["entrada"] else None,
+                "entrada_dt": ent_dt, "prazo": sla(r["cod"]),
+            })
+
     # --- CLIENTES (clínicas): lista p/ busca + requisições recentes p/ acender alerta ---
     cli_lista = q("""SELECT CodCliente cod, MAX(Cliente) nome
         FROM `TabExameNumeroRequisiçao`
@@ -232,7 +265,8 @@ def build():
        "separacao":{"cutoffs":CORTES,
                     "gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
                     "itens":sep_itens,"historico":hist_itens},
-       "clientes":{"lista":cli_lista,"reqs":cli_reqs}}
+       "clientes":{"lista":cli_lista,"reqs":cli_reqs},
+       "especializados":esp_itens}
     conn.close()
     return D
 
@@ -251,7 +285,7 @@ def encrypt(D):
          "iv":base64.b64encode(iv).decode(),"ct":base64.b64encode(ct).decode()}
     os.makedirs(os.path.dirname(OUT_ENC),exist_ok=True)
     json.dump(env,open(OUT_ENC,"w"),separators=(",",":"))
-    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])} separacao={len(D.get('separacao',{}).get('itens',[]))} historico={len(D.get('separacao',{}).get('historico',[]))} clientes_lista={len(D.get('clientes',{}).get('lista',[]))} clientes_reqs={len(D.get('clientes',{}).get('reqs',[]))}")
+    print(f"OK -> producao.enc ({round(os.path.getsize(OUT_ENC)/1024,1)} KB) · em_processo={D['resumo']['em_processo']} atrasado={D['resumo']['atrasado']} cats={len(D['categorias'])} atrasados_list={len(D['atrasados'])} separacao={len(D.get('separacao',{}).get('itens',[]))} historico={len(D.get('separacao',{}).get('historico',[]))} clientes_lista={len(D.get('clientes',{}).get('lista',[]))} clientes_reqs={len(D.get('clientes',{}).get('reqs',[]))} especializados={len(D.get('especializados',[]))}")
 
 if __name__=="__main__":
     last=None
