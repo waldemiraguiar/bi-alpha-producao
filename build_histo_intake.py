@@ -46,7 +46,8 @@ def main():
             "observacoes": ("Cliente: " + cliente) if cliente else "",
             "urgente": (r.get("urgencia") == 1),   # HF: 1=urgente, 2=normal/rotina
             "pet_love": pet,
-            "data_entrada": ent.isoformat() if hasattr(ent, "isoformat") else (str(ent) if ent else None),
+            # meio-dia para a DATA do HF nao "voltar 1 dia" no fuso do Brasil (senao conta dia 2)
+            "data_entrada": (ent.strftime("%Y-%m-%d") + "T12:00:00") if ent else None,
         })
     print("requisicoes encontradas:", len(items))
     url = SUPA_URL.rstrip("/") + "/rest/v1/rpc/intake_hf"
