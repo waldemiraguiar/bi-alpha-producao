@@ -84,6 +84,7 @@
     const dl = new Date(d); dl.setDate(dl.getDate() + 1); dl.setHours(cs[0], 0, 0, 0); return dl;
   }
   const hhmm = dt => dt ? dt.toTimeString().slice(0, 5) : '';
+  const ddmm = s => { const p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : (s || ''); }; // YYYY-MM-DD -> DD/MM
   // status: 'feito' (marcado), 'atrasado' (venceu, não marcado), 'noprazo'
   function statusOf(it) {
     const m = marks[chaveOf(it)];
@@ -352,9 +353,10 @@
     const vet = it.vet ? ` · vet <b>${esc2(it.vet)}</b>` : '';
     const cl = `<span class="cl ${it.classe}">${it.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
     const urg = it.urgente ? '<span class="urg2">URGENTE</span>' : '';
+    const entrou = it.entrada ? ` · 📅 entrou <b>${ddmm(it.entrada)}</b>` : '';
     const head = `<div class="req">${esc2(it.req)}<span class="y">/${esc2(it.ano)}</span></div>
       <div><div class="pac">${esc2(it.paciente)}${cl}${urg}</div>
-      <div class="meta">${esc2(it.exame)}${tut}${vet}</div></div>`;
+      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div></div>`;
     const separated = !!(m && m.estado);            // separado / enviado / recebido
     const received = !!(m && m.estado === 'recebido');
     // PASSO 1 — SEPARAR
@@ -370,8 +372,11 @@
     else b2 = `<span class="step lock" title="entre como time de Recebidos">🔒 Receber</span>`;
     // 3º caminho — AMOSTRA INSUFICIENTE (só enquanto não separou; quem separa decide)
     const b3 = (!separated && canSep()) ? `<button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="sem amostra / amostra insuficiente"><span>🚫 Insuficiente</span><small>avisar cliente</small></button>` : '';
-    // prazo só enquanto não separou
-    const badge = !separated ? (s.st === 'atrasado' ? `<span class="dl late">⏰ atrasado</span>` : (s.dl ? `<span class="dl ok">vence ${hhmm(s.dl)}</span>` : '')) : '';
+    // prazo / atraso: mostra a IDADE (dias parada) quando 1 dia+ ; senão o horário do corte de hoje
+    const dias = it.dias || 0;
+    let badge = '';
+    if (!separated) badge = dias >= 1 ? `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} parada</span>` : (s.dl ? `<span class="dl ok">vence ${hhmm(s.dl)}</span>` : '');
+    else if (dias >= 1) badge = `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} aguardando receber</span>`;
     const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
     return `<div class="seprow ${received ? 'donerow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${undo}</div></div>`;
   }
