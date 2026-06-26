@@ -128,14 +128,30 @@ def build():
                 "paciente": (r["paciente"] or "").strip() or "—",
                 "dt": str(r["entrada"]) if r["entrada"] else None})
 
-    # --- ATENÇÃO-ESPECIALIZADOS: exames EM PROCESSO de categorias com prazo longo (SLA>=3) ---
+    # --- Clínicas VIGIADAS (flags do app) — calculado CEDO: Atenção E Especializados usam ---
+    CLI_DIAS = 14
+    flagged_cods = set()
+    try:
+        import urllib.request
+        _SK = "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8"
+        _rq = urllib.request.Request("https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1/cli_flags?select=cod",
+                                     headers={"apikey": _SK, "Authorization": "Bearer " + _SK})
+        for f in json.loads(urllib.request.urlopen(_rq, timeout=20).read().decode()):
+            try: flagged_cods.add(int(f["cod"]))   # cods de teste (texto) são ignorados
+            except Exception: pass
+        print(f"[clientes] {len(flagged_cods)} clínicas vigiadas no Supabase (janela {CLI_DIAS}d)")
+    except Exception as e:
+        print(f"[clientes] aviso: não leu flags do Supabase ({e}); fallback 2 dias")
+
+    # --- ATENÇÃO-ESPECIALIZADOS: exames de prazo >=2 dias das CLÍNICAS VIGIADAS (decisão Wal) ---
     # Prazo de liberação = SLA por categoria (campo Entrega do HF está vazio). Vence = entrada + SLA.
     # Front pinta amarelo e vira vermelho 2 dias antes de vencer. Janela 40d cobre até Necrópsia(30).
     ESP_MIN = 2   # Atenção = 1 dia; Especializados = 2 dias pra cima (decisão Wal)
     esp_codes = [cod for cod in cats if cod not in JUNK and sla(cod) >= ESP_MIN]
     esp_itens = []
-    if esp_codes:
+    if esp_codes and flagged_cods:
         _ec = ",".join(str(c) for c in esp_codes)
+        _ecli = ",".join(str(c) for c in flagged_cods)
         # Baixa MANUAL (✓ conferi). Liberar no HF NÃO remove na hora (marca liberado=1, fica em verde
         # p/ confirmar). Escopo p/ não entupir: EM PROCESSO (sempre) + liberados RECENTES (últimos
         # ESP_LIB_GRACE dias). Liberados antigos saem sozinhos (já confirmados há tempo).
@@ -146,7 +162,7 @@ def build():
             r.DataEntrada entrada, r.UsuarioDataEntrada udata, r.UsuarioHoraEntrada uhora,
             (s.DataExame IS NOT NULL) liberado
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-            WHERE s.CodCategoria IN ({_ec})
+            WHERE s.CodCategoria IN ({_ec}) AND r.CodCliente IN ({_ecli})
               AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 40 DAY) AND r.DataEntrada>='{ATEN_PISO}'
               AND (s.DataExame IS NULL OR s.DataExame>=DATE_SUB(CURDATE(),INTERVAL {ESP_LIB_GRACE} DAY))
             ORDER BY r.DataEntrada ASC, r.NumeroSequencial ASC LIMIT 2500""")
@@ -174,21 +190,7 @@ def build():
         WHERE Cliente IS NOT NULL AND TRIM(Cliente)<>'' AND DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 365 DAY)
         GROUP BY CodCliente ORDER BY nome""")
     cli_lista = [{"cod": r["cod"], "nome": (r["nome"] or "").strip()} for r in cli_lista if r["nome"]]
-    # Clínicas VIGIADAS (flags do app) → janela LONGA p/ o alerta persistir até alguém dar baixa.
-    # Como são poucas clínicas, isso até reduz o payload. Fallback = 2 dias (todas) se não ler as flags.
-    CLI_DIAS = 14
-    flagged_cods = set()
-    try:
-        import urllib.request
-        _SK = "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8"
-        _rq = urllib.request.Request("https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1/cli_flags?select=cod",
-                                     headers={"apikey": _SK, "Authorization": "Bearer " + _SK})
-        for f in json.loads(urllib.request.urlopen(_rq, timeout=20).read().decode()):
-            try: flagged_cods.add(int(f["cod"]))   # cods de teste (texto) são ignorados
-            except Exception: pass
-        print(f"[clientes] {len(flagged_cods)} clínicas vigiadas no Supabase (janela {CLI_DIAS}d)")
-    except Exception as e:
-        print(f"[clientes] aviso: não leu flags do Supabase ({e}); fallback 2 dias")
+    # flagged_cods/CLI_DIAS já calculados acima (antes dos especializados). Janela LONGA p/ persistir; fallback 2d.
     if flagged_cods:
         _where = f"CodCliente IN ({','.join(str(c) for c in flagged_cods)}) AND DataEntrada>=DATE_SUB(CURDATE(),INTERVAL {CLI_DIAS} DAY)"
     else:
