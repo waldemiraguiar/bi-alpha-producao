@@ -49,15 +49,15 @@ def build():
 
     # ===== DIAG TEMP: procurar campo de PRAZO/PREVISÃO de liberação no HF (remover depois) =====
     if True:
+        for t in ("TabExame","TabExameNumeroSolicitado","TabCategoria"):
+            try: print(f"[DIAG cols {t}]:", [c['Field'] for c in q(f"SHOW COLUMNS FROM {t}")])
+            except Exception as e: print(f"[DIAG cols {t}] erro:", e)
         try:
             cand = q("""SELECT TABLE_NAME tn, COLUMN_NAME cn, DATA_TYPE dt FROM information_schema.COLUMNS
-                        WHERE TABLE_SCHEMA=DATABASE() AND (COLUMN_NAME LIKE '%razo%' OR COLUMN_NAME LIKE '%revis%'
-                        OR COLUMN_NAME LIKE '%ntrega%' OR COLUMN_NAME LIKE '%iberac%' OR COLUMN_NAME LIKE '%SLA%'
-                        OR COLUMN_NAME LIKE '%Dias%' OR COLUMN_NAME LIKE '%Resultado%') ORDER BY tn,cn""")
+                        WHERE TABLE_SCHEMA=DATABASE() AND (COLUMN_NAME LIKE '%%razo%%' OR COLUMN_NAME LIKE '%%revis%%'
+                        OR COLUMN_NAME LIKE '%%ntrega%%' OR COLUMN_NAME LIKE '%%iberac%%' OR COLUMN_NAME LIKE '%%SLA%%'
+                        OR COLUMN_NAME LIKE '%%Dias%%' OR COLUMN_NAME LIKE '%%Resultado%%') ORDER BY tn,cn""")
             print("[DIAG prazo] candidatos:", [(d['tn'],d['cn'],d['dt']) for d in cand])
-            for t in ("TabExame","TabExameNumeroSolicitado","TabCategoria"):
-                try: print(f"[DIAG cols {t}]:", [c['Field'] for c in q(f"SHOW COLUMNS FROM {t}")])
-                except Exception as e: print(f"[DIAG cols {t}] erro:", e)
         except Exception as e:
             print("[DIAG prazo] erro:", e)
     # ===== fim DIAG =====
