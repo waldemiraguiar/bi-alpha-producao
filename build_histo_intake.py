@@ -56,6 +56,8 @@ def main():
     for r in rows:
         cliente = (r.get("cliente") or ""); tutor = (r.get("tutor") or ""); animal = (r.get("animal") or "")
         pet = "petlove" in (cliente + tutor + animal).lower().replace(" ", "")
+        # Unidade Cabo Frio (Cliente "Alpha Cabo Frio"): SEMPRE urgente + selo no app (detecta o "Cliente:" em observacoes)
+        cabo_frio = "cabofrio" in cliente.lower().replace(" ", "")
         ent = r.get("entrada")
         items.append({
             "numero_hf": str(r["hf"]),
@@ -64,7 +66,7 @@ def main():
             "especie": r.get("especie") or "",
             "tipo_material": r.get("exames") or "",
             "observacoes": ("Cliente: " + cliente) if cliente else "",
-            "urgente": (r.get("urgencia") == 1),   # HF: 1=urgente, 2=normal/rotina
+            "urgente": (r.get("urgencia") == 1) or cabo_frio,   # HF: 1=urgente, 2=normal/rotina; Cabo Frio sempre urgente
             "pet_love": pet,
             # meio-dia para a DATA do HF nao "voltar 1 dia" no fuso do Brasil (senao conta dia 2)
             "data_entrada": (ent.strftime("%Y-%m-%d") + "T12:00:00") if ent else None,
