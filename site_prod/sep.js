@@ -177,7 +177,7 @@
       if (!p) { pin.focus(); return; }
       wrap.querySelector('#opmsg').textContent = 'Conferindo…';
       const r = await window.SUPA.login(nome, p);
-      if (r.ok) { saveOp({ nome, papel: r.papel }); close(); render(); }
+      if (r.ok) { saveOp({ nome, papel: r.papel, podeInsuf: r.podeInsuf }); close(); render(); }
       else { wrap.querySelector('#opmsg').textContent = '❌ Senha incorreta.'; pin.value = ''; pin.focus(); }
     };
     wrap.querySelector('#opgo').onclick = go;
@@ -208,7 +208,7 @@
       msg.textContent = 'Criando…';
       try {
         const r = await window.SUPA.register(nome, pp, p1);
-        if (r.ok) { saveOp({ nome, papel: pp }); close(); await loadTeam(); render(); }
+        if (r.ok) { saveOp({ nome, papel: pp, podeInsuf: false }); close(); await loadTeam(); render(); }
         else { msg.textContent = '❌ ' + (r.erro || 'Não foi possível criar.'); }
       } catch (e) { msg.textContent = 'Erro de conexão.'; }
     };
@@ -255,7 +255,7 @@
     if (list == null) { alert('Não consegui carregar a equipe (PIN admin?).'); return; }
     const old = document.querySelector('.oplogin'); if (old) old.remove();
     const wrap = document.createElement('div'); wrap.className = 'oplogin';
-    const rows = list.length ? list.map(u => `<div class="eqrow"><span class="eqn">${esc2(u.nome)}</span><span class="eqp ${u.papel}">${papelLbl(u.papel)}</span><button class="eqreset" data-reset="${esc2(u.nome)}" data-papel="${esc2(u.papel)}">🔑 nova senha</button><button class="eqdel" data-del="${esc2(u.nome)}">remover</button></div>`).join('') : '<div class="opmsg">Ninguém cadastrado ainda — cada um pode criar o próprio acesso na tela de login, ou adicione aqui.</div>';
+    const rows = list.length ? list.map(u => `<div class="eqrow"><span class="eqn">${esc2(u.nome)}</span><span class="eqp ${u.papel}">${papelLbl(u.papel)}</span><button class="eqperm ${u.pode_insuf ? 'on' : ''}" data-perm="${esc2(u.nome)}" data-on="${u.pode_insuf ? '1' : '0'}" title="pode marcar amostra insuficiente">🚫 insuf ${u.pode_insuf ? '✓' : '✗'}</button><button class="eqreset" data-reset="${esc2(u.nome)}" data-papel="${esc2(u.papel)}">🔑 nova senha</button><button class="eqdel" data-del="${esc2(u.nome)}">remover</button></div>`).join('') : '<div class="opmsg">Ninguém cadastrado ainda — cada um pode criar o próprio acesso na tela de login, ou adicione aqui.</div>';
     wrap.innerHTML = `<div class="oplbox wide"><h3>👥 Equipe da Triagem</h3>
       <div class="eqlist">${rows}</div>
       <div class="eqadd"><input id="eqnome" placeholder="nome / iniciais">
@@ -267,6 +267,10 @@
     const close = () => wrap.remove();
     wrap.onclick = e => { if (e.target === wrap) close(); };
     wrap.querySelector('#eqclose').onclick = close;
+    wrap.querySelectorAll('.eqperm').forEach(b => b.onclick = async () => {
+      const turnOn = b.dataset.on !== '1';
+      try { const ok = await window.SUPA.teamPerm(adminPin(), b.dataset.perm, turnOn); if (!ok) { alert('PIN admin inválido.'); return; } close(); render(); openTeam(); } catch (e) { alert('Erro ao mudar a permissão (rodou o SQL pode_insuf?).'); }
+    });
     wrap.querySelectorAll('.eqreset').forEach(b => b.onclick = async () => {
       const np = prompt(`Nova senha para "${b.dataset.reset}":`); if (!np || !np.trim()) return;
       try { const ok = await window.SUPA.teamSave(adminPin(), b.dataset.reset, b.dataset.papel, np.trim()); if (!ok) { alert('PIN admin inválido.'); return; } close(); render(); openTeam(); alert(`Senha de ${b.dataset.reset} resetada.`); } catch (e) { alert('Erro ao resetar.'); }
@@ -728,6 +732,8 @@
 .eqrow .eqp.recebidos{background:#fef3c7;color:#92400e}.eqrow .eqp.ambos{background:#ede9fe;color:#5b21b6}
 .eqdel{font-size:12px;color:#b91c1c;background:none;border:0;cursor:pointer;text-decoration:underline}
 .eqreset{font-size:12px;color:#2563eb;background:none;border:0;cursor:pointer;text-decoration:underline;margin-right:6px}
+.eqperm{font-size:11px;font-weight:700;border:1px solid #cbd5e1;border-radius:999px;padding:2px 8px;margin-right:6px;cursor:pointer;background:#f1f5f9;color:#64748b}
+.eqperm.on{background:#fee2e2;color:#991b1b;border-color:#fca5a5}
 .opreg{margin-top:12px;font-size:14px;text-align:center;color:#475569}
 .oplink{background:none;border:0;color:#2563eb;text-decoration:underline;cursor:pointer;font-size:14px;font-weight:700;padding:0}
 .eqadd{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;margin-top:6px}
