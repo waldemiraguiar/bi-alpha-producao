@@ -126,8 +126,47 @@
     return leg + srch + `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">${reg.length} cadastrada${reg.length !== 1 ? 's' : ''}</h3>` + regHtml;
   }
 
+  /* ===== 🟡 ATENÇÃO-ESPECIALIZADOS: exames de prazo longo (SLA>=3), HF-driven ===== */
+  const ddmm = s => { const p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : (s || ''); };
+  const espItens = () => (typeof DATA !== 'undefined' && DATA && DATA.especializados) ? DATA.especializados : null;
+  function viewEsp() {
+    const items = espItens() || [];
+    const leg = `<div class="seplegend atrasado">🟡 Prazo longo (PCR, Cultura, Anatomia, Necrópsia): entram <b>amarelos</b> e viram <b style="color:var(--red)">🔴 vermelho 2 dias antes de vencer</b>. Some sozinho quando é liberado no HF.</div>`;
+    if (!items.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum exame especializado em processo agora. 👍</div>`;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const rows = items.map(it => {
+      const ent = it.entrada ? new Date(it.entrada + 'T00:00:00') : null;
+      const venceMs = ent && !isNaN(ent) ? ent.getTime() + (it.prazo || 1) * 864e5 : null;
+      const faltam = venceMs != null ? Math.round((venceMs - today.getTime()) / 864e5) : 99;
+      return { it, vence: venceMs != null ? new Date(venceMs).toISOString().slice(0, 10) : '', faltam, red: faltam <= 2 };
+    }).sort((a, b) => a.faltam - b.faltam);
+    const reds = rows.filter(r => r.red), yellows = rows.filter(r => !r.red);
+    const faltaTxt = f => f < 0 ? `VENCEU há ${-f} dia${f < -1 ? 's' : ''}` : f === 0 ? 'VENCE HOJE' : f === 1 ? 'vence amanhã' : `faltam ${f} dias`;
+    const card = ({ it, vence, faltam, red }) => {
+      const hora = it.entrada_dt ? String(it.entrada_dt).slice(11, 16) : '';
+      const flag = red ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="fw1">🎆</span><span class="fw2">🎇</span><span style="font-size:12.5px;font-weight:900;letter-spacing:.04em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">⚠️ ${faltaTxt(faltam).toUpperCase()} — LIBERE!</span><span class="fw3">🎆</span></div>` : '';
+      return `<div class="alertcard atencao ${red ? 'esquecido' : ''}">
+        <div style="min-width:0">${flag}
+          <div class="cli" style="font-size:17px">${red ? '🔴' : '🟡'} ${esc2(it.exame)}</div>
+          <div class="big2">🐾 ${esc2(it.paciente)} &nbsp; <span class="reg">Reg ${esc2(it.req)}/${esc2(it.ano)}</span></div>
+          <div class="meta"><b>${esc2(it.cat)}</b>${it.clinica ? ' · ' + esc2(it.clinica) : ''}${it.vet ? ' · vet ' + esc2(it.vet) : ''} · 📅 entrou ${ddmm(it.entrada)}${hora ? ' ' + hora : ''} · ⏳ vence ${ddmm(vence)} (${faltaTxt(faltam)})</div></div>
+      </div>`;
+    };
+    let html = leg;
+    if (reds.length) html += `<h3 style="font-size:13px;font-weight:900;color:var(--red);margin:6px 0 10px;letter-spacing:.03em">🔴 ${reds.length} PERTO DE VENCER (≤2 dias) — PRIORIDADE!</h3>` + reds.map(card).join('');
+    if (yellows.length) html += `<h3 style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">🟡 No prazo (${yellows.length})</h3>` + yellows.map(card).join('');
+    return html;
+  }
+
   function render() {
     const el = $('cli'); if (!el) return;
+    if (classe === 'esp') {
+      const n = (espItens() || []).length;
+      const head = `<div class="clihead"><div><h2>🟡 Atenção — Especializados ${n ? `<span class="c" style="font-size:14px">${n}</span>` : ''}</h2><div class="clisub">Produção · exames de prazo longo · puxado do HF (some quando liberado)</div></div></div>`;
+      if (!espItens()) { el.innerHTML = head + `<div class="sepwait">Aguardando dados do HF (~10 min).</div>`; return; }
+      el.innerHTML = head + `<div class="clibody">${viewEsp()}</div>`;
+      return;
+    }
     const titulo = classe === 'sensivel' ? '🔴 Clientes Sensíveis' : '🟡 Clientes com Atenção';
     const sub = classe === 'sensivel' ? 'Atendimento ao cliente · só o nome da clínica' : 'Produção · check-in antes de liberar o exame';
     const nAl = classe === 'sensivel' ? alertByClinic().length : alertReqs().length;
@@ -173,6 +212,12 @@
       } else {
         timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) { await load(); render(); } }, 60000);
       }
+    } else if (m === 'cli-atencao-esp') {
+      classe = 'esp'; render();
+      if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; }
+      if (timer) { clearInterval(timer); timer = null; }
+      // re-renderiza a cada 60s p/ as cores acompanharem o relógio (vira vermelho 2 dias antes)
+      timer = setInterval(() => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) render(); }, 60000);
     } else { if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; } if (timer) { clearInterval(timer); timer = null; } }
   }
   document.addEventListener('visibilitychange', () => { const el = $('cli'); if (!document.hidden && el && el.style.display !== 'none') load().then(render); });
