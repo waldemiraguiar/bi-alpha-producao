@@ -377,9 +377,11 @@
     else if (!separated) b2 = `<span class="step wait">2 · Receber</span>`;             // só libera após separar
     else if (canRec()) b2 = `<button class="sepbtn rec" data-act="receber" data-k="${k}">2 · Receber</button>`;
     else b2 = `<span class="step lock" title="entre como time de Recebidos">🔒 Receber</span>`;
-    // 3º caminho — AMOSTRA INSUFICIENTE só DEPOIS de recebida (governança: separar -> receber -> insuf encerra)
-    // e restrito a quem tem permissão (canInsuf)
-    const b3 = (received && canInsuf()) ? `<button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="amostra insuficiente (apos receber) - encerra e avisa o cliente"><span>🚫 Insuficiente</span><small>avisar cliente</small></button>` : '';
+    // 3º caminho — AMOSTRA INSUFICIENTE: SEMPRE visível, mas só ACEITA clique depois de recebida (e com permissão).
+    // Antes disso fica apagado (off) e só mostra a dica do porquê.
+    let b3;
+    if (received && canInsuf()) b3 = `<button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="marcar amostra insuficiente — encerra e avisa o cliente"><span>🚫 Insuficiente</span><small>avisar cliente</small></button>`;
+    else { const why = received ? 'Você não tem permissão (peça ao admin no 👥 Equipe)' : 'Libera só depois de Separar e Receber'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-k="${k}" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Insuficiente</span><small>${received ? '🔒 sem permissão' : 'após receber'}</small></button>`; }
     // prazo / atraso: mostra a IDADE (dias parada) quando 1 dia+ ; senão o horário do corte de hoje
     const dias = it.dias || 0;
     let badge = '';
@@ -671,6 +673,7 @@
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
       else if (act === 'insuf') { const it = itens().find(x => chaveOf(x) === k); if (it) doInsuf(it); }
+      else if (act === 'insufoff') alert('🚫 Insuficiente: ' + (b.dataset.why || 'indisponível agora') + '.');
       else if (act === 'avisar') avisarCliente(k);
       else if (act === 'enviar') step('enviar', k);
       else if (act === 'receber') step('receber', k);
@@ -747,8 +750,10 @@
 .step.wait{background:#f1f5f9;color:#94a3b8}
 .step.lock{background:#f1f5f9;color:#64748b}
 .steparrow{color:#cbd5e1;font-weight:800;margin:0 1px}
-.sepbtn.insuf{background:#fee2e2;color:#991b1b;display:inline-flex;flex-direction:column;align-items:center;line-height:1.05;padding:4px 10px;margin-left:6px}
-.sepbtn.insuf small{font-size:9px;opacity:.85;font-weight:600;letter-spacing:.2px}`;
+.sepbtn.insuf{background:#dc2626;color:#fff;display:inline-flex;flex-direction:column;align-items:center;line-height:1.05;padding:4px 10px;margin-left:6px;border:0}
+.sepbtn.insuf small{font-size:9px;opacity:.9;font-weight:600;letter-spacing:.2px}
+.sepbtn.insuf.off{background:#eef1f5;color:#9aa6b2;border:1px dashed #cbd5e1;cursor:not-allowed}
+.sepbtn.insuf.off small{opacity:.85}`;
     document.head.appendChild(s);
   })();
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
