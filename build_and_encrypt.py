@@ -24,6 +24,9 @@ EX = "TabExameNumeroSolicitado"; RQ = "`TabExameNumeroRequisiçao`"
 SLA = {16:1, 1:1, 9:2, 15:1, 34:2, 31:3, 4:5, 7:1, 2:1, 58:30, 62:15}
 SLA_DEFAULT = 3
 JUNK = {55,56,60,24,25,35,36,37,50,52,54}   # CANCELADO/DINHEIRO/FAKE/Z NAO UTILIZAR
+# PISO da Atenção/Especializados: começa a contar a partir desta data (zera o histórico p/ a equipe
+# não afogar). Só entradas >= ATEN_PISO aparecem. Mudar a data = novo recorte.
+ATEN_PISO = "2026-06-26"
 
 # Cortes diários (horas) p/ a "baixa" da separação — editar aqui muda os dois cortes
 CORTES = [15, 21]
@@ -144,7 +147,7 @@ def build():
             (s.DataExame IS NOT NULL) liberado
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
             WHERE s.CodCategoria IN ({_ec})
-              AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 40 DAY)
+              AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 40 DAY) AND r.DataEntrada>='{ATEN_PISO}'
               AND (s.DataExame IS NULL OR s.DataExame>=DATE_SUB(CURDATE(),INTERVAL {ESP_LIB_GRACE} DAY))
             ORDER BY r.DataEntrada ASC, r.NumeroSequencial ASC LIMIT 2500""")
         for r in esp_rows:
@@ -190,6 +193,7 @@ def build():
         _where = f"CodCliente IN ({','.join(str(c) for c in flagged_cods)}) AND DataEntrada>=DATE_SUB(CURDATE(),INTERVAL {CLI_DIAS} DAY)"
     else:
         _where = "DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 2 DAY)"
+    _where += f" AND DataEntrada>='{ATEN_PISO}'"   # piso: zera o histórico; conta a partir de ATEN_PISO
     cli_reqs_raw = q(f"""SELECT CodCliente cod, Cliente cliente, NumeroSequencial req, AnoRequisiçao ano,
         Animal paciente, Requisitante vet, DataEntrada entrada, UsuarioDataEntrada udata, UsuarioHoraEntrada uhora
         FROM `TabExameNumeroRequisiçao`
