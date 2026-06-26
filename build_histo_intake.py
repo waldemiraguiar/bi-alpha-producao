@@ -27,11 +27,31 @@ SQL = (
     "GROUP BY r.CodNumeroSequencialTela"
 )
 
+# Liberados no HF (laudo enviado ao cliente): EnviadoParaSite=1 / DataEnvioSite preenchido.
+# So a partir do MARCO (os que existem no app). O app finaliza por inteiro -> vai pro Historico.
+SQL_LIBERADOS = (
+    "SELECT r.NumeroSequencial AS hf "
+    "FROM TabExameNumeroSolicitado s "
+    "JOIN `TabExameNumeroRequisiçao` r ON r.CodNumeroSequencialTela = s.CodNumeroSequencialTela "
+    "WHERE s.CodCategoria = 15 AND (s.Exame LIKE 'Histologia%%' OR s.Exame LIKE '%%Cell Block%%') "
+    "AND s.Exame NOT LIKE 'Solicita%%' AND r.CodNumeroSequencialTela > %s "
+    "AND (r.EnviadoParaSite = 1 OR r.DataEnvioSite IS NOT NULL) "
+    "GROUP BY r.CodNumeroSequencialTela"
+)
+
+def rpc(nome, payload):
+    url = SUPA_URL.rstrip("/") + "/rest/v1/rpc/" + nome
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={
+        "Content-Type": "application/json", "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY})
+    resp = urllib.request.urlopen(req, timeout=90)
+    return resp.read().decode()
+
 def main():
     conn = pymysql.connect(host=HOST, user=USER, password=PWD, database=DB,
                            connect_timeout=20, read_timeout=180, charset="utf8mb4",
                            cursorclass=pymysql.cursors.DictCursor)
-    cur = conn.cursor(); cur.execute(SQL, (MIN_ID,)); rows = cur.fetchall(); conn.close()
+    cur = conn.cursor(); cur.execute(SQL, (MIN_ID,)); rows = cur.fetchall()
+    cur.execute(SQL_LIBERADOS, (MIN_ID,)); liberados = [str(r["hf"]) for r in cur.fetchall()]; conn.close()
     items = []
     for r in rows:
         cliente = (r.get("cliente") or ""); tutor = (r.get("tutor") or ""); animal = (r.get("animal") or "")
@@ -50,18 +70,19 @@ def main():
             "data_entrada": (ent.strftime("%Y-%m-%d") + "T12:00:00") if ent else None,
         })
     print("requisicoes encontradas:", len(items))
-    url = SUPA_URL.rstrip("/") + "/rest/v1/rpc/intake_hf"
-    payload = json.dumps({"p_token": TOKEN, "p_items": items}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers={
-        "Content-Type": "application/json",
-        "apikey": SUPA_KEY,
-        "Authorization": "Bearer " + SUPA_KEY,
-    })
     try:
-        resp = urllib.request.urlopen(req, timeout=90)
-        print("resposta:", resp.read().decode())
+        print("intake:", rpc("intake_hf", {"p_token": TOKEN, "p_items": items}))
     except urllib.error.HTTPError as e:
-        print("HTTP", e.code, e.read().decode()); raise
+        print("HTTP intake", e.code, e.read().decode()); raise
+
+    # baixa automatica dos liberados no HF (nao-fatal: se a funcao ainda nao existir, segue a vida)
+    print("liberados no HF (>marco):", len(liberados))
+    try:
+        print("finalizar:", rpc("finalizar_hf", {"p_token": TOKEN, "p_numeros": liberados}))
+    except urllib.error.HTTPError as e:
+        print("HTTP finalizar", e.code, e.read().decode(), "(crie a funcao finalizar_hf no Supabase)")
+    except Exception as e:
+        print("finalizar falhou (nao-fatal):", e)
 
 if __name__ == "__main__":
     main()
