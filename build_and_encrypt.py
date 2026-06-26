@@ -131,7 +131,7 @@ def build():
     # --- ATENÇÃO-ESPECIALIZADOS: exames EM PROCESSO de categorias com prazo longo (SLA>=3) ---
     # Prazo de liberação = SLA por categoria (campo Entrega do HF está vazio). Vence = entrada + SLA.
     # Front pinta amarelo e vira vermelho 2 dias antes de vencer. Janela 40d cobre até Necrópsia(30).
-    ESP_MIN = 3
+    ESP_MIN = 2   # Atenção = 1 dia; Especializados = 2 dias pra cima (decisão Wal)
     esp_codes = [cod for cod in cats if cod not in JUNK and sla(cod) >= ESP_MIN]
     esp_itens = []
     if esp_codes:
@@ -212,7 +212,7 @@ def build():
             nm = (e["exame"] or "").strip()
             if not nm: continue
             # esp = especializado (SLA>=3) -> mora na aba Especializados, não na Atenção normal
-            exmap.setdefault((e["req"], e["ano"]), []).append({"exame": nm, "proc": bool(e["em_proc"]), "esp": sla(e["cod"]) >= 3})
+            exmap.setdefault((e["req"], e["ano"]), []).append({"exame": nm, "proc": bool(e["em_proc"]), "esp": sla(e["cod"]) >= ESP_MIN})
     except Exception as e:
         print(f"[clientes] aviso exames por req: {e}")
     cli_reqs = []
