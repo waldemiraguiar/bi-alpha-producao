@@ -50,6 +50,23 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
+    # ===== DIAG VOLUME urina/fezes 2026 (remover depois) =====
+    if True:
+        try:
+            print("[VOL] exames Uroanalise(7)+Parasitologia(2) em 2026 (codex, n, nome):")
+            for x in q("""SELECT s.CodExame codex, MAX(s.Exame) ex, s.CodCategoria cod, COUNT(*) n
+                FROM TabExameNumeroSolicitado s JOIN `TabExameNumeroRequisiçao` r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+                WHERE YEAR(r.DataEntrada)=2026 AND s.CodCategoria IN (2,7) GROUP BY s.CodExame ORDER BY n DESC"""):
+                print(f"[VOL] codex={x['codex']} cat={nome(x['cod'])!r} n={x['n']} ex={x['ex']!r}")
+            for lbl, w in [("EAS(urina)","s.CodExame=59"), ("UROANALISE(cat7)","s.CodCategoria=7"), ("PARASITO(cat2)","s.CodCategoria=2")]:
+                rows = q(f"""SELECT MONTH(r.DataEntrada) mes, COUNT(*) n
+                    FROM TabExameNumeroSolicitado s JOIN `TabExameNumeroRequisiçao` r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+                    WHERE YEAR(r.DataEntrada)=2026 AND {w} GROUP BY mes ORDER BY mes""")
+                print(f"[VOL] {lbl}: " + " | ".join(f"{d['mes']:02d}={d['n']}" for d in rows) + f"  TOTAL={sum(d['n'] for d in rows)}")
+        except Exception as e:
+            print("[VOL] erro:", e)
+    # ===== fim DIAG VOLUME =====
+
     # ===== VARREDURA DO COFRE (só quando SWEEP_COFRE=1): exames usados que faltam no cofre =====
     # Pega variantes (ex.: "- Quantitativo", "Diluição Plena") de exames já classificados interno/apoio.
     if os.environ.get("SWEEP_COFRE"):
