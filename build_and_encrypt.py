@@ -50,6 +50,19 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
+    # ===== DIAG VOLUME urina/fezes 2025 (remover depois) =====
+    if True:
+        try:
+            for lbl, w in [("EAS(urina,codex59)","s.CodExame=59"), ("UROANALISE(cat7)","s.CodCategoria=7"), ("PARASITO(cat2)","s.CodCategoria=2"), ("FezesSimples(codex11)","s.CodExame=11")]:
+                rows = q(f"""SELECT MONTH(r.DataEntrada) mes, COUNT(*) n
+                    FROM TabExameNumeroSolicitado s JOIN `TabExameNumeroRequisiçao` r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+                    WHERE YEAR(r.DataEntrada)=2025 AND {w} GROUP BY mes ORDER BY mes""")
+                mm = {d['mes']: d['n'] for d in rows}
+                print(f"[VOL25] {lbl}: " + " | ".join(f"{m:02d}={mm.get(m,0)}" for m in range(1,13)) + f"  TOTAL={sum(mm.values())}")
+        except Exception as e:
+            print("[VOL25] erro:", e)
+    # ===== fim DIAG VOLUME 2025 =====
+
 
     # ===== VARREDURA DO COFRE (só quando SWEEP_COFRE=1): exames usados que faltam no cofre =====
     # Pega variantes (ex.: "- Quantitativo", "Diluição Plena") de exames já classificados interno/apoio.
