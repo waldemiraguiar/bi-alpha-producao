@@ -6,6 +6,11 @@ on:
     # UTC = BRT+3 -> 09-23 e 00-02 cobrem 06h-23h BRT.
     - cron: '*/10 0-2,9-23 * * *'
   workflow_dispatch:           # permite rodar manualmente pelo botão "Run workflow"
+    inputs:
+      sweep:
+        description: "Rodar varredura do cofre (lista exames faltando)"
+        required: false
+        default: "0"
 
 concurrency:
   group: atualiza-producao
@@ -35,6 +40,7 @@ jobs:
           MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
           MYSQL_DB:   ${{ secrets.MYSQL_DB }}
           PROD_PWD:   ${{ secrets.PROD_PWD }}
+          SWEEP_COFRE: ${{ github.event.inputs.sweep }}
         run: python build_and_encrypt.py
 
       - name: Config + dependências da função
