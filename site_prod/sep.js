@@ -24,6 +24,7 @@
   let descartesList = [];         // arquivo COMPLETO dos apagados (histórico do histórico)
   let selByView = { separar: '', urgente: '', avisar: '', hist: '', apagados: '' }; // categoria selecionada por aba
   let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
+  let busca = '';                 // 🔎 busca global (todas as categorias) por registro/paciente/exame/data
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
   let subSep = null;             // canal Realtime do Supabase
   const useSupa = () => window.SUPA && window.SUPA.ok;
@@ -87,6 +88,15 @@
   }
   const hhmm = dt => dt ? dt.toTimeString().slice(0, 5) : '';
   const ddmm = s => { const p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : (s || ''); }; // YYYY-MM-DD -> DD/MM
+  /* ---- 🔎 busca global (todas as categorias): registro, paciente, exame, data ---- */
+  const norm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const matchBusca = o => {
+    if (!busca.trim()) return true;
+    const d = o.entrada || o.dt || '';
+    const hay = norm([o.req, o.ano, (o.req != null ? o.req + '/' + o.ano : ''), o.paciente, o.exame, o.cat, o.tutor, o.vet, d, ddmm(d)].join(' '));
+    return norm(busca).split(/\s+/).filter(Boolean).every(t => hay.includes(t));
+  };
+  const buscaBox = () => `<div class="sepbuscawrap"><input id="sepbusca" class="sepbusca" placeholder="🔎 buscar em TODAS as categorias — registro, paciente, exame, data…" value="${esc2(busca)}" autocomplete="off">${busca ? `<button class="sepbuscax" id="sepbuscax" title="limpar">✕</button>` : ''}</div>`;
   // status: 'feito' (marcado), 'atrasado' (venceu, não marcado), 'noprazo'
   function statusOf(it) {
     const m = marks[chaveOf(it)];
@@ -431,7 +441,14 @@
   const pendentes = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it));
   const ageItems = (lo, hi) => pendentes().filter(it => (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
   function worklistView(viewKey, items, opts) {
-    if (!items.length) return `<div class="${opts.emptyClass || 'sepwait'}">${opts.empty}</div>`;
+    const search = buscaBox();
+    if (busca.trim()) {  // 🔎 busca varre TODAS as categorias do bucket
+      const hits = items.filter(matchBusca).sort((a, b) => (b.dias || 0) - (a.dias || 0));
+      return search + (hits.length
+        ? `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>🔎 Resultados</span><span class="cnt">${hits.length} encontrado(s)</span></div>${hits.map(rowSeparar).join('')}</div>`
+        : `<div class="sepwait">Nada encontrado para "${esc2(busca)}".</div>`);
+    }
+    if (!items.length) return search + `<div class="${opts.emptyClass || 'sepwait'}">${opts.empty}</div>`;
     const byCat = {}; items.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
     const cats = orderedCats(byCat);
     let sel = selByView[viewKey]; if (!sel || !byCat[sel]) sel = selByView[viewKey] = cats[0];
@@ -439,7 +456,7 @@
     const arr = byCat[sel];
     const ordered = [...arr].sort((a, b) => (b.dias || 0) - (a.dias || 0) || rankSt(statusOf(a).st) - rankSt(statusOf(b).st));
     const bar = opts.bar ? opts.bar(items.length) : '';
-    return bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(sel)}</span>
+    return search + bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(sel)}</span>
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
   // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
@@ -512,7 +529,7 @@
   // universo (7 dias) cruzado com marcações: cada item vira separado OU não-separado
   function histRows() {
     const now = Date.now(); const today = new Date().toISOString().slice(0, 10);
-    const cutDay = histPer === 'dia' ? today : histPer === 'semana' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : histPer === 'mes' ? new Date(now - 30 * 864e5).toISOString().slice(0, 10) : '0';
+    const cutDay = busca.trim() ? '0' : (histPer === 'dia' ? today : histPer === 'semana' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : histPer === 'mes' ? new Date(now - 30 * 864e5).toISOString().slice(0, 10) : '0');
     const rows = [];
     universo().forEach(u => {
       const fl = cutDay > pisoDay(u.cat) ? cutDay : pisoDay(u.cat);
@@ -529,7 +546,8 @@
     const all = histRows();
     const byCat = {}; all.forEach(r => { (byCat[r.cat] = byCat[r.cat] || []).push(r); });
     const histCat = selByView.hist;
-    let shown = histCat ? all.filter(r => r.cat === histCat) : all;
+    // com busca, varre TODAS as categorias (ignora a pílula de categoria); sem busca, respeita a categoria
+    let shown = (busca.trim() ? all : (histCat ? all.filter(r => r.cat === histCat) : all)).filter(matchBusca);
     // classe de cada linha: insuficiente | separado(=sep/recebido) | não separado
     const klassOf = r => (r.m && (r.m.estado === 'insuficiente' || r.m.estado === 'insuficiente_avisado')) ? 'insuf' : (r.sep ? 'sep' : 'nao');
     if (histFiltro === 'separados') shown = shown.filter(r => klassOf(r) === 'sep');
@@ -548,8 +566,8 @@
     const pills = topicStrip(byCat, 'hist', histCat, null, true);
     const misses = shown.filter(r => klassOf(r) === 'nao');
     const batch = (isAdmin() && misses.length) ? `<button class="perbtn" id="histdelbatch" style="border-color:var(--red);color:var(--red);font-weight:800">🗑 Apagar ${misses.length} não-separado${misses.length > 1 ? 's' : ''} (deste filtro)</button>` : '';
-    const head = `<div class="histfilt"><b style="font-size:15px">📋 Histórico</b>${perBtns}${fBtns}
-      <span style="margin-left:auto;color:var(--mut);font-size:12px">✓ ${nSep} separados · <b style="color:var(--red)">✗ ${nNao} não</b> · <b style="color:#b91c1c">🚫 ${nInsuf} insuf.</b></span></div>${pills}
+    const head = buscaBox() + `<div class="histfilt"><b style="font-size:15px">📋 Histórico</b>${busca.trim() ? '<span style="color:var(--cyan);font-size:12px">🔎 buscando em tudo (período ignorado)</span>' : perBtns}${fBtns}
+      <span style="margin-left:auto;color:var(--mut);font-size:12px">✓ ${nSep} separados · <b style="color:var(--red)">✗ ${nNao} não</b> · <b style="color:#b91c1c">🚫 ${nInsuf} insuf.</b></span></div>${busca.trim() ? '' : pills}
       ${batch ? `<div class="histfilt">${batch}</div>` : ''}`;
     if (!shown.length) return head + `<div class="sepwait">Nada nesse período/filtro (contagem oficial desde 23/jun).</div>`;
     const fmtTs = ts => { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toTimeString().slice(0, 5); };
@@ -639,6 +657,8 @@
 
   function wire(el) {
     el.querySelectorAll('.septab').forEach(t => t.onclick = () => { view = t.dataset.v; render(); });
+    const sb = $('sepbusca'); if (sb) sb.oninput = () => { busca = sb.value; render(); const n = $('sepbusca'); if (n) { n.focus(); try { n.setSelectionRange(n.value.length, n.value.length); } catch (e) {} } };
+    const sbx = $('sepbuscax'); if (sbx) sbx.onclick = () => { busca = ''; render(); };
     const sm = $('sepme'); if (sm) sm.onchange = () => {
       if (sm.value === '__novo__') { const n = prompt('Seu nome ou iniciais:'); if (n && n.trim()) addUser(n); render(); return; }
       localStorage.setItem(MEK, sm.value); render();
@@ -750,6 +770,10 @@
 .step.wait{background:#f1f5f9;color:#94a3b8}
 .step.lock{background:#f1f5f9;color:#64748b}
 .steparrow{color:#cbd5e1;font-weight:800;margin:0 1px}
+.sepbuscawrap{position:relative;margin:0 0 12px}
+.sepbusca{width:100%;box-sizing:border-box;padding:11px 38px 11px 14px;font-size:15px;border:1.5px solid var(--line,#2a3b57);border-radius:10px;background:var(--card,#0f1f38);color:var(--ink,#e6eefc);font-family:inherit}
+.sepbusca::placeholder{color:var(--mut,#7e8aa0)}
+.sepbuscax{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:rgba(255,255,255,.12);color:#fff;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:12px;line-height:1}
 .sepbtn.insuf{background:#dc2626;color:#fff;display:inline-flex;flex-direction:column;align-items:center;line-height:1.05;padding:4px 10px;margin-left:6px;border:0}
 .sepbtn.insuf small{font-size:9px;opacity:.9;font-weight:600;letter-spacing:.2px}
 .sepbtn.insuf.off{background:#eef1f5;color:#9aa6b2;border:1px dashed #cbd5e1;cursor:not-allowed}
