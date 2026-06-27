@@ -50,19 +50,6 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
-    # ===== DIAG TEMP: por que reqs nao aparecem na Triagem? (remover depois) =====
-    if True:
-        try:
-            d = q("""SELECT r.NumeroSequencial req, r.Animal paciente, r.DataEntrada entrada,
-                s.CodExame codex, s.Exame exame, s.CodCategoria cod, s.DataExame dx
-                FROM TabExameNumeroSolicitado s JOIN `TabExameNumeroRequisiçao` r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-                WHERE r.NumeroSequencial IN (616451,616318) ORDER BY r.NumeroSequencial""")
-            for x in d:
-                print(f"[DIAG req] {x['req']} {x['paciente']!r} entrada={x['entrada']} cat={nome(x['cod'])!r} codex={x['codex']} exame={x['exame']!r} dx={x['dx']} no_cofre={x['codex'] in COFRE}")
-            if not d: print("[DIAG req] nenhuma das reqs 616451/616318 encontrada no HF")
-        except Exception as e:
-            print("[DIAG req] erro:", e)
-    # ===== fim DIAG =====
 
 
     # --- FILA EM ABERTO (DataExame NULL) por categoria x EXAME(derivação) x dias-em-aberto ---

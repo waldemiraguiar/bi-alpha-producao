@@ -1,6 +1,6 @@
 {
   "gerado": "2026-06-22T19:44:48.697Z",
-  "total_classificados": 284,
+  "total_classificados": 199,
   "itens": [
     {
       "cat": "BACTERIOLOGIA - CULTURA",
@@ -2273,6 +2273,14 @@
       "codex": 739,
       "exame": "Cálculo Urinário - Quantitativo",
       "classe": "apoio"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 997,
+      "exame": "Leishmaniose Felina - ELISA e RIFI - Diluição Plena",
+      "classe": "interno"
     }
   ]
 }
