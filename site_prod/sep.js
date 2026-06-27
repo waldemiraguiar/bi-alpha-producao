@@ -12,11 +12,13 @@
   // RESET à MEIA-NOITE de 25/jun: a equipe recomeça LIMPA. Quando o relógio (BRT) virar 25/jun, tudo de
   // antes some da separação / histórico / placar — EXCETO "EXAMES ESPECIALIZADOS" (o time já trabalha
   // desde ontem, mantém o piso original 23/jun). Hoje (24/jun) fica INTACTO; zera sozinho à meia-noite.
-  const RESET_DAY = '2026-06-25';
+  const RESET_DAY = '2026-06-25';   // 1º reset (25/jun): zerou tudo menos EXAMES ESPECIALIZADOS
+  const RESET_FINAL = '2026-06-29'; // INÍCIO PRA VALER (segunda 29/jun): à meia-noite BRT zera TUDO (sem exceção)
   const pisoDay = cat => {
     const hojeBRT = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // data em BRT (UTC-3)
-    if (hojeBRT < RESET_DAY) return PISO_DAY;                       // antes da meia-noite de 25/jun: nada muda
-    return /especializ/i.test(cat || '') ? PISO_DAY : RESET_DAY;    // 25/jun em diante: zera tudo menos especializados
+    if (hojeBRT >= RESET_FINAL) return RESET_FINAL;                 // 29/jun em diante: começa LIMPO (tudo)
+    if (hojeBRT >= RESET_DAY) return /especializ/i.test(cat || '') ? PISO_DAY : RESET_DAY; // 25-28/jun: estado atual (treino)
+    return PISO_DAY;                                                // antes de 25/jun
   };
   let MODE = 'tv', view = 'separar', period = 'hoje';
   let marks = {};                 // chave -> marcação
