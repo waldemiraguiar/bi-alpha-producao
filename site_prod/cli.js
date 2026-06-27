@@ -98,7 +98,7 @@
     const leg = `<div class="seplegend atrasado">🟡 Confira e libere cada exame (check-in, baixa <b>manual</b>). Não liberou → <b style="color:var(--red)">🔴 loucura total</b> até alguém liberar.</div>`;
     const reqs = atencaoReqs();
     if (!reqs.length) return leg + `<div class="sepwait" style="padding:30px">Nenhum exame de liberação rápida pendente agora. (Especializados ficam na aba 🟡 Atenção·Especializados.)</div>`;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // data de HOJE em BRT (UTC-3) — senão, à noite o UTC vira amanhã e o exame de hoje fica "vermelho" cedo
     const esq = [], hj = [];
     reqs.forEach(r => { const d = (r.dt || '').slice(0, 10); (d && d < todayStr ? esq : hj).push(r); });
     const card = (r, esquecido) => {
