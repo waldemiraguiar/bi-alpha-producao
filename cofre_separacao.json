@@ -1,6 +1,6 @@
 {
   "gerado": "2026-06-22T19:44:48.697Z",
-  "total_classificados": 199,
+  "total_classificados": 203,
   "itens": [
     {
       "cat": "BACTERIOLOGIA - CULTURA",
@@ -2280,6 +2280,38 @@
       "cod": 9,
       "codex": 997,
       "exame": "Leishmaniose Felina - ELISA e RIFI - Diluição Plena",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 846,
+      "exame": "PCR Cinomose - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "Hematologia",
+      "setor": "—",
+      "cod": 1,
+      "codex": 841,
+      "exame": "Compatibilidade Sanguínea - Prova Cruzada",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 870,
+      "exame": "PCR FIV - DNA PROVIRAL - Quantitativo",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1122,
+      "exame": "PCR Anaplasma spp. - Quantitativo",
       "classe": "interno"
     }
   ]
