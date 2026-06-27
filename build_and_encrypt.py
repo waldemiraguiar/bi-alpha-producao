@@ -50,6 +50,39 @@ def build():
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
 
+    # ===== SWEEP TEMP: achar exames que PROVAVELMENTE faltam no cofre (variantes de irmãos classificados) =====
+    if True:
+        try:
+            cofre_full = json.load(open(COFRE_PATH, encoding="utf-8")).get("itens", [])
+            VAR = ['diluição plena','diluicao plena','felina','felino','canina','canino','urina',
+                   'auricular esquerdo','auricular direito','esquerdo','direito','ouvido direito','ouvido esquerdo',
+                   'quantitativo','com titulação','com titulacao','snap','plena','região','regiao','aeróbios','aerobios',
+                   'anaeróbios','anaerobios','sérica','serica','urinária','urinaria','2','1','-']
+            def keyname(nm):
+                s = (nm or "").lower()
+                for w in VAR: s = s.replace(w, ' ')
+                return ' '.join(s.split())
+            cofre_keys = {}                       # key normalizada -> classe (só interno/apoio)
+            nao_codex = set()                     # codex marcados explicitamente como 'nao'
+            for i in cofre_full:
+                if i.get("classe") in ("interno","apoio"): cofre_keys.setdefault(keyname(i.get("exame","")), i["classe"])
+                elif i.get("classe") == "nao": nao_codex.add(int(i.get("codex",-1)))
+            usados = q("""SELECT s.CodExame codex, MAX(s.Exame) exame, MAX(s.CodCategoria) cod, COUNT(*) n
+                FROM TabExameNumeroSolicitado s JOIN `TabExameNumeroRequisiçao` r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+                WHERE r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 180 DAY) GROUP BY s.CodExame""")
+            cand = []
+            for x in usados:
+                cx = x["codex"]
+                if cx in COFRE or cx in nao_codex or x["cod"] in JUNK: continue
+                k = keyname(x["exame"])
+                if k in cofre_keys: cand.append((cx, x["exame"], nome(x["cod"]), x["n"], cofre_keys[k]))
+            cand.sort(key=lambda z: -z[3])
+            print(f"[SWEEP] {len(cand)} candidatos a faltar no cofre (variantes de irmaos classificados):")
+            for c in cand: print(f"[SWEEP] codex={c[0]} usos={c[3]} classe_irmao={c[4]} cat={c[2]!r} exame={c[1]!r}")
+        except Exception as e:
+            print("[SWEEP] erro:", e)
+    # ===== fim SWEEP =====
+
 
 
     # --- FILA EM ABERTO (DataExame NULL) por categoria x EXAME(derivação) x dias-em-aberto ---
