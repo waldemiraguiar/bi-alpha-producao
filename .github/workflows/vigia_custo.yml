@@ -1,0 +1,86 @@
+name: Vigia de Custo Netlify (e-mail diário)
+
+# Roda no servidor do GitHub (independe do app aberto). Conta os deploys de produção de ONTEM
+# por site via API do Netlify, calcula a economia vs baseline (~215/dia antes de 28/jun) e
+# MANDA E-MAIL pro Wal — ✅ status diário ou ⚠️ recaída (>10 deploys/dia em algum site).
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # 08h BRT (UTC=BRT+3)
+  workflow_dispatch:        # rodar agora p/ testar o e-mail
+
+concurrency:
+  group: vigia-custo
+  cancel-in-progress: false
+
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Checar deploys e enviar e-mail
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request, datetime, smtplib, ssl
+          from email.mime.text import MIMEText
+
+          TOKEN=os.environ["NETLIFY_AUTH_TOKEN"]
+          GU=os.environ["GMAIL_USER"]; GP=os.environ["GMAIL_APP_PASSWORD"]
+          TO=os.environ.get("EMAIL_TO") or GU
+          def api(p):
+              r=urllib.request.Request("https://api.netlify.com/api/v1"+p,headers={"Authorization":"Bearer "+TOKEN})
+              return json.load(urllib.request.urlopen(r,timeout=30))
+
+          SITES={"producao-lab-alpha":"Produção","bi-alpha-waldemir":"Financeiro","agente-crm-matriz":"CRM","alpha-cabofrio":"Cabo Frio"}
+          ids={s["name"]:s["id"] for s in api("/sites?per_page=100") if s["name"] in SITES}
+          # ontem (UTC) — janela simples e suficiente p/ vigia diário
+          ontem=(datetime.datetime.utcnow().date()-datetime.timedelta(days=1)).isoformat()
+
+          cont={}
+          for name,label in SITES.items():
+              sid=ids.get(name); n=0; page=1
+              if sid:
+                  while page<=10:
+                      deps=api(f"/sites/{sid}/deploys?per_page=100&page={page}")
+                      if not deps: break
+                      old=False
+                      for d in deps:
+                          if d.get("context")!="production": continue
+                          ds=(d.get("created_at") or "")[:10]
+                          if ds==ontem: n+=1
+                          elif ds<ontem: old=True
+                      if old or len(deps)<100: break
+                      page+=1
+              cont[label]=n
+
+          total=sum(cont.values())
+          BASE=215.0; COST=0.10
+          econ_sem=max(0,BASE-total)*COST*7
+          recaida=[f"{k} ({v}/dia)" for k,v in cont.items() if v>10]
+          det=" · ".join(f"{k}: {v}" for k,v in cont.items())
+
+          if recaida:
+              assunto=f"⚠️ Custo IA: recaída em {', '.join(recaida)}"
+              corpo=(f"ATENÇÃO Wal: algum painel voltou a deployar demais ({ontem}).\n\n"
+                     f"{det}\nTotal: {total} deploys/dia (alvo ~6).\n\n"
+                     f"Provável: o disparador externo voltou a deployar, ou entrou um deploy=1 em algum cron/dispatcher. "
+                     f"Vale investigar e cortar. Detalhe na aba 📉 Saving IA do Fênix.")
+          else:
+              assunto=f"✅ Custo IA ok: {total} deploys ontem (~US${econ_sem:.0f}/sem economizado)"
+              corpo=(f"Tudo sob controle, Wal ({ontem}).\n\n"
+                     f"{det}\nTotal: {total} deploys/dia (alvo ~6; antes ~215).\n"
+                     f"Economia real vs antes: ~US${econ_sem:.0f}/semana (~US${econ_sem*4.3:.0f}/mês).\n\n"
+                     f"Pendência aberta: achar e desligar o disparador externo (hoje inofensivo, só faz POST).\n"
+                     f"Painel ao vivo: aba 📉 Saving IA do Fênix.")
+
+          msg=MIMEText(corpo,"plain","utf-8"); msg["Subject"]=assunto; msg["From"]=GU; msg["To"]=TO
+          ctx=ssl.create_default_context()
+          with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ctx) as s:
+              s.login(GU,GP); s.sendmail(GU,[TO],msg.as_string())
+          print("email enviado:",assunto,"-> ",TO)
+          PY
