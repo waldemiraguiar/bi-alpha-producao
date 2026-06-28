@@ -8,8 +8,13 @@
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 // descriptografa um .enc com a senha; retorna o objeto JSON (lança se senha errada)
+// CUSTO: tenta a FUNÇÃO (/api/enc?f=<nome> — atualizada sem deploy) e CAI no arquivo estático se falhar.
 async function decryptEnc(url, pwd){
-  const env = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now())
+  const base = (url.split('/').pop() || '').replace(/\?.*$/,'').replace(/\.enc$/,'') || 'data';
+  let env = null;
+  try{ const r = await fetch('/api/enc?f='+base+'&_='+Date.now());
+    if(r.ok){ const j = await r.json(); if(j && j.ct && j.salt && j.iv) env = j; } }catch(e){}
+  if(!env) env = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now())
     .then(r => { if(!r.ok) throw new Error('sem dados'); return r.json(); });
   const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(pwd), 'PBKDF2', false, ['deriveKey']);
   const key = await crypto.subtle.deriveKey(
