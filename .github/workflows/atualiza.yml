@@ -7,8 +7,12 @@ on:
     # (POST /api/enc — web request baratíssimo). Exames seguem 10 min, deploys ~0.
     - cron: '*/10 0-2,9-23 * * *'   # build + POST do .enc (barato) — horário útil BRT (UTC=BRT+3)
     - cron: '13 12 * * *'           # 1x/dia: DEPLOY completo (~09h13 BRT) — refresca fallback estático + código
-  workflow_dispatch:                # rodar manual: SEMPRE faz deploy completo (usar após mexer no código)
+  workflow_dispatch:                # dispatch SEM deploy=1 => só build+POST (barato). deploy=1 => deploy completo.
     inputs:
+      deploy:
+        description: "deploy=1 publica o site (após mexer no código); senão só atualiza dados (POST)"
+        required: false
+        default: "0"
       sweep:
         description: "Rodar varredura do cofre (lista exames faltando)"
         required: false
@@ -20,8 +24,9 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # evita aviso de descontinuação do Node 20
-  # true quando este run deve fazer DEPLOY completo (cron diário OU disparo manual). Senão, só POST do .enc.
-  DEPLOY_FULL: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '13 12 * * *' }}
+  # DEPLOY completo só no cron diário OU dispatch com deploy=1. Dispatch comum (ex.: disparador externo
+  # de 10 em 10 min) faz APENAS build+POST do .enc (barato, mantém dados frescos sem deploy).
+  DEPLOY_FULL: ${{ github.event.inputs.deploy == '1' || github.event.schedule == '13 12 * * *' }}
 
 jobs:
   atualiza:

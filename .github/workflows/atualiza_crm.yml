@@ -6,7 +6,12 @@ on:
     # o crm.enc por função (POST /api/enc — web request barato). Deploy completo só 1x/dia.
     - cron: '0 */6 * * *'   # a cada 6h: build + POST do .enc (barato)
     - cron: '27 12 * * *'   # 1x/dia: DEPLOY completo (~09h27 BRT) — refresca fallback estático + código
-  workflow_dispatch:        # rodar manual: SEMPRE faz deploy completo (usar após mexer no código)
+  workflow_dispatch:        # dispatch SEM deploy=1 => só build+POST (barato). deploy=1 => deploy completo.
+    inputs:
+      deploy:
+        description: "deploy=1 publica o site (após mexer no código); senão só atualiza dados (POST)"
+        required: false
+        default: "0"
 
 concurrency:
   group: atualiza-crm
@@ -14,7 +19,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  DEPLOY_FULL: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '27 12 * * *' }}
+  DEPLOY_FULL: ${{ github.event.inputs.deploy == '1' || github.event.schedule == '27 12 * * *' }}
 
 jobs:
   atualiza:
