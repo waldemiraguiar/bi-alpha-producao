@@ -68,8 +68,17 @@ function buildUrgentCat(list){return buildSpecial(list,e=>urgentOf(e),{cod:'__UR
 function buildPetCat(list){return buildSpecial(list,e=>isPetlove(e.paciente),{cod:'__PET__',nome:'PET LOVE',kind:'pet'});}
 function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR__',nome:'ATRASADOS',kind:'atras'});}
 
+// Busca o .enc da FUNÇÃO (/api/enc, baratíssimo — atualizado sem deploy) e CAI no arquivo
+// estático data/producao.enc se a função falhar/estiver vazia. Nunca quebra o painel.
+async function fetchEnc(){
+  try{
+    const r=await fetch('/api/enc?_='+Date.now());
+    if(r.ok){const j=await r.json(); if(j&&j.ct&&j.salt&&j.iv) return j;}
+  }catch(e){}
+  return await fetch('data/producao.enc?_='+Date.now()).then(r=>{if(!r.ok)throw new Error('sem dados');return r.json();});
+}
 async function decrypt(pwd){
-  ENC=await fetch('data/producao.enc?_='+Date.now()).then(r=>{if(!r.ok)throw new Error('sem dados');return r.json();});
+  ENC=await fetchEnc();
   const bk=await crypto.subtle.importKey('raw',new TextEncoder().encode(pwd),'PBKDF2',false,['deriveKey']);
   const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64(ENC.salt),iterations:ENC.iter,hash:'SHA-256'},bk,{name:'AES-GCM',length:256},false,['decrypt']);
   const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(ENC.iv)},key,b64(ENC.ct));
