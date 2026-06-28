@@ -76,9 +76,14 @@ function kspark(vals, color){
 const b64dec = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
 let ENC = null; // envelope cifrado, carregado sob demanda
 
+// Busca o .enc da FUNÇÃO (/api/enc — atualizado sem deploy) e CAI no estático data/dashboard.enc se falhar.
+async function fetchEncF(name, fallbackUrl){
+  try{ const r = await fetch('/api/enc?f='+name+'&_='+Date.now());
+    if(r.ok){ const j = await r.json(); if(j && j.ct && j.salt && j.iv) return j; } }catch(e){}
+  return await fetch(fallbackUrl+'?_='+Date.now()).then(r=>{ if(!r.ok) throw new Error('arquivo de dados não encontrado'); return r.json(); });
+}
 async function decryptDashboard(pwd){
-  if(!ENC){ ENC = await fetch('data/dashboard.enc?_='+Date.now()).then(r=>{
-    if(!r.ok) throw new Error('arquivo de dados não encontrado'); return r.json(); }); }
+  if(!ENC){ ENC = await fetchEncF('dashboard','data/dashboard.enc'); }
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey('raw', enc.encode(pwd), 'PBKDF2', false, ['deriveKey']);
   const key = await crypto.subtle.deriveKey(

@@ -2,8 +2,11 @@ name: Atualiza Agente CRM (Matriz)
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # a cada 6h (UTC; melhor esforço do GitHub)
-  workflow_dispatch:
+    # CUSTO (28/jun): em vez de re-deployar (cada deploy ~15 créditos ≈ US$0,10), o build PUBLICA
+    # o crm.enc por função (POST /api/enc — web request barato). Deploy completo só 1x/dia.
+    - cron: '0 */6 * * *'   # a cada 6h: build + POST do .enc (barato)
+    - cron: '27 12 * * *'   # 1x/dia: DEPLOY completo (~09h27 BRT) — refresca fallback estático + código
+  workflow_dispatch:        # rodar manual: SEMPRE faz deploy completo (usar após mexer no código)
 
 concurrency:
   group: atualiza-crm
@@ -11,6 +14,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DEPLOY_FULL: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '27 12 * * *' }}
 
 jobs:
   atualiza:
@@ -32,14 +36,30 @@ jobs:
           BI_PWD:     ${{ secrets.BI_PWD }}
           CRM_PWD:    ${{ secrets.CRM_PWD }}
         run: python build_crm.py
-      - name: Config + dependências da função (follow-up)
+
+      # PUBLICA OS DADOS por função (todo run): atualiza o .enc SEM deploy. Fallback estático cobre se falhar.
+      - name: Publicar dados (.enc) via função — barato, sem deploy
+        continue-on-error: true
+        env:
+          CRM_PWD: ${{ secrets.CRM_PWD }}
+        run: |
+          code=$(curl -sS -o /tmp/r.txt -w "%{http_code}" -X POST \
+            "https://agente-crm-matriz.netlify.app/api/enc?f=crm" \
+            -H "x-pwd: $CRM_PWD" -H "content-type: application/json" \
+            --data-binary @site_crm/data/crm.enc) || code=000
+          echo "POST /api/enc?f=crm -> HTTP $code ; $(cat /tmp/r.txt)"
+          [ "$code" = "200" ] || echo "::warning::POST do .enc falhou (HTTP $code) — fallback estático cobre"
+
+      # --- abaixo só roda no DEPLOY completo (1x/dia ou manual) ---
+      - name: Config + dependências da função (follow-up + enc)
+        if: env.DEPLOY_FULL == 'true'
         env:
           CRM_PWD: ${{ secrets.CRM_PWD }}
         run: |
           node -e "require('fs').writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\n')"
           cd site_crm/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
-
       - name: Publicar no Netlify (Agente CRM)
+        if: env.DEPLOY_FULL == 'true'
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: npx --yes netlify-cli@26 deploy --prod --dir=site_crm --functions=site_crm/functions --site=${{ secrets.CRM_SITE_ID }}

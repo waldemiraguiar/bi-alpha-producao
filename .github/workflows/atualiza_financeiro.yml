@@ -2,8 +2,11 @@ name: Atualiza Painel Financeiro
 
 on:
   schedule:
-    - cron: '0 9-23/2 * * *'   # a cada 2h em horário útil BRT (~6h-20h) — BI admin não precisa de tempo real (era */30 24h). workflow_dispatch p/ atualizar na hora.
-  workflow_dispatch:
+    # CUSTO (28/jun): em vez de re-deployar (cada deploy ~15 créditos ≈ US$0,10), o build PUBLICA
+    # o dashboard.enc por função (POST /api/enc — web request barato). Deploy completo só 1x/dia.
+    - cron: '0 9-23/2 * * *'   # a cada 2h horário útil BRT: build + POST do .enc (barato)
+    - cron: '21 12 * * *'      # 1x/dia: DEPLOY completo (~09h21 BRT) — refresca fallback estático + código
+  workflow_dispatch:           # rodar manual: SEMPRE faz deploy completo (usar após mexer no código)
 
 concurrency:
   group: atualiza-financeiro
@@ -11,6 +14,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DEPLOY_FULL: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '21 12 * * *' }}
 
 jobs:
   atualiza:
@@ -31,7 +35,23 @@ jobs:
           MYSQL_DB:   ${{ secrets.MYSQL_DB }}
           BI_PWD:     ${{ secrets.BI_PWD }}
         run: python build_financeiro.py
-      - name: Config + dependências da função (e-mail renegociação)
+
+      # PUBLICA OS DADOS por função (todo run): atualiza o .enc SEM deploy. Fallback estático cobre se falhar.
+      - name: Publicar dados (.enc) via função — barato, sem deploy
+        continue-on-error: true
+        env:
+          BI_PWD: ${{ secrets.BI_PWD }}
+        run: |
+          code=$(curl -sS -o /tmp/r.txt -w "%{http_code}" -X POST \
+            "https://bi-alpha-waldemir.netlify.app/api/enc?f=dashboard" \
+            -H "x-pwd: $BI_PWD" -H "content-type: application/json" \
+            --data-binary @site/data/dashboard.enc) || code=000
+          echo "POST /api/enc?f=dashboard -> HTTP $code ; $(cat /tmp/r.txt)"
+          [ "$code" = "200" ] || echo "::warning::POST do .enc falhou (HTTP $code) — fallback estático cobre"
+
+      # --- abaixo só roda no DEPLOY completo (1x/dia ou manual) ---
+      - name: Config + dependências da função (e-mail renegociação + enc)
+        if: env.DEPLOY_FULL == 'true'
         env:
           BI_PWD:             ${{ secrets.BI_PWD }}
           GMAIL_USER:         ${{ secrets.GMAIL_USER }}
@@ -39,8 +59,9 @@ jobs:
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
         run: |
           node -e "const fs=require('fs');const q=s=>JSON.stringify(s||'');const e=process.env;fs.writeFileSync('site/functions/secret.mjs',['export const SECRET='+q(e.BI_PWD),'export const GMAIL_USER='+q(e.GMAIL_USER),'export const GMAIL_APP_PASSWORD='+q(e.GMAIL_APP_PASSWORD),'export const EMAIL_TO='+q(e.EMAIL_TO||e.GMAIL_USER)].join(';\n')+';\n')"
-          cd site/functions && npm install >/dev/null 2>&1 && echo "func e-mail pronta"
+          cd site/functions && npm install >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func e-mail+enc pronta"
       - name: Publicar no Netlify (site admin)
+        if: env.DEPLOY_FULL == 'true'
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: npx --yes netlify-cli@26 deploy --prod --dir=site --functions=site/functions --site=${{ secrets.FIN_SITE_ID }}
