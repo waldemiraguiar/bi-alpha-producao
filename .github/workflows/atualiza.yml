@@ -2,11 +2,12 @@ name: Atualiza Painel de Produção
 
 on:
   schedule:
-    # STOPGAP de custo (28/jun): cada DEPLOY de prod custa ~15 créditos (~US$0,10). Era */10 (108/dia).
-    # Reduzido p/ */20 em horário útil BRT enquanto monto a solução definitiva (.enc por função, deploys~0).
-    # UTC = BRT+3 -> 09-23 e 00-02 cobrem 06h-23h BRT.
-    - cron: '*/20 0-2,9-23 * * *'
-  workflow_dispatch:           # permite rodar manualmente pelo botão "Run workflow"
+    # SOLUÇÃO DE CUSTO (28/jun): cada DEPLOY de prod custa ~15 créditos (~US$0,10).
+    # Em vez de re-deployar o site só p/ trocar o .enc, o build PUBLICA o .enc por função
+    # (POST /api/enc — web request baratíssimo). Exames seguem 10 min, deploys ~0.
+    - cron: '*/10 0-2,9-23 * * *'   # build + POST do .enc (barato) — horário útil BRT (UTC=BRT+3)
+    - cron: '13 12 * * *'           # 1x/dia: DEPLOY completo (~09h13 BRT) — refresca fallback estático + código
+  workflow_dispatch:                # rodar manual: SEMPRE faz deploy completo (usar após mexer no código)
     inputs:
       sweep:
         description: "Rodar varredura do cofre (lista exames faltando)"
@@ -19,6 +20,8 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # evita aviso de descontinuação do Node 20
+  # true quando este run deve fazer DEPLOY completo (cron diário OU disparo manual). Senão, só POST do .enc.
+  DEPLOY_FULL: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '13 12 * * *' }}
 
 jobs:
   atualiza:
@@ -44,7 +47,23 @@ jobs:
           SWEEP_COFRE: ${{ github.event.inputs.sweep }}
         run: python build_and_encrypt.py
 
+      # PUBLICA OS DADOS por função (todo run): atualiza o .enc SEM deploy. Se falhar, o
+      # fallback estático (data/producao.enc, refrescado no deploy diário) cobre — não falha o run.
+      - name: Publicar dados (.enc) via função — barato, sem deploy
+        continue-on-error: true
+        env:
+          PROD_PWD: ${{ secrets.PROD_PWD }}
+        run: |
+          code=$(curl -sS -o /tmp/encresp.txt -w "%{http_code}" -X POST \
+            "https://producao-lab-alpha.netlify.app/api/enc" \
+            -H "x-pwd: $PROD_PWD" -H "content-type: application/json" \
+            --data-binary @site_prod/data/producao.enc) || code=000
+          echo "POST /api/enc -> HTTP $code ; $(cat /tmp/encresp.txt)"
+          if [ "$code" != "200" ]; then echo "::warning::POST do .enc falhou (HTTP $code) — fallback estático cobre"; fi
+
+      # --- abaixo só roda no DEPLOY completo (1x/dia ou manual) ---
       - name: Config + dependências da função
+        if: env.DEPLOY_FULL == 'true'
         env:
           PROD_PWD: ${{ secrets.PROD_PWD }}
           ADMIN_PWD: ${{ secrets.ADMIN_PWD }}
@@ -53,7 +72,8 @@ jobs:
           node -e "require('fs').writeFileSync('site_prod/functions/admin.mjs','export const ADMIN='+JSON.stringify(process.env.ADMIN_PWD||'')+';\n')"
           cd site_prod/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
 
-      - name: Publicar no Netlify
+      - name: Publicar no Netlify (deploy completo)
+        if: env.DEPLOY_FULL == 'true'
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: npx --yes netlify-cli@26 deploy --prod --dir=site_prod --functions=site_prod/functions --site=${{ secrets.PROD_SITE_ID }}
