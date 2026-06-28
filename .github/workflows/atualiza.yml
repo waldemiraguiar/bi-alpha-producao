@@ -2,9 +2,10 @@ name: Atualiza Painel de Produção
 
 on:
   schedule:
-    # a cada 10 min SÓ em horário útil BRT (~06h-23h) — poupa deploys de madrugada.
+    # STOPGAP de custo (28/jun): cada DEPLOY de prod custa ~15 créditos (~US$0,10). Era */10 (108/dia).
+    # Reduzido p/ */20 em horário útil BRT enquanto monto a solução definitiva (.enc por função, deploys~0).
     # UTC = BRT+3 -> 09-23 e 00-02 cobrem 06h-23h BRT.
-    - cron: '*/10 0-2,9-23 * * *'
+    - cron: '*/20 0-2,9-23 * * *'
   workflow_dispatch:           # permite rodar manualmente pelo botão "Run workflow"
     inputs:
       sweep:
