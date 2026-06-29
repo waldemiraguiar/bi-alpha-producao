@@ -7,8 +7,12 @@ const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let ENC=null,REFRESH=null,ROT=null,DATA=null,active=0,locked=null,pinned=false;
 const URG_API='/api/urgentes';
 let manual=new Set(), baixados=new Set(), baixasInfo=[];
+// baixa de EXAME na Produção (PIN admin) — chave única por exame = registro|exame
+let prodBaixados=new Set(), prodBaixaInfo=[];
+const exChave=e=>String(e.registro)+'|'+(e.exame||'');
+const exBaixado=e=>prodBaixados.has(exChave(e));
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.map(b=>String(b.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -33,7 +37,42 @@ function darBaixa(reg,pac,exm,isManual){
 function onContentClick(ev){
   const u=ev.target.closest('.urgbtn'); if(u){toggleUrg(u.dataset.reg,u.dataset.pac,u.dataset.exm,manual.has(String(u.dataset.reg)));return;}
   const b=ev.target.closest('.baixabtn'); if(b){darBaixa(b.dataset.reg,b.dataset.pac,b.dataset.exm,b.dataset.manual==='1');return;}
-  const d=ev.target.closest('.desfazbtn'); if(d){post({tipo:'baixa',registro:d.dataset.reg,acao:'remove'},'Não foi possível desfazer.');return;}}
+  const d=ev.target.closest('.desfazbtn'); if(d){post({tipo:'baixa',registro:d.dataset.reg,acao:'remove'},'Não foi possível desfazer.');return;}
+  const xb=ev.target.closest('.exbaixabtn'); if(xb){exBaixar(xb.dataset);return;}
+  const lb=ev.target.closest('.limpabtn'); if(lb){limparAtrasados();return;}
+  const ub=ev.target.closest('.undobtn'); if(ub){undoBaixas();return;}}
+// --- baixa de EXAME na Produção (PIN admin) ---
+let __pin=null;
+async function pedePin(){
+  if(__pin) return __pin;
+  if(!(window.SUPA&&window.SUPA.ok)){alert('Sem conexão com o servidor — baixa de exame indisponível.');return null;}
+  const p=prompt('PIN admin para dar baixa no exame:'); if(!p) return null;
+  const ok=await window.SUPA.admincheck(p); if(!ok){alert('PIN inválido.');return null;}
+  __pin=p; return p;
+}
+async function exBaixar(d){
+  if(!confirm(`Dar baixa no EXAME?\n\n#${d.reg} · ${d.pac}\n${d.exm}\n\nSai da Produção (não depende do HF). Dá pra desfazer.`))return;
+  const pin=await pedePin(); if(!pin) return;
+  try{ await window.SUPA.prodBaixar([{chave:d.reg+'|'+d.exm,registro:d.reg,exame:d.exm,paciente:d.pac,cat:d.cat,atrasado:d.atr==='1'}],pin);
+    await loadManual(); renderActive(); }
+  catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); }
+}
+async function limparAtrasados(){
+  const alvo=window.__limparAlvo||[]; if(!alvo.length){alert('Nenhum atrasado nesta aba.');return;}
+  if(!confirm(`Limpar ${alvo.length} atrasado(s) desta aba?\n\nTodos saem da Produção (dá pra desfazer).`))return;
+  const pin=await pedePin(); if(!pin) return;
+  try{ await window.SUPA.prodBaixar(alvo,pin); await loadManual(); renderActive(); }
+  catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); }
+}
+async function undoBaixas(){
+  const cat=window.__curCat||''; const info=(prodBaixaInfo||[]).filter(b=>!cat||b.cat===cat);
+  if(!info.length){alert('Nada baixado nesta aba.');return;}
+  const lista=info.slice(-25).map(b=>`#${b.registro} · ${b.exame}`).join('\n');
+  if(!confirm(`Desfazer ${info.length} baixa(s)${cat?' de '+cat:''}? Os exames VOLTAM pra fila.\n\n${lista}`))return;
+  const pin=await pedePin(); if(!pin) return;
+  try{ await window.SUPA.prodUnbaixar(info.map(b=>b.chave),pin); await loadManual(); renderActive(); }
+  catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); }
+}
 const escA=s=>esc(s).replace(/"/g,'&quot;');
 const isPetlove=s=>/pet\s*love/i.test(String(s||''));
 let searchTerm='';
@@ -53,7 +92,7 @@ function catOrderIdx(name){const i=ORDER.findIndex(o=>slug(name).includes(slug(o
 function buildSpecial(list,pred,opts){
   const items=[];
   list.forEach(c=>(c.exames||[]).forEach(e=>{
-    if(pred(e,c)) items.push({...e,categoria:c.categoria,_urg:urgentOf(e),_manual:manual.has(String(e.registro))&&!e.urgente&&!baixados.has(String(e.registro))});
+    if(pred(e,c)&&!exBaixado(e)) items.push({...e,categoria:c.categoria,_urg:urgentOf(e),_manual:manual.has(String(e.registro))&&!e.urgente&&!baixados.has(String(e.registro))});
   }));
   items.sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
   const byCat={}; items.forEach(e=>{const k=e.categoria;(byCat[k]=byCat[k]||{exame:k,em_processo:0,atrasado:0});byCat[k].em_processo++;if(e.atrasado)byCat[k].atrasado++;});
@@ -67,6 +106,17 @@ function buildSpecial(list,pred,opts){
 function buildUrgentCat(list){return buildSpecial(list,e=>urgentOf(e),{cod:'__URG__',nome:'EXAMES URGENTES',kind:'urg'});}
 function buildPetCat(list){return buildSpecial(list,e=>isPetlove(e.paciente),{cod:'__PET__',nome:'PET LOVE',kind:'pet'});}
 function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR__',nome:'ATRASADOS',kind:'atras'});}
+// Desconta os exames baixados (PIN) de uma categoria NORMAL — contadores, derivações e lista batem.
+function adjustCat(x){
+  if(!x||x.special||!prodBaixados.size) return x;
+  const ex=x.exames||[], baix=ex.filter(exBaixado);
+  if(!baix.length) return x;
+  const byT={},byTA={}; baix.forEach(e=>{const t=e.exame||'';byT[t]=(byT[t]||0)+1;if(e.atrasado)byTA[t]=(byTA[t]||0)+1;});
+  const nB=baix.length, nBA=baix.filter(e=>e.atrasado).length;
+  const emp=Math.max(0,(x.em_processo||0)-nB), atr=Math.max(0,(x.atrasado||0)-nBA);
+  const ders=(x.derivacoes||[]).map(d=>{const ep=Math.max(0,d.em_processo-(byT[d.exame]||0)),at=Math.max(0,d.atrasado-(byTA[d.exame]||0));return {...d,em_processo:ep,atrasado:at,pct:ep?Math.round(100*(ep-at)/ep):100};}).filter(d=>d.em_processo>0);
+  return {...x,exames:ex.filter(e=>!exBaixado(e)),em_processo:emp,atrasado:atr,no_prazo:emp-atr,pct_no_prazo:emp?Math.round(100*(emp-atr)/emp):100,derivacoes:ders};
+}
 
 // Busca o .enc da FUNÇÃO (/api/enc, baratíssimo — atualizado sem deploy) e CAI no arquivo
 // estático data/producao.enc se a função falhar/estiver vazia. Nunca quebra o painel.
@@ -170,7 +220,7 @@ function buildTabs(){
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
   const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
-  tabsEl.innerHTML=list.map((x,i)=>{const k=x.special?KT[x.kind]:null;return `
+  tabsEl.innerHTML=list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
     <div class="tab ${i===active?'on':''} ${k?k.t:''}" data-i="${i}">
       <span class="tn">${k?k.i+' '+esc(x.categoria):esc(x.categoria)}</span>
       <span class="tb ${k?k.b:(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
@@ -200,7 +250,7 @@ function ringColor(p){return p>=70?C.green:p>=40?C.amber:C.red;}
 
 function renderActive(){
   const list=cats(); if(!list.length){document.getElementById('content').innerHTML='<div style="padding:40px;color:var(--mut)">Sem fila no momento.</div>';return;}
-  const x = locked || list[active] || list[0];
+  const x = adjustCat(locked || list[active] || list[0]);
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
   const special=!!x.special;
   const KIND={
@@ -215,6 +265,10 @@ function renderActive(){
   const urgItems=wlItems.filter(e=>e._urg);
   const urgCount=urgItems.length;
   const manualCount=wlItems.filter(e=>e._manual).length;
+  // alvo do "Limpar atrasados" = os atrasados visíveis nesta aba
+  const atrasAlvo=wlItems.filter(e=>e.atrasado);
+  window.__limparAlvo=atrasAlvo.map(e=>({chave:exChave(e),registro:String(e.registro),exame:e.exame||'',paciente:e.paciente||'',cat:e.categoria||x.categoria||'',atrasado:true}));
+  window.__curCat=special?'':x.categoria;
   const banner = (!special && urgCount>0) ? `<div class="urgbanner"><span class="ico">🚨</span>
       <span class="ttl">${num(urgCount)} URGENTE${urgCount>1?'S':''}</span>
       <div class="ul">${urgItems.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
@@ -248,12 +302,18 @@ function renderActive(){
           </div>`;}).join('')||'<div style="color:var(--mut)">—</div>'}</div>
       </div>
       <div class="card"><h3><span>${special?K.work:'Amostras em processo'} <span class="tag">${special?'categoria · ':''}nº registro · paciente</span></span><input id="wlsearch" class="wlsearch" placeholder="🔍 buscar nº registro / paciente" value="${escA(searchTerm)}"></h3>
+        <div class="exleg">
+          <span class="lg"><b style="color:var(--amber,#f0a020)">baixa na urgência</b> = tira só do alerta 🔴 (o exame continua)</span>
+          <span class="lg"><b style="color:var(--cyan,#22d3ee)">✓ no exame</b> = tira o exame da Produção · não depende do HF · pede PIN</span>
+          ${atrasAlvo.length?`<button class="limpabtn">🧹 Limpar atrasados (${atrasAlvo.length})</button>`:''}
+          ${prodBaixados.size?`<button class="undobtn">↩ baixados (${prodBaixados.size})</button>`:''}
+        </div>
         <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
             <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
             <div class="wlact">${e._urg
-              ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" data-manual="${e._manual?'1':'0'}" title="dar baixa (resolver urgência)">✓ baixa</button>`
-              : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
+              ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" data-manual="${e._manual?'1':'0'}" title="tira do alerta de urgência (o exame continua na fila)">baixa na urgência</button>`
+              : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<button class="exbaixabtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" data-atr="${e.atrasado?'1':'0'}" title="baixa no EXAME — tira da Produção (não depende do HF)">✓ no exame</button><span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
         </div>
       </div>
     </div></div>`;
