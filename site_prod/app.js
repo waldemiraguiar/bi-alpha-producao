@@ -42,8 +42,9 @@ function onContentClick(ev){
   const lb=ev.target.closest('.limpabtn'); if(lb){limparAtrasados();return;}
   const hb=ev.target.closest('.histbtn'); if(hb){openHistBaix();return;}}
 // --- LOGIN do colaborador p/ baixa de exame (mesma equipe da Triagem) ---
-let __op=null, __opTimer=null;            // {nome, senha, papel} — sessão na memória, desloga sozinho
-function opTouch(){ if(__opTimer)clearTimeout(__opTimer); __opTimer=setTimeout(()=>{__op=null;}, 15*60000); }
+let __op=null, __opTimer=null;            // {nome, senha, papel} — sessão na memória; zera no auto-reload da meia-noite
+// cada colaborador tem o próprio PC -> logout por inatividade bem longo (12h = turno inteiro)
+function opTouch(){ if(__opTimer)clearTimeout(__opTimer); __opTimer=setTimeout(()=>{__op=null;}, 12*3600*1000); }
 async function pedeLogin(){
   if(!(window.SUPA&&window.SUPA.ok)){alert('Sem conexão com o servidor — baixa indisponível.');return null;}
   if(__op){ opTouch(); return __op; }
