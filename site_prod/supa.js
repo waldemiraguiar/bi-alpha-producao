@@ -14,6 +14,10 @@
     async loadCli() { if (!SB) return { flags: [], cli_baixas: [] }; const [f, b] = await Promise.all([SB.from('cli_flags').select('*'), SB.from('cli_baixas').select('*')]); return { flags: arr(f), cli_baixas: arr(b) }; },
     async loadSep() { if (!SB) return { marks: [], descartes: [] }; const [m, d] = await Promise.all([SB.from('sep_marks').select('*'), SB.from('sep_descartes').select('*')]); return { marks: arr(m), descartes: arr(d) }; },
     async loadUrg() { if (!SB) return { urgentes: [], baixas: [] }; const [l, b] = await Promise.all([SB.from('urg_lista').select('*'), SB.from('urg_baixas').select('*')]); return { urgentes: arr(l), baixas: arr(b) }; },
+    // ---- baixa de EXAME na Produção (PIN admin) ----
+    async loadProd() { if (!SB) return []; try { const r = await SB.from('prod_baixas').select('*'); return arr(r); } catch (e) { return []; } },
+    async prodBaixar(itens, pin, por) { const { error } = await SB.rpc('prod_baixar', { p_itens: itens, p_pin: pin, p_por: por || 'equipe' }); if (error) throw new Error(error.message || 'PIN'); },
+    async prodUnbaixar(chaves, pin) { const { error } = await SB.rpc('prod_unbaixar', { p_chaves: chaves, p_pin: pin }); if (error) throw new Error(error.message || 'PIN'); },
     // ---- escrita: clientes ----
     upsertFlag(row) { return SB.from('cli_flags').upsert(row); },
     delFlag(cod) { return SB.from('cli_flags').delete().eq('cod', String(cod)); },
