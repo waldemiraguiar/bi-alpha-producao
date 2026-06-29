@@ -66,6 +66,17 @@ jobs:
           recaida=[f"{k} ({v}/dia)" for k,v in cont.items() if v>10]
           det=" · ".join(f"{k}: {v}" for k,v in cont.items())
 
+          # RECARGAS (dinheiro REAL colocado) — lê o painel Saving IA do Fênix
+          recarga_line=""; rec_wa=""
+          try:
+              import urllib.request as _u
+              rec=json.load(_u.urlopen("https://fenix-evolucao-waldemir.netlify.app/api/custos-ia",timeout=30)).get("recargas",{})
+              rs=rec.get("usdSemana",0); rm=rec.get("usdMes",0)
+              recarga_line=f"\n💵 Recargas (dinheiro colocado): US${rs:.0f} nos últimos 7 dias · US${rm:.0f} em 30 dias (antes ~US$100/sem)."
+              rec_wa=f" 💵 Recarga 7d: US${rs:.0f} (antes ~US$100/sem)."
+          except Exception as e:
+              print("recargas indisponiveis:",e)
+
           if recaida:
               assunto=f"⚠️ Custo IA: recaída em {', '.join(recaida)}"
               corpo=(f"ATENÇÃO Wal: algum painel voltou a deployar demais ({ontem}).\n\n"
@@ -80,6 +91,7 @@ jobs:
                      f"Pendência aberta: achar e desligar o disparador externo (hoje inofensivo, só faz POST).\n"
                      f"Painel ao vivo: aba 📉 Saving IA do Fênix.")
 
+          corpo=corpo+recarga_line
           msg=MIMEText(corpo,"plain","utf-8"); msg["Subject"]=assunto; msg["From"]=GU; msg["To"]=TO
           ctx=ssl.create_default_context()
           with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ctx) as s:
@@ -94,6 +106,7 @@ jobs:
                   wa=f"⚠️ Custo IA: recaída em {', '.join(recaida)}. Total {total}/dia (alvo ~6). Ver Fênix > Saving IA."
               else:
                   wa=f"✅ Custo IA ok: {total} deploys ontem (alvo ~6). Economia ~US${econ_sem:.0f}/sem. ({det})"
+              wa=wa+rec_wa
               u=("https://api.callmebot.com/whatsapp.php?phone="+urllib.parse.quote(ph)
                  +"&text="+urllib.parse.quote(wa)+"&apikey="+urllib.parse.quote(ak))
               try:
