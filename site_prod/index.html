@@ -152,19 +152,8 @@ body{font-family:'Inter',sans-serif;background:
 .stundo{color:var(--mut,#8aa)}
 .histundo{background:transparent;border:1px solid rgba(255,255,255,.25);color:var(--mut,#8aa);border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
 .histundo:hover{background:rgba(255,255,255,.1)}
-/* Login do colaborador (modal de baixa) */
-.oplogin{position:fixed;inset:0;background:rgba(4,10,22,.74);display:flex;align-items:center;justify-content:center;z-index:10000;padding:18px}
-.oplbox{background:#0c1626;border:1px solid rgba(255,255,255,.14);border-radius:16px;width:min(420px,94vw);padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-.oplbox h3{margin:0 0 14px;font-size:18px;color:#fff}
-.oplbox label{display:block;font-size:12px;color:var(--mut,#8aa);margin:10px 0 4px}
-.oplbox select,.oplbox input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:9px;padding:10px 12px;color:#fff;font-size:15px}
-.opmsg{min-height:18px;font-size:13px;color:#ffb3c0;margin:8px 0 2px}
-.opbtns{display:flex;gap:10px;margin-top:8px}
-.opb{flex:1;border-radius:9px;padding:11px;font-size:15px;font-weight:700;cursor:pointer;border:1px solid transparent}
-.opb.cancel{background:transparent;border-color:rgba(255,255,255,.22);color:var(--mut,#8aa)}
-.opb.ok{background:var(--cyan,#22d3ee);color:#04141a}
-.opreg{margin-top:12px;font-size:13px;color:var(--mut,#8aa);text-align:center}
-.oplink{background:transparent;border:0;color:var(--cyan,#22d3ee);cursor:pointer;font-size:13px;text-decoration:underline;padding:0}
+/* O modal de login da baixa REUSA o tema do sep.js (.oplogin/.oplbox/.opb/...) — não redefinir aqui
+   (antes eu redefinia com texto branco e o sep.js sobrescrevia o fundo p/ branco = invisível). */
 .desfazbtn{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:3px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
 .desfazbtn:hover{background:rgba(255,255,255,.06);color:var(--ink)}
 /* gate */
