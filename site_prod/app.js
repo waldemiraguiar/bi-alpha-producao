@@ -41,28 +41,104 @@ function onContentClick(ev){
   const xb=ev.target.closest('.exbaixabtn'); if(xb){exBaixar(xb.dataset);return;}
   const lb=ev.target.closest('.limpabtn'); if(lb){limparAtrasados();return;}
   const hb=ev.target.closest('.histbtn'); if(hb){openHistBaix();return;}}
-// --- baixa de EXAME na Produção (PIN admin) ---
-let __pin=null;
-async function pedePin(){
-  if(__pin) return __pin;
-  if(!(window.SUPA&&window.SUPA.ok)){alert('Sem conexão com o servidor — baixa de exame indisponível.');return null;}
-  const p=prompt('PIN admin para dar baixa no exame:'); if(!p) return null;
-  const ok=await window.SUPA.admincheck(p); if(!ok){alert('PIN inválido.');return null;}
-  __pin=p; return p;
+// --- LOGIN do colaborador p/ baixa de exame (mesma equipe da Triagem) ---
+let __op=null, __opTimer=null;            // {nome, senha, papel} — sessão na memória, desloga sozinho
+function opTouch(){ if(__opTimer)clearTimeout(__opTimer); __opTimer=setTimeout(()=>{__op=null;}, 15*60000); }
+async function pedeLogin(){
+  if(!(window.SUPA&&window.SUPA.ok)){alert('Sem conexão com o servidor — baixa indisponível.');return null;}
+  if(__op){ opTouch(); return __op; }
+  return new Promise(res=>openLoginBaixa(res));
+}
+async function openLoginBaixa(resolve){
+  let team=[]; try{ team=await window.SUPA.teamNames(); }catch(e){}
+  const done=v=>{ if(resolve){const r=resolve;resolve=null;r(v);} };
+  const old=document.querySelector('.oplogin'); if(old) old.remove();
+  const wrap=document.createElement('div'); wrap.className='oplogin';
+  const opts=team.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(u=>`<option value="${escA(u.nome)}">${esc(u.nome)}</option>`).join('');
+  wrap.innerHTML=`<div class="oplbox"><h3>👤 Quem está dando baixa?</h3>
+    <label>Colaborador</label><select id="opnome">${opts||'<option value="">(ninguém cadastrado)</option>'}</select>
+    <label>Senha</label><input id="oppin" type="password" autocomplete="off" placeholder="sua senha">
+    <div class="opmsg" id="opmsg"></div>
+    <div class="opbtns"><button class="opb cancel" id="opcancel">Cancelar</button><button class="opb ok" id="opgo">Entrar</button></div>
+    <div class="opreg">Primeiro acesso? <button class="oplink" id="opnew">Criar meu login</button> · <button class="oplink" id="opchg">Trocar senha</button></div></div>`;
+  document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.onclick=e=>{ if(e.target===wrap){close();done(null);} };
+  wrap.querySelector('#opcancel').onclick=()=>{close();done(null);};
+  wrap.querySelector('#opnew').onclick=()=>{ close(); openRegBaixa(done); };
+  wrap.querySelector('#opchg').onclick=()=>{ close(); openChgBaixa(done, team); };
+  const pin=wrap.querySelector('#oppin'); pin.focus();
+  const go=async()=>{ const nome=wrap.querySelector('#opnome').value, p=pin.value;
+    if(!nome||!p){pin.focus();return;}
+    wrap.querySelector('#opmsg').textContent='Conferindo…';
+    const r=await window.SUPA.login(nome,p);
+    if(r.ok){ __op={nome,senha:p,papel:r.papel}; opTouch(); close(); done(__op); }
+    else { wrap.querySelector('#opmsg').textContent='❌ Senha incorreta.'; pin.value=''; pin.focus(); } };
+  wrap.querySelector('#opgo').onclick=go; pin.onkeydown=e=>{ if(e.key==='Enter')go(); };
+}
+function openRegBaixa(done){
+  const wrap=document.createElement('div'); wrap.className='oplogin';
+  wrap.innerHTML=`<div class="oplbox"><h3>➕ Criar meu acesso</h3>
+    <label>Seu nome / iniciais (aparece no histórico)</label><input id="rgnome" autocomplete="off" placeholder="ex.: Ana, A. Silva">
+    <label>Seu time</label><select id="rgpapel"><option value="ambos">Separação + Recebidos</option><option value="separacao">Separação</option><option value="recebidos">Recebidos</option></select>
+    <label>Crie uma senha</label><input id="rgpin" type="password" autocomplete="new-password" placeholder="senha">
+    <label>Repita</label><input id="rgpin2" type="password" autocomplete="new-password" placeholder="confirme">
+    <div class="opmsg" id="rgmsg"></div>
+    <div class="opbtns"><button class="opb cancel" id="rgback">Voltar</button><button class="opb ok" id="rggo">Criar e entrar</button></div></div>`;
+  document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.onclick=e=>{ if(e.target===wrap){close(); if(done)done(null);} };
+  wrap.querySelector('#rgback').onclick=()=>{ close(); openLoginBaixa(done); };
+  wrap.querySelector('#rgnome').focus();
+  const go=async()=>{ const nome=wrap.querySelector('#rgnome').value.trim(), pp=wrap.querySelector('#rgpapel').value;
+    const p1=wrap.querySelector('#rgpin').value, p2=wrap.querySelector('#rgpin2').value, msg=wrap.querySelector('#rgmsg');
+    if(!nome||!p1){msg.textContent='Preencha nome e senha.';return;}
+    if(p1!==p2){msg.textContent='As senhas não conferem.';return;}
+    msg.textContent='Criando…';
+    try{ const r=await window.SUPA.register(nome,pp,p1);
+      if(r.ok){ __op={nome,senha:p1,papel:pp}; opTouch(); close(); if(done)done(__op); }
+      else msg.textContent='❌ '+(r.erro||'Não foi possível criar.'); }
+    catch(e){ msg.textContent='Erro de conexão.'; } };
+  wrap.querySelector('#rggo').onclick=go; wrap.querySelector('#rgpin2').onkeydown=e=>{ if(e.key==='Enter')go(); };
+}
+function openChgBaixa(done, team){
+  const wrap=document.createElement('div'); wrap.className='oplogin';
+  const opts=(team||[]).slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(u=>`<option value="${escA(u.nome)}">${esc(u.nome)}</option>`).join('');
+  wrap.innerHTML=`<div class="oplbox"><h3>🔑 Trocar minha senha</h3>
+    <label>Colaborador</label><select id="cgnome">${opts}</select>
+    <label>Senha atual</label><input id="cgold" type="password" autocomplete="off" placeholder="senha de agora">
+    <label>Nova senha</label><input id="cgnew" type="password" autocomplete="new-password" placeholder="nova">
+    <label>Repita</label><input id="cgnew2" type="password" autocomplete="new-password" placeholder="confirme">
+    <div class="opmsg" id="cgmsg"></div>
+    <div class="opbtns"><button class="opb cancel" id="cgback">Voltar</button><button class="opb ok" id="cggo">Salvar</button></div>
+    <div class="opreg" style="font-size:12px">Esqueceu e não sabe a atual? Peça ao Wal resetar (👥 Equipe na Triagem).</div></div>`;
+  document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.onclick=e=>{ if(e.target===wrap){close(); if(done)done(null);} };
+  wrap.querySelector('#cgback').onclick=()=>{ close(); openLoginBaixa(done); };
+  const go=async()=>{ const nome=wrap.querySelector('#cgnome').value, o=wrap.querySelector('#cgold').value, n1=wrap.querySelector('#cgnew').value, n2=wrap.querySelector('#cgnew2').value, msg=wrap.querySelector('#cgmsg');
+    if(!o||!n1){msg.textContent='Preencha as senhas.';return;}
+    if(n1!==n2){msg.textContent='A nova senha não confere.';return;}
+    msg.textContent='Salvando…';
+    try{ const r=await window.SUPA.changePin(nome,o,n1);
+      if(r.ok){ close(); alert('Senha trocada! Entre com a nova.'); openLoginBaixa(done); }
+      else msg.textContent='❌ '+(r.erro||'Não foi possível.'); }
+    catch(e){ msg.textContent='Erro de conexão.'; } };
+  wrap.querySelector('#cggo').onclick=go; wrap.querySelector('#cgnew2').onkeydown=e=>{ if(e.key==='Enter')go(); };
 }
 async function exBaixar(d){
   if(!confirm(`Dar baixa no EXAME?\n\n#${d.reg} · ${d.pac}\n${d.exm}\n\nSai da Produção (não depende do HF). Dá pra desfazer.`))return;
-  const pin=await pedePin(); if(!pin) return;
-  try{ await window.SUPA.prodBaixar([{chave:d.reg+'|'+d.exm,registro:d.reg,exame:d.exm,paciente:d.pac,cat:d.cat,atrasado:d.atr==='1'}],pin);
+  const op=await pedeLogin(); if(!op) return;
+  try{ await window.SUPA.prodBaixar([{chave:d.reg+'|'+d.exm,registro:d.reg,exame:d.exm,paciente:d.pac,cat:d.cat,atrasado:d.atr==='1'}],op.nome,op.senha);
     await loadManual(); renderActive(); }
-  catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); }
+  catch(e){ if(/login|senha/i.test(e.message||''))__op=null; alert('Não foi possível: '+(e.message||e)); }
 }
 async function limparAtrasados(){
   const alvo=window.__limparAlvo||[]; if(!alvo.length){alert('Nenhum atrasado nesta aba.');return;}
   if(!confirm(`Limpar ${alvo.length} atrasado(s) desta aba?\n\nTodos saem da Produção (dá pra desfazer).`))return;
-  const pin=await pedePin(); if(!pin) return;
-  try{ await window.SUPA.prodBaixar(alvo,pin); await loadManual(); renderActive(); }
-  catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); }
+  const op=await pedeLogin(); if(!op) return;
+  try{ await window.SUPA.prodBaixar(alvo,op.nome,op.senha); await loadManual(); renderActive(); }
+  catch(e){ if(/login|senha/i.test(e.message||''))__op=null; alert('Não foi possível: '+(e.message||e)); }
 }
 // --- HISTÓRICO de exames baixados (datado, por período) ---
 function _brtDate(ts){return new Date(new Date(ts).getTime()-3*3600e3);}
@@ -100,11 +176,11 @@ function openHistBaix(){
     if(ev.target.closest('.histclose')||ev.target===el){el.remove();return;}
     const u=ev.target.closest('.histundo'); if(u){const ch=u.dataset.chave;
       if(!confirm('Desfazer esta baixa? O exame volta pra fila (continua no histórico como desfeito).'))return;
-      const pin=await pedePin(); if(!pin)return;
-      try{ await window.SUPA.prodUnbaixar([ch],pin);
+      const op=await pedeLogin(); if(!op)return;
+      try{ await window.SUPA.prodUnbaixar([ch],op.nome,op.senha);
         prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(x=>!x.desfeito).map(x=>String(x.chave)));
         renderActive(); render(); }
-      catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); } return; }
+      catch(e){ if(/login|senha/i.test(e.message||''))__op=null; alert('Não foi possível: '+(e.message||e)); } return; }
   });
   el.addEventListener('input',ev=>{ if(ev.target.classList.contains('histq')){q=ev.target.value; render(); const i=el.querySelector('.histq'); if(i){i.focus();i.setSelectionRange(q.length,q.length);} }});
   render();
@@ -340,7 +416,7 @@ function renderActive(){
       <div class="card"><h3><span>${special?K.work:'Amostras em processo'} <span class="tag">${special?'categoria · ':''}nº registro · paciente</span></span><input id="wlsearch" class="wlsearch" placeholder="🔍 buscar nº registro / paciente" value="${escA(searchTerm)}"></h3>
         <div class="exleg">
           <span class="lg"><b style="color:var(--amber,#f0a020)">baixa na urgência</b> = tira só do alerta 🔴 (o exame continua)</span>
-          <span class="lg"><b style="color:var(--cyan,#22d3ee)">✓ no exame</b> = tira o exame da Produção · não depende do HF · pede PIN</span>
+          <span class="lg"><b style="color:var(--cyan,#22d3ee)">✓ no exame</b> = tira o exame da Produção · não depende do HF · pede seu login</span>
           ${atrasAlvo.length?`<button class="limpabtn">🧹 Limpar atrasados (${atrasAlvo.length})</button>`:''}
           <button class="histbtn">🗂 Histórico baixados${prodBaixaInfo.length?` (${prodBaixaInfo.length})`:''}</button>
         </div>
