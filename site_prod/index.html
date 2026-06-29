@@ -131,8 +131,27 @@ body{font-family:'Inter',sans-serif;background:
 .exleg .lg{opacity:.92}
 .limpabtn{background:rgba(255,84,112,.16);border:1px solid var(--red,#ff5470);color:#ffb3c0;border-radius:7px;padding:4px 11px;font-size:12px;font-weight:700;cursor:pointer;margin-left:auto}
 .limpabtn:hover{background:rgba(255,84,112,.30)}
-.undobtn{background:transparent;border:1px solid rgba(255,255,255,.22);color:var(--mut,#8aa);border-radius:7px;padding:4px 11px;font-size:12px;cursor:pointer}
-.undobtn:hover{background:rgba(255,255,255,.08)}
+.undobtn,.histbtn{background:transparent;border:1px solid rgba(255,255,255,.22);color:var(--mut,#8aa);border-radius:7px;padding:4px 11px;font-size:12px;cursor:pointer}
+.undobtn:hover,.histbtn:hover{background:rgba(255,255,255,.08)}
+/* Histórico de exames baixados (modal) */
+.histmodal{position:fixed;inset:0;background:rgba(4,10,22,.74);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px}
+.histcard{background:#0c1626;border:1px solid rgba(255,255,255,.12);border-radius:16px;width:min(960px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.histhd{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.1);font-size:16px}
+.histclose{background:transparent;border:0;color:var(--mut,#8aa);font-size:20px;cursor:pointer;line-height:1}
+.histbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.06)}
+.hper{background:transparent;border:1px solid rgba(255,255,255,.2);color:var(--mut,#8aa);border-radius:20px;padding:5px 14px;font-size:13px;cursor:pointer}
+.hper.on{background:var(--cyan,#22d3ee);border-color:var(--cyan,#22d3ee);color:#04141a;font-weight:700}
+.histq{flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:7px 12px;color:#fff;font-size:13px}
+.histcnt{font-size:12px;color:var(--mut,#8aa)}
+.histscroll{overflow:auto;padding:6px 8px}
+.histtbl{width:100%;border-collapse:collapse;font-size:13px}
+.histtbl th{position:sticky;top:0;background:#0c1626;text-align:left;padding:8px 10px;color:var(--mut,#8aa);font-size:11px;border-bottom:1px solid rgba(255,255,255,.1)}
+.histtbl td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);white-space:nowrap}
+.histtbl tr.undone{opacity:.5}
+.stok{color:var(--cyan,#22d3ee);font-weight:700}
+.stundo{color:var(--mut,#8aa)}
+.histundo{background:transparent;border:1px solid rgba(255,255,255,.25);color:var(--mut,#8aa);border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
+.histundo:hover{background:rgba(255,255,255,.1)}
 .desfazbtn{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:3px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
 .desfazbtn:hover{background:rgba(255,255,255,.06);color:var(--ink)}
 /* gate */

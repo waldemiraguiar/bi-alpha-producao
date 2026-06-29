@@ -12,7 +12,7 @@ let prodBaixados=new Set(), prodBaixaInfo=[];
 const exChave=e=>String(e.registro)+'|'+(e.exame||'');
 const exBaixado=e=>prodBaixados.has(exChave(e));
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.map(b=>String(b.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -40,7 +40,7 @@ function onContentClick(ev){
   const d=ev.target.closest('.desfazbtn'); if(d){post({tipo:'baixa',registro:d.dataset.reg,acao:'remove'},'Não foi possível desfazer.');return;}
   const xb=ev.target.closest('.exbaixabtn'); if(xb){exBaixar(xb.dataset);return;}
   const lb=ev.target.closest('.limpabtn'); if(lb){limparAtrasados();return;}
-  const ub=ev.target.closest('.undobtn'); if(ub){undoBaixas();return;}}
+  const hb=ev.target.closest('.histbtn'); if(hb){openHistBaix();return;}}
 // --- baixa de EXAME na Produção (PIN admin) ---
 let __pin=null;
 async function pedePin(){
@@ -64,14 +64,50 @@ async function limparAtrasados(){
   try{ await window.SUPA.prodBaixar(alvo,pin); await loadManual(); renderActive(); }
   catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); }
 }
-async function undoBaixas(){
-  const cat=window.__curCat||''; const info=(prodBaixaInfo||[]).filter(b=>!cat||b.cat===cat);
-  if(!info.length){alert('Nada baixado nesta aba.');return;}
-  const lista=info.slice(-25).map(b=>`#${b.registro} · ${b.exame}`).join('\n');
-  if(!confirm(`Desfazer ${info.length} baixa(s)${cat?' de '+cat:''}? Os exames VOLTAM pra fila.\n\n${lista}`))return;
-  const pin=await pedePin(); if(!pin) return;
-  try{ await window.SUPA.prodUnbaixar(info.map(b=>b.chave),pin); await loadManual(); renderActive(); }
-  catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); }
+// --- HISTÓRICO de exames baixados (datado, por período) ---
+function _brtDate(ts){return new Date(new Date(ts).getTime()-3*3600e3);}
+function inPeriod(ts,p){
+  if(p==='tudo') return true; if(!ts) return false;
+  const t=new Date(ts).getTime(), now=Date.now(), bn=_brtDate(now), bt=_brtDate(t);
+  if(p==='hoje') return bt.toISOString().slice(0,10)===bn.toISOString().slice(0,10);
+  if(p==='semana') return t>=now-7*864e5;
+  if(p==='mes') return bt.getUTCFullYear()===bn.getUTCFullYear()&&bt.getUTCMonth()===bn.getUTCMonth();
+  if(p==='ano') return bt.getUTCFullYear()===bn.getUTCFullYear();
+  return true;
+}
+function _fmtDT(ts){if(!ts)return'—';const d=_brtDate(ts).toISOString();return d.slice(8,10)+'/'+d.slice(5,7)+' '+d.slice(11,16);}
+function openHistBaix(){
+  let el=document.getElementById('histmodal'); if(el) el.remove();
+  el=document.createElement('div'); el.id='histmodal'; el.className='histmodal'; document.body.appendChild(el);
+  let period='hoje', q='';
+  function render(){
+    const all=(prodBaixaInfo||[]).slice().sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
+    const qq=q.trim().toLowerCase();
+    const rows=all.filter(b=>inPeriod(b.ts,period)).filter(b=>!qq||(String(b.registro)+' '+String(b.exame)+' '+String(b.paciente)+' '+String(b.cat)).toLowerCase().includes(qq));
+    const ativos=rows.filter(b=>!b.desfeito).length;
+    const per=(k,l)=>`<button class="hper ${period===k?'on':''}" data-per="${k}">${l}</button>`;
+    el.innerHTML=`<div class="histcard">
+      <div class="histhd"><b>🗂 Histórico de exames baixados</b><button class="histclose" data-act="close">✕</button></div>
+      <div class="histbar">${per('hoje','Hoje')}${per('semana','Semana')}${per('mes','Mês')}${per('ano','Ano')}${per('tudo','Tudo')}
+        <input class="histq" placeholder="🔍 buscar registro / paciente / exame" value="${escA(q)}">
+        <span class="histcnt">${rows.length} no período · ${ativos} ativos</span></div>
+      <div class="histscroll"><table class="histtbl"><thead><tr><th>Quando</th><th>#Reg</th><th>Exame</th><th>Paciente</th><th>Categoria</th><th>Por</th><th>Status</th><th></th></tr></thead><tbody>
+      ${rows.map(b=>`<tr class="${b.desfeito?'undone':''}"><td>${_fmtDT(b.ts)}</td><td>#${esc(b.registro)}</td><td>${esc(b.exame)}</td><td>${esc(b.paciente||'—')}</td><td>${esc(b.cat||'—')}</td><td>${esc(b.por||'—')}</td><td>${b.desfeito?`<span class="stundo">↩ desfeito ${_fmtDT(b.ts_undo)}</span>`:'<span class="stok">baixado</span>'}</td><td>${b.desfeito?'':`<button class="histundo" data-chave="${escA(b.chave)}">↩ desfazer</button>`}</td></tr>`).join('')||'<tr><td colspan="8" style="padding:16px;color:var(--mut)">Nada no período.</td></tr>'}
+      </tbody></table></div></div>`;
+  }
+  el.addEventListener('click',async ev=>{
+    const p=ev.target.closest('.hper'); if(p){period=p.dataset.per;render();return;}
+    if(ev.target.closest('.histclose')||ev.target===el){el.remove();return;}
+    const u=ev.target.closest('.histundo'); if(u){const ch=u.dataset.chave;
+      if(!confirm('Desfazer esta baixa? O exame volta pra fila (continua no histórico como desfeito).'))return;
+      const pin=await pedePin(); if(!pin)return;
+      try{ await window.SUPA.prodUnbaixar([ch],pin);
+        prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(x=>!x.desfeito).map(x=>String(x.chave)));
+        renderActive(); render(); }
+      catch(e){ if(/pin/i.test(e.message||''))__pin=null; alert('Não foi possível: '+(e.message||e)); } return; }
+  });
+  el.addEventListener('input',ev=>{ if(ev.target.classList.contains('histq')){q=ev.target.value; render(); const i=el.querySelector('.histq'); if(i){i.focus();i.setSelectionRange(q.length,q.length);} }});
+  render();
 }
 const escA=s=>esc(s).replace(/"/g,'&quot;');
 const isPetlove=s=>/pet\s*love/i.test(String(s||''));
@@ -306,7 +342,7 @@ function renderActive(){
           <span class="lg"><b style="color:var(--amber,#f0a020)">baixa na urgência</b> = tira só do alerta 🔴 (o exame continua)</span>
           <span class="lg"><b style="color:var(--cyan,#22d3ee)">✓ no exame</b> = tira o exame da Produção · não depende do HF · pede PIN</span>
           ${atrasAlvo.length?`<button class="limpabtn">🧹 Limpar atrasados (${atrasAlvo.length})</button>`:''}
-          ${prodBaixados.size?`<button class="undobtn">↩ baixados (${prodBaixados.size})</button>`:''}
+          <button class="histbtn">🗂 Histórico baixados${prodBaixaInfo.length?` (${prodBaixaInfo.length})`:''}</button>
         </div>
         <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>

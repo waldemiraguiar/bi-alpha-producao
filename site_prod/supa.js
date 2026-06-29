@@ -17,7 +17,7 @@
     // ---- baixa de EXAME na Produção (PIN admin) ----
     async loadProd() { if (!SB) return []; try { const r = await SB.from('prod_baixas').select('*'); return arr(r); } catch (e) { return []; } },
     async prodBaixar(itens, pin, por) { const { error } = await SB.rpc('prod_baixar', { p_itens: itens, p_pin: pin, p_por: por || 'equipe' }); if (error) throw new Error(error.message || 'PIN'); },
-    async prodUnbaixar(chaves, pin) { const { error } = await SB.rpc('prod_unbaixar', { p_chaves: chaves, p_pin: pin }); if (error) throw new Error(error.message || 'PIN'); },
+    async prodUnbaixar(chaves, pin, por) { const { error } = await SB.rpc('prod_unbaixar', { p_chaves: chaves, p_pin: pin, p_por: por || 'admin' }); if (error) throw new Error(error.message || 'PIN'); },
     // ---- escrita: clientes ----
     upsertFlag(row) { return SB.from('cli_flags').upsert(row); },
     delFlag(cod) { return SB.from('cli_flags').delete().eq('cod', String(cod)); },
