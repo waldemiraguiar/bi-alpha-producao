@@ -214,16 +214,27 @@ function pistaMic(btn, ta){
   PREC.onend=stop; PREC.onerror=stop;
   try{ PREC.start(); precOn=true; btn.classList.add("rec"); btn.innerHTML="⏹ Parar — gravando…"; }catch(e){ stop(); }
 }
+let pistaView="feed";   // "feed" | "retornos"
+function pistaRetornos(){ // último feedback COM retorno por cliente (a "bola de neve" de revisitas)
+  const byCli={};
+  PISTA.filter(f=>f.proximo).forEach(f=>{ const k=(f.cliente||f.id).trim().toLowerCase(); if(!byCli[k]||(f.ts||0)>(byCli[k].ts||0)) byCli[k]=f; });
+  return Object.values(byCli).sort((a,b)=>a.proximo<b.proximo?-1:(a.proximo>b.proximo?1:0));
+}
+function fmtDataBR(iso){ try{ const d=new Date(iso+"T00:00:00"); const dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; const p=n=>String(n).padStart(2,'0'); return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)}`; }catch(e){ return iso; } }
 let F_ID=null, F_RES="visita";
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
   F_ID=id||null; F_RES=f?f.resultado:"visita";
+  const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
   document.getElementById("modalBody").innerHTML=`
     <div class="m-head"><div><div class="m-cli">${f?"✏️ Editar feedback":"🎤 Novo feedback da pista"}</div>
       <div class="t-mut" style="font-size:13px;margin-top:2px">${f?("registrado "+esc(diasAtras(f.ts))+" · "+esc(f.por)):"fale ou digite — salva com data e hora"}</div></div>
       <button class="m-x" id="mClose">✕</button></div>
     <div class="m-lbl">Cliente / clínica visitada</div>
     <input id="fCli" class="m-date" style="width:100%" placeholder="Nome do cliente" value="${f?esc(f.cliente):""}">
+    <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— obrigatório (monta a rota das revisitas)</span></div>
+    <input id="fBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca, Copacabana…" list="bairrosDL" value="${f?esc(f.bairro||""):""}">
+    <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
     <div class="m-lbl">Feedback quente <span class="t-mut" style="font-weight:500">— ${speechOK()?"toque 🎤 e fale, ou digite":"digite (voz indisponível neste aparelho)"}</span></div>
     <div style="display:flex;gap:8px;align-items:stretch">
       <button class="micbtn" id="fMic" type="button">🎤 Falar</button>
@@ -241,10 +252,11 @@ function openPistaRec(id){
   document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
   document.getElementById("fSave").onclick=async()=>{
     try{PREC&&PREC.stop();}catch(e){}
-    const cli=document.getElementById("fCli").value.trim(), texto=ta.value.trim();
+    const cli=document.getElementById("fCli").value.trim(), texto=ta.value.trim(), bairro=document.getElementById("fBairro").value.trim();
     if(!cli && !texto){ alert("Diga ao menos o cliente ou o feedback."); return; }
+    if(!bairro){ alert("Informe o BAIRRO — é obrigatório (é o que monta a rota das revisitas)."); document.getElementById("fBairro").focus(); return; }
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
-    const ok=await savePista({id:F_ID, cliente:cli, texto, resultado:F_RES, proximo:document.getElementById("fProx").value});
+    const ok=await savePista({id:F_ID, cliente:cli, bairro, texto, resultado:F_RES, proximo:document.getElementById("fProx").value});
     if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>{ if(confirm("Remover este feedback?")) removePista(F_ID); };
 }
@@ -976,7 +988,43 @@ function renderTab(){
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span></div>
       </div>`; });
-    c.innerHTML=`
+    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button></div>`;
+    const wirePista=()=>{
+      document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
+      document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
+      const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
+    };
+
+    if(pistaView==="retornos"){
+      const ret=pistaRetornos();
+      const today=new Date(); today.setHours(0,0,0,0); const tISO=today.toISOString().slice(0,10);
+      const semFimISO=new Date(today.getTime()+7*864e5).toISOString().slice(0,10);
+      const atras=ret.filter(f=>f.proximo<tISO).length, semana=ret.filter(f=>f.proximo>=tISO&&f.proximo<=semFimISO).length;
+      const bc={}; ret.forEach(f=>{const b=f.bairro||"(sem bairro)"; bc[b]=(bc[b]||0)+1;});
+      const byDate={}; ret.forEach(f=>{ (byDate[f.proximo]=byDate[f.proximo]||[]).push(f); });
+      const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">↻</div>
+        <div><div class="nm">${esc(f.cliente||"(sem nome)")}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div><div class="rcell"></div></div>`;
+      const agenda=Object.keys(byDate).sort().map(d=>{ const items=byDate[d], bgrp={}; items.forEach(f=>{const b=f.bairro||"(sem bairro)"; (bgrp[b]=bgrp[b]||[]).push(f);});
+        const nb=Object.keys(bgrp).length, late=d<tISO;
+        const head=`<div class="retday-h">📅 <b>${fmtDataBR(d)}</b>${late?' <span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">atrasado</span>':''} <span class="t-mut">· ${items.length} cliente(s)</span>${nb>1?` <span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266">⚠️ ${nb} bairros — confira a rota</span>`:''}</div>`;
+        const blocks=Object.entries(bgrp).sort((a,b)=>b[1].length-a[1].length).map(([b,fs])=>`<div class="retbairro">📍 ${esc(b)} <span class="t-mut">(${fs.length})</span></div>`+fs.map(linha).join("")).join("");
+        return `<div class="card" style="margin-bottom:12px">${head}${blocks}</div>`; }).join("");
+      const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
+      c.innerHTML=`${toggle}
+        <div class="kgrid">
+          ${kpi("r", atras, "Atrasados", "passaram da data")}
+          ${kpi("a", semana, "Esta semana", "próximos 7 dias")}
+          ${kpi("", ret.length, "Retornos", "pendentes")}
+          ${kpi("", Object.keys(bc).length, "Bairros", "regiões a cobrir")}
+        </div>
+        ${ret.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
+        <div class="seclabel">📅 Agenda de retornos · por dia <span class="t-mut" style="font-weight:500">— ⚠️ avisa quando o dia mistura bairros (rota inviável)</span></div>
+        ${ret.length? agenda : `<div class="empty">Sem retornos agendados ainda. Em cada feedback, preencha <b>Próximo passo (retorno)</b> + bairro — eles se organizam aqui em agenda e por bairro.</div>`}`;
+      wirePista();
+      return;
+    }
+
+    c.innerHTML=`${toggle}
       <button class="bigmic" id="pistaRec">🎤 Gravar feedback da visita</button>
       <div class="kgrid">
         ${kpi("g", hoje, "Hoje", "feedbacks de hoje")}
@@ -989,8 +1037,7 @@ function renderTab(){
         <input class="wlsearch" id="lupaPista" placeholder="🔍 cliente, texto ou resultado…" value="${esc(search)}">
       </div>
       ${all.length ? (arr.length? body : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`) : `<div class="empty">Nenhum feedback ainda. Toque <b>🎤 Gravar feedback</b> ao sair do cliente — fala 20s e pronto.</div>`}`;
-    document.getElementById("pistaRec").onclick=()=>openPistaRec(null);
-    document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
+    wirePista();
     const lp=document.getElementById("lupaPista");
     if(lp){ lp.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const p=lp.selectionStart; renderTab(); const l2=document.getElementById("lupaPista"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
     return;
