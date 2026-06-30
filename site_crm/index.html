@@ -178,6 +178,11 @@
   .classhead{display:flex;align-items:center;gap:8px;margin:10px 0 5px 2px;font-size:13px;font-weight:700}
   .complist{display:flex;flex-wrap:wrap;gap:8px}
   .comp-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid #888;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;background:rgba(255,255,255,.03)}
+  .bigmic{width:100%;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#06121f;font-weight:800;font-size:18px;border:none;border-radius:14px;padding:18px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(0,212,255,.25);margin-bottom:14px}
+  .bigmic:active{transform:scale(.99)}
+  .micbtn{flex:0 0 96px;background:rgba(0,212,255,.12);border:1px solid var(--cyan);color:var(--cyan);font-weight:800;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit;padding:8px}
+  .micbtn.rec{background:rgba(255,84,112,.18);border-color:var(--red);color:#ffb3c0;animation:micpulse 1s ease-in-out infinite}
+  @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,84,112,.5)}50%{box-shadow:0 0 0 8px rgba(255,84,112,0)}}
   .legenda{display:flex;flex-direction:column;gap:7px}
   .leg-row{display:flex;align-items:center;gap:8px;font-size:13.5px}
   .leg-dot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}

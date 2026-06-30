@@ -25,6 +25,7 @@ const TABS = [
   {k:"novos_esfriando", ic:"🌱", nm:"Onboarding",      cls:"",         bcls:""},
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
+  {k:"pista",           ic:"🏍️", nm:"Pista",           cls:"",         bcls:""},
   {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
@@ -182,6 +183,70 @@ function openProsp(id){
     const btn=document.getElementById("pSave"); btn.disabled=true; btn.textContent="Salvando…";
     const ok=await saveProsp(np); if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar prospect"; } };
   document.getElementById("pDel").onclick=()=>{ if(confirm("Remover este prospect?")) removeProsp(P_ID); };
+}
+
+/* ---------- PISTA (feedback do comercial de rua — voz→texto, editável) ---------- */
+const PISTA_API="/api/crm-pista";
+let PISTA=[];
+const PRES={interesse:{lbl:"Interesse",ic:"😍",col:"#00E5A0"},orcamento:{lbl:"Pediu orçamento",ic:"📄",col:"#00D4FF"},
+  fechou:{lbl:"Fechou",ic:"✅",col:"#00E5A0"},objecao:{lbl:"Objeção",ic:"🛑",col:"#FFB020"},
+  sem_interesse:{lbl:"Sem interesse",ic:"❌",col:"#FF5470"},visita:{lbl:"Visita registrada",ic:"📍",col:"#8aa2bd"}};
+const PRORDER=["interesse","orcamento","fechou","objecao","sem_interesse","visita"];
+function syncPista(arr){ PISTA=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+async function loadPista(){ try{ const r=await fetch(PISTA_API); if(r.ok) syncPista((await r.json()).pista); }catch(e){} }
+async function savePista(it){ const por=quem(); if(por===null) return false; if(!it.por) it.por=por;
+  try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:it,senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); return false; }
+    if(r.ok){ syncPista((await r.json()).pista); return true; } }catch(e){ alert("Falha ao salvar feedback."); } return false; }
+async function removePista(id){ try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPista((await r.json()).pista); closeModal(); renderTab(); } }catch(e){} }
+
+/* ---- ditado por voz (grátis, no aparelho — Web Speech API) ---- */
+let PREC=null, precOn=false;
+function speechOK(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function pistaMic(btn, ta){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alert("Este celular não transcreve voz (comum no iPhone). Pode DIGITAR o feedback normalmente."); return; }
+  if(precOn){ try{PREC&&PREC.stop();}catch(e){} return; }
+  PREC=new SR(); PREC.lang="pt-BR"; PREC.continuous=true; PREC.interimResults=true;
+  let base=ta.value?ta.value.trim()+" ":"";
+  PREC.onresult=e=>{ let fin="",intr=""; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t+" "; else intr+=t; } if(fin) base+=fin; ta.value=base+intr; };
+  const stop=()=>{ precOn=false; btn.classList.remove("rec"); btn.innerHTML="🎤 Falar"; };
+  PREC.onend=stop; PREC.onerror=stop;
+  try{ PREC.start(); precOn=true; btn.classList.add("rec"); btn.innerHTML="⏹ Parar — gravando…"; }catch(e){ stop(); }
+}
+let F_ID=null, F_RES="visita";
+function openPistaRec(id){
+  const f=id?PISTA.find(x=>x.id===id):null;
+  F_ID=id||null; F_RES=f?f.resultado:"visita";
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div><div class="m-cli">${f?"✏️ Editar feedback":"🎤 Novo feedback da pista"}</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">${f?("registrado "+esc(diasAtras(f.ts))+" · "+esc(f.por)):"fale ou digite — salva com data e hora"}</div></div>
+      <button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">Cliente / clínica visitada</div>
+    <input id="fCli" class="m-date" style="width:100%" placeholder="Nome do cliente" value="${f?esc(f.cliente):""}">
+    <div class="m-lbl">Feedback quente <span class="t-mut" style="font-weight:500">— ${speechOK()?"toque 🎤 e fale, ou digite":"digite (voz indisponível neste aparelho)"}</span></div>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="micbtn" id="fMic" type="button">🎤 Falar</button>
+      <textarea id="fTexto" class="m-ta" style="flex:1;min-height:90px;margin:0" placeholder="O que rolou na visita? Interesse, objeção, próximo passo…">${f?esc(f.texto):""}</textarea>
+    </div>
+    <div class="m-sec">Resultado</div>
+    <div class="m-opts" id="fRes">${PRORDER.map(k=>`<button class="opt pst-${k}${k===F_RES?" on":""}" data-r="${k}">${PRES[k].ic} ${PRES[k].lbl}</button>`).join("")}</div>
+    <div class="m-lbl">Próximo passo (retorno) · opcional</div><input id="fProx" type="date" class="m-date" value="${f?esc(f.proximo||""):""}">
+    <button class="m-save" id="fSave">${f?"Salvar alterações":"Salvar feedback"}</button>
+    ${f?`<button class="m-enc" id="fDel" style="border-color:var(--mut);color:var(--mut)">Remover feedback</button>`:""}`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  const ta=document.getElementById("fTexto");
+  document.getElementById("fMic").onclick=function(){ pistaMic(this, ta); };
+  document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
+  document.getElementById("fSave").onclick=async()=>{
+    try{PREC&&PREC.stop();}catch(e){}
+    const cli=document.getElementById("fCli").value.trim(), texto=ta.value.trim();
+    if(!cli && !texto){ alert("Diga ao menos o cliente ou o feedback."); return; }
+    const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
+    const ok=await savePista({id:F_ID, cliente:cli, texto, resultado:F_RES, proximo:document.getElementById("fProx").value});
+    if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
+  const del=document.getElementById("fDel"); if(del) del.onclick=()=>{ if(confirm("Remover este feedback?")) removePista(F_ID); };
 }
 
 /* ---------- histórico semanal do radar (snapshots) ---------- */
@@ -894,6 +959,43 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="pista"){
+    const q=search.trim().toLowerCase(), all=PISTA;
+    const arr= q ? all.filter(f=>(f.cliente||"").toLowerCase().includes(q)||(f.texto||"").toLowerCase().includes(q)||((PRES[f.resultado]||{}).lbl||"").toLowerCase().includes(q)) : all;
+    const now=Date.now(), d0=new Date(); d0.setHours(0,0,0,0);
+    const hoje=all.filter(f=>f.ts>=d0.getTime()).length, sem=all.filter(f=>f.ts>=now-7*864e5).length, fechou=all.filter(f=>f.resultado==="fechou").length;
+    const fmt=ts=>{const d=new Date(ts);const dd=['dom','seg','ter','qua','qui','sex','sáb'][d.getDay()];const p=n=>String(n).padStart(2,'0');return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)} · ${p(d.getHours())}:${p(d.getMinutes())}`;};
+    let body="",curM=null;
+    arr.forEach(f=>{ const d=new Date(f.ts), mk=d.getFullYear()*100+(d.getMonth()+1), pr=PRES[f.resultado]||PRES.visita;
+      if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
+      body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">
+        <div class="rk" style="color:${pr.col}">${pr.ic}</div>
+        <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?" · editado":""}</span></div>
+          ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
+          ${f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:""}</div>
+        <div class="mid"></div>
+        <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span></div>
+      </div>`; });
+    c.innerHTML=`
+      <button class="bigmic" id="pistaRec">🎤 Gravar feedback da visita</button>
+      <div class="kgrid">
+        ${kpi("g", hoje, "Hoje", "feedbacks de hoje")}
+        ${kpi("", sem, "Na semana", "últimos 7 dias")}
+        ${kpi("g", fechou, "Fecharam", "resultado = fechou")}
+        ${kpi("", all.length, "Total", "permanente")}
+      </div>
+      <div class="tabsbar" style="margin:16px 0 8px">
+        <div class="seclabel" style="margin:0">🏍️ Feedbacks da pista · por mês e ano <span class="t-mut" style="font-weight:500">— toque p/ editar</span></div>
+        <input class="wlsearch" id="lupaPista" placeholder="🔍 cliente, texto ou resultado…" value="${esc(search)}">
+      </div>
+      ${all.length ? (arr.length? body : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`) : `<div class="empty">Nenhum feedback ainda. Toque <b>🎤 Gravar feedback</b> ao sair do cliente — fala 20s e pronto.</div>`}`;
+    document.getElementById("pistaRec").onclick=()=>openPistaRec(null);
+    document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
+    const lp=document.getElementById("lupaPista");
+    if(lp){ lp.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const p=lp.selectionStart; renderTab(); const l2=document.getElementById("lupaPista"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
+    return;
+  }
+
   if(ACTIVE==="carteira"){
     const all = flt(act(D.carteira||[]));
     const q = search.trim().toLowerCase();
@@ -924,6 +1026,7 @@ function renderTabs(){
             : tb.k==="reativados" ? new Set(reativadosEvents().map(e=>e.cod)).size
             : tb.k==="sensiveis" ? SENS.length
             : tb.k==="prospeccao" ? PROSP.length
+            : tb.k==="pista" ? PISTA.length
             : (Array.isArray(D[tb.k]) ? act(D[tb.k]).length : (r[tb.k] || 0));
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
@@ -995,9 +1098,9 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp()]).then(()=>renderAll());
-    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length;
-      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp()]);
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista()]).then(()=>renderAll());
+    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length;
+      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista()]);
       if(a!==sig()) renderTab(); }, 45000);
   }
 }
