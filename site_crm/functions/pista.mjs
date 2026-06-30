@@ -34,6 +34,7 @@ export default async (req) => {
       const clean = {
         id: it.id || ("f" + Date.now()),
         cliente: String(it.cliente || "").slice(0, 120),
+        bairro: String(it.bairro || "").slice(0, 80),
         cod: it.cod ? String(it.cod).slice(0, 30) : "",
         texto: String(it.texto || "").slice(0, 2000),
         resultado: RES.includes(it.resultado) ? it.resultado : "visita",
