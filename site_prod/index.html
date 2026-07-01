@@ -220,7 +220,10 @@ body{font-family:'Inter',sans-serif;background:
 .septab.avisopulse{animation:avisotabpulse .5s ease-in-out infinite}
 @keyframes avisotabpulse{0%,100%{background:rgba(249,115,22,.28);box-shadow:0 0 0 0 rgba(249,115,22,.7)}50%{background:rgba(249,115,22,.55);box-shadow:0 0 0 7px rgba(249,115,22,0)}}
 .septab.avisopulse .tn,.septab.avisopulse{color:#f97316!important}
-.septab.aviso.on{border-color:#f97316;color:#f97316}.septab.aviso .c{background:#f97316;color:#fff}
+.septab.aviso{border-color:#f97316}.septab.aviso.on{border-color:#f97316;color:#f97316}.septab.aviso .c{background:#f97316;color:#fff}
+/* fogos dentro da ABA (Triagem e Produção) — sempre animando, chama atenção mesmo em 0 */
+.septab.aviso .fwt,.tab.avisotab .fwt{display:inline-block;line-height:1;animation:fwpop .6s ease-in-out infinite;filter:drop-shadow(0 0 5px rgba(249,115,22,.85))}
+.tab.avisotab .fwt:last-child,.septab.aviso .fwt:last-child{animation-delay:.3s}
 /* espelho "Avisar cliente" na PRODUÇÃO (app.js) — aba + banner laranja */
 .urgbanner.aviso{animation:flashorange .4s steps(1,end) infinite}
 .tab.avisotab{border-color:rgba(249,115,22,.6);background:rgba(249,115,22,.12)}

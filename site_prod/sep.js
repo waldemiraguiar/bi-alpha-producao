@@ -363,7 +363,7 @@
       <div class="septabs">
         <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar / Receber <span class="c">${sepN}</span></div>
         <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
-        <div class="septab aviso ${aviN ? 'avisopulse' : ''} ${view === 'avisar' ? 'on' : ''}" data-v="avisar">📧 Avisar cliente <span class="c">${aviN}</span></div>
+        <div class="septab aviso avisopulse ${view === 'avisar' ? 'on' : ''}" data-v="avisar"><span class="fwt">🎆</span> 📧 Avisar cliente <span class="fwt">🎇</span> <span class="c">${aviN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
