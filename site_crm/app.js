@@ -283,6 +283,17 @@ function iniciarVisita(ret){   // ret = retorno da agenda {id,cliente,bairro} �
     if(ACTIVE==="pista"){ pistaView="feed"; renderTab(); }
   }, ()=>alert("Não consegui pegar sua localização. Ative o GPS e permita o acesso."), {enableHighAccuracy:true,timeout:15000,maximumAge:0});
 }
+/* "Cliquei em Cheguei sem querer" — cancela a chegada. Seguro contra golpe: a chegada mora só no aparelho
+   (localStorage), NADA foi gravado no servidor ainda; e o horário NÃO é editável — ao chegar de verdade
+   bate um novo Cheguei (timestamp novo só pode ser MAIS TARDE, nunca infla o tempo de permanência). */
+function cancelVisita(){
+  const v=visitaLoad(); if(!v) return;
+  if(!confirm(`Cancelar a chegada em "${v.cliente||""}"?\n\nUse se tocou "📍 Cheguei" sem querer / ainda não chegou. O cliente continua na sua agenda de retornos.\n\n⚠️ O horário de chegada NÃO é editável: quando chegar de verdade, toque "Cheguei" de novo.`)) return;
+  const rid=v.returnId; visitaClear();
+  alert("↩ Chegada cancelada. Quando chegar na clínica, toque 📍 Cheguei de novo.");
+  if(ACTIVE==="pista"){ pistaView=rid?"retornos":"feed"; }
+  renderTab();
+}
 
 let pistaView="feed";   // "feed" | "retornos"
 function pistaRetornos(list){ // retornos PENDENTES (com data e SEM baixa) — o que ainda falta visitar
@@ -1344,6 +1355,7 @@ function renderTab(){
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
       const vi=document.getElementById("visIni"); if(vi) vi.onclick=()=>iniciarVisita();
       const vf=document.getElementById("visFim"); if(vf) vf.onclick=()=>{ const v=visitaLoad(); openPistaRec(v&&v.returnId?v.returnId:null); };
+      const vcx=document.getElementById("visCancel"); if(vcx) vcx.onclick=()=>cancelVisita();
       const at=document.getElementById("agendarTel"); if(at) at.onclick=()=>openAgendar();
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
@@ -1521,7 +1533,8 @@ function renderTab(){
       ${pqCount()?`<div class="proxhint" style="border-color:#FFB020;color:#ffd94d;background:rgba(255,176,32,.12);margin-bottom:12px">📴 <b>${pqCount()}</b> feedback(s) salvos sem sinal — sincroniza sozinho quando a internet voltar${navigator.onLine?` · <a onclick="pqFlush()" style="color:var(--cyan);cursor:pointer;text-decoration:underline">sincronizar agora</a>`:""}</div>`:""}
       ${(()=>{ const v=visitaLoad(); if(!v||!v.checkin) return ""; const t=new Date(v.checkin.ts),pp=n=>String(n).padStart(2,"0");
         return `<div class="proxhint" style="border-color:#00E5A0;color:#7effcf;background:rgba(0,229,160,.14);margin-bottom:8px;font-size:14px">🟢 <b>Visita em andamento:</b> ${esc(v.cliente)}${v.bairro?" · 📍 "+esc(v.bairro):""} · chegou ${pp(t.getHours())}:${pp(t.getMinutes())}</div>
-          <button class="bigmic" id="visFim" style="margin-bottom:12px">📝 Registrar feedback + check-out (sair)</button>`; })()}
+          <button class="bigmic" id="visFim" style="margin-bottom:6px">📝 Registrar feedback + check-out (sair)</button>
+          <button class="baixabtn no" id="visCancel" type="button" style="width:100%;margin-bottom:12px">✖ Não cheguei ainda — cancelar chegada</button>`; })()}
       ${!visitaLoad()?`<button class="bigmic" id="visIni" type="button" style="margin-bottom:6px">📍 Cheguei — check-in de chegada (começa a visita)</button><div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Bata o check-in ao CHEGAR. O feedback + saída você faz ao sair.</div>`:""}
       <div class="kgrid">
         ${kpi("g", hoje, "Hoje", "feedbacks de hoje")}
