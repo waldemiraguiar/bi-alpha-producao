@@ -2513,6 +2513,14 @@
       "codex": 1246,
       "exame": "Chlamydophila e Toxoplasma IgG FELINO",
       "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 641,
+      "exame": "Coronavirus (Ag) Canino",
+      "classe": "interno"
     }
   ]
 }
