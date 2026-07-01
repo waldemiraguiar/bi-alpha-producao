@@ -431,15 +431,22 @@
   ];
   const topicOf = cat => { const t = TOPICS.find(x => x.cats.some(c => slug(c) === slug(cat))); return t ? t.t : '📋 Outros'; };
   // pílulas de categoria AGRUPADAS por tópico. withAll => acrescenta "Todas".
-  function topicStrip(byCat, viewKey, sel, lateFn, withAll) {
-    const groups = {}; Object.keys(byCat).forEach(cat => { const t = topicOf(cat); (groups[t] = groups[t] || []).push(cat); });
-    const order = TOPICS.map(x => x.t).concat(['📋 Outros']).filter(t => groups[t]);
+  function topicStrip(byCat, viewKey, sel, lateFn, withAll, showAllCats) {
+    // showAllCats: mostra TODAS as categorias dos TOPICS (0 quando sem exame), pra equipe não se perder.
+    const groups = {};
+    if (showAllCats) {
+      TOPICS.forEach(x => { groups[x.t] = x.cats.slice(); });                                  // todas as categorias, sempre
+      Object.keys(byCat).forEach(cat => { const t = topicOf(cat); if (t === '📋 Outros') { (groups[t] = groups[t] || []); if (!groups[t].some(c => slug(c) === slug(cat))) groups[t].push(cat); } });
+    } else {
+      Object.keys(byCat).forEach(cat => { const t = topicOf(cat); (groups[t] = groups[t] || []).push(cat); });
+    }
+    const order = TOPICS.map(x => x.t).concat(['📋 Outros']).filter(t => groups[t] && groups[t].length);
     const total = Object.values(byCat).reduce((s, a) => s + a.length, 0);
     const all = withAll ? `<div class="topicgrp"><div class="catstrip"><div class="catpill ${!sel ? 'on' : ''}" data-selview="${viewKey}" data-selcat=""><span class="nm">Todas</span><span class="cc">${total}</span></div></div></div>` : '';
     return `<div class="topicwrap">` + all + order.map(t => {
-      const cats = groups[t].sort((a, b) => catIdx(a) - catIdx(b));
-      const pills = cats.map(c => { const arr = byCat[c]; const late = lateFn ? arr.filter(lateFn).length : 0;
-        return `<div class="catpill ${c === sel ? 'on' : ''} ${late ? 'haslate' : ''}" data-selview="${viewKey}" data-selcat="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc ${late ? 'late' : ''}">${arr.length}</span></div>`; }).join('');
+      const cats = groups[t].slice().sort((a, b) => catIdx(a) - catIdx(b));
+      const pills = cats.map(c => { const arr = byCat[c] || []; const late = lateFn ? arr.filter(lateFn).length : 0;
+        return `<div class="catpill ${slug(c) === slug(sel) ? 'on' : ''} ${late ? 'haslate' : ''} ${arr.length === 0 ? 'zero' : ''}" data-selview="${viewKey}" data-selcat="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc ${late ? 'late' : ''}">${arr.length}</span></div>`; }).join('');
       return `<div class="topicgrp"><div class="topiclbl">${t}</div><div class="catstrip">${pills}</div></div>`;
     }).join('') + `</div>`;
   }
@@ -463,14 +470,18 @@
     }
     if (!items.length) return search + `<div class="${opts.emptyClass || 'sepwait'}">${opts.empty}</div>`;
     const byCat = {}; items.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
-    const cats = orderedCats(byCat);
-    let sel = selByView[viewKey]; if (!sel || !byCat[sel]) sel = selByView[viewKey] = cats[0];
-    const strip = topicStrip(byCat, viewKey, sel, opts.lateFn);
-    const arr = byCat[sel];
+    const cats = orderedCats(byCat);   // categorias COM item (p/ default de seleção)
+    const allCats = TOPICS.flatMap(x => x.cats).concat(Object.keys(byCat).filter(c => topicOf(c) === '📋 Outros'));  // universo (todas)
+    let sel = selByView[viewKey];
+    if (!sel || !allCats.some(c => slug(c) === slug(sel))) sel = selByView[viewKey] = (cats[0] || allCats[0]);   // default: 1ª COM item
+    const selKey = allCats.find(c => slug(c) === slug(sel)) || sel;   // nome canônico da categoria escolhida
+    const strip = topicStrip(byCat, viewKey, sel, opts.lateFn, false, true);   // showAllCats = TODAS as categorias
+    const arr = byCat[selKey] || [];   // pode estar vazia (categoria com 0 exames)
     const ordered = [...arr].sort((a, b) => (b.dias || 0) - (a.dias || 0) || rankSt(statusOf(a).st) - rankSt(statusOf(b).st));
     const bar = opts.bar ? opts.bar(items.length) : '';
-    return search + bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(sel)}</span>
-      <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
+    const listHtml = ordered.length ? ordered.map(rowSeparar).join('') : `<div class="sepwait" style="padding:14px">✓ Nenhum exame em <b>${esc2(selKey)}</b> nesta aba agora.</div>`;
+    return search + bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(selKey)}</span>
+      <span class="cnt">${arr.length} ${opts.noun}</span></div>${listHtml}</div>`;
   }
   // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
   // FILA DE HOJE = entradas de HOJE (dias 0) ainda não confirmadas. Fluxo completo: separar → receber → tem amostra?
