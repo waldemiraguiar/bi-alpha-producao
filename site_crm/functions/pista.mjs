@@ -37,7 +37,7 @@ export default async (req) => {
         if (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE)
           return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
       }
-      const baixa = (it.baixa && typeof it.baixa === "object") ? {
+      const baixa = it.clear_baixa ? null : (it.baixa && typeof it.baixa === "object") ? {
         tipo: it.baixa.tipo === "desmarcado" ? "desmarcado" : "compareceu",
         ts: +it.baixa.ts || Date.now(),
         por: String(it.baixa.por || "").slice(0, 40),
