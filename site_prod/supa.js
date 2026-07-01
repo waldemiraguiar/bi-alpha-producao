@@ -23,9 +23,9 @@
     delFlag(cod) { return SB.from('cli_flags').delete().eq('cod', String(cod)); },
     baixaCli(rows) { return SB.from('cli_baixas').upsert(rows); },
     // ---- escrita: triagem ----
-    upsertMark(row) { return SB.from('sep_marks').upsert(row); },
-    updateMark(chave, patch) { return SB.from('sep_marks').update(patch).eq('chave', chave); },
-    delMark(chave) { return SB.from('sep_marks').delete().eq('chave', chave); },
+    async upsertMark(row) { const { error } = await SB.from('sep_marks').upsert(row); if (error) throw new Error(error.message || 'erro ao salvar'); },
+    async updateMark(chave, patch) { const { error } = await SB.from('sep_marks').update(patch).eq('chave', chave); if (error) throw new Error(error.message || 'erro ao salvar'); },
+    async delMark(chave) { const { error } = await SB.from('sep_marks').delete().eq('chave', chave); if (error) throw new Error(error.message || 'erro ao apagar'); },
     async admincheck(pin) { try { const { data } = await SB.rpc('sep_admincheck', { p_pin: pin }); return !!data; } catch (e) { return false; } },
     async descartar(itens, pin, por) { const { error } = await SB.rpc('sep_descartar', { p_itens: itens, p_pin: pin, p_por: por || 'admin' }); if (error) throw new Error(error.message || 'PIN'); },
     async undescartar(chaves, pin) { const { error } = await SB.rpc('sep_undescartar', { p_chaves: chaves, p_pin: pin }); if (error) throw new Error(error.message || 'PIN'); },
