@@ -325,6 +325,39 @@ async function desfazerBaixa(id){   // ↩ voltar etapa: desfaz a baixa (confirm
   const ok=await savePista({...f, clear_baixa:true});
   if(ok){ alert("↩ Baixa desfeita — voltou pra agenda de retornos."); renderTab(); }
 }
+/* 📞 Agendar visita por TELEFONE (prospecção ativa) → cai na agenda de retornos, sem check-in */
+function openAgendar(){
+  const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div><div class="m-cli">📞 Agendar visita (por telefone)</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">prospecção ativa — cai na agenda de rota; o check-in é só quando você for lá</div></div>
+      <button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">Comercial <span style="color:var(--red)">*</span></div>
+    <input id="aRep" class="m-date" style="width:100%" list="repsDL" value="${esc(meuRep())}">
+    <datalist id="repsDL">${repList().map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
+    <div class="m-lbl">Cliente / clínica <span style="color:var(--red)">*</span></div>
+    <input id="aCli" class="m-date" style="width:100%" placeholder="Nome do cliente">
+    <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— monta a rota</span></div>
+    <input id="aBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca" list="bairrosDL">
+    <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
+    <div class="m-lbl">Data da visita agendada <span style="color:var(--red)">*</span></div>
+    <input id="aData" type="date" class="m-date" value="${hojeISO()}">
+    <div class="m-lbl">O que combinou no telefone</div>
+    <textarea id="aObs" class="m-ta" style="min-height:54px" placeholder="Ex.: Dra. topou receber orçamento, levar tabela de histopato"></textarea>
+    <button class="m-save" id="aSave">📞 Agendar na rota</button>`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("aSave").onclick=async()=>{
+    const rep=document.getElementById("aRep").value.trim(), cli=document.getElementById("aCli").value.trim(), bairro=document.getElementById("aBairro").value.trim(), data=document.getElementById("aData").value, obs=document.getElementById("aObs").value.trim();
+    if(!rep){ alert("Informe o COMERCIAL."); return; }
+    if(!cli){ alert("Informe o CLIENTE / clínica."); document.getElementById("aCli").focus(); return; }
+    if(!bairro){ alert("Informe o BAIRRO (monta a rota)."); document.getElementById("aBairro").focus(); return; }
+    if(!data){ alert("Informe a DATA da visita agendada."); return; }
+    localStorage.setItem("crm_rep", rep);
+    const btn=document.getElementById("aSave"); btn.disabled=true; btn.textContent="Agendando…";
+    const ok=await savePista({cliente:cli, bairro, por:rep, proximo:data, resultado:"visita", origem:"telefone", texto:obs?("📞 Agendado por telefone: "+obs):"📞 Agendado por telefone"});
+    if(ok){ closeModal(); pistaView="retornos"; renderTab(); } else { btn.disabled=false; btn.textContent="📞 Agendar na rota"; } };
+}
 /* BI da Pista (Chart.js — mesmo CDN da aba Resultados) */
 function drawPistaBI(base){
   if(typeof Chart==="undefined") return;
@@ -1250,6 +1283,7 @@ function renderTab(){
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
       const vi=document.getElementById("visIni"); if(vi) vi.onclick=()=>iniciarVisita();
       const vf=document.getElementById("visFim"); if(vf) vf.onclick=()=>openPistaRec(null);
+      const at=document.getElementById("agendarTel"); if(at) at.onclick=()=>openAgendar();
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
     };
@@ -1262,7 +1296,7 @@ function renderTab(){
       const bc={}; ret.forEach(f=>{const b=f.bairro||"(sem bairro)"; bc[b]=(bc[b]||0)+1;});
       const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
       const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">↻</div>
-        <div><div class="nm">${esc(f.cliente||"(sem nome)")}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div>
+        <div><div class="nm">${esc(f.cliente||"(sem nome)")}${f.origem==="telefone"?' <span class="pr" style="background:rgba(0,212,255,.16);color:#9fe6ff;font-size:11px">📞 telefone</span>':""}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div>
         <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-baixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Estou na clínica — check-in">✓ dar baixa</button><button class="baixabtn no" data-desm="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente desmarcou — precisa do código da diretoria">🚫 desmarcou</button></div></div>`;
       // agenda por COMERCIAL → dia → bairro (cada vendedor tem a SUA rota; incompatibilidade vale por vendedor)
       const byRep={}; ret.forEach(f=>{ const rp=f.por||"(sem comercial)"; (byRep[rp]=byRep[rp]||[]).push(f); });
@@ -1286,6 +1320,7 @@ function renderTab(){
         const dias=Object.keys(byDate).sort().map(d=>diaCard(d, byDate[d])).join("");
         return `<div class="repagenda"><div class="repagenda-h">👤 <b>${esc(rp)}</b> · agenda de rota <span class="t-mut" style="font-weight:500">(${items.length} retorno${items.length>1?'s':''})</span></div>${dias}</div>`; }).join("");
       c.innerHTML=`${toggle}${repBar}
+        <button class="checkinbtn" id="agendarTel" type="button" style="margin-bottom:12px">📞 Agendar visita (prospecção por telefone)</button>
         <div class="kgrid">
           ${kpi("r", atras, "Atrasados", "passaram da data")}
           ${kpi("a", semana, "Esta semana", "próximos 7 dias")}
