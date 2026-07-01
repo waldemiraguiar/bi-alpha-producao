@@ -246,19 +246,29 @@ function parseDataBR(texto){
   // dd/mm  ou dd/mm/aa(aa)
   m=t.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
   if(m){ let yy=m[3]?+m[3]:y; if(yy<100)yy+=2000; const r=mk(+m[1],+m[2],yy); if(r) return r; }
-  // "dia X do/de Y" (Y = número, número por extenso, ou nome do mês)
-  m=t.match(/dia\s+([a-zç]+(?:\s+e\s+[a-zç]+)?|\d{1,2})\s+(?:do|de)\s+([a-zç]+|\d{1,2})/);
-  if(m){ const dd=_palNum(m[1]); let mm=/^\d+$/.test(m[2])?+m[2]:MES[m[2]]; if(dd&&mm){ const r=mk(dd,mm,y); if(r) return r; } }
+  // "dia X do/de Y" (Y = número, número por extenso, ou nome do mês) — varre todas as ocorrências
+  { const re=/dia\s+([a-zç]+(?:\s+e\s+[a-zç]+)?|\d{1,2})\s+(?:do|de)\s+([a-zç]+(?:\s+e\s+[a-zç]+)?|\d{1,2})/g; let mm2;
+    while((mm2=re.exec(t))){ const dd=_palNum(mm2[1]); let mm=/^\d+$/.test(mm2[2])?+mm2[2]:(MES[mm2[2]]||_palNum(mm2[2])); if(dd&&mm){ const r=mk(dd,mm,y); if(r) return r; } } }
   // "amanhã"
   if(/amanh[ãa]/.test(t)){ const d=new Date(hoje.getTime()+864e5); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); }
   // dia da semana ("segunda", "próxima terça"…) → próxima ocorrência
   const DIA={domingo:0,segunda:1,"terça":2,terca:2,quarta:3,quinta:4,sexta:5,"sábado":6,sabado:6};
   for(const nome in DIA){ if(t.includes(nome)){ let diff=(DIA[nome]-hoje.getDay()+7)%7; if(diff===0)diff=7; const d=new Date(hoje.getTime()+diff*864e5); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); } }
-  // "dia X" (só o dia) → próxima ocorrência desse dia
-  m=t.match(/dia\s+([a-zç]+(?:\s+e\s+[a-zç]+)?|\d{1,2})\b/);
-  if(m){ const dd=_palNum(m[1]); if(dd){ let d=new Date(y,hoje.getMonth(),dd); if(d<hoje) d=new Date(y,hoje.getMonth()+1,dd); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); } }
+  // "dia X" (só o dia) → próxima ocorrência desse dia — varre todas (ignora "bom dia meu…")
+  { const re=/dia\s+([a-zç]+(?:\s+e\s+[a-zç]+)?|\d{1,2})\b/g; let mm3;
+    while((mm3=re.exec(t))){ const dd=_palNum(mm3[1]); if(dd){ let d=new Date(y,hoje.getMonth(),dd); if(d<hoje) d=new Date(y,hoje.getMonth()+1,dd); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); } } }
   return "";
 }
+/* detectores dos outros campos na fala (best-effort — o que não vier, é obrigatório digitar) */
+const BAIRROS_RJ=["Barra da Tijuca","Recreio dos Bandeirantes","Recreio","Jacarepaguá","Freguesia","Tijuca","Vila Isabel","Maracanã","Copacabana","Ipanema","Leblon","Botafogo","Flamengo","Laranjeiras","Méier","Madureira","Campo Grande","Bangu","Santa Cruz","Ilha do Governador","Centro","Duque de Caxias","Nova Iguaçu","São João de Meriti","Belford Roxo","Niterói","Icaraí","São Gonçalo","Alcântara"];
+function detectBairro(texto, conhecidos){ const t=" "+(texto||"").toLowerCase()+" ";
+  const cands=[...new Set([...(conhecidos||[]), ...BAIRROS_RJ])].sort((a,b)=>b.length-a.length);
+  for(const b of cands){ if(b && t.includes(" "+b.toLowerCase())) return b; } return ""; }
+function detectRep(texto){ const m=(" "+(texto||"").toLowerCase()).match(/\b(?:meu nome (?:é|e)|aqui (?:é|e|quem fala(?: é| e)?)|quem fala (?:é|e))\s+([a-zà-ú]+(?:\s+[a-zà-ú]+)?)/);
+  if(!m) return ""; const s=m[1].replace(/\s+(visitei|visitou|fui|estou|passei|liguei|cheguei|aqui|bom|boa|hoje|falando|e|da|de|do)\b.*$/i,"").trim();
+  return s.split(/\s+/).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" "); }
+function detectCliente(texto){ const m=(" "+(texto||"")).match(/\b(cl[ií]nica|hospital|pet\s?shop|petshop|veterin[áa]ria|consult[óo]rio|pet)\s+([A-Za-zÀ-ú0-9]+(?:\s+[A-Za-zÀ-ú0-9]+){0,2})/i);
+  if(!m) return ""; return m[0].trim().replace(/\s+/g," ").replace(/\s+(na|no|em|de|da|do|para|pra|e|que|com|pediram|pediu|gostou|gostaram)$/i,""); }
 let F_ID=null, F_RES="visita", F_CHECKIN=null;
 function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 /* check-in por georreferência (Geolocation API do navegador — anti-golpe) */
@@ -299,7 +309,7 @@ function openPistaRec(id){
     </div>
     <div class="m-sec">Resultado</div>
     <div class="m-opts" id="fRes">${PRORDER.map(k=>`<button class="opt pst-${k}${k===F_RES?" on":""}" data-r="${k}">${PRES[k].ic} ${PRES[k].lbl}</button>`).join("")}</div>
-    <div class="m-lbl">Próximo passo (retorno) <span class="t-mut" style="font-weight:500">— eu detecto da sua fala; confira</span></div>
+    <div class="m-lbl">Próximo passo (retorno) <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— detecto da fala; se não falar, digite</span></div>
     <input id="fProx" type="date" class="m-date" value="${f?esc(f.proximo||""):""}">
     <div id="fProxHint" class="proxhint" style="display:none"></div>
     <div class="m-sec">Check-in da visita <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— confirma no GPS que você está no cliente</span></div>
@@ -310,10 +320,15 @@ function openPistaRec(id){
   document.getElementById("modal").style.display="flex";
   document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
   const ta=document.getElementById("fTexto");
-  const proxAuto=()=>{ const fp=document.getElementById("fProx"); if(!fp||fp.value) return; const dt=parseDataBR(ta.value); const h=document.getElementById("fProxHint");
-    if(dt){ fp.value=dt; if(h){ h.style.display="block"; h.innerHTML=`📅 detectei o retorno: <b>${fmtDataBR(dt)}</b> — confira/ajuste no calendário acima`; } } };
-  ta.addEventListener("input", proxAuto);
-  document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, proxAuto); };
+  const detectarCampos=()=>{ const val=ta.value, got=[];
+    const setIf=(id,v,fmt)=>{ const el=document.getElementById(id); if(el && !el.value && v){ el.value=v; got.push(fmt(v)); } };
+    setIf("fRep", detectRep(val), v=>"👤 "+v);
+    setIf("fCli", detectCliente(val), v=>"🏥 "+v);
+    setIf("fBairro", detectBairro(val, bairrosUsados), v=>"📍 "+v);
+    setIf("fProx", parseDataBR(val), v=>"📅 retorno "+fmtDataBR(v));
+    if(got.length){ const h=document.getElementById("fProxHint"); if(h){ h.style.display="block"; h.innerHTML="🧠 detectei da fala (confira/corrija): <b>"+got.join(" · ")+"</b>"; } } };
+  ta.addEventListener("input", detectarCampos);
+  document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, detectarCampos); };
   document.getElementById("fCheckin").onclick=function(){ fazerCheckin(this, document.getElementById("fCheckinStatus")); };
   document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
   document.getElementById("fSave").onclick=async()=>{
@@ -323,9 +338,10 @@ function openPistaRec(id){
     if(!cli){ alert("Informe o CLIENTE / clínica visitada — obrigatório."); document.getElementById("fCli").focus(); return; }
     if(!bairro){ alert("Informe o BAIRRO — obrigatório (monta a rota das revisitas)."); document.getElementById("fBairro").focus(); return; }
     if(!dataVisita){ alert("Informe a DATA DA VISITA."); document.getElementById("fVisita").focus(); return; }
+    let prox=document.getElementById("fProx").value; if(!prox) prox=parseDataBR(texto);   // detecta do texto se não preencheu
+    if(!prox){ alert("Informe a DATA DE RETORNO (próximo passo) — obrigatória. Fale a data ou escolha no calendário."); document.getElementById("fProx").focus(); return; }
     if(!F_CHECKIN){ alert("Faça o CHECK-IN (📍 GPS) — obrigatório: confirma que você está no cliente."); return; }
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
-    let prox=document.getElementById("fProx").value; if(!prox) prox=parseDataBR(texto);   // fallback: detecta do texto
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
     const ok=await savePista({id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, checkin:F_CHECKIN});
     if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
