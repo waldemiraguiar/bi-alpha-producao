@@ -409,16 +409,59 @@ function drawPistaBI(base){
   if(g("pbObj")) CHARTS.push(new Chart(g("pbObj"),{type:"bar",data:{labels:obj.map(o=>o[0]),datasets:[{data:obj.map(o=>o[1]),backgroundColor:"#FF8A00"}]},options:{indexAxis:"y",animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}},y:{grid:{display:false}}}}}));
 }
 function fmtDataBR(iso){ try{ const d=new Date(iso+"T00:00:00"); const dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; const p=n=>String(n).padStart(2,'0'); return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)}`; }catch(e){ return iso; } }
-/* roteiro otimizado: ordena por proximidade (vizinho mais próximo) usando as coords do check-in da última visita */
+/* Coordenada de cada cliente p/ a rota: usa o CHECK-IN (preciso, se já visitou) OU o centro do BAIRRO.
+   Assim um cliente agendado por telefone (sem check-in) TAMBÉM entra na conta da rota. */
+const BAIRRO_COORD={ // bairro normalizado (sem acento) → [lat, lng] · centro aproximado (bom p/ agrupar rota)
+  "barra da tijuca":[-23.0040,-43.3650],"recreio dos bandeirantes":[-23.0250,-43.4650],"recreio":[-23.0250,-43.4650],
+  "jacarepagua":[-22.9640,-43.3690],"freguesia":[-22.9430,-43.3380],"anil":[-22.9500,-43.3350],"taquara":[-22.9200,-43.3650],
+  "pechincha":[-22.9330,-43.3620],"curicica":[-22.9540,-43.4030],"gardenia azul":[-22.9530,-43.3480],"cidade de deus":[-22.9490,-43.3620],
+  "praca seca":[-22.8930,-43.3500],"vila valqueire":[-22.8830,-43.3660],"tanque":[-22.9130,-43.3560],"itanhanga":[-22.9970,-43.3020],
+  "tijuca":[-22.9240,-43.2320],"vila isabel":[-22.9160,-43.2470],"maracana":[-22.9121,-43.2302],"grajau":[-22.9210,-43.2610],
+  "andarai":[-22.9270,-43.2540],"praca da bandeira":[-22.9110,-43.2160],
+  "copacabana":[-22.9710,-43.1830],"ipanema":[-22.9840,-43.2040],"leblon":[-22.9840,-43.2240],"botafogo":[-22.9510,-43.1840],
+  "flamengo":[-22.9330,-43.1750],"laranjeiras":[-22.9330,-43.1880],"gavea":[-22.9760,-43.2320],"jardim botanico":[-22.9680,-43.2240],
+  "humaita":[-22.9560,-43.1970],"catete":[-22.9250,-43.1770],"gloria":[-22.9200,-43.1740],
+  "meier":[-22.9020,-43.2780],"cachambi":[-22.8900,-43.2790],"engenho de dentro":[-22.8880,-43.2870],"engenho novo":[-22.9030,-43.2660],
+  "sao cristovao":[-22.8970,-43.2220],"madureira":[-22.8730,-43.3390],"cascadura":[-22.8850,-43.3230],"campinho":[-22.8830,-43.3110],
+  "oswaldo cruz":[-22.8680,-43.3510],"marechal hermes":[-22.8570,-43.3760],"iraja":[-22.8300,-43.3260],"vila da penha":[-22.8380,-43.3120],
+  "penha":[-22.8420,-43.2770],"ramos":[-22.8500,-43.2540],"olaria":[-22.8440,-43.2650],"bonsucesso":[-22.8600,-43.2540],
+  "ilha do governador":[-22.8100,-43.2100],"campo grande":[-22.9030,-43.5610],"bangu":[-22.8790,-43.4650],"realengo":[-22.8790,-43.4300],
+  "padre miguel":[-22.8770,-43.4470],"santa cruz":[-22.9190,-43.6840],"guaratiba":[-23.0530,-43.5940],"sepetiba":[-22.9700,-43.7100],
+  "centro":[-22.9070,-43.1760],"lapa":[-22.9130,-43.1810],"santa teresa":[-22.9190,-43.1900],
+  "duque de caxias":[-22.7850,-43.3110],"nova iguacu":[-22.7590,-43.4510],"sao joao de meriti":[-22.8040,-43.3720],
+  "belford roxo":[-22.7640,-43.3990],"nilopolis":[-22.8080,-43.4140],"mesquita":[-22.7820,-43.4290],
+  "niteroi":[-22.8830,-43.1030],"icarai":[-22.9060,-43.1080],"sao goncalo":[-22.8270,-43.0540],"alcantara":[-22.8250,-43.0180],
+};
+function bairroKey(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim(); }
+function geoCacheLoad(){ try{ return JSON.parse(localStorage.getItem("crm_bairro_geo")||"{}"); }catch(e){ return {}; } }
+function geoCacheSave(o){ try{ localStorage.setItem("crm_bairro_geo", JSON.stringify(o)); }catch(e){} }
+function ptBairro(f){ const k=bairroKey(f.bairro); if(!k) return null;
+  if(BAIRRO_COORD[k]) return {lat:BAIRRO_COORD[k][0],lng:BAIRRO_COORD[k][1],src:"bairro"};
+  const g=geoCacheLoad(); if(g[k]) return {lat:g[k][0],lng:g[k][1],src:"bairro"}; return null; }
+function ptOf(f){ if(f&&f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null) return {lat:f.checkin.lat,lng:f.checkin.lng,src:"checkin"}; return ptBairro(f); }
+/* geocoda (1x, cacheado) os bairros que não estão na tabela nem têm check-in — via Nominatim grátis */
+async function geocodeBairros(items){
+  const g=geoCacheLoad(); const origByKey={};
+  (items||[]).forEach(f=>{ if(f.checkin&&f.checkin.ts) return; const k=bairroKey(f.bairro); if(k&&!BAIRRO_COORD[k]&&!g[k]&&!origByKey[k]) origByKey[k]=f.bairro; });
+  const need=Object.keys(origByKey); if(!need.length) return; let changed=false;
+  for(const k of need){ try{
+      const u=`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(origByKey[k]+", Rio de Janeiro, Brasil")}`;
+      const r=await fetch(u); if(!r.ok) continue; const j=await r.json();
+      if(j&&j[0]&&j[0].lat){ g[k]=[+(+j[0].lat).toFixed(5),+(+j[0].lon).toFixed(5)]; changed=true; }
+    }catch(e){} }
+  if(changed) geoCacheSave(g);
+}
+/* roteiro otimizado: ordena por proximidade (vizinho mais próximo) usando a coord de cada cliente (check-in ou bairro) */
 function ordenarRota(items){
-  const pts=(items||[]).filter(f=>f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null);
-  if(pts.length<=2) return pts;
-  const d2=(a,b)=>{const dx=a.checkin.lat-b.checkin.lat,dy=a.checkin.lng-b.checkin.lng;return dx*dx+dy*dy;};
+  const pts=(items||[]).map(f=>({f,p:ptOf(f)})).filter(x=>x.p);
+  if(pts.length<=2) return pts.map(x=>x.f);
+  const d2=(a,b)=>{const dx=a.p.lat-b.p.lat,dy=a.p.lng-b.p.lng;return dx*dx+dy*dy;};
   const rem=pts.slice(), ord=[rem.shift()];
   while(rem.length){ const last=ord[ord.length-1]; let bi=0,bd=Infinity; rem.forEach((x,i)=>{const dd=d2(last,x);if(dd<bd){bd=dd;bi=i;}}); ord.push(rem.splice(bi,1)[0]); }
-  return ord;
+  return ord.map(x=>x.f);
 }
-function mapsRotaURL(items){ const ord=ordenarRota(items); return ord.length>=2 ? "https://www.google.com/maps/dir/"+ord.map(f=>`${f.checkin.lat},${f.checkin.lng}`).join("/") : ""; }
+function mapsRotaURL(items){ const ord=ordenarRota(items).map(f=>({f,p:ptOf(f)})).filter(x=>x.p);
+  return ord.length>=2 ? "https://www.google.com/maps/dir/"+ord.map(x=>`${x.p.lat},${x.p.lng}`).join("/") : ""; }
 /* rota compatível por DISTÂNCIA REAL — mede a MAIOR distância entre as paradas do dia.
    Preferência: distância de RUA de verdade (OSRM grátis, sem API key), já que o comercial vai de MOTO
    (mesmas vias do carro). Fallback = linha reta (Haversine) quando estiver OFFLINE. */
@@ -427,13 +470,13 @@ const RAIO_KM=8;          // fallback OFFLINE por linha reta (mais apertado — 
 function haversineKm(a,b){ const R=6371, toR=x=>x*Math.PI/180, dLat=toR(b.lat-a.lat), dLng=toR(b.lng-a.lng);
   const s=Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(s))); }
-function geoPts(items){ return (items||[]).filter(f=>f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null); }
-function rotaAvaliar(items){   // {ok, km, a, b, geoN} — LINHA RETA (fallback offline / render instantâneo)
-  const geo=geoPts(items);
-  if(geo.length<2) return {geoN:geo.length};
+function geoPts(items){ return (items||[]).map(f=>({f,p:ptOf(f)})).filter(x=>x.p); }   // [{f,p}] — cada cliente com sua coord (check-in ou bairro)
+function rotaAvaliar(items){   // {ok, km, a, b, geoN, semLoc} — LINHA RETA (fallback offline / render instantâneo)
+  const geo=geoPts(items), semLoc=(items||[]).length-geo.length;
+  if(geo.length<2) return {geoN:geo.length, semLoc};
   let maxd=0, pa=geo[0], pb=geo[1];
-  for(let i=0;i<geo.length;i++) for(let j=i+1;j<geo.length;j++){ const d=haversineKm(geo[i].checkin,geo[j].checkin); if(d>maxd){maxd=d;pa=geo[i];pb=geo[j];} }
-  return {ok:maxd<=RAIO_KM, km:Math.round(maxd), a:pa, b:pb, geoN:geo.length};
+  for(let i=0;i<geo.length;i++) for(let j=i+1;j<geo.length;j++){ const d=haversineKm(geo[i].p,geo[j].p); if(d>maxd){maxd=d;pa=geo[i];pb=geo[j];} }
+  return {ok:maxd<=RAIO_KM, km:Math.round(maxd), a:pa.f, b:pb.f, geoN:geo.length, semLoc};
 }
 /* upgrade assíncrono: troca a estimativa por reta pela DISTÂNCIA DE RUA real (OSRM table). Offline → mantém a reta. */
 let PENDING_ROTAS=[];
@@ -441,12 +484,15 @@ async function upgradeRotas(){
   const jobs=PENDING_ROTAS.slice(); PENDING_ROTAS=[];
   for(const job of jobs){
     const el=document.getElementById(job.id); if(!el) continue;
+    await geocodeBairros(job.items);   // garante coord de bairros fora da tabela antes de medir
     const geo=geoPts(job.items); if(geo.length<2){ continue; }
+    const semLoc=(job.items||[]).length-geo.length;
+    const nota=semLoc?` <span class="t-mut" style="font-weight:500">· ${semLoc} sem bairro/GPS (fora da conta)</span>`:"";
     const reta=()=>{ const a=rotaAvaliar(job.items); el.removeAttribute("style"); el.className=a.ok?"rota-ok":"rota-inc";
-      el.innerHTML=a.ok?`✅ Rota compatível <span class="t-mut" style="font-weight:500">(estimativa reta, offline)</span> — até <b>${a.km} km</b>`
-        :`🚨 ROTA INCOMPATÍVEL <span style="font-weight:500">(estimativa reta, offline)</span> — <b>${esc(a.a.cliente||a.a.bairro||"?")} ↔ ${esc(a.b.cliente||a.b.bairro||"?")}: ${a.km} km</b>`; };
+      el.innerHTML=a.ok?`✅ Rota compatível <span class="t-mut" style="font-weight:500">(estimativa reta, offline)</span> — até <b>${a.km} km</b>${nota}`
+        :`🚨 ROTA INCOMPATÍVEL <span style="font-weight:500">(estimativa reta, offline)</span> — <b>${esc(a.a.cliente||a.a.bairro||"?")} ↔ ${esc(a.b.cliente||a.b.bairro||"?")}: ${a.km} km</b>${nota}`; };
     try{
-      const coords=geo.map(f=>`${f.checkin.lng},${f.checkin.lat}`).join(";");
+      const coords=geo.map(x=>`${x.p.lng},${x.p.lat}`).join(";");
       const url=`https://router.project-osrm.org/table/v1/driving/${coords}?annotations=distance,duration`;
       const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),9000);
       const r=await fetch(url,{signal:ctrl.signal}); clearTimeout(to);
@@ -455,10 +501,10 @@ async function upgradeRotas(){
       for(let i=0;i<geo.length;i++) for(let k=i+1;k<geo.length;k++){ const m=D[i][k]; if(m!=null&&m>maxm){maxm=m;ai=i;bi=k;} }
       if(maxm<0) throw 0;
       const km=Math.round(maxm/1000), min=(T&&T[ai]&&T[ai][bi]!=null)?Math.round(T[ai][bi]/60):null, ok=km<=RAIO_CARRO_KM;
-      const a=geo[ai], b=geo[bi]; el.removeAttribute("style"); el.className=ok?"rota-ok":"rota-inc";
+      const a=geo[ai].f, b=geo[bi].f; el.removeAttribute("style"); el.className=ok?"rota-ok":"rota-inc";
       el.innerHTML=ok
-        ? `✅ Rota compatível de 🏍️ moto — no máx <b>${km} km${min!=null?` / ${min} min`:""}</b> de rua entre as paradas <span class="t-mut" style="font-weight:500">(limite ${RAIO_CARRO_KM} km)</span>`
-        : `🚨 ROTA INCOMPATÍVEL de 🏍️ moto — <b>${esc(a.cliente||a.bairro||"?")} ↔ ${esc(b.cliente||b.bairro||"?")}: ${km} km${min!=null?` / ${min} min`:""}</b> de rua (limite ${RAIO_CARRO_KM} km). Separe em dias diferentes!`;
+        ? `✅ Rota compatível de 🏍️ moto — no máx <b>${km} km${min!=null?` / ${min} min`:""}</b> de rua entre as paradas <span class="t-mut" style="font-weight:500">(limite ${RAIO_CARRO_KM} km)</span>${nota}`
+        : `🚨 ROTA INCOMPATÍVEL de 🏍️ moto — <b>${esc(a.cliente||a.bairro||"?")} ↔ ${esc(b.cliente||b.bairro||"?")}: ${km} km${min!=null?` / ${min} min`:""}</b> de rua (limite ${RAIO_CARRO_KM} km). Separe em dias diferentes!${nota}`;
     }catch(e){ reta(); }
   }
 }
@@ -1388,7 +1434,7 @@ function renderTab(){
             : `<div class="rota-ok">✅ Rota compatível — todos em <b>${esc(bairrosNomes[0]||"—")}</b></div>`);
         const blocks=Object.entries(bgrp).sort((a,b)=>b[1].length-a[1].length).map(([b,fs])=>`<div class="retbairro">📍 ${esc(b)} <span class="t-mut">(${fs.length})</span></div>`+fs.map(linha).join("")).join("");
         const rurl=mapsRotaURL(items);
-        const rotaBtn=rurl?`<a class="baixabtn ok" href="${rurl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-block;margin:0 0 8px">🗺️ Abrir rota otimizada no Maps (${ordenarRota(items).length} paradas)</a>`:"";
+        const rotaBtn=rurl?`<a class="baixabtn ok" href="${rurl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-block;margin:0 0 8px">🗺️ Ver distância real + navegar no Maps (${ordenarRota(items).length} paradas, na melhor ordem)</a>`:"";
         return `<div class="card retday-card ${cls}" style="margin-bottom:12px">${head}${rota}${rotaBtn}${blocks}</div>`; };
       const agenda=Object.keys(byRep).sort().map(rp=>{ const items=byRep[rp], byDate={}; items.forEach(f=>{(byDate[f.proximo]=byDate[f.proximo]||[]).push(f);});
         const dias=Object.keys(byDate).sort().map(d=>diaCard(d, byDate[d])).join("");
