@@ -38,6 +38,10 @@ export default async (req) => {
         cod: it.cod ? String(it.cod).slice(0, 30) : "",
         texto: String(it.texto || "").slice(0, 2000),
         resultado: RES.includes(it.resultado) ? it.resultado : "visita",
+        data_visita: String(it.data_visita || "").slice(0, 20),
+        checkin: (it.checkin && typeof it.checkin === "object")
+          ? { lat: +it.checkin.lat || 0, lng: +it.checkin.lng || 0, acc: +it.checkin.acc || 0, ts: +it.checkin.ts || 0 }
+          : (existing ? existing.checkin || null : null),   // não perde o check-in ao editar
         proximo: String(it.proximo || "").slice(0, 20),
         por: String(it.por || "equipe").slice(0, 40),
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
