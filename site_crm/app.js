@@ -296,6 +296,16 @@ function drawPistaBI(base){
   if(g("pbObj")) CHARTS.push(new Chart(g("pbObj"),{type:"bar",data:{labels:obj.map(o=>o[0]),datasets:[{data:obj.map(o=>o[1]),backgroundColor:"#FF8A00"}]},options:{indexAxis:"y",animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}},y:{grid:{display:false}}}}}));
 }
 function fmtDataBR(iso){ try{ const d=new Date(iso+"T00:00:00"); const dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; const p=n=>String(n).padStart(2,'0'); return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)}`; }catch(e){ return iso; } }
+/* roteiro otimizado: ordena por proximidade (vizinho mais próximo) usando as coords do check-in da última visita */
+function ordenarRota(items){
+  const pts=(items||[]).filter(f=>f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null);
+  if(pts.length<=2) return pts;
+  const d2=(a,b)=>{const dx=a.checkin.lat-b.checkin.lat,dy=a.checkin.lng-b.checkin.lng;return dx*dx+dy*dy;};
+  const rem=pts.slice(), ord=[rem.shift()];
+  while(rem.length){ const last=ord[ord.length-1]; let bi=0,bd=Infinity; rem.forEach((x,i)=>{const dd=d2(last,x);if(dd<bd){bd=dd;bi=i;}}); ord.push(rem.splice(bi,1)[0]); }
+  return ord;
+}
+function mapsRotaURL(items){ const ord=ordenarRota(items); return ord.length>=2 ? "https://www.google.com/maps/dir/"+ord.map(f=>`${f.checkin.lat},${f.checkin.lng}`).join("/") : ""; }
 /* detecta a data de retorno no texto falado/digitado (pt-BR) → "YYYY-MM-DD" */
 const _NUMW={um:1,uma:1,dois:2,duas:2,tres:3,"três":3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,dezesseis:16,dezasseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30};
 function _palNum(s){ s=(s||"").trim(); if(/^\d+$/.test(s)) return +s; let n=0; for(const p of s.split(/\s+e\s+/)){ if(_NUMW[p]!=null) n+=_NUMW[p]; else return null; } return n||null; }
@@ -1200,7 +1210,9 @@ function renderTab(){
           ? `<div class="rota-inc">🚨 ROTA INCOMPATÍVEL — ${nb} bairros no mesmo dia: <b>${esc(bairrosNomes.join(" · "))}</b>. Reagende para dias diferentes!</div>`
           : `<div class="rota-ok">✅ Rota compatível — todos em <b>${esc(bairrosNomes[0]||"—")}</b></div>`;
         const blocks=Object.entries(bgrp).sort((a,b)=>b[1].length-a[1].length).map(([b,fs])=>`<div class="retbairro">📍 ${esc(b)} <span class="t-mut">(${fs.length})</span></div>`+fs.map(linha).join("")).join("");
-        return `<div class="card retday-card ${cls}" style="margin-bottom:12px">${head}${rota}${blocks}</div>`; };
+        const rurl=mapsRotaURL(items);
+        const rotaBtn=rurl?`<a class="baixabtn ok" href="${rurl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-block;margin:0 0 8px">🗺️ Abrir rota otimizada no Maps (${ordenarRota(items).length} paradas)</a>`:"";
+        return `<div class="card retday-card ${cls}" style="margin-bottom:12px">${head}${rota}${rotaBtn}${blocks}</div>`; };
       const agenda=Object.keys(byRep).sort().map(rp=>{ const items=byRep[rp], byDate={}; items.forEach(f=>{(byDate[f.proximo]=byDate[f.proximo]||[]).push(f);});
         const dias=Object.keys(byDate).sort().map(d=>diaCard(d, byDate[d])).join("");
         return `<div class="repagenda"><div class="repagenda-h">👤 <b>${esc(rp)}</b> · agenda de rota <span class="t-mut" style="font-weight:500">(${items.length} retorno${items.length>1?'s':''})</span></div>${dias}</div>`; }).join("");
