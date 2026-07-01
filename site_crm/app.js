@@ -1278,7 +1278,7 @@ function renderTab(){
             <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in no mapa</a>`:""}${dwellMin(f.checkin,f.checkout)!=null?` · ⏱ ${dwellMin(f.checkin,f.checkout)} min`:""}</div>
             ${f.texto?`<div class="lastint">"${esc(f.texto.slice(0,80))}"</div>`:""}</div>
           <div class="mid"></div>
-          <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desfazer baixa — confirmei errado">↩ Voltar etapa</button></div></div>`; });
+          <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente pediu outra revisita — marca nova data e volta pra Retornos">🔁 Reagendar</button><button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desfazer baixa — confirmei errado">↩ Voltar etapa</button></div></div>`; });
       c.innerHTML=`${toggle}${repBar}
         <div class="kgrid">
           ${kpi("g", rHoje, "Hoje", "visitas realizadas")}
