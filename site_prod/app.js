@@ -9,10 +9,12 @@ const URG_API='/api/urgentes';
 let manual=new Set(), baixados=new Set(), baixasInfo=[];
 // baixa de EXAME na Produção (PIN admin) — chave única por exame = registro|exame
 let prodBaixados=new Set(), prodBaixaInfo=[];
+// ESPELHO de "Avisar cliente" da Triagem (marcações insuficiente do sep_marks) — read-only, sempre pareado
+let avisarMarks=[];
 const exChave=e=>String(e.registro)+'|'+(e.exame||'');
 const exBaixado=e=>prodBaixados.has(exChave(e));
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -219,6 +221,8 @@ function buildSpecial(list,pred,opts){
 function buildUrgentCat(list){return buildSpecial(list,e=>urgentOf(e),{cod:'__URG__',nome:'EXAMES URGENTES',kind:'urg'});}
 function buildPetCat(list){return buildSpecial(list,e=>isPetlove(e.paciente),{cod:'__PET__',nome:'PET LOVE',kind:'pet'});}
 function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR__',nome:'ATRASADOS',kind:'atras'});}
+// ESPELHO de "Avisar cliente" (amostra insuficiente da Triagem) — read-only na Produção
+function buildAvisoCat(){return {cod:'__AVI__',categoria:'AVISAR CLIENTE',special:true,kind:'aviso',sla:null,em_processo:avisarMarks.length,atrasado:0,no_prazo:avisarMarks.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // Desconta os exames baixados (PIN) de uma categoria NORMAL — contadores, derivações e lista batem.
 function adjustCat(x){
   if(!x||x.special||!prodBaixados.size) return x;
@@ -288,7 +292,7 @@ function cats(){
   let list=(DATA.categorias||[]).filter(x=>x.em_processo>0 || (x.derivacoes&&x.derivacoes.length));
   if(ORDER.length){ const idx=c=>{const i=ORDER.findIndex(o=>slug(c.categoria).includes(slug(o)));return i<0?99:i;};
     list=[...list].sort((a,b)=>idx(a)-idx(b)); }
-  return [buildUrgentCat(list), buildPetCat(list), buildAtrasCat(list), ...list];   // 3 abas especiais primeiro
+  return [buildUrgentCat(list), buildAvisoCat(), buildPetCat(list), buildAtrasCat(list), ...list];   // especiais primeiro (avisar cliente ao lado de urgentes)
 }
 function resolveLock(list){
   const h=decodeURIComponent((location.hash||'').replace('#','')).trim();
@@ -314,7 +318,7 @@ async function boot(D){
   if(window.__muref)clearInterval(window.__muref);
   // urgentes só importam no modo TV. Com Supabase: Realtime (push, zero polling); senão: polling 90s
   if(window.SUPA&&window.SUPA.ok){
-    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas'],async()=>{if(document.getElementById('content').style.display!=='none'){await loadManual();renderActive();}});
+    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas','sep_marks','sep_descartes'],async()=>{if(document.getElementById('content').style.display!=='none'){await loadManual();buildTabs();renderActive();}});
   }else{
     window.__muref=setInterval(async()=>{if(document.hidden||document.getElementById('content').style.display==='none')return;const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},90000);
   }
@@ -332,9 +336,9 @@ function buildTabs(){
   }
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
-  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
+  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
   tabsEl.innerHTML=list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
-    <div class="tab ${i===active?'on':''} ${k?k.t:''}" data-i="${i}">
+    <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'&&x.em_processo>0?'avisopulse':''}" data-i="${i}">
       <span class="tn">${k?k.i+' '+esc(x.categoria):esc(x.categoria)}</span>
       <span class="tb ${k?k.b:(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
       <span class="prog"></span>
@@ -361,10 +365,21 @@ function animateProg(){
 
 function ringColor(p){return p>=70?C.green:p>=40?C.amber:C.red;}
 
+// banner laranja "clientes a avisar" (espelho) — aparece em qualquer aba da Produção
+function avisoBannerHtml(){ const list=avisarMarks; if(!list.length) return '';
+  return `<div class="urgbanner aviso"><span class="ico">📧</span><span class="ttl">${num(list.length)} CLIENTE${list.length>1?'S':''} A AVISAR · AMOSTRA INSUFICIENTE (recoleta)</span><div class="ul">${list.slice(0,10).map(m=>`<span class="u"><span class="r">#${esc(m.req)}</span>${esc(m.paciente)} · ${esc(m.exame)}</span>`).join('')}</div></div>`; }
+function renderAviso(){
+  const list=avisarMarks.slice().sort((a,b)=>(Number(a.ts_sep)||0)-(Number(b.ts_sep)||0));
+  const rows = list.length
+    ? list.map(m=>`<div class="wl"><span class="reg">#${esc(m.req)}</span><div><div class="pac">${esc(m.paciente)}</div><div class="exm">${esc(m.exame)} · insuf. por <b>${esc(m.por||'')}</b></div></div><div class="wlact"><span class="db late">📧 avisar cliente</span></div></div>`).join('')
+    : '<div style="color:var(--green);padding:16px;font-size:16px">✓ Nenhum cliente a avisar. 👍</div>';
+  document.getElementById('content').innerHTML=avisoBannerHtml()+`<div class="cgrid"><div class="card avisocard"><h3><span>📧 Avisar cliente <span class="tag">${num(list.length)} · amostra insuficiente · espelho da Triagem (a ação é feita lá)</span></span></h3><div class="scroll">${rows}</div></div></div>`;
+}
 function renderActive(){
   const list=cats(); if(!list.length){document.getElementById('content').innerHTML='<div style="padding:40px;color:var(--mut)">Sem fila no momento.</div>';return;}
   const x = adjustCat(locked || list[active] || list[0]);
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
+  if(x.special && x.kind==='aviso'){ renderAviso(); return; }   // ESPELHO de Avisar cliente (read-only)
   const special=!!x.special;
   const KIND={
     urg:{c:C.amber,ic:'🚨',sub:'urgentes de todas as categorias',ring:'urgentes',m1l:'Urgentes na fila',work:'Amostras urgentes',m3l:'Marcados pela equipe (★)'},
@@ -386,7 +401,7 @@ function renderActive(){
       <span class="ttl">${num(urgCount)} URGENTE${urgCount>1?'S':''}</span>
       <div class="ul">${urgItems.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
     </div>` : '';
-  document.getElementById('content').innerHTML=banner+`
+  document.getElementById('content').innerHTML=(special?'':avisoBannerHtml())+banner+`
     <div class="cgrid">
     <div class="hero">
       <div class="hcat ${special?x.kind+'cat':''}"><div class="nm">${special?K.ic+' ':''}${esc(x.categoria)}</div><span class="sla">${special?K.sub:'prazo de liberação: '+x.sla+(x.sla>1?' dias':' dia')}</span></div>
