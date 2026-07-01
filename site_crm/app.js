@@ -259,10 +259,24 @@ function parseDataBR(texto){
   if(m){ const dd=_palNum(m[1]); if(dd){ let d=new Date(y,hoje.getMonth(),dd); if(d<hoje) d=new Date(y,hoje.getMonth()+1,dd); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); } }
   return "";
 }
-let F_ID=null, F_RES="visita";
+let F_ID=null, F_RES="visita", F_CHECKIN=null;
+function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+/* check-in por georreferência (Geolocation API do navegador — anti-golpe) */
+function fazerCheckin(btn, statusEl){
+  if(!navigator.geolocation){ alert("Este aparelho não tem localização/GPS."); return; }
+  btn.disabled=true; btn.textContent="📍 Localizando…";
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const c=pos.coords; F_CHECKIN={lat:+c.latitude.toFixed(6), lng:+c.longitude.toFixed(6), acc:Math.round(c.accuracy||0), ts:Date.now()};
+    btn.disabled=false; btn.classList.add("done"); btn.textContent="✅ Check-in feito (refazer)";
+    const t=new Date(F_CHECKIN.ts), p=n=>String(n).padStart(2,"0");
+    statusEl.style.display="block";
+    statusEl.innerHTML=`✅ Check-in às ${p(t.getHours())}:${p(t.getMinutes())} · precisão ±${F_CHECKIN.acc}m · <a href="https://maps.google.com/?q=${F_CHECKIN.lat},${F_CHECKIN.lng}" target="_blank" style="color:var(--cyan);font-weight:700">ver no mapa</a>`;
+  }, err=>{ btn.disabled=false; btn.textContent="📍 Fazer check-in"; alert("Não consegui pegar sua localização. Ative o GPS e PERMITA o acesso à localização no navegador."); },
+  {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+}
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
-  F_ID=id||null; F_RES=f?f.resultado:"visita";
+  F_ID=id||null; F_RES=f?f.resultado:"visita"; F_CHECKIN=(f&&f.checkin&&f.checkin.ts)?f.checkin:null;
   const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
   document.getElementById("modalBody").innerHTML=`
     <div class="m-head"><div><div class="m-cli">${f?"✏️ Editar feedback":"🎤 Novo feedback da pista"}</div>
@@ -271,11 +285,13 @@ function openPistaRec(id){
     <div class="m-lbl">Comercial (quem visitou) <span style="color:var(--red)">*</span></div>
     <input id="fRep" class="m-date" style="width:100%" placeholder="Seu nome" list="repsDL" value="${f?esc(f.por||""):esc(meuRep())}">
     <datalist id="repsDL">${repList().map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
-    <div class="m-lbl">Cliente / clínica visitada</div>
+    <div class="m-lbl">Cliente / clínica visitada <span style="color:var(--red)">*</span></div>
     <input id="fCli" class="m-date" style="width:100%" placeholder="Nome do cliente" value="${f?esc(f.cliente):""}">
-    <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— obrigatório (monta a rota das revisitas)</span></div>
+    <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— monta a rota das revisitas</span></div>
     <input id="fBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca, Copacabana…" list="bairrosDL" value="${f?esc(f.bairro||""):""}">
     <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
+    <div class="m-lbl">Data da visita <span style="color:var(--red)">*</span></div>
+    <input id="fVisita" type="date" class="m-date" value="${f?esc(f.data_visita||hojeISO()):hojeISO()}">
     <div class="m-lbl">Feedback quente <span class="t-mut" style="font-weight:500">— ${speechOK()?"toque 🎤 e fale, ou digite":"digite (voz indisponível neste aparelho)"}</span></div>
     <div style="display:flex;gap:8px;align-items:stretch">
       <button class="micbtn" id="fMic" type="button">🎤 Falar</button>
@@ -286,6 +302,9 @@ function openPistaRec(id){
     <div class="m-lbl">Próximo passo (retorno) <span class="t-mut" style="font-weight:500">— eu detecto da sua fala; confira</span></div>
     <input id="fProx" type="date" class="m-date" value="${f?esc(f.proximo||""):""}">
     <div id="fProxHint" class="proxhint" style="display:none"></div>
+    <div class="m-sec">Check-in da visita <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— confirma no GPS que você está no cliente</span></div>
+    <button class="checkinbtn${F_CHECKIN?" done":""}" id="fCheckin" type="button">${F_CHECKIN?"✅ Check-in feito (refazer)":"📍 Fazer check-in"}</button>
+    <div id="fCheckinStatus" class="proxhint" style="display:${F_CHECKIN?"block":"none"}">${F_CHECKIN?`✅ Check-in salvo · precisão ±${F_CHECKIN.acc}m · <a href="https://maps.google.com/?q=${F_CHECKIN.lat},${F_CHECKIN.lng}" target="_blank" style="color:var(--cyan);font-weight:700">ver no mapa</a>`:""}</div>
     <button class="m-save" id="fSave">${f?"Salvar alterações":"Salvar feedback"}</button>
     ${f?`<button class="m-enc" id="fDel" style="border-color:var(--mut);color:var(--mut)">Remover feedback</button>`:""}`;
   document.getElementById("modal").style.display="flex";
@@ -295,17 +314,20 @@ function openPistaRec(id){
     if(dt){ fp.value=dt; if(h){ h.style.display="block"; h.innerHTML=`📅 detectei o retorno: <b>${fmtDataBR(dt)}</b> — confira/ajuste no calendário acima`; } } };
   ta.addEventListener("input", proxAuto);
   document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, proxAuto); };
+  document.getElementById("fCheckin").onclick=function(){ fazerCheckin(this, document.getElementById("fCheckinStatus")); };
   document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
   document.getElementById("fSave").onclick=async()=>{
     try{PREC&&PREC.stop();}catch(e){}
-    const cli=document.getElementById("fCli").value.trim(), texto=ta.value.trim(), bairro=document.getElementById("fBairro").value.trim(), rep=document.getElementById("fRep").value.trim();
+    const cli=document.getElementById("fCli").value.trim(), texto=ta.value.trim(), bairro=document.getElementById("fBairro").value.trim(), rep=document.getElementById("fRep").value.trim(), dataVisita=document.getElementById("fVisita").value;
     if(!rep){ alert("Informe o COMERCIAL (quem visitou) — obrigatório."); document.getElementById("fRep").focus(); return; }
-    if(!cli && !texto){ alert("Diga ao menos o cliente ou o feedback."); return; }
-    if(!bairro){ alert("Informe o BAIRRO — é obrigatório (é o que monta a rota das revisitas)."); document.getElementById("fBairro").focus(); return; }
+    if(!cli){ alert("Informe o CLIENTE / clínica visitada — obrigatório."); document.getElementById("fCli").focus(); return; }
+    if(!bairro){ alert("Informe o BAIRRO — obrigatório (monta a rota das revisitas)."); document.getElementById("fBairro").focus(); return; }
+    if(!dataVisita){ alert("Informe a DATA DA VISITA."); document.getElementById("fVisita").focus(); return; }
+    if(!F_CHECKIN){ alert("Faça o CHECK-IN (📍 GPS) — obrigatório: confirma que você está no cliente."); return; }
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
     let prox=document.getElementById("fProx").value; if(!prox) prox=parseDataBR(texto);   // fallback: detecta do texto
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
-    const ok=await savePista({id:F_ID, cliente:cli, bairro, texto, resultado:F_RES, por:rep, proximo:prox});
+    const ok=await savePista({id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, checkin:F_CHECKIN});
     if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>{ if(confirm("Remover este feedback?")) removePista(F_ID); };
 }
@@ -1039,7 +1061,8 @@ function renderTab(){
         <div class="rk" style="color:${pr.col}">${pr.ic}</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?" · editado":""}</span></div>
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
-          ${f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:""}</div>
+          ${f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:""}
+          <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${(f.checkin&&f.checkin.ts)?`<a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in</a>`:`<span style="color:#ffc266">⚠️ sem check-in</span>`}</div></div>
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span></div>
       </div>`; });
