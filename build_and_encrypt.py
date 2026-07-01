@@ -54,7 +54,7 @@ def build():
 
     # ===== VARREDURA DO COFRE (só quando SWEEP_COFRE=1): exames usados que faltam no cofre =====
     # Pega variantes (ex.: "- Quantitativo", "Diluição Plena") de exames já classificados interno/apoio.
-    if os.environ.get("SWEEP_COFRE"):
+    if os.environ.get("SWEEP_COFRE") == "1":   # só quando explicitamente pedido (senão "0" é truthy e rodava sempre)
         try:
             cofre_full = json.load(open(COFRE_PATH, encoding="utf-8")).get("itens", [])
             VAR = ['diluição plena','diluicao plena','felina','felino','canina','canino','urina',
@@ -80,7 +80,7 @@ def build():
                 if k in cofre_keys: cand.append((cx, x["exame"], nome(x["cod"]), x["n"], cofre_keys[k], x["cod"]))
             cand.sort(key=lambda z: -z[3])
             print(f"[SWEEP] {len(cand)} candidatos a faltar no cofre:")
-            for c in cand: print(f"[SWEEP] codex={c[0]} cod={c[5]} usos={c[3]} classe_irmao={c[4]} cat={c[2]!r} exame={c[1]!r}")
+            for _cd in cand: print(f"[SWEEP] codex={_cd[0]} cod={_cd[5]} usos={_cd[3]} classe_irmao={_cd[4]} cat={_cd[2]!r} exame={_cd[1]!r}")   # NÃO reusar 'c' (é o cursor!)
         except Exception as e:
             print("[SWEEP] erro:", e)
     # ===== fim varredura =====
