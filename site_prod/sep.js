@@ -398,7 +398,7 @@
     // prazo / atraso: mostra a IDADE (dias parada) quando 1 dia+ ; senão o horário do corte de hoje
     const dias = it.dias || 0;
     let badge = '';
-    if (!separated) badge = dias >= 1 ? `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} parada</span>` : (s.dl ? `<span class="dl ok">vence ${hhmm(s.dl)}</span>` : '');
+    if (!separated) badge = dias >= 1 ? `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} parada</span>` : '';  // horário de vencimento removido (pedido Wal)
     else if (dias >= 1) badge = `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} aguardando receber</span>`;
     const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
     return `<div class="seprow ${received ? 'donerow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${undo}</div></div>`;

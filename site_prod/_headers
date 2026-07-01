@@ -1,0 +1,4 @@
+# Painel vivo: navegador SEMPRE revalida os arquivos (pega o código novo após cada deploy,
+# sem depender de F5 forçado da equipe). 304 quando nada mudou = barato.
+/*
+  Cache-Control: public, max-age=0, must-revalidate
