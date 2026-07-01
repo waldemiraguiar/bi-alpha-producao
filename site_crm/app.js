@@ -1324,15 +1324,15 @@ function renderTab(){
     }
 
     if(pistaView==="naofeitos"){
-      const linhaNF=(f, badge)=>`<div class="crow retday-card retday-pulse" style="margin-bottom:8px;padding:10px">
+      const linhaNF=(f, badge, isDesm)=>`<div class="crow retday-card retday-pulse" style="margin-bottom:8px;padding:10px">
         <div class="rk" style="color:#FFD000">⏰</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">${badge}</span></div>
           <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${f.texto?' · "'+esc(f.texto.slice(0,50))+'"':''}</div>
           ${(f.baixa&&f.baixa.motivo)?`<div class="lastint">motivo: "${esc(f.baixa.motivo)}"</div>`:""}</div>
         <div class="mid"></div>
-        <div class="rcell"><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()">🔁 Reagendar</button></div></div>`;
+        <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()">🔁 Reagendar</button>${isDesm?`<button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desmarcaram por engano — desfaz e volta ao retorno original">↩ Voltar etapa</button>`:""}</div></div>`;
       const secA=naofeitosAtras.length?`<div class="seclabel">🔴 Atrasados — passou da data e não teve baixa (${naofeitosAtras.length})</div>`+naofeitosAtras.map(f=>linhaNF(f,"· venceu "+fmtDataBR(f.proximo))).join(""):"";
-      const secB=naofeitosDesm.length?`<div class="seclabel" style="margin-top:16px">🚫 Desmarcados — a visita não aconteceu, reagende (${naofeitosDesm.length})</div>`+naofeitosDesm.map(f=>linhaNF(f,"· desmarcado")).join(""):"";
+      const secB=naofeitosDesm.length?`<div class="seclabel" style="margin-top:16px">🚫 Desmarcados — a visita não aconteceu, reagende (${naofeitosDesm.length})</div>`+naofeitosDesm.map(f=>linhaNF(f,"· desmarcado",true)).join(""):"";
       c.innerHTML=`${toggle}${repBar}
         <div class="kgrid">
           ${kpi("r", naofeitosAtras.length, "Atrasados", "venceu sem baixa")}
