@@ -305,6 +305,12 @@ async function reagendarRetorno(id){
   const ok=await savePista({...f, proximo:nova, sem_retorno:false, clear_baixa:true});   // limpa baixa → volta pra agenda
   if(ok){ alert("✅ Reagendado para "+fmtDataBR(nova)+" — voltou pra agenda de rota."); renderTab(); }
 }
+async function desfazerBaixa(id){   // ↩ voltar etapa: desfaz a baixa (confirmei errado) → volta pra agenda de retornos
+  const f=PISTA.find(x=>x.id===id); if(!f) return;
+  if(!confirm(`Desfazer a baixa de "${f.cliente||""}"? Volta pra agenda de retornos (dá pra dar baixa de novo).`)) return;
+  const ok=await savePista({...f, clear_baixa:true});
+  if(ok){ alert("↩ Baixa desfeita — voltou pra agenda de retornos."); renderTab(); }
+}
 /* BI da Pista (Chart.js — mesmo CDN da aba Resultados) */
 function drawPistaBI(base){
   if(typeof Chart==="undefined") return;
@@ -1211,6 +1217,7 @@ function renderTab(){
       document.querySelectorAll("#content [data-baixa]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaCheckin(el.dataset.baixa); });
       document.querySelectorAll("#content [data-desm]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaDesmarcou(el.dataset.desm); });
       document.querySelectorAll("#content [data-reag]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); reagendarRetorno(el.dataset.reag); });
+      document.querySelectorAll("#content [data-undobaixa]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); desfazerBaixa(el.dataset.undobaixa); });
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
@@ -1269,7 +1276,7 @@ function renderTab(){
             <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in no mapa</a>`:""}${dwellMin(f.checkin,f.checkout)!=null?` · ⏱ ${dwellMin(f.checkin,f.checkout)} min`:""}</div>
             ${f.texto?`<div class="lastint">"${esc(f.texto.slice(0,80))}"</div>`:""}</div>
           <div class="mid"></div>
-          <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span></div></div>`; });
+          <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desfazer baixa — confirmei errado">↩ Voltar etapa</button></div></div>`; });
       c.innerHTML=`${toggle}${repBar}
         <div class="kgrid">
           ${kpi("g", rHoje, "Hoje", "visitas realizadas")}
