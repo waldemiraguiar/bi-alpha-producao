@@ -305,12 +305,34 @@ function darBaixaCheckin(id){
     const ok=await saveBaixaItem(f,baixa); if(ok){ alert("✅ Baixa registrada com check-in!"); renderTab(); }
   }, ()=>alert("Não consegui pegar sua localização. Ative o GPS e permita o acesso."), {enableHighAccuracy:true,timeout:15000,maximumAge:0});
 }
+/* salva uma operação de DESMARCAÇÃO com o código da diretoria (server valida DIR_CODE; 403 se inválido) */
+async function saveDesmarc(item, dir_code){
+  try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd,dir_code})});
+    if(r.status===403){ alert("❌ Código da diretoria INVÁLIDO — não autorizado."); return false; }
+    if(r.status===401){ alert("Sessão sem permissão."); return false; }
+    if(r.ok){ syncPista((await r.json()).pista); return true; } }catch(e){ alert("Sem internet — a desmarcação precisa de conexão pra validar o código da diretoria."); } return false; }
 async function darBaixaDesmarcou(id){
   const f=PISTA.find(x=>x.id===id); if(!f) return;
-  const motivo=(prompt(`Cliente "${f.cliente||""}" DESMARCOU por telefone (sem ida). Qual o motivo?`)||"").trim(); if(!motivo) return;
-  const code=(prompt("Isto exige AUTORIZAÇÃO. Digite o CÓDIGO DA DIRETORIA:")||"").trim(); if(!code) return;
-  const ok=await saveBaixaItem(f,{tipo:"desmarcado",ts:Date.now(),por:meuRep()||quemExcluiu(),motivo},code);
-  if(ok){ alert("✅ Baixa autorizada pela diretoria. Foi pra '⏰ Retornos não feitos' pra você reagendar."); renderTab(); }
+  const motivo=(prompt(`Cliente "${f.cliente||""}" DESMARCOU (a visita não aconteceu). Qual o motivo?`)||"").trim(); if(!motivo) return;
+  // o REP decide o destino; a diretoria só LIBERA o código (anti-golpe). Nunca vira "realizado", nunca some sem rastro.
+  const dst=(prompt(`Destino de "${f.cliente||""}":\n\n1 = 🔁 REMARCAR (cliente quer nova data → volta pra sua rota)\n2 = 🚫 PERDIDO (cliente não quer mais → sai da agenda, fica no histórico/BI)\n\nDigite 1 ou 2:`)||"").trim();
+  if(dst!=="1"&&dst!=="2") return;
+  const rem=dst==="1"; let nova="";
+  if(rem){
+    const txt=(prompt('Nova data do retorno (ex.: 12/07, "dia 12 do 7", "segunda que vem"):')||"").trim(); if(!txt) return;
+    nova=parseDataBR(txt)||(/^\d{4}-\d{2}-\d{2}$/.test(txt)?txt:"");
+    if(!nova){ alert("Não entendi a data. Tente 12/07, 'dia 12 do 7' ou 2026-07-12."); return; }
+  }
+  const code=(prompt("A DIRETORIA precisa LIBERAR (anti-golpe). Digite o código da diretoria:")||"").trim(); if(!code) return;
+  const por=meuRep()||quemExcluiu();
+  const desmarc_add={motivo,por,destino:rem?"remarcado":"perdido",remarcado_para:nova,ts:Date.now()};   // log permanente (auditoria), exige DIR_CODE
+  const item = rem
+    ? {...f, desmarc_add, proximo:nova, sem_retorno:false, clear_baixa:true}                              // remarcar → volta pra agenda de rota
+    : {...f, desmarc_add, sem_retorno:true, baixa:{tipo:"desmarcado",ts:Date.now(),por,motivo,destino:"perdido"}};   // perdido → sai da agenda
+  const ok=await saveDesmarc(item, code);
+  if(ok){ alert(rem
+      ? "✅ Liberado pela diretoria. Remarcado p/ "+fmtDataBR(nova)+" — voltou pra sua rota (fica o registro da desmarcação)."
+      : "✅ Liberado pela diretoria. Marcado como PERDIDO — saiu da agenda, ficou no histórico e no BI (objeção)."); renderTab(); }
 }
 async function reagendarRetorno(id){
   const f=PISTA.find(x=>x.id===id); if(!f) return;
@@ -386,17 +408,48 @@ function ordenarRota(items){
   return ord;
 }
 function mapsRotaURL(items){ const ord=ordenarRota(items); return ord.length>=2 ? "https://www.google.com/maps/dir/"+ord.map(f=>`${f.checkin.lat},${f.checkin.lng}`).join("/") : ""; }
-/* rota compatível por DISTÂNCIA REAL (Haversine, grátis) — não por nome de bairro */
-const RAIO_KM=12;   // raio de ação: clientes até X km entre si = rota compatível (ajustável)
+/* rota compatível por DISTÂNCIA REAL — mede a MAIOR distância entre as paradas do dia.
+   Preferência: distância de RUA de verdade (OSRM grátis, sem API key), já que o comercial vai de MOTO
+   (mesmas vias do carro). Fallback = linha reta (Haversine) quando estiver OFFLINE. */
+const RAIO_CARRO_KM=15;   // de moto/carro pela RUA: paradas até X km entre si = rota compatível (Anil↔Maracanã=19km→incompatível)
+const RAIO_KM=8;          // fallback OFFLINE por linha reta (mais apertado — a reta subestima; ex.: Anil↔Maracanã reta=11,5km mas de rua=19km)
 function haversineKm(a,b){ const R=6371, toR=x=>x*Math.PI/180, dLat=toR(b.lat-a.lat), dLng=toR(b.lng-a.lng);
   const s=Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(s))); }
-function rotaAvaliar(items){   // {ok, km, a, b, geoN} — usa coords do check-in
-  const geo=(items||[]).filter(f=>f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null);
+function geoPts(items){ return (items||[]).filter(f=>f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null); }
+function rotaAvaliar(items){   // {ok, km, a, b, geoN} — LINHA RETA (fallback offline / render instantâneo)
+  const geo=geoPts(items);
   if(geo.length<2) return {geoN:geo.length};
   let maxd=0, pa=geo[0], pb=geo[1];
   for(let i=0;i<geo.length;i++) for(let j=i+1;j<geo.length;j++){ const d=haversineKm(geo[i].checkin,geo[j].checkin); if(d>maxd){maxd=d;pa=geo[i];pb=geo[j];} }
   return {ok:maxd<=RAIO_KM, km:Math.round(maxd), a:pa, b:pb, geoN:geo.length};
+}
+/* upgrade assíncrono: troca a estimativa por reta pela DISTÂNCIA DE RUA real (OSRM table). Offline → mantém a reta. */
+let PENDING_ROTAS=[];
+async function upgradeRotas(){
+  const jobs=PENDING_ROTAS.slice(); PENDING_ROTAS=[];
+  for(const job of jobs){
+    const el=document.getElementById(job.id); if(!el) continue;
+    const geo=geoPts(job.items); if(geo.length<2){ continue; }
+    const reta=()=>{ const a=rotaAvaliar(job.items); el.removeAttribute("style"); el.className=a.ok?"rota-ok":"rota-inc";
+      el.innerHTML=a.ok?`✅ Rota compatível <span class="t-mut" style="font-weight:500">(estimativa reta, offline)</span> — até <b>${a.km} km</b>`
+        :`🚨 ROTA INCOMPATÍVEL <span style="font-weight:500">(estimativa reta, offline)</span> — <b>${esc(a.a.cliente||a.a.bairro||"?")} ↔ ${esc(a.b.cliente||a.b.bairro||"?")}: ${a.km} km</b>`; };
+    try{
+      const coords=geo.map(f=>`${f.checkin.lng},${f.checkin.lat}`).join(";");
+      const url=`https://router.project-osrm.org/table/v1/driving/${coords}?annotations=distance,duration`;
+      const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),9000);
+      const r=await fetch(url,{signal:ctrl.signal}); clearTimeout(to);
+      if(!r.ok) throw 0; const j=await r.json(); const D=j.distances, T=j.durations; if(!D) throw 0;
+      let maxm=-1, ai=0, bi=1;
+      for(let i=0;i<geo.length;i++) for(let k=i+1;k<geo.length;k++){ const m=D[i][k]; if(m!=null&&m>maxm){maxm=m;ai=i;bi=k;} }
+      if(maxm<0) throw 0;
+      const km=Math.round(maxm/1000), min=(T&&T[ai]&&T[ai][bi]!=null)?Math.round(T[ai][bi]/60):null, ok=km<=RAIO_CARRO_KM;
+      const a=geo[ai], b=geo[bi]; el.removeAttribute("style"); el.className=ok?"rota-ok":"rota-inc";
+      el.innerHTML=ok
+        ? `✅ Rota compatível de 🏍️ moto — no máx <b>${km} km${min!=null?` / ${min} min`:""}</b> de rua entre as paradas <span class="t-mut" style="font-weight:500">(limite ${RAIO_CARRO_KM} km)</span>`
+        : `🚨 ROTA INCOMPATÍVEL de 🏍️ moto — <b>${esc(a.cliente||a.bairro||"?")} ↔ ${esc(b.cliente||b.bairro||"?")}: ${km} km${min!=null?` / ${min} min`:""}</b> de rua (limite ${RAIO_CARRO_KM} km). Separe em dias diferentes!`;
+    }catch(e){ reta(); }
+  }
 }
 /* detecta a data de retorno no texto falado/digitado (pt-BR) → "YYYY-MM-DD" */
 const _NUMW={um:1,uma:1,dois:2,duas:2,tres:3,"três":3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,dezesseis:16,dezasseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30};
@@ -1257,7 +1310,10 @@ function renderTab(){
     const _tISO=hojeISO();
     const naofeitosAtras=pistaRetornos(all).filter(f=>f.proximo<_tISO);
     const naofeitosDesm=all.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").sort((a,b)=>((b.baixa||{}).ts||0)-((a.baixa||{}).ts||0));
-    const naofeitosN=naofeitosAtras.length+naofeitosDesm.length;
+    const _ehPerdido=f=>!!(f.sem_retorno||(f.baixa&&f.baixa.destino==="perdido"));
+    const naofeitosDesmReag=naofeitosDesm.filter(f=>!_ehPerdido(f));   // desmarcado a REAGENDAR (pisca)
+    const naofeitosPerdidos=naofeitosDesm.filter(_ehPerdido);         // PERDIDO — resolvido, não pisca
+    const naofeitosN=naofeitosAtras.length+naofeitosDesmReag.length;  // alerta da aba = só o que está pendente
     const realizados=all.filter(f=>f.baixa&&f.baixa.tipo==="compareceu").sort((a,b)=>((b.baixa||{}).ts||0)-((a.baixa||{}).ts||0));
     const arr= q ? all.filter(f=>(f.cliente||"").toLowerCase().includes(q)||(f.texto||"").toLowerCase().includes(q)||((PRES[f.resultado]||{}).lbl||"").toLowerCase().includes(q)) : all;
     const now=Date.now(), d0=new Date(); d0.setHours(0,0,0,0);
@@ -1294,6 +1350,7 @@ function renderTab(){
     };
 
     if(pistaView==="retornos"){
+      let _rotaSeq=0; PENDING_ROTAS=[];
       const ret=pistaRetornos(all);
       const today=new Date(); today.setHours(0,0,0,0); const tISO=today.toISOString().slice(0,10);
       const semFimISO=new Date(today.getTime()+7*864e5).toISOString().slice(0,10);
@@ -1310,10 +1367,10 @@ function renderTab(){
         const cls = late?"retday-late" : (ehoje?"retday-hoje" : (prox?"retday-pulse":""));
         const head=`<div class="retday-h">📅 <b>${fmtDataBR(d)}</b>${late?' <span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">ATRASADO</span>':ehoje?' <span class="pr" style="background:rgba(255,196,0,.22);color:#ffd94d">HOJE — VÁ AQUI</span>':''} <span class="t-mut">· ${items.length} cliente(s)</span></div>`;
         const av=rotaAvaliar(items);
+        const rid="rota_"+(_rotaSeq++);
+        if(av.geoN>=2) PENDING_ROTAS.push({id:rid, items});
         const rota = (av.geoN>=2)
-          ? (av.ok
-            ? `<div class="rota-ok">✅ Rota compatível — clientes em até <b>${av.km} km</b> (raio ${RAIO_KM} km)${nb>1?` · ${nb} bairros vizinhos`:""}</div>`
-            : `<div class="rota-inc">🚨 ROTA INCOMPATÍVEL — <b>${esc(av.a.cliente||av.a.bairro||"?")} ↔ ${esc(av.b.cliente||av.b.bairro||"?")}: ${av.km} km</b> (limite ${RAIO_KM} km). Reagende p/ dias diferentes!</div>`)
+          ? `<div id="${rid}" class="rota-calc" style="padding:8px 10px;border-radius:6px;background:rgba(0,212,255,.08);color:#8aa2bd;font-size:12.5px;margin:6px 0">🏍️ conferindo distância real de moto pela rua…</div>`
           : (nb>1
             ? `<div class="rota-inc">🚨 ${nb} bairros no mesmo dia: <b>${esc(bairrosNomes.join(" · "))}</b> <span style="font-weight:500">(ainda sem GPS p/ medir — confira)</span></div>`
             : `<div class="rota-ok">✅ Rota compatível — todos em <b>${esc(bairrosNomes[0]||"—")}</b></div>`);
@@ -1336,6 +1393,7 @@ function renderTab(){
         <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
         ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Em cada feedback preencha o retorno + bairro — a agenda se monta aqui, por comercial e por dia.</div>`}`;
       wirePista();
+      upgradeRotas();   // troca a estimativa por reta pela distância de RUA real (OSRM) quando online
       return;
     }
 
@@ -1405,23 +1463,25 @@ function renderTab(){
     }
 
     if(pistaView==="naofeitos"){
-      const linhaNF=(f, badge, isDesm)=>`<div class="crow retday-card retday-pulse" style="margin-bottom:8px;padding:10px">
-        <div class="rk" style="color:#FFD000">⏰</div>
+      const linhaNF=(f, badge, isDesm, noPulse)=>`<div class="crow retday-card${noPulse?"":" retday-pulse"}" style="margin-bottom:8px;padding:10px">
+        <div class="rk" style="color:${noPulse?"#FF8A00":"#FFD000"}">${noPulse?"🚫":"⏰"}</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">${badge}</span></div>
           <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${f.texto?' · "'+esc(f.texto.slice(0,50))+'"':''}</div>
           ${(f.baixa&&f.baixa.motivo)?`<div class="lastint">motivo: "${esc(f.baixa.motivo)}"</div>`:""}</div>
         <div class="mid"></div>
         <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()">🔁 Reagendar</button>${isDesm?`<button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desmarcaram por engano — desfaz e volta ao retorno original">↩ Voltar etapa</button>`:""}</div></div>`;
       const secA=naofeitosAtras.length?`<div class="seclabel">🔴 Atrasados — passou da data e não teve baixa (${naofeitosAtras.length})</div>`+naofeitosAtras.map(f=>linhaNF(f,"· venceu "+fmtDataBR(f.proximo))).join(""):"";
-      const secB=naofeitosDesm.length?`<div class="seclabel" style="margin-top:16px">🚫 Desmarcados — a visita não aconteceu, reagende (${naofeitosDesm.length})</div>`+naofeitosDesm.map(f=>linhaNF(f,"· desmarcado",true)).join(""):"";
+      const secB=naofeitosDesmReag.length?`<div class="seclabel" style="margin-top:16px">🚫 Desmarcados — a visita não aconteceu, reagende (${naofeitosDesmReag.length})</div>`+naofeitosDesmReag.map(f=>linhaNF(f,"· desmarcado",true)).join(""):"";
+      const secC=naofeitosPerdidos.length?`<div class="seclabel" style="margin-top:16px;color:#ffc266">🚫 Perdidos — cliente não quis mais (fora da agenda, no histórico/BI) (${naofeitosPerdidos.length})</div>`+naofeitosPerdidos.map(f=>linhaNF(f,"· perdido",true,true)).join(""):"";
+      const temAlgo=naofeitosN||naofeitosPerdidos.length;
       c.innerHTML=`${toggle}${repBar}
         <div class="kgrid">
           ${kpi("r", naofeitosAtras.length, "Atrasados", "venceu sem baixa")}
-          ${kpi("a", naofeitosDesm.length, "Desmarcados", "não visitou")}
-          ${kpi("", naofeitosN, "Não feitos", "reagende — não perca")}
+          ${kpi("a", naofeitosDesmReag.length, "Desmarcados", "reagende")}
+          ${kpi("", naofeitosPerdidos.length, "Perdidos", "não quis mais")}
         </div>
-        <div class="t-mut" style="font-size:12.5px;margin:2px 0 10px;line-height:1.5">⏰ Retornos que <b>não foram feitos</b> (venceram sem baixa) + <b>desmarcados</b> (cliente cancelou / diretoria liberou). Toque <b>🔁 Reagendar</b> pra dar nova data — volta pra agenda de rota. Não fica perdido no limbo.</div>
-        ${naofeitosN?(secA+secB):`<div class="empty">Nada pendente aqui 👌 — retornos em dia.</div>`}`;
+        <div class="t-mut" style="font-size:12.5px;margin:2px 0 10px;line-height:1.5">⏰ Retornos que <b>não foram feitos</b> (venceram sem baixa) + <b>desmarcados</b> (a visita não aconteceu). A diretoria só <b>libera o código</b> — o <b>rep</b> escolhe o destino: <b>🔁 remarcar</b> (volta pra rota) ou <b>🚫 perdido</b> (sai da agenda, fica no histórico/BI). Nada some sem rastro.</div>
+        ${temAlgo?(secA+secB+secC):`<div class="empty">Nada pendente aqui 👌 — retornos em dia.</div>`}`;
       wirePista();
       return;
     }
