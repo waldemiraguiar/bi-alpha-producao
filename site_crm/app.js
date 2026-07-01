@@ -198,7 +198,23 @@ async function savePista(it){ if(!it.por) it.por=meuRep()||"equipe";
   try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:it,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); return false; }
     if(r.ok){ syncPista((await r.json()).pista); return true; } }catch(e){ alert("Falha ao salvar feedback."); } return false; }
-async function removePista(id){ try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPista((await r.json()).pista); closeModal(); renderTab(); } }catch(e){} }
+async function removePista(id){ try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPista((await r.json()).pista); } }catch(e){} }
+
+/* ---- histórico de EXCLUSÕES (auditoria — nada some sem rastro) ---- */
+const EXCL_API="/api/crm-exclusoes";
+let EXCL=[];
+function syncExcl(arr){ EXCL=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+async function loadExcl(){ try{ const r=await fetch(EXCL_API); if(r.ok) syncExcl((await r.json()).exclusoes); }catch(e){} }
+function quemExcluiu(){ return meuRep() || (localStorage.getItem("crm_quem")||"").trim() || (prompt("Quem está excluindo? (seu nome)")||"").trim(); }
+async function excluirFeedback(id){
+  const f=PISTA.find(x=>x.id===id); if(!f) return;
+  if(!confirm(`Excluir o feedback de "${f.cliente||"(sem nome)"}"? Vai para o 🗑️ Histórico de exclusão (permanente, com seu nome).`)) return;
+  const por=quemExcluiu(); if(!por){ alert("Preciso saber quem está excluindo."); return; }
+  const motivo=(prompt("Motivo da exclusão (opcional):")||"").trim();
+  try{ await fetch(EXCL_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",senha:window.__pwd,
+    item:{tipo:"Feedback pista",cliente:f.cliente,bairro:f.bairro,resumo:(f.texto||"").slice(0,200),por_registro:f.por,por_exclusao:por,motivo,ts_original:f.ts}})}); }catch(e){}
+  await removePista(id); await loadExcl(); closeModal(); renderTab();
+}
 
 /* ---- ditado por voz (grátis, no aparelho — Web Speech API) ---- */
 let PREC=null, precOn=false;
@@ -269,7 +285,7 @@ function detectRep(texto){ const m=(" "+(texto||"").toLowerCase()).match(/\b(?:m
   return s.split(/\s+/).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" "); }
 function detectCliente(texto){ const m=(" "+(texto||"")).match(/\b(cl[ií]nica|hospital|pet\s?shop|petshop|veterin[áa]ria|consult[óo]rio|pet)\s+([A-Za-zÀ-ú0-9]+(?:\s+[A-Za-zÀ-ú0-9]+){0,2})/i);
   if(!m) return ""; return m[0].trim().replace(/\s+/g," ").replace(/\s+(na|no|em|de|da|do|para|pra|e|que|com|pediram|pediu|gostou|gostaram)$/i,""); }
-let F_ID=null, F_RES="visita", F_CHECKIN=null;
+let F_ID=null, F_RES="visita", F_CHECKIN=null, F_SEMRET=false;
 function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 /* check-in por georreferência (Geolocation API do navegador — anti-golpe) */
 function fazerCheckin(btn, statusEl){
@@ -286,7 +302,7 @@ function fazerCheckin(btn, statusEl){
 }
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
-  F_ID=id||null; F_RES=f?f.resultado:"visita"; F_CHECKIN=(f&&f.checkin&&f.checkin.ts)?f.checkin:null;
+  F_ID=id||null; F_RES=f?f.resultado:"visita"; F_CHECKIN=(f&&f.checkin&&f.checkin.ts)?f.checkin:null; F_SEMRET=f?!!f.sem_retorno:false;
   const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
   document.getElementById("modalBody").innerHTML=`
     <div class="m-head"><div><div class="m-cli">${f?"✏️ Editar feedback":"🎤 Novo feedback da pista"}</div>
@@ -312,6 +328,7 @@ function openPistaRec(id){
     <div class="m-lbl">Próximo passo (retorno) <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— detecto da fala; se não falar, digite</span></div>
     <input id="fProx" type="date" class="m-date" value="${f?esc(f.proximo||""):""}">
     <div id="fProxHint" class="proxhint" style="display:none"></div>
+    <label class="semret"><input type="checkbox" id="fSemRet" ${F_SEMRET?"checked":""}> 🚫 <b>Sem retorno</b> — cliente fechou/recusou (aí escreva o motivo no feedback)</label>
     <div class="m-sec">Check-in da visita <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— confirma no GPS que você está no cliente</span></div>
     <button class="checkinbtn${F_CHECKIN?" done":""}" id="fCheckin" type="button">${F_CHECKIN?"✅ Check-in feito (refazer)":"📍 Fazer check-in"}</button>
     <div id="fCheckinStatus" class="proxhint" style="display:${F_CHECKIN?"block":"none"}">${F_CHECKIN?`✅ Check-in salvo · precisão ±${F_CHECKIN.acc}m · <a href="https://maps.google.com/?q=${F_CHECKIN.lat},${F_CHECKIN.lng}" target="_blank" style="color:var(--cyan);font-weight:700">ver no mapa</a>`:""}</div>
@@ -326,6 +343,7 @@ function openPistaRec(id){
     setIf("fCli", detectCliente(val), v=>"🏥 "+v);
     setIf("fBairro", detectBairro(val, bairrosUsados), v=>"📍 "+v);
     setIf("fProx", parseDataBR(val), v=>"📅 retorno "+fmtDataBR(v));
+    if(/\bsem retorno\b|n[ãa]o (?:tem|vai ter|ter[áa]|haver[áa]) retorno|fechou (?:a porta|as portas)|n[ãa]o quis|recusou|n[ãa]o (?:tem|h[áa]) interesse/i.test(val)){ const cb=document.getElementById("fSemRet"); if(cb && !cb.checked){ cb.checked=true; got.push("🚫 sem retorno"); } }
     if(got.length){ const h=document.getElementById("fProxHint"); if(h){ h.style.display="block"; h.innerHTML="🧠 detectei da fala (confira/corrija): <b>"+got.join(" · ")+"</b>"; } } };
   ta.addEventListener("input", detectarCampos);
   document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, detectarCampos); };
@@ -338,14 +356,16 @@ function openPistaRec(id){
     if(!cli){ alert("Informe o CLIENTE / clínica visitada — obrigatório."); document.getElementById("fCli").focus(); return; }
     if(!bairro){ alert("Informe o BAIRRO — obrigatório (monta a rota das revisitas)."); document.getElementById("fBairro").focus(); return; }
     if(!dataVisita){ alert("Informe a DATA DA VISITA."); document.getElementById("fVisita").focus(); return; }
-    let prox=document.getElementById("fProx").value; if(!prox) prox=parseDataBR(texto);   // detecta do texto se não preencheu
-    if(!prox){ alert("Informe a DATA DE RETORNO (próximo passo) — obrigatória. Fale a data ou escolha no calendário."); document.getElementById("fProx").focus(); return; }
+    const semRet=document.getElementById("fSemRet").checked;
+    let prox=document.getElementById("fProx").value; if(!prox && !semRet) prox=parseDataBR(texto);   // detecta do texto se não preencheu
+    if(semRet){ prox=""; if(!texto){ alert("Marcou '🚫 Sem retorno' — então escreva o MOTIVO no feedback (ex.: cliente fechou a porta, recusou)."); ta.focus(); return; } }
+    else if(!prox){ alert("Informe a DATA DE RETORNO — obrigatória. Fale/escolha a data, OU marque '🚫 Sem retorno' e explique o motivo."); document.getElementById("fProx").focus(); return; }
     if(!F_CHECKIN){ alert("Faça o CHECK-IN (📍 GPS) — obrigatório: confirma que você está no cliente."); return; }
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
-    const ok=await savePista({id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, checkin:F_CHECKIN});
+    const ok=await savePista({id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, sem_retorno:semRet, checkin:F_CHECKIN});
     if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
-  const del=document.getElementById("fDel"); if(del) del.onclick=()=>{ if(confirm("Remover este feedback?")) removePista(F_ID); };
+  const del=document.getElementById("fDel"); if(del) del.onclick=()=>excluirFeedback(F_ID);
 }
 
 /* ---------- histórico semanal do radar (snapshots) ---------- */
@@ -1077,15 +1097,16 @@ function renderTab(){
         <div class="rk" style="color:${pr.col}">${pr.ic}</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?" · editado":""}</span></div>
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
-          ${f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:""}
+          ${f.sem_retorno?`<div class="rtbadge" style="background:rgba(255,138,0,.16);color:#ffc266">🚫 sem retorno</div>`:(f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:"")}
           <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${(f.checkin&&f.checkin.ts)?`<a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in</a>`:`<span style="color:#ffc266">⚠️ sem check-in</span>`}</div></div>
         <div class="mid"></div>
-        <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span></div>
+        <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
-    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button></div>`;
+    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
+      document.querySelectorAll("#content [data-delfb]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); excluirFeedback(el.dataset.delfb); });
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
@@ -1120,6 +1141,37 @@ function renderTab(){
         <div class="seclabel">📅 Agenda de retornos · por dia <span class="t-mut" style="font-weight:500">— ⚠️ avisa quando o dia mistura bairros (rota inviável)</span></div>
         ${ret.length? agenda : `<div class="empty">Sem retornos agendados ainda. Em cada feedback, preencha <b>Próximo passo (retorno)</b> + bairro — eles se organizam aqui em agenda e por bairro.</div>`}`;
       wirePista();
+      return;
+    }
+
+    if(pistaView==="exclusoes"){
+      const qx=search.trim().toLowerCase();
+      const arrx=qx?EXCL.filter(e=>((e.cliente||"")+" "+(e.por_exclusao||"")+" "+(e.motivo||"")+" "+(e.bairro||"")).toLowerCase().includes(qx)):EXCL;
+      let bodyx="",curMx=null;
+      arrx.forEach(e=>{ const d=new Date(e.ts), mk=d.getFullYear()*100+(d.getMonth()+1), p2=n=>String(n).padStart(2,"0");
+        if(mk!==curMx){ curMx=mk; bodyx+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
+        bodyx+=`<div class="crow">
+          <div class="rk" style="color:#FF5470">🗑️</div>
+          <div><div class="nm">${esc(e.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]} ${p2(d.getDate())}/${p2(d.getMonth()+1)}/${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}</span></div>
+            <div class="ci">excluído por <b>${esc(e.por_exclusao||"—")}</b>${e.por_registro?` · registrado por ${esc(e.por_registro)}`:""}${e.bairro?" · 📍 "+esc(e.bairro):""}</div>
+            ${e.motivo?`<div class="lastint">motivo: "${esc(e.motivo)}"</div>`:""}${e.resumo?`<div class="t-mut" style="font-size:12px">era: "${esc(e.resumo)}"</div>`:""}</div>
+          <div class="mid"></div>
+          <div class="rcell"><span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">${esc(e.tipo||"excluído")}</span></div>
+        </div>`; });
+      c.innerHTML=`${toggle}
+        <div class="kgrid">
+          ${kpi("r", EXCL.length, "Exclusões", "total, permanente")}
+          ${kpi("", new Set(EXCL.map(e=>e.por_exclusao)).size, "Quem excluiu", "pessoas distintas")}
+          ${kpi("", EXCL.filter(e=>e.ts>=Date.now()-7*864e5).length, "Na semana", "últimos 7 dias")}
+        </div>
+        <div class="tabsbar" style="margin:16px 0 8px">
+          <div class="seclabel" style="margin:0">🗑️ Histórico de exclusão · por mês e ano <span class="t-mut" style="font-weight:500">— quem, quando, motivo</span></div>
+          <input class="wlsearch" id="lupaExcl" placeholder="🔍 cliente, quem excluiu, motivo…" value="${esc(search)}">
+        </div>
+        ${EXCL.length?(arrx.length?bodyx:`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma exclusão ainda. Ao excluir um feedback (🗑️), ele vem parar aqui — permanente, com quem excluiu, quando e por quê.</div>`}`;
+      wirePista();
+      const lpx=document.getElementById("lupaExcl");
+      if(lpx){ lpx.addEventListener("input", ev=>{ search=ev.target.value; pinned=true; setPin(); const pp=lpx.selectionStart; renderTab(); const l3=document.getElementById("lupaExcl"); if(l3){l3.focus(); try{l3.setSelectionRange(pp,pp);}catch(_){}}}); }
       return;
     }
 
@@ -1245,9 +1297,9 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps()]).then(()=>renderAll());
-    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length;
-      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps()]);
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]).then(()=>renderAll());
+    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length;
+      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]);
       if(a!==sig()) renderTab(); }, 45000);
   }
 }
