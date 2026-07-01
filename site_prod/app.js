@@ -338,8 +338,8 @@ function buildTabs(){
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
   const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
   tabsEl.innerHTML=list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
-    <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'&&x.em_processo>0?'avisopulse':''}" data-i="${i}">
-      <span class="tn">${k?k.i+' '+esc(x.categoria):esc(x.categoria)}</span>
+    <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'?'avisopulse':''}" data-i="${i}">
+      <span class="tn">${k&&x.kind==='aviso'?'<span class="fwt">🎆</span> '+k.i+' '+esc(x.categoria)+' <span class="fwt">🎇</span>':(k?k.i+' '+esc(x.categoria):esc(x.categoria))}</span>
       <span class="tb ${k?k.b:(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
       <span class="prog"></span>
     </div>`;}).join('')
