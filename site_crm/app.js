@@ -442,7 +442,7 @@ function openPistaRec(id){
     <label class="semret"><input type="checkbox" id="fSemRet" ${F_SEMRET?"checked":""}> 🚫 <b>Sem retorno</b> — cliente fechou/recusou (aí escreva o motivo no feedback)</label>
     <div class="m-sec">Check-in da visita <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— GPS: entrada obrigatória; saída mede o tempo na clínica</span></div>
     <div style="display:flex;gap:8px">
-      <button class="checkinbtn${F_CHECKIN?" done":""}" id="fCheckin" type="button" style="flex:1">${F_CHECKIN?"✅ Entrada (refazer)":"📍 Check-in (entrada)"}</button>
+      ${(vand&&vand.checkin)?`<div class="checkinbtn done" style="flex:1;text-align:center;cursor:default">🔒 Entrada ${(()=>{const t=new Date(vand.checkin.ts),p=n=>String(n).padStart(2,'0');return p(t.getHours())+':'+p(t.getMinutes());})()} (chegada)</div>`:`<button class="checkinbtn${F_CHECKIN?" done":""}" id="fCheckin" type="button" style="flex:1">${F_CHECKIN?"✅ Entrada (refazer)":"📍 Check-in (entrada)"}</button>`}
       <button class="checkinbtn${F_CHECKOUT?" done":""}" id="fCheckout" type="button" style="flex:1">${F_CHECKOUT?"✅ Saída (refazer)":"📍 Check-out (saída)"}</button>
     </div>
     <div id="fCheckinStatus" class="proxhint" style="display:none"></div>
@@ -461,7 +461,7 @@ function openPistaRec(id){
     if(got.length){ const h=document.getElementById("fProxHint"); if(h){ h.style.display="block"; h.innerHTML="🧠 detectei da fala (confira/corrija): <b>"+got.join(" · ")+"</b>"; } } };
   ta.addEventListener("input", detectarCampos);
   document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, detectarCampos); };
-  document.getElementById("fCheckin").onclick=function(){ fazerCheckin(this, "in"); };
+  const fci=document.getElementById("fCheckin"); if(fci) fci.onclick=function(){ fazerCheckin(this, "in"); };
   document.getElementById("fCheckout").onclick=function(){ fazerCheckin(this, "out"); };
   renderCheckinStatus();
   document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));
@@ -1403,9 +1403,9 @@ function renderTab(){
     c.innerHTML=`${toggle}${repBar}
       ${pqCount()?`<div class="proxhint" style="border-color:#FFB020;color:#ffd94d;background:rgba(255,176,32,.12);margin-bottom:12px">📴 <b>${pqCount()}</b> feedback(s) salvos sem sinal — sincroniza sozinho quando a internet voltar${navigator.onLine?` · <a onclick="pqFlush()" style="color:var(--cyan);cursor:pointer;text-decoration:underline">sincronizar agora</a>`:""}</div>`:""}
       ${(()=>{ const v=visitaLoad(); if(!v||!v.checkin) return ""; const t=new Date(v.checkin.ts),pp=n=>String(n).padStart(2,"0");
-        return `<div class="proxhint" style="border-color:#00E5A0;color:#7effcf;background:rgba(0,229,160,.14);margin-bottom:12px;font-size:14px">🟢 <b>Visita em andamento:</b> ${esc(v.cliente)}${v.bairro?" · 📍 "+esc(v.bairro):""} · chegou ${pp(t.getHours())}:${pp(t.getMinutes())}<button class="baixabtn ok" id="visFim" onclick="event.stopPropagation()" style="margin-top:8px;width:100%">📝 Feedback + check-out (sair)</button></div>`; })()}
-      ${!visitaLoad()?`<button class="checkinbtn" id="visIni" type="button" style="margin-bottom:12px">📍 Cheguei — check-in de chegada (antes da visita)</button>`:""}
-      <button class="bigmic" id="pistaRec">🎤 Gravar feedback da visita</button>
+        return `<div class="proxhint" style="border-color:#00E5A0;color:#7effcf;background:rgba(0,229,160,.14);margin-bottom:8px;font-size:14px">🟢 <b>Visita em andamento:</b> ${esc(v.cliente)}${v.bairro?" · 📍 "+esc(v.bairro):""} · chegou ${pp(t.getHours())}:${pp(t.getMinutes())}</div>
+          <button class="bigmic" id="visFim" style="margin-bottom:12px">📝 Registrar feedback + check-out (sair)</button>`; })()}
+      ${!visitaLoad()?`<button class="bigmic" id="visIni" type="button" style="margin-bottom:6px">📍 Cheguei — check-in de chegada (começa a visita)</button><div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Bata o check-in ao CHEGAR. O feedback + saída você faz ao sair.</div>`:""}
       <div class="kgrid">
         ${kpi("g", hoje, "Hoje", "feedbacks de hoje")}
         ${kpi("", sem, "Na semana", "últimos 7 dias")}
