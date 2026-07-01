@@ -279,6 +279,22 @@ async function reagendarRetorno(id){
   const ok=await savePista({...f, proximo:nova, sem_retorno:false, clear_baixa:true});   // limpa baixa → volta pra agenda
   if(ok){ alert("✅ Reagendado para "+fmtDataBR(nova)+" — voltou pra agenda de rota."); renderTab(); }
 }
+/* BI da Pista (Chart.js — mesmo CDN da aba Resultados) */
+function drawPistaBI(base){
+  if(typeof Chart==="undefined") return;
+  CHARTS.forEach(c=>{try{c.destroy();}catch(e){}}); CHARTS=[];
+  Chart.defaults.color="#8aa2bd"; Chart.defaults.font.family="Inter";
+  const g=id=>document.getElementById(id), p=n=>String(n).padStart(2,"0");
+  const porRep=Object.entries(base.reduce((a,f)=>{const k=f.por||"—";a[k]=(a[k]||0)+1;return a;},{})).sort((a,b)=>b[1]-a[1]);
+  if(g("pbRep")) CHARTS.push(new Chart(g("pbRep"),{type:"bar",data:{labels:porRep.map(r=>r[0]),datasets:[{data:porRep.map(r=>r[1]),backgroundColor:"#00D4FF"}]},options:{animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}}}}));
+  const porRes=PRORDER.map(k=>base.filter(f=>f.resultado===k).length);
+  if(g("pbRes")) CHARTS.push(new Chart(g("pbRes"),{type:"doughnut",data:{labels:PRORDER.map(k=>PRES[k].lbl),datasets:[{data:porRes,backgroundColor:PRORDER.map(k=>PRES[k].col),borderColor:"#0A1628",borderWidth:3}]},options:{animation:false,cutout:"60%",plugins:{legend:{position:"right",labels:{boxWidth:12}}}}}));
+  const dias=[]; for(let i=13;i>=0;i--){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-i);dias.push({lbl:`${p(d.getDate())}/${p(d.getMonth()+1)}`,key:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`,n:0});}
+  base.forEach(f=>{const dv=f.data_visita||new Date(f.ts).toISOString().slice(0,10);const d=dias.find(x=>x.key===dv);if(d)d.n++;});
+  if(g("pbDia")) CHARTS.push(new Chart(g("pbDia"),{type:"line",data:{labels:dias.map(d=>d.lbl),datasets:[{data:dias.map(d=>d.n),borderColor:"#00E5A0",backgroundColor:"rgba(0,229,160,.15)",fill:true,tension:.35,pointRadius:2}]},options:{animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}}}}));
+  const obj=[["🛑 Objeção",base.filter(f=>f.resultado==="objecao").length],["❌ Sem interesse",base.filter(f=>f.resultado==="sem_interesse").length],["🚫 Desmarcado",base.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").length]];
+  if(g("pbObj")) CHARTS.push(new Chart(g("pbObj"),{type:"bar",data:{labels:obj.map(o=>o[0]),datasets:[{data:obj.map(o=>o[1]),backgroundColor:"#FF8A00"}]},options:{indexAxis:"y",animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}},y:{grid:{display:false}}}}}));
+}
 function fmtDataBR(iso){ try{ const d=new Date(iso+"T00:00:00"); const dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; const p=n=>String(n).padStart(2,'0'); return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)}`; }catch(e){ return iso; } }
 /* detecta a data de retorno no texto falado/digitado (pt-BR) → "YYYY-MM-DD" */
 const _NUMW={um:1,uma:1,dois:2,duas:2,tres:3,"três":3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,dezesseis:16,dezasseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30};
@@ -1151,7 +1167,7 @@ function renderTab(){
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
-    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
+    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='bi'?'on':''}" data-pv="bi">📊 BI</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
@@ -1231,6 +1247,34 @@ function renderTab(){
       wirePista();
       const lpr=document.getElementById("lupaReal");
       if(lpr){ lpr.addEventListener("input", ev=>{ search=ev.target.value; pinned=true; setPin(); const pp=lpr.selectionStart; renderTab(); const l4=document.getElementById("lupaReal"); if(l4){l4.focus(); try{l4.setSelectionRange(pp,pp);}catch(_){}}}); }
+      return;
+    }
+
+    if(pistaView==="bi"){
+      const base=all, total=base.length;
+      const realiz=base.filter(f=>f.baixa&&f.baixa.tipo==="compareceu").length;
+      const desm=base.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").length;
+      const fechou=base.filter(f=>f.resultado==="fechou").length;
+      const taxaReal=(realiz+desm)?Math.round(100*realiz/(realiz+desm)):0;
+      const conv=total?Math.round(100*fechou/total):0;
+      c.innerHTML=`${toggle}${repBar}
+        <div class="kgrid">
+          ${kpi("", total, "Feedbacks", repFilter?("de "+esc(repFilter)):"total")}
+          ${kpi("g", realiz, "Realizadas", "com check-in")}
+          ${kpi("g", taxaReal+"%", "Taxa de realização", "feitas ÷ (feitas+desmarcadas)")}
+          ${kpi("g", conv+"%", "Conversão", "fecharam ÷ total")}
+        </div>
+        <div class="bigrid">
+          <div class="card"><h3>Visitas por comercial</h3><div class="cwrap"><canvas id="pbRep"></canvas></div></div>
+          <div class="card"><h3>Resultados das visitas</h3><div class="cwrap"><canvas id="pbRes"></canvas></div></div>
+        </div>
+        <div class="bigrid">
+          <div class="card"><h3>Visitas por dia <span class="tag">14 dias</span></h3><div class="cwrap"><canvas id="pbDia"></canvas></div></div>
+          <div class="card"><h3>Objeções / não-avanço</h3><div class="cwrap"><canvas id="pbObj"></canvas></div></div>
+        </div>
+        ${total?"":`<div class="empty">Sem dados ainda — os gráficos aparecem conforme o time registra visitas.</div>`}`;
+      wirePista();
+      drawPistaBI(base);
       return;
     }
 
