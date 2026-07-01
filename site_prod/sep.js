@@ -465,10 +465,21 @@
   // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
   const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && (it.dias || 0) === 0 && estadoDe(it) !== 'insuficiente' && estadoDe(it) !== 'insuficiente_avisado');
   const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber)', lateFn: it => statusOf(it).st === 'atrasado' });
-  const viewUrgente = () => worklistView('urgente', ageItems(1, null), {
-    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não finalizada(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
-    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO FINALIZADA${n > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
-  });
+  // Última Chamada = não finalizadas de ontem+ (dias>=1) MAIS os RECEBIDOS HOJE (ficam p/ o passo opcional de
+  // amostra insuficiente, igual à fila de hoje; somem sozinhos na virada do dia se não virarem insuficiente).
+  const recebidoHoje = it => { const m = marks[chaveOf(it)]; return !!(m && m.estado === 'recebido' && dayTs(m.ts_receb) === dayTs(Date.now())); };
+  const ultChamadaItems = () => {
+    const pend = ageItems(1, null);
+    const seen = new Set(pend.map(chaveOf));
+    const recHoje = itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && (it.dias || 0) >= 1 && recebidoHoje(it) && !seen.has(chaveOf(it)));
+    return pend.concat(recHoje);
+  };
+  const viewUrgente = () => { const pendN = ageItems(1, null).length; return worklistView('urgente', ultChamadaItems(), {
+    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: it => estadoDe(it) !== 'recebido',
+    bar: () => pendN > 0
+      ? `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${pendN} AMOSTRA${pendN > 1 ? 'S' : ''} NÃO FINALIZADA${pendN > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
+      : `<div class="sepnote" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#15803d;padding:10px 14px;border-radius:10px;margin-bottom:10px">✓ Nenhuma pendente. As recebidas hoje ficam aqui até a virada do dia — marque <b>🚫 Insuficiente</b> se alguma amostra estiver ruim.</div>`
+  }); };
 
   /* ---- 📧 AVISAR CLIENTE: amostras insuficientes aguardando o check-in do aviso ---- */
   function rowAvisar(m) {
