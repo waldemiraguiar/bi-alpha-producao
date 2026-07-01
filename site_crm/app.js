@@ -1120,6 +1120,7 @@ function renderTab(){
     const naofeitosAtras=pistaRetornos(all).filter(f=>f.proximo<_tISO);
     const naofeitosDesm=all.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").sort((a,b)=>((b.baixa||{}).ts||0)-((a.baixa||{}).ts||0));
     const naofeitosN=naofeitosAtras.length+naofeitosDesm.length;
+    const realizados=all.filter(f=>f.baixa&&f.baixa.tipo==="compareceu").sort((a,b)=>((b.baixa||{}).ts||0)-((a.baixa||{}).ts||0));
     const arr= q ? all.filter(f=>(f.cliente||"").toLowerCase().includes(q)||(f.texto||"").toLowerCase().includes(q)||((PRES[f.resultado]||{}).lbl||"").toLowerCase().includes(q)) : all;
     const now=Date.now(), d0=new Date(); d0.setHours(0,0,0,0);
     const hoje=all.filter(f=>f.ts>=d0.getTime()).length, sem=all.filter(f=>f.ts>=now-7*864e5).length, fechou=all.filter(f=>f.resultado==="fechou").length;
@@ -1137,7 +1138,7 @@ function renderTab(){
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
-    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
+    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
@@ -1185,6 +1186,38 @@ function renderTab(){
         <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
         ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Em cada feedback preencha o retorno + bairro — a agenda se monta aqui, por comercial e por dia.</div>`}`;
       wirePista();
+      return;
+    }
+
+    if(pistaView==="realizados"){
+      const p2=n=>String(n).padStart(2,"0"), now=Date.now(); const d0=new Date(); d0.setHours(0,0,0,0);
+      const rHoje=realizados.filter(f=>(f.baixa.ts||0)>=d0.getTime()).length, rSem=realizados.filter(f=>(f.baixa.ts||0)>=now-7*864e5).length, rMes=realizados.filter(f=>(f.baixa.ts||0)>=now-30*864e5).length;
+      const q=search.trim().toLowerCase();
+      const arr=q?realizados.filter(f=>((f.cliente||"")+" "+(f.por||"")+" "+(f.bairro||"")).toLowerCase().includes(q)):realizados;
+      let body="",curM=null;
+      arr.forEach(f=>{ const d=new Date(f.baixa.ts||f.ts), mk=d.getFullYear()*100+(d.getMonth()+1), pr=PRES[f.resultado]||PRES.visita, dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()];
+        if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
+        body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">✅</div>
+          <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· realizado ${dd} ${p2(d.getDate())}/${p2(d.getMonth()+1)} ${p2(d.getHours())}:${p2(d.getMinutes())}</span></div>
+            <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in no mapa</a>`:""}</div>
+            ${f.texto?`<div class="lastint">"${esc(f.texto.slice(0,80))}"</div>`:""}</div>
+          <div class="mid"></div>
+          <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span></div></div>`; });
+      c.innerHTML=`${toggle}${repBar}
+        <div class="kgrid">
+          ${kpi("g", rHoje, "Hoje", "visitas realizadas")}
+          ${kpi("", rSem, "Na semana", "últimos 7 dias")}
+          ${kpi("g", rMes, "No mês", "últimos 30 dias")}
+          ${kpi("", realizados.length, "Total", "com check-in")}
+        </div>
+        <div class="tabsbar" style="margin:16px 0 8px">
+          <div class="seclabel" style="margin:0">✅ Visitas realizadas · por mês e ano <span class="t-mut" style="font-weight:500">— baixa por check-in (prova de presença)</span></div>
+          <input class="wlsearch" id="lupaReal" placeholder="🔍 cliente, comercial, bairro…" value="${esc(search)}">
+        </div>
+        ${realizados.length?(arr.length?body:`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma visita com baixa ainda. Dê baixa num retorno (✓ check-in na clínica) e ela aparece aqui como realizada — com data, comercial e o pino do mapa.</div>`}`;
+      wirePista();
+      const lpr=document.getElementById("lupaReal");
+      if(lpr){ lpr.addEventListener("input", ev=>{ search=ev.target.value; pinned=true; setPin(); const pp=lpr.selectionStart; renderTab(); const l4=document.getElementById("lupaReal"); if(l4){l4.focus(); try{l4.setSelectionRange(pp,pp);}catch(_){}}}); }
       return;
     }
 
