@@ -315,24 +315,32 @@ function detectRep(texto){ const m=(" "+(texto||"").toLowerCase()).match(/\b(?:m
   return s.split(/\s+/).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" "); }
 function detectCliente(texto){ const m=(" "+(texto||"")).match(/\b(cl[ií]nica|hospital|pet\s?shop|petshop|veterin[áa]ria|consult[óo]rio|pet)\s+([A-Za-zÀ-ú0-9]+(?:\s+[A-Za-zÀ-ú0-9]+){0,2})/i);
   if(!m) return ""; return m[0].trim().replace(/\s+/g," ").replace(/\s+(na|no|em|de|da|do|para|pra|e|que|com|pediram|pediu|gostou|gostaram)$/i,""); }
-let F_ID=null, F_RES="visita", F_CHECKIN=null, F_SEMRET=false;
+let F_ID=null, F_RES="visita", F_CHECKIN=null, F_CHECKOUT=null, F_SEMRET=false;
 function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
-/* check-in por georreferência (Geolocation API do navegador — anti-golpe) */
-function fazerCheckin(btn, statusEl){
+function dwellMin(ci,co){ return (ci&&co&&co.ts&&ci.ts)?Math.max(0,Math.round((co.ts-ci.ts)/60000)):null; }
+/* check-in (entrada) / check-out (saída) por georreferência (Geolocation API — anti-golpe + tempo na clínica) */
+function fazerCheckin(btn, kind){
   if(!navigator.geolocation){ alert("Este aparelho não tem localização/GPS."); return; }
   btn.disabled=true; btn.textContent="📍 Localizando…";
   navigator.geolocation.getCurrentPosition(pos=>{
-    const c=pos.coords; F_CHECKIN={lat:+c.latitude.toFixed(6), lng:+c.longitude.toFixed(6), acc:Math.round(c.accuracy||0), ts:Date.now()};
-    btn.disabled=false; btn.classList.add("done"); btn.textContent="✅ Check-in feito (refazer)";
-    const t=new Date(F_CHECKIN.ts), p=n=>String(n).padStart(2,"0");
-    statusEl.style.display="block";
-    statusEl.innerHTML=`✅ Check-in às ${p(t.getHours())}:${p(t.getMinutes())} · precisão ±${F_CHECKIN.acc}m · <a href="https://maps.google.com/?q=${F_CHECKIN.lat},${F_CHECKIN.lng}" target="_blank" style="color:var(--cyan);font-weight:700">ver no mapa</a>`;
-  }, err=>{ btn.disabled=false; btn.textContent="📍 Fazer check-in"; alert("Não consegui pegar sua localização. Ative o GPS e PERMITA o acesso à localização no navegador."); },
+    const c=pos.coords, obj={lat:+c.latitude.toFixed(6), lng:+c.longitude.toFixed(6), acc:Math.round(c.accuracy||0), ts:Date.now()};
+    if(kind==="out") F_CHECKOUT=obj; else F_CHECKIN=obj;
+    btn.disabled=false; btn.classList.add("done"); btn.textContent=kind==="out"?"✅ Saída (refazer)":"✅ Entrada (refazer)";
+    renderCheckinStatus();
+  }, ()=>{ btn.disabled=false; btn.textContent=kind==="out"?"📍 Check-out (saída)":"📍 Check-in (entrada)"; alert("Não consegui pegar sua localização. Ative o GPS e PERMITA o acesso."); },
   {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+}
+function renderCheckinStatus(){
+  const el=document.getElementById("fCheckinStatus"); if(!el) return;
+  const p=n=>String(n).padStart(2,"0"), hm=x=>{const d=new Date(x.ts); return p(d.getHours())+":"+p(d.getMinutes());}, s=[];
+  if(F_CHECKIN) s.push(`entrada ${hm(F_CHECKIN)} <a href="https://maps.google.com/?q=${F_CHECKIN.lat},${F_CHECKIN.lng}" target="_blank" style="color:var(--cyan)">📍</a>`);
+  if(F_CHECKOUT) s.push(`saída ${hm(F_CHECKOUT)}`);
+  const dw=dwellMin(F_CHECKIN,F_CHECKOUT); if(dw!=null) s.push(`<b>⏱ ${dw} min na clínica</b>`);
+  el.style.display=s.length?"block":"none"; el.innerHTML="✅ "+s.join(" · ");
 }
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
-  F_ID=id||null; F_RES=f?f.resultado:"visita"; F_CHECKIN=(f&&f.checkin&&f.checkin.ts)?f.checkin:null; F_SEMRET=f?!!f.sem_retorno:false;
+  F_ID=id||null; F_RES=f?f.resultado:"visita"; F_CHECKIN=(f&&f.checkin&&f.checkin.ts)?f.checkin:null; F_CHECKOUT=(f&&f.checkout&&f.checkout.ts)?f.checkout:null; F_SEMRET=f?!!f.sem_retorno:false;
   const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
   document.getElementById("modalBody").innerHTML=`
     <div class="m-head"><div><div class="m-cli">${f?"✏️ Editar feedback":"🎤 Novo feedback da pista"}</div>
@@ -359,9 +367,12 @@ function openPistaRec(id){
     <input id="fProx" type="date" class="m-date" value="${f?esc(f.proximo||""):""}">
     <div id="fProxHint" class="proxhint" style="display:none"></div>
     <label class="semret"><input type="checkbox" id="fSemRet" ${F_SEMRET?"checked":""}> 🚫 <b>Sem retorno</b> — cliente fechou/recusou (aí escreva o motivo no feedback)</label>
-    <div class="m-sec">Check-in da visita <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— confirma no GPS que você está no cliente</span></div>
-    <button class="checkinbtn${F_CHECKIN?" done":""}" id="fCheckin" type="button">${F_CHECKIN?"✅ Check-in feito (refazer)":"📍 Fazer check-in"}</button>
-    <div id="fCheckinStatus" class="proxhint" style="display:${F_CHECKIN?"block":"none"}">${F_CHECKIN?`✅ Check-in salvo · precisão ±${F_CHECKIN.acc}m · <a href="https://maps.google.com/?q=${F_CHECKIN.lat},${F_CHECKIN.lng}" target="_blank" style="color:var(--cyan);font-weight:700">ver no mapa</a>`:""}</div>
+    <div class="m-sec">Check-in da visita <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— GPS: entrada obrigatória; saída mede o tempo na clínica</span></div>
+    <div style="display:flex;gap:8px">
+      <button class="checkinbtn${F_CHECKIN?" done":""}" id="fCheckin" type="button" style="flex:1">${F_CHECKIN?"✅ Entrada (refazer)":"📍 Check-in (entrada)"}</button>
+      <button class="checkinbtn${F_CHECKOUT?" done":""}" id="fCheckout" type="button" style="flex:1">${F_CHECKOUT?"✅ Saída (refazer)":"📍 Check-out (saída)"}</button>
+    </div>
+    <div id="fCheckinStatus" class="proxhint" style="display:none"></div>
     <button class="m-save" id="fSave">${f?"Salvar alterações":"Salvar feedback"}</button>
     ${f?`<button class="m-enc" id="fDel" style="border-color:var(--mut);color:var(--mut)">Remover feedback</button>`:""}`;
   document.getElementById("modal").style.display="flex";
@@ -377,7 +388,9 @@ function openPistaRec(id){
     if(got.length){ const h=document.getElementById("fProxHint"); if(h){ h.style.display="block"; h.innerHTML="🧠 detectei da fala (confira/corrija): <b>"+got.join(" · ")+"</b>"; } } };
   ta.addEventListener("input", detectarCampos);
   document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, detectarCampos); };
-  document.getElementById("fCheckin").onclick=function(){ fazerCheckin(this, document.getElementById("fCheckinStatus")); };
+  document.getElementById("fCheckin").onclick=function(){ fazerCheckin(this, "in"); };
+  document.getElementById("fCheckout").onclick=function(){ fazerCheckin(this, "out"); };
+  renderCheckinStatus();
   document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
   document.getElementById("fSave").onclick=async()=>{
     try{PREC&&PREC.stop();}catch(e){}
@@ -393,7 +406,7 @@ function openPistaRec(id){
     if(!F_CHECKIN){ alert("Faça o CHECK-IN (📍 GPS) — obrigatório: confirma que você está no cliente."); return; }
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
-    const ok=await savePista({id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, sem_retorno:semRet, checkin:F_CHECKIN});
+    const ok=await savePista({id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, sem_retorno:semRet, checkin:F_CHECKIN, checkout:F_CHECKOUT});
     if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>excluirFeedback(F_ID);
 }
@@ -1133,7 +1146,7 @@ function renderTab(){
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?" · editado":""}</span></div>
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
           ${f.sem_retorno?`<div class="rtbadge" style="background:rgba(255,138,0,.16);color:#ffc266">🚫 sem retorno</div>`:(f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:"")}
-          <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${(f.checkin&&f.checkin.ts)?`<a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in</a>`:`<span style="color:#ffc266">⚠️ sem check-in</span>`}</div>
+          <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${(f.checkin&&f.checkin.ts)?`<a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in</a>`:`<span style="color:#ffc266">⚠️ sem check-in</span>`}${dwellMin(f.checkin,f.checkout)!=null?` · ⏱ ${dwellMin(f.checkin,f.checkout)} min na clínica`:""}</div>
           ${f.baixa?`<div class="ci" style="font-size:11.5px">${f.baixa.tipo==="compareceu"?`<span style="color:#7effcf;font-weight:700">✓ baixa: compareceu${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf">📍 mapa</a>`:""}</span>`:`<span style="color:#ffc266;font-weight:700">🚫 baixa: desmarcado · aut. diretoria${f.baixa.motivo?' ("'+esc(f.baixa.motivo)+'")':''}</span>`}</div>`:""}</div>
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
@@ -1199,7 +1212,7 @@ function renderTab(){
         if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
         body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">✅</div>
           <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· realizado ${dd} ${p2(d.getDate())}/${p2(d.getMonth()+1)} ${p2(d.getHours())}:${p2(d.getMinutes())}</span></div>
-            <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in no mapa</a>`:""}</div>
+            <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in no mapa</a>`:""}${dwellMin(f.checkin,f.checkout)!=null?` · ⏱ ${dwellMin(f.checkin,f.checkout)} min`:""}</div>
             ${f.texto?`<div class="lastint">"${esc(f.texto.slice(0,80))}"</div>`:""}</div>
           <div class="mid"></div>
           <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span></div></div>`; });

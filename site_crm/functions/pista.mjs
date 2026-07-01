@@ -57,6 +57,9 @@ export default async (req) => {
         checkin: (it.checkin && typeof it.checkin === "object")
           ? { lat: +it.checkin.lat || 0, lng: +it.checkin.lng || 0, acc: +it.checkin.acc || 0, ts: +it.checkin.ts || 0 }
           : (existing ? existing.checkin || null : null),   // não perde o check-in ao editar
+        checkout: (it.checkout && typeof it.checkout === "object")
+          ? { lat: +it.checkout.lat || 0, lng: +it.checkout.lng || 0, acc: +it.checkout.acc || 0, ts: +it.checkout.ts || 0 }
+          : (existing ? existing.checkout || null : null),   // saída (opcional) — mede o tempo na clínica
         proximo: String(it.proximo || "").slice(0, 20),
         sem_retorno: !!it.sem_retorno,
         baixa,
