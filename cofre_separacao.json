@@ -2329,6 +2329,190 @@
       "codex": 834,
       "exame": "Beta Hidroxibutirato",
       "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 332,
+      "exame": "Brometo de Potássio",
+      "classe": "interno"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 389,
+      "exame": "Pesquisa de Mycoplasma sp. (Haemobartonella sp.)",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 682,
+      "exame": "PCR Theileria equi",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 747,
+      "exame": "PCR Chlamydophila psitacci",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 794,
+      "exame": "PCR - Vírus da Panleucopenia Felina (FPV - Parvovirus)",
+      "classe": "interno"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 823,
+      "exame": "Identificação de Verme Adulto",
+      "classe": "nao"
+    },
+    {
+      "cat": "Uroanálise",
+      "setor": "—",
+      "cod": 7,
+      "codex": 900,
+      "exame": "Relação Cálcio - Creatinina Urinária",
+      "classe": "nao"
+    },
+    {
+      "cat": "NECRÓPSIA",
+      "setor": "—",
+      "cod": 58,
+      "codex": 974,
+      "exame": "Necrópsia - Até 60Kg",
+      "classe": "nao"
+    },
+    {
+      "cat": "NECRÓPSIA",
+      "setor": "—",
+      "cod": 58,
+      "codex": 977,
+      "exame": "Necrópsia - Até 40Kg",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "—",
+      "cod": 16,
+      "codex": 1023,
+      "exame": "Relação Ureia-Creatinina",
+      "classe": "nao"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1043,
+      "exame": "Citologia Neoplásica - 6 Regiões",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1044,
+      "exame": "Mutação BRAF - CARCINOMA DE VESICULA URINARIA E PROSTATA DE CAES",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1046,
+      "exame": "PCR Cryptococcus sp",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1067,
+      "exame": "Histologia - 7 Fragmentos",
+      "classe": "interno"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 1145,
+      "exame": "Parasitológico - Exame Direto",
+      "classe": "nao"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1173,
+      "exame": "PCR Mycoplasma Haemocanis",
+      "classe": "interno"
+    },
+    {
+      "cat": "Parasitologia",
+      "setor": "—",
+      "cod": 2,
+      "codex": 1188,
+      "exame": "Parasitológico - Bearman",
+      "classe": "nao"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 1194,
+      "exame": "T4 Total RIE - BET",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1200,
+      "exame": "Coronavirus (Ag) Felino",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOLOGIA MOLECULAR - PCR",
+      "setor": "—",
+      "cod": 31,
+      "codex": 1239,
+      "exame": "PCR Anaplasma phagocytophila",
+      "classe": "interno"
+    },
+    {
+      "cat": "Citopatologia",
+      "setor": "—",
+      "cod": 15,
+      "codex": 1242,
+      "exame": "Imunoistoquímica - Painel Prognostico Carcinomas",
+      "classe": "interno"
+    },
+    {
+      "cat": "BIOQUÍMICA",
+      "setor": "—",
+      "cod": 16,
+      "codex": 1245,
+      "exame": "Dessorar - 4 Tubos",
+      "classe": "interno"
+    },
+    {
+      "cat": "IMUNOLOGIA",
+      "setor": "—",
+      "cod": 9,
+      "codex": 1246,
+      "exame": "Chlamydophila e Toxoplasma IgG FELINO",
+      "classe": "interno"
     }
   ]
 }
