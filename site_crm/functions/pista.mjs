@@ -43,6 +43,7 @@ export default async (req) => {
           ? { lat: +it.checkin.lat || 0, lng: +it.checkin.lng || 0, acc: +it.checkin.acc || 0, ts: +it.checkin.ts || 0 }
           : (existing ? existing.checkin || null : null),   // não perde o check-in ao editar
         proximo: String(it.proximo || "").slice(0, 20),
+        sem_retorno: !!it.sem_retorno,
         por: String(it.por || "equipe").slice(0, 40),
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
         ts_upd: Date.now(),
