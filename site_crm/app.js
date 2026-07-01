@@ -269,7 +269,15 @@ async function darBaixaDesmarcou(id){
   const motivo=(prompt(`Cliente "${f.cliente||""}" DESMARCOU por telefone (sem ida). Qual o motivo?`)||"").trim(); if(!motivo) return;
   const code=(prompt("Isto exige AUTORIZAÇÃO. Digite o CÓDIGO DA DIRETORIA:")||"").trim(); if(!code) return;
   const ok=await saveBaixaItem(f,{tipo:"desmarcado",ts:Date.now(),por:meuRep()||quemExcluiu(),motivo},code);
-  if(ok){ alert("✅ Baixa autorizada pela diretoria."); renderTab(); }
+  if(ok){ alert("✅ Baixa autorizada pela diretoria. Foi pra '⏰ Retornos não feitos' pra você reagendar."); renderTab(); }
+}
+async function reagendarRetorno(id){
+  const f=PISTA.find(x=>x.id===id); if(!f) return;
+  const txt=(prompt(`Reagendar "${f.cliente||""}". Nova data (ex.: 12/07, "dia 12 do 7", "segunda que vem"):`)||"").trim(); if(!txt) return;
+  const nova=parseDataBR(txt)||(/^\d{4}-\d{2}-\d{2}$/.test(txt)?txt:"");
+  if(!nova){ alert("Não entendi a data. Tente 12/07, 'dia 12 do 7' ou 2026-07-12."); return; }
+  const ok=await savePista({...f, proximo:nova, sem_retorno:false, clear_baixa:true});   // limpa baixa → volta pra agenda
+  if(ok){ alert("✅ Reagendado para "+fmtDataBR(nova)+" — voltou pra agenda de rota."); renderTab(); }
 }
 function fmtDataBR(iso){ try{ const d=new Date(iso+"T00:00:00"); const dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; const p=n=>String(n).padStart(2,'0'); return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)}`; }catch(e){ return iso; } }
 /* detecta a data de retorno no texto falado/digitado (pt-BR) → "YYYY-MM-DD" */
@@ -1108,6 +1116,10 @@ function renderTab(){
       +`<button class="opt" id="repAdd" style="padding:6px 10px">＋ comercial</button></div>`;
     const rank={}; PISTA.forEach(f=>{const p=f.por||"(sem nome)"; (rank[p]=rank[p]||{n:0,fechou:0}); rank[p].n++; if(f.resultado==="fechou")rank[p].fechou++;});
     const rankHtml=Object.entries(rank).sort((a,b)=>b[1].n-a[1].n).map(([p,v])=>`<div class="leg-row"><span class="leg-dot" style="background:${p===repFilter?'#00E5A0':'#00D4FF'}"></span><b>${esc(p)}</b><span class="leg-n">${v.n}</span><span class="t-mut">— ${v.fechou} fechado(s)</span></div>`).join("");
+    const _tISO=hojeISO();
+    const naofeitosAtras=pistaRetornos(all).filter(f=>f.proximo<_tISO);
+    const naofeitosDesm=all.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").sort((a,b)=>((b.baixa||{}).ts||0)-((a.baixa||{}).ts||0));
+    const naofeitosN=naofeitosAtras.length+naofeitosDesm.length;
     const arr= q ? all.filter(f=>(f.cliente||"").toLowerCase().includes(q)||(f.texto||"").toLowerCase().includes(q)||((PRES[f.resultado]||{}).lbl||"").toLowerCase().includes(q)) : all;
     const now=Date.now(), d0=new Date(); d0.setHours(0,0,0,0);
     const hoje=all.filter(f=>f.ts>=d0.getTime()).length, sem=all.filter(f=>f.ts>=now-7*864e5).length, fechou=all.filter(f=>f.resultado==="fechou").length;
@@ -1125,13 +1137,14 @@ function renderTab(){
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
-    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
+    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
       document.querySelectorAll("#content [data-delfb]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); excluirFeedback(el.dataset.delfb); });
       document.querySelectorAll("#content [data-baixa]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaCheckin(el.dataset.baixa); });
       document.querySelectorAll("#content [data-desm]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaDesmarcou(el.dataset.desm); });
+      document.querySelectorAll("#content [data-reag]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); reagendarRetorno(el.dataset.reag); });
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
@@ -1171,6 +1184,28 @@ function renderTab(){
         ${ret.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
         <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
         ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Em cada feedback preencha o retorno + bairro — a agenda se monta aqui, por comercial e por dia.</div>`}`;
+      wirePista();
+      return;
+    }
+
+    if(pistaView==="naofeitos"){
+      const linhaNF=(f, badge)=>`<div class="crow retday-card retday-pulse" style="margin-bottom:8px;padding:10px">
+        <div class="rk" style="color:#FFD000">⏰</div>
+        <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">${badge}</span></div>
+          <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${f.texto?' · "'+esc(f.texto.slice(0,50))+'"':''}</div>
+          ${(f.baixa&&f.baixa.motivo)?`<div class="lastint">motivo: "${esc(f.baixa.motivo)}"</div>`:""}</div>
+        <div class="mid"></div>
+        <div class="rcell"><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()">🔁 Reagendar</button></div></div>`;
+      const secA=naofeitosAtras.length?`<div class="seclabel">🔴 Atrasados — passou da data e não teve baixa (${naofeitosAtras.length})</div>`+naofeitosAtras.map(f=>linhaNF(f,"· venceu "+fmtDataBR(f.proximo))).join(""):"";
+      const secB=naofeitosDesm.length?`<div class="seclabel" style="margin-top:16px">🚫 Desmarcados — a visita não aconteceu, reagende (${naofeitosDesm.length})</div>`+naofeitosDesm.map(f=>linhaNF(f,"· desmarcado")).join(""):"";
+      c.innerHTML=`${toggle}${repBar}
+        <div class="kgrid">
+          ${kpi("r", naofeitosAtras.length, "Atrasados", "venceu sem baixa")}
+          ${kpi("a", naofeitosDesm.length, "Desmarcados", "não visitou")}
+          ${kpi("", naofeitosN, "Não feitos", "reagende — não perca")}
+        </div>
+        <div class="t-mut" style="font-size:12.5px;margin:2px 0 10px;line-height:1.5">⏰ Retornos que <b>não foram feitos</b> (venceram sem baixa) + <b>desmarcados</b> (cliente cancelou / diretoria liberou). Toque <b>🔁 Reagendar</b> pra dar nova data — volta pra agenda de rota. Não fica perdido no limbo.</div>
+        ${naofeitosN?(secA+secB):`<div class="empty">Nada pendente aqui 👌 — retornos em dia.</div>`}`;
       wirePista();
       return;
     }
