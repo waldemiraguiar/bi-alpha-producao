@@ -346,7 +346,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = naFilaHoje().length, urgN = ultChamadaItems().length, aviN = aAvisar().length;
+    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -473,16 +473,19 @@
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
   // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
-  // FILA DE HOJE = entradas de hoje ainda não confirmadas + QUALQUER recebida aguardando confirmar "tem amostra?"
-  // (a recebida fica aqui CALMA — não pisca — até o operador marcar ✅ Tem amostra ou 🚫 Sem amostra).
-  const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && ((it.dias || 0) === 0 || estadoDe(it) === 'recebido'));
+  // FILA DE HOJE = entradas de HOJE (dias 0) ainda não confirmadas. Fluxo completo: separar → receber → tem amostra?
+  const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) === 0);
   const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber → tem amostra?)', lateFn: it => estadoDe(it) !== 'recebido' && statusOf(it).st === 'atrasado' });
-  // ÚLTIMA CHAMADA = de ontem+ e AINDA NÃO RECEBIDAS (as de risco — piscam). Recebidas saem daqui (vão calmas p/ a fila de hoje).
-  const ultChamadaItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) >= 1 && estadoDe(it) !== 'recebido');
-  const viewUrgente = () => worklistView('urgente', ultChamadaItems(), {
-    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não recebida(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
-    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO RECEBIDA${n > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
-  });
+  // ÚLTIMA CHAMADA = de ONTEM+ (dias>=1), MESMO fluxo da fila de hoje (separar → receber → tem/sem amostra).
+  // Não recebidas = piscam (risco). Recebidas ficam CALMAS aqui mesmo (confirme tem amostra), NÃO piscam.
+  const ultChamadaItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) >= 1);
+  const ultChamadaPendN = () => ultChamadaItems().filter(it => estadoDe(it) !== 'recebido').length;   // só as NÃO recebidas = a urgência
+  const viewUrgente = () => { const pendN = ultChamadaPendN(); return worklistView('urgente', ultChamadaItems(), {
+    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada (separar → receber → tem amostra?)', icon: '🚨 ', cardClass: pendN > 0 ? 'andon urgmax' : 'andon', lateFn: it => estadoDe(it) !== 'recebido',
+    bar: () => pendN > 0
+      ? `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${pendN} AMOSTRA${pendN > 1 ? 'S' : ''} NÃO RECEBIDA${pendN > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
+      : `<div class="sepnote" style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.4);color:#15803d;padding:10px 14px;border-radius:10px;margin-bottom:10px">✓ Nada pendente de receber. Confirme <b>✅ Tem amostra</b> ou <b>🚫 Sem amostra</b> nas recebidas abaixo.</div>`
+  }); };
 
   /* ---- 📧 AVISAR CLIENTE: amostras insuficientes aguardando o check-in do aviso ---- */
   function rowAvisar(m) {
