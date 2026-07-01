@@ -203,14 +203,14 @@ async function removePista(id){ try{ const r=await fetch(PISTA_API,{method:"POST
 /* ---- ditado por voz (grátis, no aparelho — Web Speech API) ---- */
 let PREC=null, precOn=false;
 function speechOK(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
-function pistaMic(btn, ta){
+function pistaMic(btn, ta, onDone){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ alert("Este celular não transcreve voz (comum no iPhone). Pode DIGITAR o feedback normalmente."); return; }
   if(precOn){ try{PREC&&PREC.stop();}catch(e){} return; }
   PREC=new SR(); PREC.lang="pt-BR"; PREC.continuous=true; PREC.interimResults=true;
   let base=ta.value?ta.value.trim()+" ":"";
   PREC.onresult=e=>{ let fin="",intr=""; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t+" "; else intr+=t; } if(fin) base+=fin; ta.value=base+intr; };
-  const stop=()=>{ precOn=false; btn.classList.remove("rec"); btn.innerHTML="🎤 Falar"; };
+  const stop=()=>{ precOn=false; btn.classList.remove("rec"); btn.innerHTML="🎤 Falar"; if(onDone) try{onDone();}catch(e){} };
   PREC.onend=stop; PREC.onerror=stop;
   try{ PREC.start(); precOn=true; btn.classList.add("rec"); btn.innerHTML="⏹ Parar — gravando…"; }catch(e){ stop(); }
 }
@@ -234,6 +234,31 @@ function pistaRetornos(list){ // último feedback COM retorno por cliente (a "bo
   return Object.values(byCli).sort((a,b)=>a.proximo<b.proximo?-1:(a.proximo>b.proximo?1:0));
 }
 function fmtDataBR(iso){ try{ const d=new Date(iso+"T00:00:00"); const dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; const p=n=>String(n).padStart(2,'0'); return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)}`; }catch(e){ return iso; } }
+/* detecta a data de retorno no texto falado/digitado (pt-BR) → "YYYY-MM-DD" */
+const _NUMW={um:1,uma:1,dois:2,duas:2,tres:3,"três":3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,dezesseis:16,dezasseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30};
+function _palNum(s){ s=(s||"").trim(); if(/^\d+$/.test(s)) return +s; let n=0; for(const p of s.split(/\s+e\s+/)){ if(_NUMW[p]!=null) n+=_NUMW[p]; else return null; } return n||null; }
+function parseDataBR(texto){
+  if(!texto) return ""; const t=(" "+texto.toLowerCase()+" ").replace(/[.,;!?]/g," ");
+  const hoje=new Date(); hoje.setHours(0,0,0,0); const y=hoje.getFullYear(); const p=n=>String(n).padStart(2,"0");
+  const mk=(dd,mm,yy)=>{ if(mm<1||mm>12||dd<1||dd>31) return ""; return `${yy}-${p(mm)}-${p(dd)}`; };
+  const MES={janeiro:1,fevereiro:2,"março":3,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
+  let m;
+  // dd/mm  ou dd/mm/aa(aa)
+  m=t.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+  if(m){ let yy=m[3]?+m[3]:y; if(yy<100)yy+=2000; const r=mk(+m[1],+m[2],yy); if(r) return r; }
+  // "dia X do/de Y" (Y = número, número por extenso, ou nome do mês)
+  m=t.match(/dia\s+([a-zç]+(?:\s+e\s+[a-zç]+)?|\d{1,2})\s+(?:do|de)\s+([a-zç]+|\d{1,2})/);
+  if(m){ const dd=_palNum(m[1]); let mm=/^\d+$/.test(m[2])?+m[2]:MES[m[2]]; if(dd&&mm){ const r=mk(dd,mm,y); if(r) return r; } }
+  // "amanhã"
+  if(/amanh[ãa]/.test(t)){ const d=new Date(hoje.getTime()+864e5); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); }
+  // dia da semana ("segunda", "próxima terça"…) → próxima ocorrência
+  const DIA={domingo:0,segunda:1,"terça":2,terca:2,quarta:3,quinta:4,sexta:5,"sábado":6,sabado:6};
+  for(const nome in DIA){ if(t.includes(nome)){ let diff=(DIA[nome]-hoje.getDay()+7)%7; if(diff===0)diff=7; const d=new Date(hoje.getTime()+diff*864e5); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); } }
+  // "dia X" (só o dia) → próxima ocorrência desse dia
+  m=t.match(/dia\s+([a-zç]+(?:\s+e\s+[a-zç]+)?|\d{1,2})\b/);
+  if(m){ const dd=_palNum(m[1]); if(dd){ let d=new Date(y,hoje.getMonth(),dd); if(d<hoje) d=new Date(y,hoje.getMonth()+1,dd); return mk(d.getDate(),d.getMonth()+1,d.getFullYear()); } }
+  return "";
+}
 let F_ID=null, F_RES="visita";
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
@@ -258,13 +283,18 @@ function openPistaRec(id){
     </div>
     <div class="m-sec">Resultado</div>
     <div class="m-opts" id="fRes">${PRORDER.map(k=>`<button class="opt pst-${k}${k===F_RES?" on":""}" data-r="${k}">${PRES[k].ic} ${PRES[k].lbl}</button>`).join("")}</div>
-    <div class="m-lbl">Próximo passo (retorno) · opcional</div><input id="fProx" type="date" class="m-date" value="${f?esc(f.proximo||""):""}">
+    <div class="m-lbl">Próximo passo (retorno) <span class="t-mut" style="font-weight:500">— eu detecto da sua fala; confira</span></div>
+    <input id="fProx" type="date" class="m-date" value="${f?esc(f.proximo||""):""}">
+    <div id="fProxHint" class="proxhint" style="display:none"></div>
     <button class="m-save" id="fSave">${f?"Salvar alterações":"Salvar feedback"}</button>
     ${f?`<button class="m-enc" id="fDel" style="border-color:var(--mut);color:var(--mut)">Remover feedback</button>`:""}`;
   document.getElementById("modal").style.display="flex";
   document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
   const ta=document.getElementById("fTexto");
-  document.getElementById("fMic").onclick=function(){ pistaMic(this, ta); };
+  const proxAuto=()=>{ const fp=document.getElementById("fProx"); if(!fp||fp.value) return; const dt=parseDataBR(ta.value); const h=document.getElementById("fProxHint");
+    if(dt){ fp.value=dt; if(h){ h.style.display="block"; h.innerHTML=`📅 detectei o retorno: <b>${fmtDataBR(dt)}</b> — confira/ajuste no calendário acima`; } } };
+  ta.addEventListener("input", proxAuto);
+  document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, proxAuto); };
   document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
   document.getElementById("fSave").onclick=async()=>{
     try{PREC&&PREC.stop();}catch(e){}
@@ -273,8 +303,9 @@ function openPistaRec(id){
     if(!cli && !texto){ alert("Diga ao menos o cliente ou o feedback."); return; }
     if(!bairro){ alert("Informe o BAIRRO — é obrigatório (é o que monta a rota das revisitas)."); document.getElementById("fBairro").focus(); return; }
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
+    let prox=document.getElementById("fProx").value; if(!prox) prox=parseDataBR(texto);   // fallback: detecta do texto
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
-    const ok=await savePista({id:F_ID, cliente:cli, bairro, texto, resultado:F_RES, por:rep, proximo:document.getElementById("fProx").value});
+    const ok=await savePista({id:F_ID, cliente:cli, bairro, texto, resultado:F_RES, por:rep, proximo:prox});
     if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>{ if(confirm("Remover este feedback?")) removePista(F_ID); };
 }
@@ -1031,10 +1062,13 @@ function renderTab(){
       const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">↻</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div><div class="rcell"></div></div>`;
       const agenda=Object.keys(byDate).sort().map(d=>{ const items=byDate[d], bgrp={}; items.forEach(f=>{const b=f.bairro||"(sem bairro)"; (bgrp[b]=bgrp[b]||[]).push(f);});
-        const nb=Object.keys(bgrp).length, late=d<tISO;
-        const head=`<div class="retday-h">📅 <b>${fmtDataBR(d)}</b>${late?' <span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">atrasado</span>':''} <span class="t-mut">· ${items.length} cliente(s)</span>${nb>1?` <span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266">⚠️ ${nb} bairros — confira a rota</span>`:''}</div>`;
+        const bairrosNomes=Object.keys(bgrp), nb=bairrosNomes.length, late=d<tISO;
+        const head=`<div class="retday-h">📅 <b>${fmtDataBR(d)}</b>${late?' <span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">atrasado</span>':''} <span class="t-mut">· ${items.length} cliente(s)</span></div>`;
+        const rota = nb>1
+          ? `<div class="rota-inc">🚨 ROTA INCOMPATÍVEL — ${nb} bairros no mesmo dia: <b>${esc(bairrosNomes.join(" · "))}</b>. Reagende para dias diferentes!</div>`
+          : `<div class="rota-ok">✅ Rota compatível — todos em <b>${esc(bairrosNomes[0]||"—")}</b></div>`;
         const blocks=Object.entries(bgrp).sort((a,b)=>b[1].length-a[1].length).map(([b,fs])=>`<div class="retbairro">📍 ${esc(b)} <span class="t-mut">(${fs.length})</span></div>`+fs.map(linha).join("")).join("");
-        return `<div class="card" style="margin-bottom:12px">${head}${blocks}</div>`; }).join("");
+        return `<div class="card" style="margin-bottom:12px">${head}${rota}${blocks}</div>`; }).join("");
       const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
       c.innerHTML=`${toggle}${repBar}
         <div class="kgrid">
