@@ -324,6 +324,24 @@ def build():
             "atrasado":sum(x["atrasado"] for x in categorias)}
     resumo["pct_no_prazo"]=round(100*resumo["no_prazo"]/resumo["em_processo"]) if resumo["em_processo"] else 100
 
+    # BLINDAGEM: exames usados (60d) que NÃO estão no cofre (nem separa interno/apoio, nem marcados 'nao')
+    # -> aba "A classificar" no painel. Assim nenhum exame novo do HF some em silêncio (pedido Wal 01/jul).
+    try:
+        _cf = json.load(open(COFRE_PATH, encoding="utf-8")).get("itens", [])
+        _naocod = {int(i.get("codex", -1)) for i in _cf if i.get("classe") == "nao"}
+        _JUNK = {55,56,59,60,61,24,25,35,36,37,50,52,54,57}
+        _nc = q(f"""SELECT s.CodExame codex, s.Exame exame, s.CodCategoria cod, cat.Categoria categoria, COUNT(*) n
+            FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+            LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria
+            WHERE r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 60 DAY)
+            GROUP BY s.CodExame""")
+        naoclass=[{"codex":int(x["codex"]),"exame":x["exame"],"cat":x["categoria"],"cod":x["cod"],"n":x["n"]}
+                  for x in _nc if x["cod"] not in _JUNK and int(x["codex"]) not in COFRE and int(x["codex"]) not in _naocod]
+        naoclass.sort(key=lambda z:-z["n"])
+        print(f"[naoclass] {len(naoclass)} exames usados FORA do cofre (a classificar)")
+    except Exception as _e:
+        naoclass=[]; print(f"[naoclass] erro: {_e}")
+
     D={"meta":{"gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
                "obs":"Painel operacional — fila e prazos (últimos 10 dias). Sem valores e sem volumes."},
        "resumo":resumo,"categorias":categorias,"atrasados":atrasados,
@@ -331,7 +349,8 @@ def build():
                     "gerado_em":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")+" UTC",
                     "itens":sep_itens,"historico":hist_itens},
        "clientes":{"lista":cli_lista,"reqs":cli_reqs},
-       "especializados":esp_itens}
+       "especializados":esp_itens,
+       "nao_classificados":naoclass}
     conn.close()
     return D
 

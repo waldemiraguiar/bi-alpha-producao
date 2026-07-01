@@ -44,6 +44,8 @@
   const sepData = () => (typeof DATA !== 'undefined' && DATA && DATA.separacao) ? DATA.separacao : null;
   const cutoffs = () => { const d = sepData(); return (d && d.cutoffs && d.cutoffs.length) ? [...d.cutoffs].sort((a, b) => a - b) : [15, 21]; };
   const itens = () => { const d = sepData(); return d && d.itens ? d.itens : []; };
+  // BLINDAGEM: exames usados no HF que NÃO estão no cofre (a classificar) — nunca somem em silêncio
+  const naoClass = () => (typeof DATA !== 'undefined' && DATA && Array.isArray(DATA.nao_classificados)) ? DATA.nao_classificados : [];
   const universo = () => { const d = sepData(); return d && d.historico ? d.historico : []; };  // últimos 7 dias (p/ histórico/placar)
   const chaveOf = it => `${it.req}-${it.codex}`;
 
@@ -346,7 +348,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length;
+    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length, ncN = naoClass().length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -365,6 +367,7 @@
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
+        ${ncN ? `<div class="septab ${view === 'naoclass' ? 'on' : ''}" data-v="naoclass" style="border-color:#f59e0b;color:#f59e0b">⚠️ A classificar <span class="c" style="background:#f59e0b;color:#fff">${ncN}</span></div>` : ''}
       </div>
       <div class="sepme">
         <button class="adminbtn ${isAdmin() ? 'on' : ''}" id="adminbtn" title="apagar/restaurar não-separados">${isAdmin() ? '🔓 Admin' : '🔒 Admin'}</button>
@@ -665,6 +668,19 @@
     return head + `<table class="htable"><thead><tr><th>Apagado em</th><th>Req</th><th>Paciente</th><th>Exame</th><th>Setor</th><th>Data orig.</th><th>Quem apagou</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
+  // BLINDAGEM: exames do HF fora do cofre (a classificar) — visíveis, nunca somem em silêncio
+  function viewNaoClass() {
+    const list = naoClass();
+    if (!list.length) return `<div class="sepwait" style="padding:14px">✓ Nenhum exame pendente de classificação — tudo no cofre. 👍</div>`;
+    const byCat = {};
+    list.forEach(x => { const c = x.cat || ('categoria ' + x.cod); (byCat[c] = byCat[c] || []).push(x); });
+    const rows = Object.keys(byCat).sort().map(cat => {
+      const items = byCat[cat].slice().sort((a, b) => (b.n || 0) - (a.n || 0));
+      return `<div class="sepcat"><div class="h"><span>${esc2(cat)}</span><span class="cnt">${items.length} exame(s)</span></div>${items.map(x => `<div class="seprow"><span class="req">#${esc2(x.codex)}</span><div><div class="pac">${esc2(x.exame)}</div><div class="meta">${x.n} uso(s) nos últimos 60 dias</div></div><div class="right2"><span class="dl late">a classificar</span></div></div>`).join('')}</div>`;
+    }).join('');
+    return `<div class="sepnote" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.5);color:#92400e;padding:12px 14px;border-radius:10px;margin-bottom:12px">⚠️ <b>${list.length} exame(s)</b> apareceram no HF e ainda não estão no cofre — o robô não sabe se precisam de separação. Manda a lista pro Claude que ele classifica (separa interno/apoio, ou não-separa) e some daqui.</div>${rows}`;
+  }
+
   // legenda curta e autoexplicativa por aba (pros colaboradores)
   const LEGENDS = {
     separar: '🧪 Ordem: 1·Separar → 2·Receber. Só DEPOIS de recebida, quem tem permissão pode marcar 🚫 Insuficiente (encerra e avisa o cliente).',
@@ -673,6 +689,7 @@
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
+    naoclass: '⚠️ Exames que apareceram no HF mas ainda NÃO estão no cofre — o robô não sabe se precisam separar. Peça pro Claude classificar (separa interno/apoio, ou não-separa). Nada some mais em silêncio.',
   };
   function render() {
     const el = $('sep'); if (!el) return;
@@ -683,6 +700,7 @@
     else if (view === 'avisar') body = viewAvisar();
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
+    else if (view === 'naoclass') body = viewNaoClass();
     else body = viewHist();
     const leg = LEGENDS[view] || LEGENDS.hist;
     el.innerHTML = header() + `<div class="seplegend ${view}">${leg}</div>` + `<div class="sepbody">${body}</div>`;
