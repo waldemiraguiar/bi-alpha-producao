@@ -2313,6 +2313,22 @@
       "codex": 1122,
       "exame": "PCR Anaplasma spp. - Quantitativo",
       "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 1042,
+      "exame": "Beta Hidroxibutirato",
+      "classe": "interno"
+    },
+    {
+      "cat": "EXAMES ESPECIALIZADOS",
+      "setor": "—",
+      "cod": 34,
+      "codex": 834,
+      "exame": "Beta Hidroxibutirato",
+      "classe": "interno"
     }
   ]
 }
