@@ -58,8 +58,9 @@
   const papel = () => teamMode ? (op ? op.papel : '') : 'ambos';
   const canSep = () => !teamMode || papel() === 'separacao' || papel() === 'ambos';
   const canRec = () => !teamMode || papel() === 'recebidos' || papel() === 'ambos';
-  // permissão p/ marcar AMOSTRA INSUFICIENTE — restrita: admin sempre, ou quem tiver pode_insuf (vem do login)
-  const canInsuf = () => !teamMode ? true : (isAdmin() || !!(op && op.podeInsuf));
+  // AMOSTRA INSUFICIENTE liberada p/ TODO MUNDO que recebe (decisão Wal 01/jul): basta estar logado.
+  // (a permissão granular pode_insuf ficou desativada — o toggle no 👥 Equipe não é mais necessário)
+  const canInsuf = () => !teamMode || !!op;
   const users = () => { try { return JSON.parse(localStorage.getItem(USK) || '[]'); } catch (e) { return []; } };
   function addUser(n) { n = (n || '').trim(); if (!n) return; const u = users(); if (!u.includes(n)) { u.push(n); u.sort(); localStorage.setItem(USK, JSON.stringify(u)); } localStorage.setItem(MEK, n); }
   function saveOp(o) { op = o; if (o) { localStorage.setItem(OPK, JSON.stringify(o)); touch(); } else localStorage.removeItem(OPK); }
@@ -316,7 +317,7 @@
   async function doInsuf(it) {
     if (teamMode && !me()) { openLogin(); return; }
     if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
-    if (!canInsuf()) { alert('Você não tem permissão para marcar amostra insuficiente. Peça ao admin para liberar (👥 Equipe).'); return; }
+    // insuficiente liberado p/ todo mundo logado (sem permissão granular) — decisão Wal 01/jul
     if (!confirm('Marcar AMOSTRA INSUFICIENTE?\n\nEncerra a amostra (depois de recebida) e abre a pendência "📧 Avisar cliente" (nova amostra), que fica piscando até alguém confirmar.')) return;
     const ok = await post({ acao: 'insuf', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
     if (ok) render();
@@ -393,7 +394,7 @@
     // Antes disso fica apagado (off) e só mostra a dica do porquê.
     let b3;
     if (received && canInsuf()) b3 = `<button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="marcar amostra insuficiente — encerra e avisa o cliente"><span>🚫 Insuficiente</span><small>avisar cliente</small></button>`;
-    else { const why = received ? 'Você não tem permissão (peça ao admin no 👥 Equipe)' : 'Libera só depois de Separar e Receber'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-k="${k}" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Insuficiente</span><small>${received ? '🔒 sem permissão' : 'após receber'}</small></button>`; }
+    else { const why = received ? 'Entre com seu login pra marcar' : 'Libera só depois de Separar e Receber'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-k="${k}" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Insuficiente</span><small>${received ? '👤 faça login' : 'após receber'}</small></button>`; }
     // prazo / atraso: mostra a IDADE (dias parada) quando 1 dia+ ; senão o horário do corte de hoje
     const dias = it.dias || 0;
     let badge = '';
