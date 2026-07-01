@@ -124,10 +124,11 @@
         if (a === 'separar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'separado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: payload.no_prazo !== false, corte: payload.corte || null });
         else if (a === 'enviar') await window.SUPA.updateMark(k, { estado: 'enviado', por_env: payload.por || 'equipe', ts_env: Date.now(), data_env: new Date().toISOString().slice(0, 10) });
         else if (a === 'receber') await window.SUPA.updateMark(k, { estado: 'recebido', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
+        else if (a === 'suficiente') await window.SUPA.updateMark(k, { estado: 'suficiente', por_conf: payload.por || 'equipe', ts_conf: Date.now() });
         else if (a === 'insuf') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'insuficiente', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: null });
         else if (a === 'avisar') await window.SUPA.updateMark(k, { estado: 'insuficiente_avisado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'desavisar') await window.SUPA.updateMark(k, { estado: 'insuficiente', por_receb: null, ts_receb: null });
-        else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
+        else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
         else if (a === 'desfazer') await window.SUPA.delMark(k);
         touch(); await loadMarks(); return true;
       }
@@ -322,6 +323,13 @@
     const ok = await post({ acao: 'insuf', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
     if (ok) render();
   }
+  // marcar TEM AMOSTRA (suficiente) — finaliza e sai da fila na hora
+  async function doSuficiente(it) {
+    if (teamMode && !me()) { openLogin(); return; }
+    if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
+    const ok = await post({ acao: 'suficiente', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
+    if (ok) render();
+  }
   // check-in: cliente avisado p/ enviar nova amostra (qualquer um logado resolve)
   async function avisarCliente(k) {
     if (teamMode && !me()) { openLogin(); return; }
@@ -338,7 +346,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = ageItems(0, 0).length, urgN = ageItems(1, null).length, aviN = aAvisar().length;
+    const sepN = naFilaHoje().length, urgN = ultChamadaItems().length, aviN = aAvisar().length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -390,18 +398,19 @@
     else if (!separated) b2 = `<span class="step wait">2 · Receber</span>`;             // só libera após separar
     else if (canRec()) b2 = `<button class="sepbtn rec" data-act="receber" data-k="${k}">2 · Receber</button>`;
     else b2 = `<span class="step lock" title="entre como time de Recebidos">🔒 Receber</span>`;
-    // 3º caminho — AMOSTRA INSUFICIENTE: SEMPRE visível, mas só ACEITA clique depois de recebida (e com permissão).
-    // Antes disso fica apagado (off) e só mostra a dica do porquê.
+    // 3º/4º passo — depois de RECEBER, confirma "tem amostra?": ✅ Suficiente (finaliza) OU 🚫 Insuficiente (avisar).
+    // Antes de receber fica apagado (off) com a dica do porquê.
     let b3;
-    if (received && canInsuf()) b3 = `<button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="marcar amostra insuficiente — encerra e avisa o cliente"><span>🚫 Insuficiente</span><small>avisar cliente</small></button>`;
-    else { const why = received ? 'Entre com seu login pra marcar' : 'Libera só depois de Separar e Receber'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-k="${k}" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Insuficiente</span><small>${received ? '👤 faça login' : 'após receber'}</small></button>`; }
+    if (received && canInsuf()) b3 = `<button class="sepbtn sufi" data-act="suficiente" data-k="${k}" title="tem amostra, tudo certo — finaliza e limpa da fila na hora"><span>✅ Tem amostra</span><small>suficiente · finaliza</small></button><button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="não tem amostra / insuficiente — avisa o cliente (recoleta)"><span>🚫 Sem amostra</span><small>insuficiente · avisar</small></button>`;
+    else { const why = received ? 'Entre com seu login pra confirmar' : 'Libera só depois de Separar e Receber'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-k="${k}" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Tem amostra?</span><small>${received ? '👤 faça login' : 'após receber'}</small></button>`; }
     // prazo / atraso: mostra a IDADE (dias parada) quando 1 dia+ ; senão o horário do corte de hoje
     const dias = it.dias || 0;
     let badge = '';
-    if (!separated) badge = dias >= 1 ? `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} parada</span>` : '';  // horário de vencimento removido (pedido Wal)
+    if (received) badge = `<span class="dl conf">✅ recebido · confirme "tem amostra?"</span>`;  // recebido = aguardando confirmação (calmo)
+    else if (!separated) badge = dias >= 1 ? `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} parada</span>` : '';  // horário de vencimento removido (pedido Wal)
     else if (dias >= 1) badge = `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} aguardando receber</span>`;
     const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
-    return `<div class="seprow ${received ? 'donerow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${undo}</div></div>`;
+    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${undo}</div></div>`;
   }
 
   // ordena categorias seguindo a ORDEM da TV (familiaridade); fallback alfabético
@@ -438,8 +447,9 @@
   /* ---- ciclo da amostra (2 chamadas, sem meio-termo): Separar(hoje) -> Última Chamada(1 dia+) ---- */
   const notFeito = it => { const m = marks[chaveOf(it)]; return !(m && m.estado); };
   const estadoDe = it => { const m = marks[chaveOf(it)]; return (m && m.estado) || ''; };
-  // fora do fluxo separar/receber: recebida (finalizada) OU marcada como amostra insuficiente
-  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'recebido' || e === 'insuficiente' || e === 'insuficiente_avisado'; };
+  // fora do fluxo: CONFIRMADA (suficiente = tem amostra, finalizada) OU insuficiente (avisar cliente).
+  // RECEBIDO agora NÃO sai — fica aguardando a confirmação "tem amostra?" (suficiente/insuficiente).
+  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado'; };
   // PENDENTE = item aberto ainda no fluxo (a finalização é o RECEBER). Insuficiente sai do fluxo (vai pra fila de aviso).
   const pendentes = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it));
   const ageItems = (lo, hi) => pendentes().filter(it => (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
@@ -463,23 +473,16 @@
       <span class="cnt">${arr.length} ${opts.noun}</span></div>${ordered.map(rowSeparar).join('')}</div>`;
   }
   // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
-  const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && (it.dias || 0) === 0 && estadoDe(it) !== 'insuficiente' && estadoDe(it) !== 'insuficiente_avisado');
-  const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber)', lateFn: it => statusOf(it).st === 'atrasado' });
-  // Última Chamada = não finalizadas de ontem+ (dias>=1) MAIS os RECEBIDOS HOJE (ficam p/ o passo opcional de
-  // amostra insuficiente, igual à fila de hoje; somem sozinhos na virada do dia se não virarem insuficiente).
-  const recebidoHoje = it => { const m = marks[chaveOf(it)]; return !!(m && m.estado === 'recebido' && dayTs(m.ts_receb) === dayTs(Date.now())); };
-  const ultChamadaItems = () => {
-    const pend = ageItems(1, null);
-    const seen = new Set(pend.map(chaveOf));
-    const recHoje = itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && (it.dias || 0) >= 1 && recebidoHoje(it) && !seen.has(chaveOf(it)));
-    return pend.concat(recHoje);
-  };
-  const viewUrgente = () => { const pendN = ageItems(1, null).length; return worklistView('urgente', ultChamadaItems(), {
-    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: it => estadoDe(it) !== 'recebido',
-    bar: () => pendN > 0
-      ? `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${pendN} AMOSTRA${pendN > 1 ? 'S' : ''} NÃO FINALIZADA${pendN > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
-      : `<div class="sepnote" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#15803d;padding:10px 14px;border-radius:10px;margin-bottom:10px">✓ Nenhuma pendente. As recebidas hoje ficam aqui até a virada do dia — marque <b>🚫 Insuficiente</b> se alguma amostra estiver ruim.</div>`
-  }); };
+  // FILA DE HOJE = entradas de hoje ainda não confirmadas + QUALQUER recebida aguardando confirmar "tem amostra?"
+  // (a recebida fica aqui CALMA — não pisca — até o operador marcar ✅ Tem amostra ou 🚫 Sem amostra).
+  const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && ((it.dias || 0) === 0 || estadoDe(it) === 'recebido'));
+  const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber → tem amostra?)', lateFn: it => estadoDe(it) !== 'recebido' && statusOf(it).st === 'atrasado' });
+  // ÚLTIMA CHAMADA = de ontem+ e AINDA NÃO RECEBIDAS (as de risco — piscam). Recebidas saem daqui (vão calmas p/ a fila de hoje).
+  const ultChamadaItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) >= 1 && estadoDe(it) !== 'recebido');
+  const viewUrgente = () => worklistView('urgente', ultChamadaItems(), {
+    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada · não recebida(s)', icon: '🚨 ', cardClass: 'andon urgmax', lateFn: () => true,
+    bar: n => `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${n} AMOSTRA${n > 1 ? 'S' : ''} NÃO RECEBIDA${n > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
+  });
 
   /* ---- 📧 AVISAR CLIENTE: amostras insuficientes aguardando o check-in do aviso ---- */
   function rowAvisar(m) {
@@ -588,15 +591,18 @@
     const fmtD = d => { const p = String(d || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : (d || ''); };
     const rowsHtml = shown.map(r => {
       const when = r.sep ? fmtTs(r.m.ts_sep) : fmtD(r.dt);
+      const suficiente = r.sep && r.m.estado === 'suficiente';
       const recebido = r.sep && r.m.estado === 'recebido';
       const insuf = r.sep && (r.m.estado === 'insuficiente' || r.m.estado === 'insuficiente_avisado');
       const status = !r.sep
         ? `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`
         : insuf
           ? `<span class="est separado" style="background:#fee2e2;color:#991b1b">🚫 amostra insuficiente</span> por <b>${esc2(r.m.por || '')}</b>${r.m.estado === 'insuficiente_avisado' ? ` · ✅ cliente avisado por <b>${esc2(r.m.por_receb || '')}</b>` : ' · <span class="dl late" style="padding:1px 5px">⚠️ falta avisar</span>'}`
-          : recebido
-            ? `<span class="est separado" style="background:#dcfce7;color:#166534">✓ recebido (finalizado)</span> sep. <b>${esc2(r.m.por || '')}</b> · receb. <b>${esc2(r.m.por_receb || '')}</b>`
-            : `<span class="est separado" style="background:#fef9c3;color:#854d0e">⏳ separado — aguardando receber</span> por <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}`;
+          : suficiente
+            ? `<span class="est separado" style="background:#dcfce7;color:#166534">✅ finalizado — tem amostra</span> sep. <b>${esc2(r.m.por || '')}</b> · receb. <b>${esc2(r.m.por_receb || '')}</b>`
+            : recebido
+              ? `<span class="est separado" style="background:#fef9c3;color:#854d0e">✓ recebido — aguardando confirmar amostra</span> sep. <b>${esc2(r.m.por || '')}</b> · receb. <b>${esc2(r.m.por_receb || '')}</b>`
+              : `<span class="est separado" style="background:#fef9c3;color:#854d0e">⏳ separado — aguardando receber</span> por <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}`;
       const del = r.sep
         ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="mark" title="desfazer marcação">↩</button>`
         : (isAdmin() ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="miss" title="apagar este não-separado (admin)">✕</button>` : `<span style="color:var(--mut);font-size:13px" title="só admin apaga">🔒</span>`);
@@ -706,6 +712,7 @@
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
+      else if (act === 'suficiente') { const it = itens().find(x => chaveOf(x) === k); if (it) doSuficiente(it); }
       else if (act === 'insuf') { const it = itens().find(x => chaveOf(x) === k); if (it) doInsuf(it); }
       else if (act === 'insufoff') alert('🚫 Insuficiente: ' + (b.dataset.why || 'indisponível agora') + '.');
       else if (act === 'avisar') avisarCliente(k);
@@ -791,7 +798,11 @@
 .sepbtn.insuf{background:#dc2626;color:#fff;display:inline-flex;flex-direction:column;align-items:center;line-height:1.05;padding:4px 10px;margin-left:6px;border:0}
 .sepbtn.insuf small{font-size:9px;opacity:.9;font-weight:600;letter-spacing:.2px}
 .sepbtn.insuf.off{background:#eef1f5;color:#9aa6b2;border:1px dashed #cbd5e1;cursor:not-allowed}
-.sepbtn.insuf.off small{opacity:.85}`;
+.sepbtn.insuf.off small{opacity:.85}
+.sepbtn.sufi{background:#16a34a;color:#fff;display:inline-flex;flex-direction:column;align-items:center;line-height:1.05;padding:4px 10px;margin-left:6px;border:0}
+.sepbtn.sufi small{font-size:9px;opacity:.92;font-weight:600;letter-spacing:.2px}
+.seprow.confirmrow{background:rgba(22,163,74,.06);border-left:3px solid #16a34a}
+.dl.conf{background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-weight:600}`;
     document.head.appendChild(s);
   })();
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
