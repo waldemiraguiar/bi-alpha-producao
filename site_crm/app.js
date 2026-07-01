@@ -268,6 +268,20 @@ async function removeRep(nome){ try{ const r=await fetch(REPS_API,{method:"POST"
 function repList(){ return [...new Set([...REPS, ...PISTA.map(f=>f.por).filter(Boolean)])].sort((a,b)=>a.localeCompare(b)); }  // cadastrados + já usados
 function meuRep(){ return localStorage.getItem("crm_rep")||""; }
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
+/* VISITA EM ANDAMENTO: check-in na CHEGADA (separado); feedback+check-out na SAÍDA */
+function visitaLoad(){ try{ return JSON.parse(localStorage.getItem("crm_visita")||"null"); }catch(e){ return null; } }
+function visitaSave(v){ try{ localStorage.setItem("crm_visita", JSON.stringify(v)); }catch(e){} }
+function visitaClear(){ try{ localStorage.removeItem("crm_visita"); }catch(e){} }
+function iniciarVisita(){
+  if(!navigator.geolocation){ alert("Este aparelho não tem GPS/localização."); return; }
+  const cli=(prompt("📍 CHECK-IN DE CHEGADA — qual cliente/clínica você está visitando agora?")||"").trim(); if(!cli) return;
+  const bairro=(prompt("Bairro (pra montar a rota):")||"").trim();
+  navigator.geolocation.getCurrentPosition(pos=>{ const c=pos.coords;
+    visitaSave({cliente:cli, bairro, por:meuRep()||"", checkin:{lat:+c.latitude.toFixed(6),lng:+c.longitude.toFixed(6),acc:Math.round(c.accuracy||0),ts:Date.now()}});
+    alert("✅ Check-in de chegada registrado! Faça a visita. Ao SAIR, toque em '📝 Feedback + check-out'.");
+    if(ACTIVE==="pista") renderTab();
+  }, ()=>alert("Não consegui pegar sua localização. Ative o GPS e permita o acesso."), {enableHighAccuracy:true,timeout:15000,maximumAge:0});
+}
 
 let pistaView="feed";   // "feed" | "retornos"
 function pistaRetornos(list){ // retornos PENDENTES (com data e SEM baixa) — o que ainda falta visitar
@@ -398,19 +412,20 @@ function renderCheckinStatus(){
 }
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
-  F_ID=id||null; F_RES=f?f.resultado:"visita"; F_CHECKIN=(f&&f.checkin&&f.checkin.ts)?f.checkin:null; F_CHECKOUT=(f&&f.checkout&&f.checkout.ts)?f.checkout:null; F_SEMRET=f?!!f.sem_retorno:false;
+  const vand=(!id)?visitaLoad():null;   // visita em andamento (check-in de chegada já feito)
+  F_ID=id||null; F_RES=f?f.resultado:"visita"; F_CHECKIN=(f&&f.checkin&&f.checkin.ts)?f.checkin:((vand&&vand.checkin)?vand.checkin:null); F_CHECKOUT=(f&&f.checkout&&f.checkout.ts)?f.checkout:null; F_SEMRET=f?!!f.sem_retorno:false;
   const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
   document.getElementById("modalBody").innerHTML=`
     <div class="m-head"><div><div class="m-cli">${f?"✏️ Editar feedback":"🎤 Novo feedback da pista"}</div>
       <div class="t-mut" style="font-size:13px;margin-top:2px">${f?("registrado "+esc(diasAtras(f.ts))+" · "+esc(f.por)):"fale ou digite — salva com data e hora"}</div></div>
       <button class="m-x" id="mClose">✕</button></div>
     <div class="m-lbl">Comercial (quem visitou) <span style="color:var(--red)">*</span></div>
-    <input id="fRep" class="m-date" style="width:100%" placeholder="Seu nome" list="repsDL" value="${f?esc(f.por||""):esc(meuRep())}">
+    <input id="fRep" class="m-date" style="width:100%" placeholder="Seu nome" list="repsDL" value="${f?esc(f.por||""):esc((vand&&vand.por)||meuRep())}">
     <datalist id="repsDL">${repList().map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
     <div class="m-lbl">Cliente / clínica visitada <span style="color:var(--red)">*</span></div>
-    <input id="fCli" class="m-date" style="width:100%" placeholder="Nome do cliente" value="${f?esc(f.cliente):""}">
+    <input id="fCli" class="m-date" style="width:100%" placeholder="Nome do cliente" value="${f?esc(f.cliente):esc((vand&&vand.cliente)||"")}">
     <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— monta a rota das revisitas</span></div>
-    <input id="fBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca, Copacabana…" list="bairrosDL" value="${f?esc(f.bairro||""):""}">
+    <input id="fBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca, Copacabana…" list="bairrosDL" value="${f?esc(f.bairro||""):esc((vand&&vand.bairro)||"")}">
     <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
     <div class="m-lbl">Data da visita <span style="color:var(--red)">*</span></div>
     <input id="fVisita" type="date" class="m-date" value="${f?esc(f.data_visita||hojeISO()):hojeISO()}">
@@ -467,7 +482,7 @@ function openPistaRec(id){
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
     const ok=await savePista({id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, sem_retorno:semRet, checkin:F_CHECKIN, checkout:F_CHECKOUT});
-    if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
+    if(ok){ visitaClear(); closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>excluirFeedback(F_ID);
 }
 
@@ -1221,6 +1236,8 @@ function renderTab(){
       document.querySelectorAll("#content [data-reag]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); reagendarRetorno(el.dataset.reag); });
       document.querySelectorAll("#content [data-undobaixa]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); desfazerBaixa(el.dataset.undobaixa); });
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
+      const vi=document.getElementById("visIni"); if(vi) vi.onclick=()=>iniciarVisita();
+      const vf=document.getElementById("visFim"); if(vf) vf.onclick=()=>openPistaRec(null);
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
     };
@@ -1385,6 +1402,9 @@ function renderTab(){
 
     c.innerHTML=`${toggle}${repBar}
       ${pqCount()?`<div class="proxhint" style="border-color:#FFB020;color:#ffd94d;background:rgba(255,176,32,.12);margin-bottom:12px">📴 <b>${pqCount()}</b> feedback(s) salvos sem sinal — sincroniza sozinho quando a internet voltar${navigator.onLine?` · <a onclick="pqFlush()" style="color:var(--cyan);cursor:pointer;text-decoration:underline">sincronizar agora</a>`:""}</div>`:""}
+      ${(()=>{ const v=visitaLoad(); if(!v||!v.checkin) return ""; const t=new Date(v.checkin.ts),pp=n=>String(n).padStart(2,"0");
+        return `<div class="proxhint" style="border-color:#00E5A0;color:#7effcf;background:rgba(0,229,160,.14);margin-bottom:12px;font-size:14px">🟢 <b>Visita em andamento:</b> ${esc(v.cliente)}${v.bairro?" · 📍 "+esc(v.bairro):""} · chegou ${pp(t.getHours())}:${pp(t.getMinutes())}<button class="baixabtn ok" id="visFim" onclick="event.stopPropagation()" style="margin-top:8px;width:100%">📝 Feedback + check-out (sair)</button></div>`; })()}
+      ${!visitaLoad()?`<button class="checkinbtn" id="visIni" type="button" style="margin-bottom:12px">📍 Cheguei — check-in de chegada (antes da visita)</button>`:""}
       <button class="bigmic" id="pistaRec">🎤 Gravar feedback da visita</button>
       <div class="kgrid">
         ${kpi("g", hoje, "Hoje", "feedbacks de hoje")}
