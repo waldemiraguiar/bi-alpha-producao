@@ -32,16 +32,31 @@ export default async (req) => {
       if (!String(it.texto || "").trim() && !String(it.cliente || "").trim())
         return new Response(JSON.stringify({ erro: "vazio" }), { status: 400, headers: cors });
       const existing = lista.find((x) => x.id === it.id);
-      // BAIXA por "desmarcado" (sem ida) exige CÓDIGO DA DIRETORIA (blindagem anti-golpe)
-      if (it.baixa && it.baixa.tipo === "desmarcado") {
+      // DESMARCAÇÃO (a visita não aconteceu) exige CÓDIGO DA DIRETORIA — vale p/ "perdido" (baixa desmarcado)
+      // E p/ "remarcado" (desmarc_add sem baixa). A diretoria só LIBERA; o rep já escolheu o destino.
+      const gateDesmarc = (it.baixa && it.baixa.tipo === "desmarcado") || (it.desmarc_add && typeof it.desmarc_add === "object");
+      if (gateDesmarc) {
         if (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE)
           return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
+      }
+      // histórico permanente de desmarcações (auditoria — nunca some, mesmo quando remarcado volta pra agenda)
+      let desmarc_hist = (existing && Array.isArray(existing.desmarc_hist)) ? existing.desmarc_hist : [];
+      if (it.desmarc_add && typeof it.desmarc_add === "object") {
+        desmarc_hist = desmarc_hist.concat([{
+          motivo: String(it.desmarc_add.motivo || "").slice(0, 200),
+          destino: it.desmarc_add.destino === "perdido" ? "perdido" : "remarcado",
+          remarcado_para: String(it.desmarc_add.remarcado_para || "").slice(0, 20),
+          por: String(it.desmarc_add.por || "").slice(0, 40),
+          autorizado_por: "diretoria",
+          ts: +it.desmarc_add.ts || Date.now(),
+        }]).slice(-50);
       }
       const baixa = it.clear_baixa ? null : (it.baixa && typeof it.baixa === "object") ? {
         tipo: it.baixa.tipo === "desmarcado" ? "desmarcado" : "compareceu",
         ts: +it.baixa.ts || Date.now(),
         por: String(it.baixa.por || "").slice(0, 40),
         motivo: String(it.baixa.motivo || "").slice(0, 200),
+        destino: it.baixa.destino === "perdido" ? "perdido" : "",
         autorizado_por: it.baixa.tipo === "desmarcado" ? "diretoria" : "",
         checkin: (it.baixa.checkin && typeof it.baixa.checkin === "object")
           ? { lat: +it.baixa.checkin.lat || 0, lng: +it.baixa.checkin.lng || 0, acc: +it.baixa.checkin.acc || 0, ts: +it.baixa.checkin.ts || 0 } : null,
@@ -63,6 +78,7 @@ export default async (req) => {
         proximo: String(it.proximo || "").slice(0, 20),
         sem_retorno: !!it.sem_retorno,
         origem: it.origem === "telefone" ? "telefone" : "visita",   // prospecção por telefone × presencial
+        desmarc_hist,   // auditoria permanente das desmarcações (motivo/destino/quem/diretoria)
         baixa,
         por: String(it.por || "equipe").slice(0, 40),
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
