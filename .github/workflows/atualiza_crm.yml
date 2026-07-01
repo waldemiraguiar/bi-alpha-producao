@@ -60,8 +60,9 @@ jobs:
         if: env.DEPLOY_FULL == 'true'
         env:
           CRM_PWD: ${{ secrets.CRM_PWD }}
+          DIR_CODE: ${{ secrets.DIR_CODE }}
         run: |
-          node -e "require('fs').writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\n')"
+          node -e "const fs=require('fs');fs.writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\nexport const DIR_CODE='+JSON.stringify(process.env.DIR_CODE||'')+';\n')"
           cd site_crm/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
       - name: Publicar no Netlify (Agente CRM)
         if: env.DEPLOY_FULL == 'true'
