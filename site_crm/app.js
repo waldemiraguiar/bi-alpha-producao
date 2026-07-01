@@ -352,6 +352,18 @@ function ordenarRota(items){
   return ord;
 }
 function mapsRotaURL(items){ const ord=ordenarRota(items); return ord.length>=2 ? "https://www.google.com/maps/dir/"+ord.map(f=>`${f.checkin.lat},${f.checkin.lng}`).join("/") : ""; }
+/* rota compatível por DISTÂNCIA REAL (Haversine, grátis) — não por nome de bairro */
+const RAIO_KM=12;   // raio de ação: clientes até X km entre si = rota compatível (ajustável)
+function haversineKm(a,b){ const R=6371, toR=x=>x*Math.PI/180, dLat=toR(b.lat-a.lat), dLng=toR(b.lng-a.lng);
+  const s=Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(s))); }
+function rotaAvaliar(items){   // {ok, km, a, b, geoN} — usa coords do check-in
+  const geo=(items||[]).filter(f=>f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null);
+  if(geo.length<2) return {geoN:geo.length};
+  let maxd=0, pa=geo[0], pb=geo[1];
+  for(let i=0;i<geo.length;i++) for(let j=i+1;j<geo.length;j++){ const d=haversineKm(geo[i].checkin,geo[j].checkin); if(d>maxd){maxd=d;pa=geo[i];pb=geo[j];} }
+  return {ok:maxd<=RAIO_KM, km:Math.round(maxd), a:pa, b:pb, geoN:geo.length};
+}
 /* detecta a data de retorno no texto falado/digitado (pt-BR) → "YYYY-MM-DD" */
 const _NUMW={um:1,uma:1,dois:2,duas:2,tres:3,"três":3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,dezesseis:16,dezasseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30};
 function _palNum(s){ s=(s||"").trim(); if(/^\d+$/.test(s)) return +s; let n=0; for(const p of s.split(/\s+e\s+/)){ if(_NUMW[p]!=null) n+=_NUMW[p]; else return null; } return n||null; }
@@ -1258,9 +1270,14 @@ function renderTab(){
         const bairrosNomes=Object.keys(bgrp), nb=bairrosNomes.length, late=d<tISO, ehoje=d===tISO, prox=(d>tISO&&d<=semFimISO);
         const cls = late?"retday-late" : (ehoje?"retday-hoje" : (prox?"retday-pulse":""));
         const head=`<div class="retday-h">📅 <b>${fmtDataBR(d)}</b>${late?' <span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">ATRASADO</span>':ehoje?' <span class="pr" style="background:rgba(255,196,0,.22);color:#ffd94d">HOJE — VÁ AQUI</span>':''} <span class="t-mut">· ${items.length} cliente(s)</span></div>`;
-        const rota = nb>1
-          ? `<div class="rota-inc">🚨 ROTA INCOMPATÍVEL — ${nb} bairros no mesmo dia: <b>${esc(bairrosNomes.join(" · "))}</b>. Reagende para dias diferentes!</div>`
-          : `<div class="rota-ok">✅ Rota compatível — todos em <b>${esc(bairrosNomes[0]||"—")}</b></div>`;
+        const av=rotaAvaliar(items);
+        const rota = (av.geoN>=2)
+          ? (av.ok
+            ? `<div class="rota-ok">✅ Rota compatível — clientes em até <b>${av.km} km</b> (raio ${RAIO_KM} km)${nb>1?` · ${nb} bairros vizinhos`:""}</div>`
+            : `<div class="rota-inc">🚨 ROTA INCOMPATÍVEL — <b>${esc(av.a.cliente||av.a.bairro||"?")} ↔ ${esc(av.b.cliente||av.b.bairro||"?")}: ${av.km} km</b> (limite ${RAIO_KM} km). Reagende p/ dias diferentes!</div>`)
+          : (nb>1
+            ? `<div class="rota-inc">🚨 ${nb} bairros no mesmo dia: <b>${esc(bairrosNomes.join(" · "))}</b> <span style="font-weight:500">(ainda sem GPS p/ medir — confira)</span></div>`
+            : `<div class="rota-ok">✅ Rota compatível — todos em <b>${esc(bairrosNomes[0]||"—")}</b></div>`);
         const blocks=Object.entries(bgrp).sort((a,b)=>b[1].length-a[1].length).map(([b,fs])=>`<div class="retbairro">📍 ${esc(b)} <span class="t-mut">(${fs.length})</span></div>`+fs.map(linha).join("")).join("");
         const rurl=mapsRotaURL(items);
         const rotaBtn=rurl?`<a class="baixabtn ok" href="${rurl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-block;margin:0 0 8px">🗺️ Abrir rota otimizada no Maps (${ordenarRota(items).length} paradas)</a>`:"";
