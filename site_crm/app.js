@@ -244,10 +244,32 @@ function meuRep(){ return localStorage.getItem("crm_rep")||""; }
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
 
 let pistaView="feed";   // "feed" | "retornos"
-function pistaRetornos(list){ // último feedback COM retorno por cliente (a "bola de neve" de revisitas)
+function pistaRetornos(list){ // retornos PENDENTES (com data e SEM baixa) — o que ainda falta visitar
   const src=list||PISTA, byCli={};
-  src.filter(f=>f.proximo).forEach(f=>{ const k=(f.cliente||f.id).trim().toLowerCase(); if(!byCli[k]||(f.ts||0)>(byCli[k].ts||0)) byCli[k]=f; });
+  src.filter(f=>f.proximo && !f.baixa).forEach(f=>{ const k=(f.cliente||f.id).trim().toLowerCase(); if(!byCli[k]||(f.ts||0)>(byCli[k].ts||0)) byCli[k]=f; });
   return Object.values(byCli).sort((a,b)=>a.proximo<b.proximo?-1:(a.proximo>b.proximo?1:0));
+}
+/* BAIXA da visita (blindagem): compareceu=check-in GPS | desmarcado=código da diretoria */
+async function saveBaixaItem(f, baixa, dir_code){
+  try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:{...f,baixa},senha:window.__pwd,dir_code})});
+    if(r.status===403){ alert("❌ Código da diretoria INVÁLIDO — baixa não autorizada."); return false; }
+    if(r.status===401){ alert("Sessão sem permissão."); return false; }
+    if(r.ok){ syncPista((await r.json()).pista); return true; } }catch(e){ alert("Falha ao dar baixa."); } return false; }
+function darBaixaCheckin(id){
+  const f=PISTA.find(x=>x.id===id); if(!f) return;
+  if(!navigator.geolocation){ alert("Sem GPS neste aparelho. Se o cliente desmarcou, use '🚫 desmarcou' com código da diretoria."); return; }
+  if(!confirm(`Dar baixa em "${f.cliente||""}" com CHECK-IN? (você precisa estar NA clínica)`)) return;
+  navigator.geolocation.getCurrentPosition(async pos=>{ const c=pos.coords;
+    const baixa={tipo:"compareceu",ts:Date.now(),por:meuRep()||quemExcluiu(),checkin:{lat:+c.latitude.toFixed(6),lng:+c.longitude.toFixed(6),acc:Math.round(c.accuracy||0),ts:Date.now()}};
+    const ok=await saveBaixaItem(f,baixa); if(ok){ alert("✅ Baixa registrada com check-in!"); renderTab(); }
+  }, ()=>alert("Não consegui pegar sua localização. Ative o GPS e permita o acesso."), {enableHighAccuracy:true,timeout:15000,maximumAge:0});
+}
+async function darBaixaDesmarcou(id){
+  const f=PISTA.find(x=>x.id===id); if(!f) return;
+  const motivo=(prompt(`Cliente "${f.cliente||""}" DESMARCOU por telefone (sem ida). Qual o motivo?`)||"").trim(); if(!motivo) return;
+  const code=(prompt("Isto exige AUTORIZAÇÃO. Digite o CÓDIGO DA DIRETORIA:")||"").trim(); if(!code) return;
+  const ok=await saveBaixaItem(f,{tipo:"desmarcado",ts:Date.now(),por:meuRep()||quemExcluiu(),motivo},code);
+  if(ok){ alert("✅ Baixa autorizada pela diretoria."); renderTab(); }
 }
 function fmtDataBR(iso){ try{ const d=new Date(iso+"T00:00:00"); const dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; const p=n=>String(n).padStart(2,'0'); return `${dd} ${p(d.getDate())}/${p(d.getMonth()+1)}`; }catch(e){ return iso; } }
 /* detecta a data de retorno no texto falado/digitado (pt-BR) → "YYYY-MM-DD" */
@@ -1098,7 +1120,8 @@ function renderTab(){
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?" · editado":""}</span></div>
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
           ${f.sem_retorno?`<div class="rtbadge" style="background:rgba(255,138,0,.16);color:#ffc266">🚫 sem retorno</div>`:(f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:"")}
-          <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${(f.checkin&&f.checkin.ts)?`<a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in</a>`:`<span style="color:#ffc266">⚠️ sem check-in</span>`}</div></div>
+          <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${(f.checkin&&f.checkin.ts)?`<a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in</a>`:`<span style="color:#ffc266">⚠️ sem check-in</span>`}</div>
+          ${f.baixa?`<div class="ci" style="font-size:11.5px">${f.baixa.tipo==="compareceu"?`<span style="color:#7effcf;font-weight:700">✓ baixa: compareceu${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf">📍 mapa</a>`:""}</span>`:`<span style="color:#ffc266;font-weight:700">🚫 baixa: desmarcado · aut. diretoria${f.baixa.motivo?' ("'+esc(f.baixa.motivo)+'")':''}</span>`}</div>`:""}</div>
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
@@ -1107,6 +1130,8 @@ function renderTab(){
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
       document.querySelectorAll("#content [data-delfb]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); excluirFeedback(el.dataset.delfb); });
+      document.querySelectorAll("#content [data-baixa]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaCheckin(el.dataset.baixa); });
+      document.querySelectorAll("#content [data-desm]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaDesmarcou(el.dataset.desm); });
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
@@ -1120,7 +1145,8 @@ function renderTab(){
       const bc={}; ret.forEach(f=>{const b=f.bairro||"(sem bairro)"; bc[b]=(bc[b]||0)+1;});
       const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
       const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">↻</div>
-        <div><div class="nm">${esc(f.cliente||"(sem nome)")}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div><div class="rcell"></div></div>`;
+        <div><div class="nm">${esc(f.cliente||"(sem nome)")}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div>
+        <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-baixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Estou na clínica — check-in">✓ dar baixa</button><button class="baixabtn no" data-desm="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente desmarcou — precisa do código da diretoria">🚫 desmarcou</button></div></div>`;
       // agenda por COMERCIAL → dia → bairro (cada vendedor tem a SUA rota; incompatibilidade vale por vendedor)
       const byRep={}; ret.forEach(f=>{ const rp=f.por||"(sem comercial)"; (byRep[rp]=byRep[rp]||[]).push(f); });
       const diaCard=(d, items)=>{ const bgrp={}; items.forEach(f=>{const b=f.bairro||"(sem bairro)"; (bgrp[b]=bgrp[b]||[]).push(f);});
