@@ -363,7 +363,7 @@
       <div class="septabs">
         <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar / Receber <span class="c">${sepN}</span></div>
         <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
-        <div class="septab aviso ${aviN ? 'urgpulse' : ''} ${view === 'avisar' ? 'on' : ''}" data-v="avisar">📧 Avisar cliente <span class="c">${aviN}</span></div>
+        <div class="septab aviso ${aviN ? 'avisopulse' : ''} ${view === 'avisar' ? 'on' : ''}" data-v="avisar">📧 Avisar cliente <span class="c">${aviN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
@@ -521,8 +521,8 @@
     let sel = selByView.avisar; if (!sel || !byCat[sel]) sel = selByView.avisar = cats[0];
     const strip = topicStrip(byCat, 'avisar', sel, null);
     const arr = byCat[sel].slice().sort((a, b) => (Number(a.ts_sep) || 0) - (Number(b.ts_sep) || 0));
-    const bar = `<div class="andonbar urg"><span class="fw1">📧</span><span class="ico">⚠️</span><span class="ttl">${items.length} AMOSTRA${items.length > 1 ? 'S' : ''} INSUFICIENTE${items.length > 1 ? 'S' : ''} · AVISE O CLIENTE (nova amostra) E DÊ O CHECK-IN!</span><span class="fw3">📧</span></div>`;
-    return bar + strip + `<div class="sepcat andon urgmax"><div class="h"><span>📧 ${esc2(sel)}</span><span class="cnt">${arr.length} a avisar</span></div>${arr.map(rowAvisar).join('')}</div>`;
+    const bar = `<div class="andonbar aviso"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">📧</span><span class="ttl">${items.length} AMOSTRA${items.length > 1 ? 'S' : ''} INSUFICIENTE${items.length > 1 ? 'S' : ''} · AVISE O CLIENTE (nova amostra) E DÊ O CHECK-IN!</span><span class="fw3">🎆</span><span class="fw2">🎇</span></div>`;
+    return bar + strip + `<div class="sepcat andon avisomax"><div class="h"><span>📧 ${esc2(sel)}</span><span class="cnt">${arr.length} a avisar</span></div>${arr.map(rowAvisar).join('')}</div>`;
   }
 
   function viewPlacar() {
