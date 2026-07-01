@@ -449,7 +449,8 @@ function openPistaRec(id){
   document.getElementById("fCheckin").onclick=function(){ fazerCheckin(this, "in"); };
   document.getElementById("fCheckout").onclick=function(){ fazerCheckin(this, "out"); };
   renderCheckinStatus();
-  document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
+  document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));
+    const h=document.getElementById("fProxHint"); if(h && F_RES==="fechou"){ h.style.display="block"; h.style.borderColor="rgba(0,229,160,.4)"; h.style.color="#7effcf"; h.style.background="rgba(0,229,160,.1)"; h.innerHTML="🏆 <b>Fechou!</b> — retorno dispensado. Pode salvar direto (check-in + saída)."; } }};
   document.getElementById("fSave").onclick=async()=>{
     try{PREC&&PREC.stop();}catch(e){}
     const cli=document.getElementById("fCli").value.trim(), texto=ta.value.trim(), bairro=document.getElementById("fBairro").value.trim(), rep=document.getElementById("fRep").value.trim(), dataVisita=document.getElementById("fVisita").value;
@@ -457,9 +458,10 @@ function openPistaRec(id){
     if(!cli){ alert("Informe o CLIENTE / clínica visitada — obrigatório."); document.getElementById("fCli").focus(); return; }
     if(!bairro){ alert("Informe o BAIRRO — obrigatório (monta a rota das revisitas)."); document.getElementById("fBairro").focus(); return; }
     if(!dataVisita){ alert("Informe a DATA DA VISITA."); document.getElementById("fVisita").focus(); return; }
-    const semRet=document.getElementById("fSemRet").checked;
-    let prox=document.getElementById("fProx").value; if(!prox && !semRet) prox=parseDataBR(texto);   // detecta do texto se não preencheu
-    if(semRet){ prox=""; if(!texto){ alert("Marcou '🚫 Sem retorno' — então escreva o MOTIVO no feedback (ex.: cliente fechou a porta, recusou)."); ta.focus(); return; } }
+    const semRet=document.getElementById("fSemRet").checked, fechou=(F_RES==="fechou");
+    let prox=document.getElementById("fProx").value; if(!prox && !semRet && !fechou) prox=parseDataBR(texto);   // detecta do texto se não preencheu
+    if(fechou){ /* ✅ Fechou não precisa de retorno — libera automático (mantém a data se ele quis marcar) */ }
+    else if(semRet){ prox=""; if(!texto){ alert("Marcou '🚫 Sem retorno' — então escreva o MOTIVO no feedback (ex.: cliente fechou a porta, recusou)."); ta.focus(); return; } }
     else if(!prox){ alert("Informe a DATA DE RETORNO — obrigatória. Fale/escolha a data, OU marque '🚫 Sem retorno' e explique o motivo."); document.getElementById("fProx").focus(); return; }
     if(!F_CHECKIN){ alert("Faça o CHECK-IN (📍 GPS) — obrigatório: confirma que você está no cliente."); return; }
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
@@ -1317,6 +1319,11 @@ function renderTab(){
           <div class="card"><h3>Visitas por dia <span class="tag">14 dias</span></h3><div class="cwrap"><canvas id="pbDia"></canvas></div></div>
           <div class="card"><h3>Objeções / não-avanço</h3><div class="cwrap"><canvas id="pbObj"></canvas></div></div>
         </div>
+        ${(()=>{ const fech=base.filter(f=>f.resultado==="fechou").sort((a,b)=>(b.ts||0)-(a.ts||0)); if(!fech.length) return "";
+          let bb="",cm=null; fech.forEach(f=>{const d=new Date(f.ts),mk=d.getFullYear()*100+(d.getMonth()+1),pp=n=>String(n).padStart(2,"0");
+            if(mk!==cm){cm=mk;bb+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`;}
+            bb+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">🏆</div><div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${pp(d.getDate())}/${pp(d.getMonth()+1)}</span></div><div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}</div></div><div class="mid"></div><div class="rcell"><span class="pr" style="background:rgba(0,229,160,.16);color:#7effcf">✅ Fechou</span></div></div>`;});
+          return `<div class="seclabel" style="margin-top:18px">🏆 Clientes fechados (${fech.length})</div>${bb}`; })()}
         ${total?"":`<div class="empty">Sem dados ainda — os gráficos aparecem conforme o time registra visitas.</div>`}`;
       wirePista();
       drawPistaBI(base);
