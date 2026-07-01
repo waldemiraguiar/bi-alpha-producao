@@ -194,10 +194,36 @@ const PRES={interesse:{lbl:"Interesse",ic:"😍",col:"#00E5A0"},orcamento:{lbl:"
 const PRORDER=["interesse","orcamento","fechou","objecao","sem_interesse","visita"];
 function syncPista(arr){ PISTA=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
 async function loadPista(){ try{ const r=await fetch(PISTA_API); if(r.ok) syncPista((await r.json()).pista); }catch(e){} }
+/* ---- fila OFFLINE (grava sem sinal → sincroniza quando volta a internet) ---- */
+const PQ_KEY="crm_pista_queue";
+function pqLoad(){ try{ return JSON.parse(localStorage.getItem(PQ_KEY)||"[]"); }catch(e){ return []; } }
+function pqSave(q){ try{ localStorage.setItem(PQ_KEY, JSON.stringify(q)); }catch(e){} }
+function pqCount(){ return pqLoad().length; }
+async function pqFlush(){
+  let q=pqLoad(); if(!q.length || !navigator.onLine || !window.__pwd) return;
+  const rest=[];
+  for(const it of q){
+    try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:it,senha:window.__pwd})});
+      if(r.ok){ syncPista((await r.json()).pista); } else rest.push(it); }
+    catch(e){ rest.push(it); break; }   // ainda sem sinal — para e mantém o resto
+  }
+  pqSave(rest);
+  if(rest.length!==q.length && ACTIVE==="pista") renderTab();
+}
 async function savePista(it){ if(!it.por) it.por=meuRep()||"equipe";
   try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:it,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); return false; }
-    if(r.ok){ syncPista((await r.json()).pista); return true; } }catch(e){ alert("Falha ao salvar feedback."); } return false; }
+    if(r.ok){ syncPista((await r.json()).pista); return true; }
+    return false;
+  }catch(e){
+    // SEM SINAL: enfileira no aparelho + mostra local (otimista)
+    const item={...it, id:it.id||("f"+Date.now()), ts:it.ts||Date.now(), ts_upd:Date.now(), _offline:true};
+    const q=pqLoad(); q.push(item); pqSave(q);
+    PISTA=PISTA.filter(x=>x.id!==item.id); PISTA.unshift(item); PISTA.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    alert("📴 Sem sinal — salvo no aparelho. Sincroniza sozinho quando a internet voltar.");
+    return true;
+  }
+}
 async function removePista(id){ try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPista((await r.json()).pista); } }catch(e){} }
 
 /* ---- histórico de EXCLUSÕES (auditoria — nada some sem rastro) ---- */
@@ -1344,6 +1370,7 @@ function renderTab(){
     }
 
     c.innerHTML=`${toggle}${repBar}
+      ${pqCount()?`<div class="proxhint" style="border-color:#FFB020;color:#ffd94d;background:rgba(255,176,32,.12);margin-bottom:12px">📴 <b>${pqCount()}</b> feedback(s) salvos sem sinal — sincroniza sozinho quando a internet voltar${navigator.onLine?` · <a onclick="pqFlush()" style="color:var(--cyan);cursor:pointer;text-decoration:underline">sincronizar agora</a>`:""}</div>`:""}
       <button class="bigmic" id="pistaRec">🎤 Gravar feedback da visita</button>
       <div class="kgrid">
         ${kpi("g", hoje, "Hoje", "feedbacks de hoje")}
@@ -1465,9 +1492,10 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]).then(()=>renderAll());
+    window.addEventListener("online", ()=>pqFlush());   // voltou o sinal → sincroniza a fila offline
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]).then(()=>{ pqFlush(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length;
-      const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]);
+      await pqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]);
       if(a!==sig()) renderTab(); }, 45000);
   }
 }
