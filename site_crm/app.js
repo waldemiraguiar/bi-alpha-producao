@@ -1118,28 +1118,33 @@ function renderTab(){
       const semFimISO=new Date(today.getTime()+7*864e5).toISOString().slice(0,10);
       const atras=ret.filter(f=>f.proximo<tISO).length, semana=ret.filter(f=>f.proximo>=tISO&&f.proximo<=semFimISO).length;
       const bc={}; ret.forEach(f=>{const b=f.bairro||"(sem bairro)"; bc[b]=(bc[b]||0)+1;});
-      const byDate={}; ret.forEach(f=>{ (byDate[f.proximo]=byDate[f.proximo]||[]).push(f); });
+      const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
       const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">↻</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div><div class="rcell"></div></div>`;
-      const agenda=Object.keys(byDate).sort().map(d=>{ const items=byDate[d], bgrp={}; items.forEach(f=>{const b=f.bairro||"(sem bairro)"; (bgrp[b]=bgrp[b]||[]).push(f);});
-        const bairrosNomes=Object.keys(bgrp), nb=bairrosNomes.length, late=d<tISO;
-        const head=`<div class="retday-h">📅 <b>${fmtDataBR(d)}</b>${late?' <span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">atrasado</span>':''} <span class="t-mut">· ${items.length} cliente(s)</span></div>`;
+      // agenda por COMERCIAL → dia → bairro (cada vendedor tem a SUA rota; incompatibilidade vale por vendedor)
+      const byRep={}; ret.forEach(f=>{ const rp=f.por||"(sem comercial)"; (byRep[rp]=byRep[rp]||[]).push(f); });
+      const diaCard=(d, items)=>{ const bgrp={}; items.forEach(f=>{const b=f.bairro||"(sem bairro)"; (bgrp[b]=bgrp[b]||[]).push(f);});
+        const bairrosNomes=Object.keys(bgrp), nb=bairrosNomes.length, late=d<tISO, ehoje=d===tISO, prox=(d>tISO&&d<=semFimISO);
+        const cls = late?"retday-late" : (ehoje?"retday-hoje" : (prox?"retday-pulse":""));
+        const head=`<div class="retday-h">📅 <b>${fmtDataBR(d)}</b>${late?' <span class="pr" style="background:rgba(255,84,112,.16);color:#ffb3c0">ATRASADO</span>':ehoje?' <span class="pr" style="background:rgba(255,196,0,.22);color:#ffd94d">HOJE — VÁ AQUI</span>':''} <span class="t-mut">· ${items.length} cliente(s)</span></div>`;
         const rota = nb>1
           ? `<div class="rota-inc">🚨 ROTA INCOMPATÍVEL — ${nb} bairros no mesmo dia: <b>${esc(bairrosNomes.join(" · "))}</b>. Reagende para dias diferentes!</div>`
           : `<div class="rota-ok">✅ Rota compatível — todos em <b>${esc(bairrosNomes[0]||"—")}</b></div>`;
         const blocks=Object.entries(bgrp).sort((a,b)=>b[1].length-a[1].length).map(([b,fs])=>`<div class="retbairro">📍 ${esc(b)} <span class="t-mut">(${fs.length})</span></div>`+fs.map(linha).join("")).join("");
-        return `<div class="card" style="margin-bottom:12px">${head}${rota}${blocks}</div>`; }).join("");
-      const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
+        return `<div class="card retday-card ${cls}" style="margin-bottom:12px">${head}${rota}${blocks}</div>`; };
+      const agenda=Object.keys(byRep).sort().map(rp=>{ const items=byRep[rp], byDate={}; items.forEach(f=>{(byDate[f.proximo]=byDate[f.proximo]||[]).push(f);});
+        const dias=Object.keys(byDate).sort().map(d=>diaCard(d, byDate[d])).join("");
+        return `<div class="repagenda"><div class="repagenda-h">👤 <b>${esc(rp)}</b> · agenda de rota <span class="t-mut" style="font-weight:500">(${items.length} retorno${items.length>1?'s':''})</span></div>${dias}</div>`; }).join("");
       c.innerHTML=`${toggle}${repBar}
         <div class="kgrid">
           ${kpi("r", atras, "Atrasados", "passaram da data")}
           ${kpi("a", semana, "Esta semana", "próximos 7 dias")}
-          ${kpi("", ret.length, "Retornos", "pendentes")}
-          ${kpi("", Object.keys(bc).length, "Bairros", "regiões a cobrir")}
+          ${kpi("", ret.length, "Retornos", repFilter?("de "+esc(repFilter)):"pendentes")}
+          ${kpi("", Object.keys(byRep).length, "Comerciais", "com rota")}
         </div>
         ${ret.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
-        <div class="seclabel">📅 Agenda de retornos · por dia <span class="t-mut" style="font-weight:500">— ⚠️ avisa quando o dia mistura bairros (rota inviável)</span></div>
-        ${ret.length? agenda : `<div class="empty">Sem retornos agendados ainda. Em cada feedback, preencha <b>Próximo passo (retorno)</b> + bairro — eles se organizam aqui em agenda e por bairro.</div>`}`;
+        <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
+        ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Em cada feedback preencha o retorno + bairro — a agenda se monta aqui, por comercial e por dia.</div>`}`;
       wirePista();
       return;
     }
