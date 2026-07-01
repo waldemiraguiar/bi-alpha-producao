@@ -62,6 +62,7 @@ export default async (req) => {
           : (existing ? existing.checkout || null : null),   // saída (opcional) — mede o tempo na clínica
         proximo: String(it.proximo || "").slice(0, 20),
         sem_retorno: !!it.sem_retorno,
+        origem: it.origem === "telefone" ? "telefone" : "visita",   // prospecção por telefone × presencial
         baixa,
         por: String(it.por || "equipe").slice(0, 40),
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
