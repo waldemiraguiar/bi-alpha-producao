@@ -123,11 +123,11 @@
     try {
       if (useSupa()) {
         const a = payload.acao, k = payload.chave;
-        if (a === 'separar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'separado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: payload.no_prazo !== false, corte: payload.corte || null });
+        if (a === 'separar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'separado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: payload.no_prazo !== false, corte: payload.corte || null, obs: (marks[k] ? (marks[k].obs || null) : null) });
         else if (a === 'enviar') await window.SUPA.updateMark(k, { estado: 'enviado', por_env: payload.por || 'equipe', ts_env: Date.now(), data_env: new Date().toISOString().slice(0, 10) });
         else if (a === 'receber') await window.SUPA.updateMark(k, { estado: 'recebido', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'suficiente') await window.SUPA.updateMark(k, { estado: 'suficiente' });   // colunas por_conf/ts_conf não existem no sep_marks; por_receb já guarda quem recebeu
-        else if (a === 'insuf') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'insuficiente', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: null });
+        else if (a === 'insuf') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'insuficiente', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: null, obs: (marks[k] ? (marks[k].obs || null) : null) });
         else if (a === 'avisar') await window.SUPA.updateMark(k, { estado: 'insuficiente_avisado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'desavisar') await window.SUPA.updateMark(k, { estado: 'insuficiente', por_receb: null, ts_receb: null });
         else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
@@ -146,7 +146,7 @@
     try {
       if (useSupa()) {
         if (undo) await window.SUPA.undescartar(itens.map(i => i.chave || i), adminPin());
-        else await window.SUPA.descartar(itens.map(i => ({ chave: i.chave, req: i.req, ano: i.ano, codex: i.codex, exame: i.exame, cat: i.cat, paciente: i.paciente, dt: i.dt })), adminPin(), me() || 'admin');
+        else await window.SUPA.descartar(itens.map(i => ({ chave: i.chave, req: i.req, ano: i.ano, codex: i.codex, exame: i.exame, cat: i.cat, paciente: i.paciente, dt: i.dt, obs: (marks[i.chave] ? (marks[i.chave].obs || null) : (i.obs || null)) })), adminPin(), me() || 'admin');
         await loadMarks(); render(); return true;
       }
       const body = undo
@@ -338,6 +338,48 @@
     if (!confirm('Confirmar que o CLIENTE FOI AVISADO para enviar nova amostra?')) return;
     if (await post({ acao: 'avisar', chave: k, por: me() })) render();
   }
+  /* ---- 📝 OBSERVAÇÃO da amostra (motivo da nova amostra / característica) ---- */
+  // Grava na coluna sep_marks.obs. Se ainda não existe marca, cria uma "só nota" (estado vazio,
+  // não conta como separada) — a nota segue o fluxo separar→receber→avisar e vai pro histórico/apagados.
+  async function saveObs(k, text) {
+    if (!useSupa()) { alert('A observação exige a conexão em nuvem (Supabase).'); return false; }
+    text = (text || '').trim();
+    try {
+      if (marks[k]) await window.SUPA.updateMark(k, { obs: text || null });
+      else {
+        const it = itens().find(x => chaveOf(x) === k);
+        if (!it) { alert('Não encontrei o item para anotar.'); return false; }
+        await window.SUPA.upsertMark({ chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame || '', cat: it.cat || '', classe: it.classe || '', paciente: it.paciente || '', tutor: it.tutor || '', vet: it.vet || '', estado: '', por: me() || 'equipe', ts_sep: null, no_prazo: null, corte: null, obs: text || null });
+      }
+      touch(); await loadMarks(); return true;
+    } catch (e) { alert('Não consegui salvar a observação (a coluna "obs" já foi criada no banco?).'); return false; }
+  }
+  // botão + chip de nota (aparece em Separar/Receber, Última Chamada e Avisar cliente)
+  function obsChunk(k) {
+    const m = marks[k]; const txt = (m && m.obs) ? String(m.obs) : '';
+    return `<div class="obswrap">${txt ? `<span class="obsnote">📝 ${esc2(txt)}</span>` : ''}<button class="obsbtn ${txt ? 'has' : ''}" data-obs="${esc2(k)}" title="observação da amostra — motivo da nova amostra, característica…">${txt ? '✏️ editar nota' : '📝 observação'}</button></div>`;
+  }
+  function openObs(k) {
+    if (teamMode && !me()) { openLogin(); return; }
+    const m = marks[k]; const it = itens().find(x => chaveOf(x) === k); const info = m || it || {};
+    const cur = (m && m.obs) ? String(m.obs) : '';
+    const old = document.querySelector('.oplogin'); if (old) old.remove();
+    const wrap = document.createElement('div'); wrap.className = 'oplogin';
+    wrap.innerHTML = `<div class="oplbox"><h3>📝 Observação da amostra</h3>
+      <div style="font-size:13px;color:#475569;margin-bottom:8px">${esc2(info.paciente || '')} · ${esc2(info.exame || '')} · #${esc2(info.req || '')}/${esc2(info.ano || '')}</div>
+      <label>Motivo da nova amostra / característica (o escritório enxerga)</label>
+      <textarea id="obstxt" rows="3" placeholder="ex.: não veio a amostra · hemolisada · coagulada · volume insuficiente…">${esc2(cur)}</textarea>
+      <div class="opmsg" id="obsmsg"></div>
+      <div class="opbtns"><button class="opb cancel" id="obscancel">Cancelar</button><button class="opb ok" id="obsgo">Salvar</button></div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.onclick = e => { if (e.target === wrap) close(); };
+    wrap.querySelector('#obscancel').onclick = close;
+    const ta = wrap.querySelector('#obstxt'); ta.focus(); try { ta.setSelectionRange(cur.length, cur.length); } catch (e) {}
+    const go = async () => { wrap.querySelector('#obsmsg').textContent = 'Salvando…'; const ok = await saveObs(k, ta.value); if (ok) { close(); render(); } else wrap.querySelector('#obsmsg').textContent = '❌ Não consegui salvar.'; };
+    wrap.querySelector('#obsgo').onclick = go;
+    ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go(); };
+  }
   async function step(acao, chave, confirmMsg) {
     if (teamMode && !me()) { openLogin(); return; }
     if ((acao === 'receber' || acao === 'enviar') && !canRec()) { alert('Você entrou como time de SEPARAÇÃO. Só o time de Recebidos dá o recebido — toque em "trocar" pra entrar como recebidos.'); return; }
@@ -387,7 +429,7 @@
     const entrou = it.entrada ? ` · 📅 entrou <b>${ddmm(it.entrada)}${hent ? ' ' + hent : ''}</b>` : '';
     const head = `<div class="req">${esc2(it.req)}<span class="y">/${esc2(it.ano)}</span></div>
       <div><div class="pac">${esc2(it.paciente)}${cl}${urg}</div>
-      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div></div>`;
+      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div>${obsChunk(k)}</div>`;
     const separated = !!(m && m.estado);            // separado / enviado / recebido
     const received = !!(m && m.estado === 'recebido');
     // PASSO 1 — SEPARAR
@@ -508,7 +550,7 @@
     const d = dayTs(m.ts_sep); const quando = d ? ` · ${d.slice(8, 10)}/${d.slice(5, 7)}` : '';
     const head = `<div class="req">${esc2(m.req)}<span class="y">/${esc2(m.ano)}</span></div>
       <div><div class="pac">${esc2(m.paciente)}${cl}</div>
-      <div class="meta">${esc2(m.exame)} · insuf. por <b>${esc2(m.por || '')}</b>${quando}</div></div>`;
+      <div class="meta">${esc2(m.exame)} · insuf. por <b>${esc2(m.por || '')}</b>${quando}</div>${obsChunk(k)}</div>`;
     const btn = `<button class="sepbtn rec" data-act="avisar" data-k="${k}">✓ Cliente avisado</button>`;
     const undo = `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="cancelar insuficiente (volta à fila de separar)">↩</button>`;
     return `<div class="seprow">${head}<div class="right2"><span class="dl late">📧 avisar</span>${btn}${undo}</div></div>`;
@@ -620,6 +662,7 @@
             : recebido
               ? `<span class="est separado" style="background:#fef9c3;color:#854d0e">✓ recebido — aguardando confirmar amostra</span> sep. <b>${esc2(r.m.por || '')}</b> · receb. <b>${esc2(r.m.por_receb || '')}</b>`
               : `<span class="est separado" style="background:#fef9c3;color:#854d0e">⏳ separado — aguardando receber</span> por <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}`;
+      const obsHtml = (r.m && r.m.obs) ? `<div class="histobs">📝 ${esc2(r.m.obs)}</div>` : '';
       const del = r.sep
         ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="mark" title="desfazer marcação">↩</button>`
         : (isAdmin() ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="miss" title="apagar este não-separado (admin)">✕</button>` : `<span style="color:var(--mut);font-size:13px" title="só admin apaga">🔒</span>`);
@@ -629,7 +672,7 @@
         <td>${esc2(r.paciente)}</td>
         <td style="color:var(--mut)">${esc2(r.exame)}</td>
         <td>${esc2(r.cat)}</td>
-        <td>${status}</td>
+        <td>${status}${obsHtml}</td>
         <td style="text-align:right">${del}</td>
       </tr>`;
     }).join('');
@@ -658,7 +701,7 @@
     const rows = list.map(d => `<tr>
       <td style="white-space:nowrap">${fmtTs(d.ts)}</td>
       <td style="color:var(--cyan);font-weight:700">${esc2(d.req)}/${esc2(d.ano)}</td>
-      <td>${esc2(d.paciente)}</td>
+      <td>${esc2(d.paciente)}${d.obs ? `<div class="histobs">📝 ${esc2(d.obs)}</div>` : ''}</td>
       <td style="color:var(--mut)">${esc2(d.exame)}</td>
       <td>${esc2(d.cat)}</td>
       <td>${fmtD(d.dt)}</td>
@@ -741,6 +784,7 @@
     };
     el.querySelectorAll('.perbtn[data-apper]').forEach(p => p.onclick = () => { apPer = p.dataset.apper; render(); });
     el.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => { if (confirm('Restaurar este item? Volta pro histórico normal (como não-separado).')) descartar([{ chave: b.dataset.restore }], true); });
+    el.querySelectorAll('[data-obs]').forEach(b => b.onclick = () => openObs(b.dataset.obs));
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
@@ -834,7 +878,13 @@
 .sepbtn.sufi{background:#16a34a;color:#fff;display:inline-flex;flex-direction:column;align-items:center;line-height:1.05;padding:4px 10px;margin-left:6px;border:0}
 .sepbtn.sufi small{font-size:9px;opacity:.92;font-weight:600;letter-spacing:.2px}
 .seprow.confirmrow{background:rgba(22,163,74,.06);border-left:3px solid #16a34a}
-.dl.conf{background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-weight:600}`;
+.dl.conf{background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-weight:600}
+.obswrap{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap}
+.obsnote{background:#fef9c3;color:#854d0e;border:1px solid #fde68a;border-radius:8px;padding:2px 9px;font-size:12.5px;font-weight:600;max-width:560px;line-height:1.3;word-break:break-word}
+.obsbtn{font-size:11.5px;font-weight:700;border:1px dashed #cbd5e1;background:#f8fafc;color:#64748b;border-radius:8px;padding:3px 9px;cursor:pointer;white-space:nowrap}
+.obsbtn.has{border-style:solid;border-color:#fbbf24;background:#fffbeb;color:#92400e}
+.oplbox textarea{width:100%;padding:11px 12px;font-size:16px;border:1.5px solid #cbd5e1;border-radius:10px;box-sizing:border-box;font-family:inherit;resize:vertical}
+.histobs{margin-top:3px;font-size:12px;color:#854d0e;background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:2px 7px;display:inline-block;max-width:520px;line-height:1.3}`;
     document.head.appendChild(s);
   })();
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
