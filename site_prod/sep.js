@@ -354,32 +354,14 @@
       touch(); await loadMarks(); return true;
     } catch (e) { alert('Não consegui salvar a observação (a coluna "obs" já foi criada no banco?).'); return false; }
   }
-  // botão + chip de nota (aparece em Separar/Receber, Última Chamada e Avisar cliente)
+  // CAMPO editável SEMPRE VISÍVEL na linha (Separar/Receber, Última Chamada, Avisar cliente).
+  // Salva no blur/Enter; o auto-refresh é blindado enquanto se digita (typingObs()).
   function obsChunk(k) {
     const m = marks[k]; const txt = (m && m.obs) ? String(m.obs) : '';
-    return `<div class="obswrap">${txt ? `<span class="obsnote">📝 ${esc2(txt)}</span>` : ''}<button class="obsbtn ${txt ? 'has' : ''}" data-obs="${esc2(k)}" title="observação da amostra — motivo da nova amostra, característica…">${txt ? '✏️ editar nota' : '📝 observação'}</button></div>`;
+    return `<div class="obswrap"><span class="obsico" title="observação da amostra">📝</span><input class="obsinput ${txt ? 'has' : ''}" data-obsk="${esc2(k)}" value="${esc2(txt)}" placeholder="observação / motivo da nova amostra (ex.: não veio a amostra, hemolisada…)" autocomplete="off" spellcheck="false"><span class="obssaved" data-obssaved="${esc2(k)}"></span></div>`;
   }
-  function openObs(k) {
-    if (teamMode && !me()) { openLogin(); return; }
-    const m = marks[k]; const it = itens().find(x => chaveOf(x) === k); const info = m || it || {};
-    const cur = (m && m.obs) ? String(m.obs) : '';
-    const old = document.querySelector('.oplogin'); if (old) old.remove();
-    const wrap = document.createElement('div'); wrap.className = 'oplogin';
-    wrap.innerHTML = `<div class="oplbox"><h3>📝 Observação da amostra</h3>
-      <div style="font-size:13px;color:#475569;margin-bottom:8px">${esc2(info.paciente || '')} · ${esc2(info.exame || '')} · #${esc2(info.req || '')}/${esc2(info.ano || '')}</div>
-      <label>Motivo da nova amostra / característica (o escritório enxerga)</label>
-      <textarea id="obstxt" rows="3" placeholder="ex.: não veio a amostra · hemolisada · coagulada · volume insuficiente…">${esc2(cur)}</textarea>
-      <div class="opmsg" id="obsmsg"></div>
-      <div class="opbtns"><button class="opb cancel" id="obscancel">Cancelar</button><button class="opb ok" id="obsgo">Salvar</button></div></div>`;
-    document.body.appendChild(wrap);
-    const close = () => wrap.remove();
-    wrap.onclick = e => { if (e.target === wrap) close(); };
-    wrap.querySelector('#obscancel').onclick = close;
-    const ta = wrap.querySelector('#obstxt'); ta.focus(); try { ta.setSelectionRange(cur.length, cur.length); } catch (e) {}
-    const go = async () => { wrap.querySelector('#obsmsg').textContent = 'Salvando…'; const ok = await saveObs(k, ta.value); if (ok) { close(); render(); } else wrap.querySelector('#obsmsg').textContent = '❌ Não consegui salvar.'; };
-    wrap.querySelector('#obsgo').onclick = go;
-    ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go(); };
-  }
+  // true enquanto o cursor está num campo de observação (não deixar o refresh apagar o texto)
+  const typingObs = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('obsinput')); };
   async function step(acao, chave, confirmMsg) {
     if (teamMode && !me()) { openLogin(); return; }
     if ((acao === 'receber' || acao === 'enviar') && !canRec()) { alert('Você entrou como time de SEPARAÇÃO. Só o time de Recebidos dá o recebido — toque em "trocar" pra entrar como recebidos.'); return; }
@@ -784,7 +766,20 @@
     };
     el.querySelectorAll('.perbtn[data-apper]').forEach(p => p.onclick = () => { apPer = p.dataset.apper; render(); });
     el.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => { if (confirm('Restaurar este item? Volta pro histórico normal (como não-separado).')) descartar([{ chave: b.dataset.restore }], true); });
-    el.querySelectorAll('[data-obs]').forEach(b => b.onclick = () => openObs(b.dataset.obs));
+    el.querySelectorAll('.obsinput').forEach(inp => {
+      inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } };
+      inp.onblur = async () => {
+        const k = inp.dataset.obsk;
+        const cur = (marks[k] && marks[k].obs) ? String(marks[k].obs) : '';
+        if (inp.value.trim() === cur.trim()) return;   // nada mudou
+        const badge = el.querySelector(`[data-obssaved="${k.replace(/"/g, '\\"')}"]`);
+        if (teamMode && !me()) { openLogin(); return; }
+        if (badge) badge.textContent = '💾 salvando…';
+        const ok = await saveObs(k, inp.value);
+        if (badge) { badge.textContent = ok ? '✓ salvo' : '❌ erro'; setTimeout(() => { if (badge) badge.textContent = ''; }, 2500); }
+        inp.classList.toggle('has', !!inp.value.trim());
+      };
+    });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
@@ -817,8 +812,8 @@
     if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
     if (m === 'sep') {
       await loadTeam(); await loadMarks(); render();
-      if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep') { await loadMarks(); render(); } });
-      else timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden) { await loadMarks(); render(); } }, 60000);
+      if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep' && !typingObs()) { await loadMarks(); render(); } });
+      else timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden && !typingObs()) { await loadMarks(); render(); } }, 60000);
       // logout automático por inatividade (só faz sentido no modo equipe)
       idleTimer = setInterval(() => { if (MODE === 'sep' && teamMode && op && Date.now() - lastAct > IDLE_MIN * 60000) { saveOp(null); render(); } }, 60000);
     }
@@ -879,16 +874,19 @@
 .sepbtn.sufi small{font-size:9px;opacity:.92;font-weight:600;letter-spacing:.2px}
 .seprow.confirmrow{background:rgba(22,163,74,.06);border-left:3px solid #16a34a}
 .dl.conf{background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-weight:600}
-.obswrap{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap}
-.obsnote{background:#fef9c3;color:#854d0e;border:1px solid #fde68a;border-radius:8px;padding:2px 9px;font-size:12.5px;font-weight:600;max-width:560px;line-height:1.3;word-break:break-word}
-.obsbtn{font-size:11.5px;font-weight:700;border:1px dashed #cbd5e1;background:#f8fafc;color:#64748b;border-radius:8px;padding:3px 9px;cursor:pointer;white-space:nowrap}
-.obsbtn.has{border-style:solid;border-color:#fbbf24;background:#fffbeb;color:#92400e}
+.obswrap{display:flex;align-items:center;gap:7px;margin-top:6px}
+.obsico{font-size:14px;opacity:.85;flex:none}
+.obsinput{flex:1;max-width:600px;min-width:180px;padding:6px 10px;font-size:12.5px;border:1px solid #fcd34d;border-radius:8px;background:#fffdf5;color:#7c2d12;font-family:inherit;box-sizing:border-box}
+.obsinput::placeholder{color:#b6a98a;font-style:italic}
+.obsinput.has{background:#fffbeb;border-color:#f59e0b;font-weight:600}
+.obsinput:focus{outline:none;border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.25);background:#fff}
+.obssaved{font-size:11px;font-weight:800;color:#16a34a;white-space:nowrap;flex:none}
 .oplbox textarea{width:100%;padding:11px 12px;font-size:16px;border:1.5px solid #cbd5e1;border-radius:10px;box-sizing:border-box;font-family:inherit;resize:vertical}
 .histobs{margin-top:3px;font-size:12px;color:#854d0e;background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:2px 7px;display:inline-block;max-width:520px;line-height:1.3}`;
     document.head.appendChild(s);
   })();
   document.querySelectorAll('#modesw .msbtn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
   // ao voltar o foco na aba, atualiza na hora (sensação de "ao vivo" sem ficar consultando à toa)
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && MODE === 'sep') loadMarks().then(render); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && MODE === 'sep' && !typingObs()) loadMarks().then(render); });
   window.SEP = { setMode, render };
 })();
