@@ -270,9 +270,9 @@ function buildUrgentCat(list){return buildSpecial(list,e=>urgentOf(e),{cod:'__UR
 function buildPetCat(list){return buildSpecial(list,e=>isPetlove(e.paciente),{cod:'__PET__',nome:'PET LOVE',kind:'pet'});}
 function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR__',nome:'ATRASADOS',kind:'atras'});}
 // ESPELHO de "Avisar cliente" (amostra insuficiente da Triagem) — read-only na Produção
-function buildAvisoCat(){return {cod:'__AVI__',categoria:'AVISAR CLIENTE',special:true,kind:'aviso',sla:null,em_processo:avisarMarks.length,atrasado:0,no_prazo:avisarMarks.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
+function buildAvisoCat(){return {cod:'__AVI__',categoria:'AVISAR CLIENTE / ESCRITÓRIO',special:true,kind:'aviso',sla:null,em_processo:avisarMarks.length,atrasado:0,no_prazo:avisarMarks.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // 🔒 TRAVADOS na Produção (a equipe trava direto aqui) — vermelho pulsante
-function buildTravaCat(){return {cod:'__TRAVA__',categoria:'TRAVADOS',special:true,kind:'trava',sla:null,em_processo:prodTravados.length,atrasado:0,no_prazo:prodTravados.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
+function buildTravaCat(){return {cod:'__TRAVA__',categoria:'TRAVADOS / ESCRITÓRIO',special:true,kind:'trava',sla:null,em_processo:prodTravados.length,atrasado:0,no_prazo:prodTravados.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only da Triagem)
 function buildHistotecCat(){const n=histotecItens().length;return {cod:'__HISTOTEC__',categoria:'HISTOTÉCNICA · CONTROLE DE AMOSTRAS',special:true,kind:'histotec',sla:null,em_processo:n,atrasado:0,no_prazo:n,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // Desconta os exames baixados (PIN) E os TRAVADOS de uma categoria NORMAL — contadores, derivações e lista batem.
@@ -443,7 +443,7 @@ function renderAviso(){
   const rows = list.length
     ? list.map(m=>`<div class="wl"><span class="reg">#${esc(m.req)}</span><div><div class="pac">${esc(m.paciente)}</div><div class="exm">${esc(m.exame)} · insuf. por <b>${esc(m.por||'')}</b></div></div><div class="wlact"><span class="db late">📧 avisar cliente</span></div></div>`).join('')
     : '<div style="color:var(--green);padding:16px;font-size:16px">✓ Nenhum cliente a avisar. 👍</div>';
-  document.getElementById('content').innerHTML=avisoBannerHtml()+`<div class="cgrid"><div class="card avisocard"><h3><span>📧 Avisar cliente <span class="tag">${num(list.length)} · amostra insuficiente · espelho da Triagem (a ação é feita lá)</span></span></h3><div class="scroll">${rows}</div></div></div>`;
+  document.getElementById('content').innerHTML=avisoBannerHtml()+`<div class="cgrid"><div class="card avisocard"><h3><span>📧 Avisar cliente / Escritório <span class="tag">${num(list.length)} · amostra insuficiente · responsabilidade do Escritório</span></span></h3><div class="scroll">${rows}</div></div></div>`;
 }
 // banner vermelho "exames travados" — aparece em qualquer aba da Produção
 function travaBannerHtml(){ const list=prodTravados; if(!list.length) return '';
@@ -459,7 +459,7 @@ function renderTrava(){
   const histHtml = hist.length
     ? `<div class="card travahistcard"><h3><span>📋 Histórico de travados (liberados) <span class="tag">${num(hist.length)}</span></span></h3><div class="scroll">${hist.slice(0,100).map(m=>`<div class="wl travahistrow"><span class="reg">#${esc(m.req)}</span><div><div class="pac">${esc(m.paciente)} <span class="db ok">✅ liberado</span></div><div class="exm">${esc(m.exame)}</div><div class="travahist"><b>📋 Histórico</b><div>🔒 <b>Travado:</b> ${esc(m.obs||'(sem motivo)')}${vez(m)}</div><div>🔒 <b>Travou:</b> ${esc(m.por||'—')} — ${fmtDataHoraP(m.ts_sep)}</div><div>✅ <b>Destravou:</b> ${esc(m.por_receb||'—')} — ${fmtDataHoraP(m.ts_receb)}</div><div>⏱️ <b>Ficou travado:</b> ${labelDiasP(m)}</div></div></div></div>`).join('')}</div></div>`
     : '';
-  document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados <span class="tag">${num(list.length)} · travados na Produção (motivo em texto livre)</span></span></h3><div class="scroll">${rows}</div></div>${histHtml}</div>`;
+  document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados / Escritório <span class="tag">${num(list.length)} · responsabilidade do Escritório · motivo em texto livre</span></span></h3><div class="scroll">${rows}</div></div>${histHtml}</div>`;
 }
 // 🔬 ESPELHO: Histotécnica · Controle de Amostras (read-only) — o que entra na Triagem aparece aqui, ao vivo
 function histotecStatus(it){
