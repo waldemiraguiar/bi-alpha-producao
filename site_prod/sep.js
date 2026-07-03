@@ -451,7 +451,7 @@
   /* ---- TÓPICOS: agrupa categorias por setor (fácil de reorganizar aqui) ---- */
   const TOPICS = [
     { t: '🧬 Biologia Molecular', cats: ['BIOLOGIA MOLECULAR - PCR'] },
-    { t: '🔬 Patologia', cats: ['Citopatologia', 'NECRÓPSIA'] },
+    { t: '🔬 Histotécnica', cats: ['Citopatologia', 'Histologia', 'NECRÓPSIA'] },
     { t: '⚗️ Análises Clínicas', cats: ['BIOQUÍMICA', 'Uroanálise', 'Hematologia'] },
     { t: '🦠 Micro & Parasito', cats: ['BACTERIOLOGIA - CULTURA', 'Parasitologia'] },
     { t: '💉 Imunologia & Endócrino', cats: ['IMUNOLOGIA', 'EXAMES ESPECIALIZADOS'] },

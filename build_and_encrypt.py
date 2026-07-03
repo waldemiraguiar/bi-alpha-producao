@@ -3,7 +3,7 @@
 Foco: fila em aberto por categoria, STATUS por prazo (No prazo/Atrasado/Adiantado),
 exames entrando/saindo (fluxo do dia) e lista de atrasados. SEM R$, SEM totais acumulados.
 Sinal de conclusão = DataExame preenchida (NULL = em processo). Tudo server-side (leve)."""
-import os, json, base64, datetime, time
+import os, json, base64, datetime, time, re
 import pymysql
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -49,6 +49,11 @@ def build():
     cats = {r["CodCategoria"]:(r["Categoria"] or f"Cat {r['CodCategoria']}") for r in q("SELECT CodCategoria,Categoria FROM TabCategoria")}
     def nome(cod): return cats.get(cod, f"Cat {cod}")
     def sla(cod): return SLA.get(cod, SLA_DEFAULT)
+    # HISTOTÉCNICA: no HF, citologia e histologia moram na MESMA categoria (Citopatologia, cod 15).
+    # Split por NOME do exame -> "Histologia" (histo/histopato/imunoisto/cell block); resto fica Citopatologia.
+    _HISTO = re.compile(r"histolog|histopatolog|imuno.?isto|imuno.?histo|cell\s*block", re.I)
+    def is_histo(cod, exame): return cod == 15 and bool(_HISTO.search(exame or ""))
+    def nome_ex(cod, exame): return "Histologia" if is_histo(cod, exame) else nome(cod)
 
 
 
@@ -136,7 +141,7 @@ def build():
                 ent_dt = base.strftime("%Y-%m-%dT%H:%M:%S")
             sep_itens.append({
                 "req": r["req"], "ano": r["ano"], "codex": r["codex"],
-                "exame": r["exame"], "cat": nome(r["cod"]), "cod": r["cod"],
+                "exame": r["exame"], "cat": nome_ex(r["cod"], r["exame"]), "cod": r["cod"],
                 "paciente": (r["paciente"] or "").strip() or "—",
                 "tutor": (r["tutor"] or "").strip(),
                 "vet": (r["vet"] or "").strip(),
@@ -159,7 +164,7 @@ def build():
         for r in hist_rows:
             if r["cod"] in JUNK or r["codex"] not in COFRE: continue
             hist_itens.append({"req": r["req"], "ano": r["ano"], "codex": r["codex"],
-                "exame": r["exame"], "cat": nome(r["cod"]), "cod": r["cod"],
+                "exame": r["exame"], "cat": nome_ex(r["cod"], r["exame"]), "cod": r["cod"],
                 "paciente": (r["paciente"] or "").strip() or "—",
                 "dt": str(r["entrada"]) if r["entrada"] else None})
 
@@ -265,15 +270,16 @@ def build():
                          "exames": exmap.get((r["req"], r["ano"]), [])})
 
     cat = {}
-    def C(cod):
-        if cod not in cat:
-            cat[cod]={"cod":cod,"categoria":nome(cod),"sla":sla(cod),
-                      "em_processo":0,"no_prazo":0,"atrasado":0,"tat_medio":None,
-                      "urgentes":0,"urgentes_list":[],"_der":{}}
-        return cat[cod]
+    def C(cod, exame=None):
+        k = nome_ex(cod, exame)   # separa "Histologia" de "Citopatologia" também na Produção
+        if k not in cat:
+            cat[k]={"cod":cod,"categoria":k,"sla":sla(cod),
+                    "em_processo":0,"no_prazo":0,"atrasado":0,"tat_medio":None,
+                    "urgentes":0,"urgentes_list":[],"_der":{}}
+        return cat[k]
     for r in abertos:
         if r["cod"] in JUNK: continue
-        x=C(r["cod"]); dias=r["dias"] or 0; n=r["n"]; exm=(r["exame"] or "—").strip() or "—"
+        x=C(r["cod"], r["exame"]); dias=r["dias"] or 0; n=r["n"]; exm=(r["exame"] or "—").strip() or "—"
         late = dias > x["sla"]
         x["em_processo"]+=n
         if late: x["atrasado"]+=n
@@ -283,7 +289,7 @@ def build():
         if late: d["atrasado"]+=n
     for r in urg_det:
         if r["cod"] in JUNK: continue
-        x=C(r["cod"]); x["urgentes"]+=1
+        x=C(r["cod"], r["exame"]); x["urgentes"]+=1
         if len(x["urgentes_list"])<10:
             x["urgentes_list"].append({"registro":r["registro"],
                 "paciente":(r["paciente"] or "").strip() or "—","exame":r["exame"],"dias":r["dias"] or 0})
@@ -305,7 +311,8 @@ def build():
     CAP=30
     atrasados=[]
     for r in abertos_det:
-        if r["cod"] in JUNK or r["cod"] not in cat: continue
+        _k = nome_ex(r["cod"], r["exame"])
+        if r["cod"] in JUNK or _k not in cat: continue
         s=sla(r["cod"]); dias=r["dias"] or 0; atras=dias>s
         lim = (r["entrada"]+datetime.timedelta(days=s)).isoformat() if r["entrada"] else None
         item={"registro":r["registro"],"paciente":(r["paciente"] or "").strip() or "—",
@@ -313,10 +320,10 @@ def build():
               "entrada":str(r["entrada"]) if r["entrada"] else None,"limite":lim,
               "urgente":(r["urg"]==1),
               "dias":dias,"sla":s,"atrasado":atras,"atraso":max(0,dias-s)}
-        lst=cat[r["cod"]]["exames"]
+        lst=cat[_k]["exames"]
         if len(lst)<CAP: lst.append(item)
         if atras:
-            atrasados.append({**item,"categoria":nome(r["cod"])})
+            atrasados.append({**item,"categoria":_k})
     atrasados.sort(key=lambda a:-a["atraso"]); atrasados=atrasados[:40]
 
     resumo={"em_processo":sum(x["em_processo"] for x in categorias),
