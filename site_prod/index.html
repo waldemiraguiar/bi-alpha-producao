@@ -41,6 +41,13 @@ body{font-family:'Inter',sans-serif;background:
 .rotctl{align-self:center;margin-left:auto;font-size:12px;font-weight:700;color:var(--mut);cursor:pointer;border:1px solid var(--line);border-radius:20px;padding:6px 13px;background:var(--card);white-space:nowrap}
 .rotctl:hover{background:var(--card2)}
 .rotctl.pinned{color:var(--amber);border-color:rgba(255,176,32,.5);background:rgba(255,176,32,.08)}
+/* 🔄 Botão Atualizar (azul) — recarga instantânea, Produção e Triagem */
+.atualizar-btn{background:#0b63d6;color:#fff;border:0;border-radius:9px;padding:8px 14px;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;box-shadow:0 0 10px rgba(11,99,214,.45)}
+.atualizar-btn:hover{background:#0a56ba}
+.atualizar-btn:disabled{cursor:wait}
+.atualizar-btn.spin{animation:atualizarpulse .7s ease-in-out infinite}
+.atualizar-btn.done{background:#16a34a;box-shadow:0 0 10px rgba(22,163,74,.6)}
+@keyframes atualizarpulse{0%,100%{opacity:.55}50%{opacity:1}}
 /* aba EXAMES URGENTES (destacada) */
 .tab.urgtab{border-color:rgba(255,176,32,.6);background:rgba(255,176,32,.12)}
 .tab.urgtab .tn{color:var(--amber);font-weight:800}

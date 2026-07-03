@@ -325,6 +325,21 @@ async function boot(D){
   if(!window.__visref){window.__visref=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.getElementById('content').style.display!=='none'){loadManual().then(renderActive).catch(()=>{});}});}
 }
 
+// 🔄 ATUALIZAR (recarga instantânea, grátis): rebusca o .enc do último build + marcações, sem esperar os 10 min.
+let __atualizando=false;
+async function atualizarProd(btn){
+  if(__atualizando) return; __atualizando=true;
+  const b=btn||document.getElementById('atualizarBtn'); if(b){b.classList.add('spin');b.disabled=true;b.textContent='🔄 atualizando…';}
+  try{ DATA=await decrypt(window.__pwd); await loadManual(); buildTabs(); renderActive(); }
+  catch(e){ console.warn(e); }
+  finally{
+    __atualizando=false;
+    const b2=document.getElementById('atualizarBtn');
+    if(b2){ b2.classList.remove('spin'); b2.disabled=false; b2.classList.add('done'); b2.textContent='✓ atualizado';
+      setTimeout(()=>{ const b3=document.getElementById('atualizarBtn'); if(b3){b3.classList.remove('done');b3.textContent='🔄 Atualizar';} },1800); }
+  }
+}
+window.atualizarProd=atualizarProd;
 function buildTabs(){
   const upd=DATA.meta.gerado_em.slice(11,16);
   document.getElementById('upd').textContent='dados '+upd+' · 10 min';
@@ -337,13 +352,15 @@ function buildTabs(){
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
   const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
-  tabsEl.innerHTML=list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
+  tabsEl.innerHTML=`<button class="atualizar-btn" id="atualizarBtn" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>`
+    + list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
     <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'?'avisopulse':''}" data-i="${i}">
       <span class="tn">${k&&x.kind==='aviso'?'<span class="fwt">🎆</span> '+k.i+' '+esc(x.categoria)+' <span class="fwt">🎇</span>':(k?k.i+' '+esc(x.categoria):esc(x.categoria))}</span>
       <span class="tb ${k?k.b:(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
       <span class="prog"></span>
     </div>`;}).join('')
     + `<div class="rotctl ${pinned?'pinned':''}" id="rotctl">${pinned?'⏸ fixado · clique p/ girar':'🔄 girando 15s'}</div>`;
+  { const _ab=document.getElementById('atualizarBtn'); if(_ab) _ab.addEventListener('click',()=>atualizarProd(_ab)); }
   [...tabsEl.querySelectorAll('.tab')].forEach(t=>t.addEventListener('click',()=>{
     active=+t.dataset.i; pinned=true; if(ROT)clearInterval(ROT); buildTabs(); renderActive();}));
   document.getElementById('rotctl').addEventListener('click',()=>{
