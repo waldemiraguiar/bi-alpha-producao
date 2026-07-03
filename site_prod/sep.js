@@ -24,7 +24,7 @@
   let marks = {};                 // chave -> marcação
   let descartes = new Set();      // chaves apagadas (p/ filtrar do histórico/placar)
   let descartesList = [];         // arquivo COMPLETO dos apagados (histórico do histórico)
-  let selByView = { separar: '', urgente: '', avisar: '', hist: '', apagados: '' }; // categoria selecionada por aba
+  let selByView = { separar: '', urgente: '', avisar: '', travados: '', hist: '', apagados: '' }; // categoria selecionada por aba
   let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
   let busca = '';                 // 🔎 busca global (todas as categorias) por registro/paciente/exame/data
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
@@ -80,6 +80,11 @@
   // fila "avisar cliente": amostras marcadas INSUFICIENTES aguardando o check-in do aviso (nova amostra)
   const aAvisar = () => Object.values(marks)
     .filter(m => m.estado === 'insuficiente')
+    .filter(m => !descartes.has(m.chave))
+    .filter(m => { const d = dayTs(m.ts_sep); return !d || d >= pisoDay(m.cat); });
+  // fila "TRAVADOS": exames travados (financeiro, cadastro, problema de amostra…) — motivo em texto livre (obs)
+  const aTravar = () => Object.values(marks)
+    .filter(m => m.estado === 'travado')
     .filter(m => !descartes.has(m.chave))
     .filter(m => { const d = dayTs(m.ts_sep); return !d || d >= pisoDay(m.cat); });
 
@@ -138,6 +143,8 @@
         else if (a === 'insuf') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'insuficiente', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: null, obs: (marks[k] ? (marks[k].obs || null) : null) });
         else if (a === 'avisar') await window.SUPA.updateMark(k, { estado: 'insuficiente_avisado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'desavisar') await window.SUPA.updateMark(k, { estado: 'insuficiente', por_receb: null, ts_receb: null });
+        else if (a === 'travar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'travado', por: payload.por || 'equipe', ts_sep: (marks[k] && marks[k].ts_sep) || Date.now(), no_prazo: null, corte: null, obs: (marks[k] ? (marks[k].obs || null) : null) });
+        else if (a === 'destravar') await window.SUPA.delMark(k);   // resolve: volta pro fluxo (fila de separar)
         else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
         else if (a === 'desfazer') await window.SUPA.delMark(k);
         touch(); await loadMarks(); return true;
@@ -334,6 +341,15 @@
     const ok = await post({ acao: 'insuf', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
     if (ok) render();
   }
+  // 🔒 TRAVAR o exame — sai do fluxo e vai pra aba Travados (motivo em texto livre no campo de observação)
+  async function doTravar(it) {
+    if (teamMode && !me()) { openLogin(); return; }
+    if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
+    const motivo = prompt('TRAVAR este exame.\n\nEscreva o MOTIVO (ex.: pendência financeira, cadastro incompleto, amostra hemolisada…):', (marks[chaveOf(it)] && marks[chaveOf(it)].obs) || '');
+    if (motivo === null) return;   // cancelou
+    const ok = await post({ acao: 'travar', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
+    if (ok) { const m = marks[chaveOf(it)]; if (m) { try { await window.SUPA.updateMark(chaveOf(it), { obs: (motivo || '').trim() || null }); await loadMarks(); } catch (e) {} } render(); }
+  }
   // marcar TEM AMOSTRA (suficiente) — finaliza e sai da fila na hora
   async function doSuficiente(it) {
     if (teamMode && !me()) { openLogin(); return; }
@@ -395,7 +411,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length, ncN = naoClass().length;
+    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length, ncN = naoClass().length, travN = aTravar().length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -411,6 +427,7 @@
         <div class="septab ${view === 'separar' ? 'on' : ''}" data-v="separar">🧪 Separar / Receber <span class="c">${sepN}</span></div>
         <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
         <div class="septab aviso avisopulse ${view === 'avisar' ? 'on' : ''}" data-v="avisar"><span class="fwt">🎆</span> 📧 Avisar cliente <span class="fwt">🎇</span> <span class="c">${aviN}</span></div>
+        <div class="septab trava ${travN ? 'travapulse' : ''} ${view === 'travados' ? 'on' : ''}" data-v="travados">🔒 Travados <span class="c">${travN}</span></div>
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
@@ -463,7 +480,9 @@
     else if (!separated) badge = dias >= 1 ? `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} parada</span>` : '';  // horário de vencimento removido (pedido Wal)
     else if (dias >= 1) badge = `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} aguardando receber</span>`;
     const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
-    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${undo}</div></div>`;
+    // 🔒 TRAVAR: manda o exame pra aba Travados (financeiro/cadastro/problema de amostra…), motivo em texto livre
+    const btrava = `<button class="sepbtn trava" data-act="travar" data-k="${k}" title="travar este exame (financeiro, cadastro, problema de amostra…)">🔒 Travar</button>`;
+    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${undo}</div></div>`;
   }
 
   // ordena categorias seguindo a ORDEM da TV (familiaridade); fallback alfabético
@@ -511,7 +530,7 @@
   const estadoDe = it => { const m = marks[chaveOf(it)]; return (m && m.estado) || ''; };
   // fora do fluxo: CONFIRMADA (suficiente = tem amostra, finalizada) OU insuficiente (avisar cliente).
   // RECEBIDO agora NÃO sai — fica aguardando a confirmação "tem amostra?" (suficiente/insuficiente).
-  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado'; };
+  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado' || e === 'travado'; };
   // PENDENTE = item aberto ainda no fluxo (a finalização é o RECEBER). Insuficiente sai do fluxo (vai pra fila de aviso).
   const pendentes = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it));
   const ageItems = (lo, hi) => pendentes().filter(it => (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
@@ -577,6 +596,29 @@
     return bar + strip + `<div class="sepcat andon avisomax"><div class="h"><span>📧 ${esc2(sel)}</span><span class="cnt">${arr.length} a avisar</span></div>${arr.map(rowAvisar).join('')}</div>`;
   }
 
+  /* ---- 🔒 TRAVADOS: exames travados (financeiro/cadastro/problema de amostra) — motivo em texto livre (obs) ---- */
+  function rowTravar(m) {
+    const k = m.chave;
+    const cl = `<span class="cl ${m.classe}">${m.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
+    const d = dayTs(m.ts_sep); const quando = d ? ` · ${d.slice(8, 10)}/${d.slice(5, 7)}` : '';
+    const head = `<div class="req">${esc2(m.req)}<span class="y">/${esc2(m.ano)}</span></div>
+      <div><div class="pac">${esc2(m.paciente)}${cl}</div>
+      <div class="meta">${esc2(m.exame)} · travado por <b>${esc2(m.por || '')}</b>${quando}</div>${obsChunk(k)}</div>`;
+    const btn = `<button class="sepbtn rec" data-act="destravar" data-k="${k}" title="resolvido — volta pro fluxo de separar">✓ Destravar</button>`;
+    return `<div class="seprow">${head}<div class="right2"><span class="dl late">🔒 travado</span>${btn}</div></div>`;
+  }
+  function viewTravados() {
+    const items = aTravar();
+    if (!items.length) return `<div class="sepwait">✓ Nenhum exame travado. 👍</div>`;
+    const byCat = {}; items.forEach(m => { const c = m.cat || '—'; (byCat[c] = byCat[c] || []).push(m); });
+    const cats = orderedCats(byCat);
+    let sel = selByView.travados; if (!sel || !byCat[sel]) sel = selByView.travados = cats[0];
+    const strip = topicStrip(byCat, 'travados', sel, null);
+    const arr = byCat[sel].slice().sort((a, b) => (Number(a.ts_sep) || 0) - (Number(b.ts_sep) || 0));
+    const bar = `<div class="andonbar trava"><span class="ico">🔒</span><span class="ttl">${items.length} EXAME${items.length > 1 ? 'S' : ''} TRAVADO${items.length > 1 ? 'S' : ''} · RESOLVA O MOTIVO (financeiro, cadastro, amostra) E DESTRAVE!</span></div>`;
+    return bar + strip + `<div class="sepcat andon travamax"><div class="h"><span>🔒 ${esc2(sel)}</span><span class="cnt">${arr.length} travado(s)</span></div>${arr.map(rowTravar).join('')}</div>`;
+  }
+
   function viewPlacar() {
     const now = new Date(); const today = now.toISOString().slice(0, 10);
     const cutDay = period === 'hoje' ? today : period === '7d' ? new Date(now - 7 * 864e5).toISOString().slice(0, 10) : '0';
@@ -587,7 +629,7 @@
       const dia = (u.dt || '').slice(0, 10); if (!dia || dia < fl) return;
       const k = chaveOf(u); if (descartes.has(k)) return;
       const m = marks[k];
-      if (m && (m.estado === 'insuficiente' || m.estado === 'insuficiente_avisado')) return; // insuficiente = NEUTRO (fora do placar)
+      if (m && (m.estado === 'insuficiente' || m.estado === 'insuficiente_avisado' || m.estado === 'travado')) return; // insuficiente/travado = NEUTRO (fora do placar)
       const a = agg[u.cat] = agg[u.cat] || { cat: u.cat, total: 0, sep: 0, ok: 0 };
       a.total++;
       if (m && m.estado) { a.sep++; if (m.no_prazo) a.ok++; }
@@ -663,8 +705,11 @@
       const suficiente = r.sep && r.m.estado === 'suficiente';
       const recebido = r.sep && r.m.estado === 'recebido';
       const insuf = r.sep && (r.m.estado === 'insuficiente' || r.m.estado === 'insuficiente_avisado');
+      const travado = r.sep && r.m.estado === 'travado';
       const status = !r.sep
         ? `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`
+        : travado
+          ? `<span class="est separado" style="background:#fee2e2;color:#991b1b">🔒 travado</span> por <b>${esc2(r.m.por || '')}</b>`
         : insuf
           ? `<span class="est separado" style="background:#fee2e2;color:#991b1b">🚫 amostra insuficiente</span> por <b>${esc2(r.m.por || '')}</b>${r.m.estado === 'insuficiente_avisado' ? ` · ✅ cliente avisado por <b>${esc2(r.m.por_receb || '')}</b>` : ' · <span class="dl late" style="padding:1px 5px">⚠️ falta avisar</span>'}`
           : suficiente
@@ -739,6 +784,7 @@
     separar: '🧪 Ordem: 1·Separar → 2·Receber. Só DEPOIS de recebida, quem tem permissão pode marcar 🚫 Insuficiente (encerra e avisa o cliente).',
     urgente: '🚨 Não FINALIZADAS de ontem ou antes (faltou separar OU receber) — última chamada, feche antes de perder!',
     avisar: '📧 Amostras insuficientes — avise o cliente para enviar NOVA amostra e dê o check-in "✓ cliente avisado". Fica piscando até confirmar.',
+    travados: '🔒 Exames TRAVADOS por algum motivo (financeiro, cadastro, problema de amostra…). O motivo fica no campo de observação. Resolva e clique "✓ Destravar" pra voltar ao fluxo.',
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
@@ -751,6 +797,7 @@
     if (view === 'separar') body = viewSeparar();
     else if (view === 'urgente') body = viewUrgente();
     else if (view === 'avisar') body = viewAvisar();
+    else if (view === 'travados') body = viewTravados();
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
     else if (view === 'naoclass') body = viewNaoClass();
@@ -816,6 +863,8 @@
       else if (act === 'insuf') { const it = itens().find(x => chaveOf(x) === k); if (it) doInsuf(it); }
       else if (act === 'insufoff') alert('🚫 Insuficiente: ' + (b.dataset.why || 'indisponível agora') + '.');
       else if (act === 'avisar') avisarCliente(k);
+      else if (act === 'travar') { const it = itens().find(x => chaveOf(x) === k); if (it) doTravar(it); }
+      else if (act === 'destravar') step('destravar', k, 'Destravar este exame? Volta pro fluxo de separar.');
       else if (act === 'enviar') step('enviar', k);
       else if (act === 'receber') step('receber', k);
       else if (act === 'voltar') step('voltar', k, 'Desfazer o último passo desta amostra?');
