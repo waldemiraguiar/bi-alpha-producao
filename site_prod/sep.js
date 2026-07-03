@@ -85,6 +85,7 @@
   // fila "TRAVADOS": exames travados (financeiro, cadastro, problema de amostra…) — motivo em texto livre (obs)
   const aTravar = () => Object.values(marks)
     .filter(m => m.estado === 'travado')
+    .filter(m => !String(m.chave).startsWith('prod:'))   // 'prod:' = travados da PRODUÇÃO (aba própria lá), não entram na Triagem
     .filter(m => !descartes.has(m.chave))
     .filter(m => { const d = dayTs(m.ts_sep); return !d || d >= pisoDay(m.cat); });
 
