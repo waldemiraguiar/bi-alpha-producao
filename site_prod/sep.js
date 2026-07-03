@@ -372,6 +372,18 @@
   }
   // true enquanto o cursor está num campo de observação (não deixar o refresh apagar o texto)
   const typingObs = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('obsinput')); };
+  // 🔄 ATUALIZAR (recarga instantânea, grátis): rebusca o .enc do último build (novos exames) + marcações, sem esperar os 10 min.
+  let atualizandoSep = false;
+  async function atualizarAgora(btn) {
+    if (atualizandoSep) return; atualizandoSep = true;
+    if (btn) { btn.classList.add('spin'); btn.disabled = true; btn.textContent = '🔄 atualizando…'; }
+    try { if (typeof decrypt === 'function' && window.__pwd) { const nd = await decrypt(window.__pwd); if (nd) DATA = nd; } await loadMarks(); }
+    catch (e) {}
+    finally {
+      atualizandoSep = false; render();
+      const b = $('sepAtualizar'); if (b) { b.classList.add('done'); b.textContent = '✓ atualizado'; setTimeout(() => { const b2 = $('sepAtualizar'); if (b2) { b2.classList.remove('done'); b2.textContent = '🔄 Atualizar'; } }, 1800); }
+    }
+  }
   async function step(acao, chave, confirmMsg) {
     if (teamMode && !me()) { openLogin(); return; }
     if ((acao === 'receber' || acao === 'enviar') && !canRec()) { alert('Você entrou como time de SEPARAÇÃO. Só o time de Recebidos dá o recebido — toque em "trocar" pra entrar como recebidos.'); return; }
@@ -403,6 +415,7 @@
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
         ${ncN ? `<div class="septab ${view === 'naoclass' ? 'on' : ''}" data-v="naoclass" style="border-color:#f59e0b;color:#f59e0b">⚠️ A classificar <span class="c" style="background:#f59e0b;color:#fff">${ncN}</span></div>` : ''}
+        <button class="atualizar-btn" id="sepAtualizar" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>
       </div>
       <div class="sepme">
         <button class="adminbtn ${isAdmin() ? 'on' : ''}" id="adminbtn" title="apagar/restaurar não-separados">${isAdmin() ? '🔓 Admin' : '🔒 Admin'}</button>
@@ -758,6 +771,7 @@
     el.querySelectorAll('[data-selcat]').forEach(p => p.onclick = () => { selByView[p.dataset.selview] = p.dataset.selcat; render(); });
     el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
     el.querySelectorAll('.perbtn[data-hf]').forEach(p => p.onclick = () => { histFiltro = p.dataset.hf; render(); });
+    const sa = $('sepAtualizar'); if (sa) sa.onclick = () => atualizarAgora(sa);
     const ab = $('adminbtn'); if (ab) ab.onclick = adminUnlock;
     const eb = $('eqbtn'); if (eb) eb.onclick = openTeam;
     const ol = $('oplogin'); if (ol) ol.onclick = openLogin;
