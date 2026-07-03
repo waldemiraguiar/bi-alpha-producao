@@ -19,8 +19,10 @@ let prodTravados=[], prodTravadoSet=new Set(), prodTravadosHist=[], prodTravaMap
 let sepMarksMap={}, histotecQ='', histotecSel='';
 // normaliza p/ busca: tira ACENTO + minúsculas (mantém espaços/números) → busca com e sem acento
 const normAcc=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
-const HISTOTEC_CATS=['citopatologia','histologia','necropsia'];
-function histotecItens(){ const sep=(typeof DATA!=='undefined'&&DATA&&DATA.separacao&&DATA.separacao.itens)||[]; return sep.filter(it=>HISTOTEC_CATS.includes(slug(it.cat))); }
+// 🔬 ESPELHO do app Histotécnica (tabela amostras, via RPC amostras_espelho). Fluxo de 7 etapas.
+let amostrasEsp=[];
+const STAGE_NAMES=['Recepção e Triagem','Clivagem Macroscópica','Processamento e Emblocagem','Microtomia','Preparação Final de Lâminas','Leitura e Laudo (Prof. Luís)','Finalização (baixa)'];
+function amEtapas(a){ const e=Array.isArray(a.etapas)?a.etapas:[]; const done=e.filter(x=>x&&x.concluida_em).length; const total=Math.max(e.length,STAGE_NAMES.length); const finalizado=e.length>0&&done>=e.length; const idx=Math.min(done,STAGE_NAMES.length-1); const atualNome=finalizado?'Finalizado':(STAGE_NAMES[idx]||('Etapa '+(idx+1))); const last=[...e].reverse().find(x=>x&&x.concluida_em); return {done,total:e.length||STAGE_NAMES.length,finalizado,atualNome,atualIdx:idx,ultimoPor:last&&last.por,ultimoEm:last&&last.concluida_em}; }
 const exTravado=e=>prodTravadoSet.has('prod:'+exChave(e));
 const diasTravaP=m=>{const ini=Number(m.ts_sep)||0,fim=Number(m.ts_receb)||Date.now();if(!ini)return null;return Math.max(0,Math.floor((fim-ini)/86400000));};
 const labelDiasP=m=>{const d=diasTravaP(m);if(d==null)return '';return d<1?'menos de 1 dia':`${d} dia${d>1?'s':''}`;};
@@ -32,7 +34,7 @@ function travHistLine(e){
   return `<div class="travahist"><b>📋 Já foi travado</b><div>🔒 <b>Motivo:</b> ${esc(m.obs||'(sem motivo)')}${vez}</div><div>🔒 <b>Travou:</b> ${esc(m.por||'—')} — ${fmtDataHoraP(m.ts_sep)}</div><div>✅ <b>Destravou:</b> ${esc(m.por_receb||'—')} — ${fmtDataHoraP(m.ts_receb)}</div><div>⏱️ <b>Ficou travado:</b> ${labelDiasP(m)}</div></div>`;
 }
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;}); sepMarksMap={}; (s.marks||[]).forEach(m=>{if(m&&m.chave)sepMarksMap[String(m.chave)]=m;});}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;}); sepMarksMap={}; (s.marks||[]).forEach(m=>{if(m&&m.chave)sepMarksMap[String(m.chave)]=m;});}catch(e){} try{amostrasEsp=await window.SUPA.loadAmostras();}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -274,8 +276,8 @@ function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR_
 function buildAvisoCat(){return {cod:'__AVI__',categoria:'AVISAR CLIENTE / ESCRITÓRIO',special:true,kind:'aviso',sla:null,em_processo:avisarMarks.length,atrasado:0,no_prazo:avisarMarks.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // 🔒 TRAVADOS na Produção (a equipe trava direto aqui) — vermelho pulsante
 function buildTravaCat(){return {cod:'__TRAVA__',categoria:'TRAVADOS / ESCRITÓRIO',special:true,kind:'trava',sla:null,em_processo:prodTravados.length,atrasado:0,no_prazo:prodTravados.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
-// 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only da Triagem)
-function buildHistotecCat(){const n=histotecItens().length;return {cod:'__HISTOTEC__',categoria:'HISTOTÉCNICA · CONTROLE DE AMOSTRAS',special:true,kind:'histotec',sla:null,em_processo:n,atrasado:0,no_prazo:n,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
+// 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only do app Histotécnica, tabela amostras)
+function buildHistotecCat(){const n=(amostrasEsp||[]).filter(a=>!amEtapas(a).finalizado).length;return {cod:'__HISTOTEC__',categoria:'HISTOTÉCNICA · CONTROLE DE AMOSTRAS',special:true,kind:'histotec',sla:null,em_processo:n,atrasado:0,no_prazo:n,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // Desconta os exames baixados (PIN) E os TRAVADOS de uma categoria NORMAL — contadores, derivações e lista batem.
 function adjustCat(x){
   if(!x||x.special||(!prodBaixados.size&&!prodTravadoSet.size)) return x;
@@ -372,7 +374,7 @@ async function boot(D){
   if(window.__muref)clearInterval(window.__muref);
   // urgentes só importam no modo TV. Com Supabase: Realtime (push, zero polling); senão: polling 90s
   if(window.SUPA&&window.SUPA.ok){
-    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas','sep_marks','sep_descartes'],async()=>{if(document.getElementById('content').style.display!=='none'&&!typingSearch()){await loadManual();buildTabs();renderActive();}});
+    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas','sep_marks','sep_descartes','amostras'],async()=>{if(document.getElementById('content').style.display!=='none'&&!typingSearch()){await loadManual();buildTabs();renderActive();}});
   }else{
     window.__muref=setInterval(async()=>{if(document.hidden||document.getElementById('content').style.display==='none'||typingSearch())return;const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},90000);
   }
@@ -462,53 +464,45 @@ function renderTrava(){
     : '';
   document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados / Escritório <span class="tag">${num(list.length)} · responsabilidade do Escritório · motivo em texto livre</span></span></h3><div class="scroll">${rows}</div></div>${histHtml}</div>`;
 }
-// 🔬 ESPELHO: Histotécnica · Controle de Amostras (read-only) — o que entra na Triagem aparece aqui, ao vivo
-function histotecStatus(it){
-  const k=String(it.req)+'-'+String(it.codex);
-  const tr=sepMarksMap['trava:'+k]; if(tr&&tr.estado==='travado') return {t:'🔒 travado',c:'#ff8a9a',bg:'rgba(220,38,38,.16)'};
-  const m=sepMarksMap[k]; const e=m&&m.estado;
-  if(e==='suficiente') return {t:'✅ tem amostra',c:'#86efac',bg:'rgba(22,163,74,.18)'};
-  if(e==='insuficiente'||e==='insuficiente_avisado') return {t:'🚫 sem amostra',c:'#ff8a9a',bg:'rgba(220,38,38,.16)'};
-  if(e==='recebido') return {t:'✓ recebido',c:'#fde68a',bg:'rgba(234,179,8,.16)'};
-  if(e==='separado'||e==='enviado') return {t:'✓ separado',c:'#7dd3fc',bg:'rgba(2,132,199,.18)'};
-  return {t:'⏳ aguardando separar',c:'#f0a020',bg:'rgba(240,160,32,.14)'};
-}
-// linha COMPLETA (mesma matriz da Triagem): nº, paciente+classe+urgente, exame+tutor+vet+clínica, entrada+hora, dias, status
-function histotecRow(it){
-  const st=histotecStatus(it); const pl=isPetlove(it.paciente);
-  const cl=`<span class="hcl">${it.classe==='apoio'?'📦 apoio':'🏠 interno'}</span>`;
-  const urg=it.urgente?'<span class="hurg">URGENTE</span>':'';
-  const hent=it.entrada_dt?String(it.entrada_dt).replace('T',' ').slice(11,16):'';
-  const entrou=it.entrada?`📅 entrou <b>${fmtD(it.entrada)}${hent?' '+hent:''}</b>`:'';
-  const tut=it.tutor?` · tutor <b>${esc(it.tutor)}</b>`:'';
-  const vet=it.vet?` · vet <b>${esc(it.vet)}</b>`:'';
-  const cli=it.clinica?` · 🏥 ${esc(it.clinica)}`:'';
-  const dias=(it.dias||0)>=1?` · <b style="color:var(--amber)">${it.dias}d parada</b>`:'';
-  const ds=escA(normAcc([it.req,it.ano,it.req+'/'+it.ano,it.paciente,it.exame,it.cat,it.tutor,it.vet,it.clinica,st.t].join(' ')));
+// linha da AMOSTRA (espelho do app Histotécnica): registro, paciente, origem, material, tutor, entrada, ETAPA atual + progresso das 7 etapas
+function amRow(a){
+  const st=amEtapas(a);
+  const origem=a.origem==='externo'?'<span class="am-orig ext">🩷 Externo</span>':'<span class="am-orig int">🔷 Alpha</span>';
+  const reg=a.numero_registro?`#${esc(a.numero_registro)}`:'<span style="color:var(--mut)">s/ registro</span>';
+  const de=a.data_entrada?fmtD(a.data_entrada):'—';
+  const esp=a.especie?` · ${esc(a.especie)}`:'';
+  const mat=a.tipo_material?`<b style="color:var(--ink)">${esc(a.tipo_material)}</b>`:'';
+  const tut=a.tutor?` · tutor <b>${esc(a.tutor)}</b>`:'';
+  const obs=a.observacoes?` · 📝 ${esc(a.observacoes)}`:'';
+  const dots=STAGE_NAMES.map((n,i)=>{const done=i<st.done;const cur=!st.finalizado&&i===st.done;return `<span class="am-dot ${done?'done':(cur?'cur':'')}" title="${escA(n)}${done?' ✓':(cur?' (atual)':'')}"></span>`;}).join('');
+  const stageLabel=st.finalizado?`<span class="db" style="background:rgba(22,163,74,.18);color:#86efac;font-size:12.5px">✅ Finalizado</span>`:`<span class="db" style="background:rgba(2,132,199,.18);color:#7dd3fc;font-size:12.5px">🔬 ${esc(st.atualNome)}</span>`;
+  const ultimo=st.ultimoPor?` · última por <b>${esc(st.ultimoPor)}</b>`:'';
+  const ds=escA(normAcc([a.numero_registro,a.nome_paciente,a.tutor,a.especie,a.tipo_material,(a.origem==='externo'?'externo':'alpha interno'),st.atualNome,a.observacoes].join(' ')));
   return `<div class="wl histrow" data-s="${ds}">
-    <span class="reg">#${esc(it.req)}<span style="opacity:.5">/${esc(it.ano)}</span></span>
-    <div class="histmain"><div class="pac${pl?' petlove':''}">${esc(it.paciente)}${cl}${urg}${pl?'<span class="plove">PET LOVE</span>':''}</div>
-      <div class="exm"><b style="color:var(--ink)">${esc(it.exame)}</b>${tut}${vet}${cli}</div>
-      <div class="exm">${entrou}${dias}</div></div>
-    <div class="wlact"><span class="db" style="background:${st.bg};color:${st.c};font-size:12.5px">${st.t}</span></div></div>`;
+    <span class="reg">${reg}</span>
+    <div class="histmain"><div class="pac">${esc(a.nome_paciente||'—')} ${origem}</div>
+      <div class="exm">${mat}${esp}${tut}${obs}</div>
+      <div class="exm">📅 entrou <b>${de}</b> · ${st.done}/${STAGE_NAMES.length} etapas${ultimo} <span class="am-prog">${dots}</span></div></div>
+    <div class="wlact">${stageLabel}</div></div>`;
 }
 function renderHistotec(){
-  const itens=histotecItens();
-  const CATLIST=['Citopatologia','Histologia','NECRÓPSIA'];
-  const byCat={}; CATLIST.forEach(c=>byCat[c]=[]);
-  itens.forEach(it=>{const c=CATLIST.find(x=>slug(x)===slug(it.cat))||it.cat;(byCat[c]=byCat[c]||[]).push(it);});
-  const cats=CATLIST.concat(Object.keys(byCat).filter(c=>!CATLIST.some(x=>slug(x)===slug(c))));
+  const amost=amostrasEsp||[];
   const searching=!!histotecQ.trim();
-  if(!histotecSel||!cats.some(c=>slug(c)===slug(histotecSel))) histotecSel=cats.find(c=>(byCat[c]||[]).length)||cats[0];
-  const banner=`<div class="urgbanner histotec"><span class="ico">🔬</span><span class="ttl">HISTOTÉCNICA · CONTROLE DE AMOSTRAS — ${num(itens.length)} amostra${itens.length!==1?'s':''} (espelho ao vivo da Triagem)</span></div>`;
-  const busca=`<div style="display:flex;gap:8px;margin:0 0 10px;align-items:center"><input id="htsearch" class="wlsearch" style="flex:1;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº, paciente, exame, categoria, status, tutor, vet (com ou sem acento)" value="${escA(histotecQ)}"><button class="atualizar-btn" onclick="atualizarProd(this)" title="puxar agora os dados do último build">🔄 Atualizar</button></div>`;
-  // pílulas de categoria (mesma regra da Triagem: 0 = verde calmo · com amostra = vermelho piscando) — clicáveis
-  const pills=`<div class="catstrip histotecpills">${cats.map(c=>{const n=(byCat[c]||[]).length;const heat=n>0?'phot':'pzero';const on=(!searching&&slug(c)===slug(histotecSel))?'on':'';return `<div class="catpill ${heat} ${on}" data-histcat="${escA(c)}"><span class="nm">${esc(c)}</span><span class="cc">${n}</span></div>`;}).join('')}</div>`;
-  // linhas: buscando = todas as categorias; senão = só a selecionada
-  const shown=(searching?itens:(byCat[histotecSel]||[])).slice().sort((a,b)=>(b.dias||0)-(a.dias||0));
-  const rowsHtml=shown.length?shown.map(histotecRow).join(''):`<div style="color:var(--green);padding:16px;font-size:15px">✓ Nenhuma amostra em ${searching?'busca':esc(histotecSel)} agora. 👍</div>`;
-  const titulo=searching?`🔎 Resultados da busca`:`${esc(histotecSel)}`;
-  document.getElementById('content').innerHTML=banner+busca+pills+`<div class="card"><h3><span>${titulo} <span class="tag">${shown.length} amostra(s) · clique numa categoria acima</span></span></h3><div class="scroll" style="max-height:none">${rowsHtml}</div></div><div id="htempty" style="display:none;color:var(--mut);padding:14px">Nada encontrado.</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only — a separação/recebimento é feita na Triagem (Histotécnica). Atualiza ao vivo.</p>`;
+  // agrupa por ETAPA ATUAL (ou Finalizado) — igual "localizar por etapa" no app
+  const groups={}; STAGE_NAMES.forEach(n=>groups[n]=[]); groups['Finalizado']=[];
+  amost.forEach(a=>{const st=amEtapas(a);const key=st.finalizado?'Finalizado':st.atualNome;(groups[key]=groups[key]||[]).push(a);});
+  const keys=['__ALL__'].concat(STAGE_NAMES,['Finalizado']);
+  if(!histotecSel||!keys.includes(histotecSel)) histotecSel='__ALL__';
+  const banner=`<div class="urgbanner histotec"><span class="ico">🔬</span><span class="ttl">HISTOTÉCNICA · CONTROLE DE AMOSTRAS — ${num(amost.length)} amostra${amost.length!==1?'s':''} · espelho ao vivo do app Histotécnica</span></div>`;
+  const busca=`<div style="display:flex;gap:8px;margin:0 0 10px;align-items:center"><input id="htsearch" class="wlsearch" style="flex:1;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº registro, paciente, tutor, espécie, material, etapa, origem (com ou sem acento)" value="${escA(histotecQ)}"><button class="atualizar-btn" onclick="atualizarProd(this)" title="puxar agora as amostras">🔄 Atualizar</button></div>`;
+  // pílulas por ETAPA (0 = verde calmo · com amostra = vermelho) + Todas + Finalizados
+  const pill=(key,label,extra)=>{const c=key==='__ALL__'?amost.length:(groups[key]||[]).length;const heat=key==='__ALL__'?'':(c>0?'phot':'pzero');const on=(!searching&&histotecSel===key)?'on':'';return `<div class="catpill ${heat} ${on}" ${extra||''} data-histcat="${escA(key)}"><span class="nm">${esc(label)}</span><span class="cc">${c}</span></div>`;};
+  const pills=`<div class="catstrip histotecpills">${pill('__ALL__','Todas')}${STAGE_NAMES.map((n,i)=>pill(n,(i+1)+'· '+n)).join('')}${pill('Finalizado','✅ Finalizados','style="border-color:#16a34a"')}</div>`;
+  const base=searching?amost:(histotecSel==='__ALL__'?amost:(groups[histotecSel]||[]));
+  const shown=base.slice().sort((a,b)=>String(b.data_entrada||'').localeCompare(String(a.data_entrada||'')));
+  const rowsHtml=shown.length?shown.map(amRow).join(''):`<div style="color:var(--green);padding:16px;font-size:15px">✓ Nenhuma amostra ${searching?'na busca':('em '+esc(histotecSel==='__ALL__'?'andamento':histotecSel))} agora. 👍</div>`;
+  const titulo=searching?'🔎 Resultados da busca':(histotecSel==='__ALL__'?'Todas as amostras':esc(histotecSel));
+  document.getElementById('content').innerHTML=banner+busca+pills+`<div class="card"><h3><span>${titulo} <span class="tag">${shown.length} amostra(s) · clique numa etapa acima</span></span></h3><div class="scroll" style="max-height:none">${rowsHtml}</div></div><div id="htempty" style="display:none;color:var(--mut);padding:14px">Nada encontrado.</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only do app Histotécnica (Alpha Labs). A operação das etapas é feita lá. Atualiza ao vivo.</p>`;
   if(histotecQ) filterHistotec();
 }
 // true enquanto o cursor está numa BUSCA (não deixar o auto-refresh apagar o que se digita)
