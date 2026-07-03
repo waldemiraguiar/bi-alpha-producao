@@ -501,7 +501,7 @@ function renderHistotec(){
   const searching=!!histotecQ.trim();
   if(!histotecSel||!cats.some(c=>slug(c)===slug(histotecSel))) histotecSel=cats.find(c=>(byCat[c]||[]).length)||cats[0];
   const banner=`<div class="urgbanner histotec"><span class="ico">🔬</span><span class="ttl">HISTOTÉCNICA · CONTROLE DE AMOSTRAS — ${num(itens.length)} amostra${itens.length!==1?'s':''} (espelho ao vivo da Triagem)</span></div>`;
-  const busca=`<input id="htsearch" class="wlsearch" style="margin:0 0 10px;width:100%;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº, ano, paciente, exame, categoria, status, tutor, vet (com ou sem acento)" value="${escA(histotecQ)}">`;
+  const busca=`<div style="display:flex;gap:8px;margin:0 0 10px;align-items:center"><input id="htsearch" class="wlsearch" style="flex:1;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº, paciente, exame, categoria, status, tutor, vet (com ou sem acento)" value="${escA(histotecQ)}"><button class="atualizar-btn" onclick="atualizarProd(this)" title="puxar agora os dados do último build">🔄 Atualizar</button></div>`;
   // pílulas de categoria (mesma regra da Triagem: 0 = verde calmo · com amostra = vermelho piscando) — clicáveis
   const pills=`<div class="catstrip histotecpills">${cats.map(c=>{const n=(byCat[c]||[]).length;const heat=n>0?'phot':'pzero';const on=(!searching&&slug(c)===slug(histotecSel))?'on':'';return `<div class="catpill ${heat} ${on}" data-histcat="${escA(c)}"><span class="nm">${esc(c)}</span><span class="cc">${n}</span></div>`;}).join('')}</div>`;
   // linhas: buscando = todas as categorias; senão = só a selecionada
