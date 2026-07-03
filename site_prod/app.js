@@ -15,6 +15,10 @@ const exChave=e=>String(e.registro)+'|'+(e.exame||'');
 const exBaixado=e=>prodBaixados.has(exChave(e));
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
 let prodTravados=[], prodTravadoSet=new Set(), prodTravadosHist=[], prodTravaMap={};
+// 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only da Triagem, cat Cito/Histo/Necrópsia)
+let sepMarksMap={};
+const HISTOTEC_CATS=['citopatologia','histologia','necropsia'];
+function histotecItens(){ const sep=(typeof DATA!=='undefined'&&DATA&&DATA.separacao&&DATA.separacao.itens)||[]; return sep.filter(it=>HISTOTEC_CATS.includes(slug(it.cat))); }
 const exTravado=e=>prodTravadoSet.has('prod:'+exChave(e));
 const diasTravaP=m=>{const ini=Number(m.ts_sep)||0,fim=Number(m.ts_receb)||Date.now();if(!ini)return null;return Math.max(0,Math.floor((fim-ini)/86400000));};
 const labelDiasP=m=>{const d=diasTravaP(m);if(d==null)return '';return d<1?'menos de 1 dia':`${d} dia${d>1?'s':''}`;};
@@ -26,7 +30,7 @@ function travHistLine(e){
   return `<div class="travahist"><b>📋 Já foi travado</b><div>🔒 <b>Motivo:</b> ${esc(m.obs||'(sem motivo)')}${vez}</div><div>🔒 <b>Travou:</b> ${esc(m.por||'—')} — ${fmtDataHoraP(m.ts_sep)}</div><div>✅ <b>Destravou:</b> ${esc(m.por_receb||'—')} — ${fmtDataHoraP(m.ts_receb)}</div><div>⏱️ <b>Ficou travado:</b> ${labelDiasP(m)}</div></div>`;
 }
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;});}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;}); sepMarksMap={}; (s.marks||[]).forEach(m=>{if(m&&m.chave)sepMarksMap[String(m.chave)]=m;});}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -265,6 +269,8 @@ function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR_
 function buildAvisoCat(){return {cod:'__AVI__',categoria:'AVISAR CLIENTE',special:true,kind:'aviso',sla:null,em_processo:avisarMarks.length,atrasado:0,no_prazo:avisarMarks.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // 🔒 TRAVADOS na Produção (a equipe trava direto aqui) — vermelho pulsante
 function buildTravaCat(){return {cod:'__TRAVA__',categoria:'TRAVADOS',special:true,kind:'trava',sla:null,em_processo:prodTravados.length,atrasado:0,no_prazo:prodTravados.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
+// 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only da Triagem)
+function buildHistotecCat(){const n=histotecItens().length;return {cod:'__HISTOTEC__',categoria:'HISTOTÉCNICA · CONTROLE DE AMOSTRAS',special:true,kind:'histotec',sla:null,em_processo:n,atrasado:0,no_prazo:n,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // Desconta os exames baixados (PIN) E os TRAVADOS de uma categoria NORMAL — contadores, derivações e lista batem.
 function adjustCat(x){
   if(!x||x.special||(!prodBaixados.size&&!prodTravadoSet.size)) return x;
@@ -335,7 +341,7 @@ function cats(){
   let list=(DATA.categorias||[]).filter(x=>x.em_processo>0 || (x.derivacoes&&x.derivacoes.length));
   if(ORDER.length){ const idx=c=>{const i=ORDER.findIndex(o=>slug(c.categoria).includes(slug(o)));return i<0?99:i;};
     list=[...list].sort((a,b)=>idx(a)-idx(b)); }
-  return [buildUrgentCat(list), buildAvisoCat(), buildTravaCat(), buildPetCat(list), buildAtrasCat(list), ...list];   // especiais primeiro (avisar cliente + travados ao lado de urgentes)
+  return [buildUrgentCat(list), buildAvisoCat(), buildTravaCat(), buildPetCat(list), buildAtrasCat(list), ...list, buildHistotecCat()];   // especiais primeiro; Histotécnica (espelho) por ÚLTIMO
 }
 function resolveLock(list){
   const h=decodeURIComponent((location.hash||'').replace('#','')).trim();
@@ -394,7 +400,7 @@ function buildTabs(){
   }
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
-  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},trava:{t:'travatab',i:'🔒',b:'travab'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
+  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},trava:{t:'travatab',i:'🔒',b:'travab'},histotec:{t:'histotectab',i:'🔬',b:'histotecb'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
   tabsEl.innerHTML=`<button class="atualizar-btn" id="atualizarBtn" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>`
     + list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
     <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'?'avisopulse':''} ${x.kind==='trava'&&x.em_processo>0?'travapulse':''}" data-i="${i}">
@@ -451,12 +457,37 @@ function renderTrava(){
     : '';
   document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados <span class="tag">${num(list.length)} · travados na Produção (motivo em texto livre)</span></span></h3><div class="scroll">${rows}</div></div>${histHtml}</div>`;
 }
+// 🔬 ESPELHO: Histotécnica · Controle de Amostras (read-only) — o que entra na Triagem aparece aqui, ao vivo
+function histotecStatus(it){
+  const k=String(it.req)+'-'+String(it.codex);
+  const tr=sepMarksMap['trava:'+k]; if(tr&&tr.estado==='travado') return {t:'🔒 travado',c:'#ff8a9a',bg:'rgba(220,38,38,.16)'};
+  const m=sepMarksMap[k]; const e=m&&m.estado;
+  if(e==='suficiente') return {t:'✅ tem amostra',c:'#86efac',bg:'rgba(22,163,74,.18)'};
+  if(e==='insuficiente'||e==='insuficiente_avisado') return {t:'🚫 sem amostra',c:'#ff8a9a',bg:'rgba(220,38,38,.16)'};
+  if(e==='recebido') return {t:'✓ recebido',c:'#fde68a',bg:'rgba(234,179,8,.16)'};
+  if(e==='separado'||e==='enviado') return {t:'✓ separado',c:'#7dd3fc',bg:'rgba(2,132,199,.18)'};
+  return {t:'⏳ aguardando separar',c:'#f0a020',bg:'rgba(240,160,32,.14)'};
+}
+function renderHistotec(){
+  const itens=histotecItens().slice().sort((a,b)=>(b.dias||0)-(a.dias||0));
+  const byCat={}; itens.forEach(it=>{const c=it.cat||'—';(byCat[c]=byCat[c]||[]).push(it);});
+  const CATORD=['Citopatologia','Histologia','NECRÓPSIA'];
+  const cats=Object.keys(byCat).sort((a,b)=>{const ia=CATORD.findIndex(x=>slug(x)===slug(a)),ib=CATORD.findIndex(x=>slug(x)===slug(b));return (ia<0?9:ia)-(ib<0?9:ib);});
+  const banner=`<div class="urgbanner histotec"><span class="ico">🔬</span><span class="ttl">HISTOTÉCNICA · CONTROLE DE AMOSTRAS — ${num(itens.length)} amostra${itens.length!==1?'s':''} (espelho ao vivo da Triagem)</span></div>`;
+  const cards=cats.length?cats.map(c=>{
+    const arr=byCat[c];
+    const rows=arr.map(it=>{const st=histotecStatus(it);const pl=isPetlove(it.paciente);return `<div class="wl"><span class="reg">#${esc(it.req)}<span style="opacity:.5">/${esc(it.ano)}</span></span><div><div class="pac${pl?' petlove':''}">${esc(it.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}</div><div class="exm">${esc(it.exame)} · entrou ${fmtD(it.entrada)}${(it.dias||0)>=1?` · <b style="color:var(--amber)">${it.dias}d parada</b>`:''}</div></div><div class="wlact"><span class="db" style="background:${st.bg};color:${st.c}">${st.t}</span></div></div>`;}).join('');
+    return `<div class="card"><h3><span>${esc(c)} <span class="tag">${arr.length} amostra(s)</span></span></h3><div class="scroll">${rows}</div></div>`;
+  }).join(''):'<div class="card"><div style="color:var(--green);padding:18px;font-size:16px">✓ Nenhuma amostra de Histotécnica em processo agora. 👍</div></div>';
+  document.getElementById('content').innerHTML=banner+`<div class="cgrid histoteccols">${cards}</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only — a separação/recebimento é feita na Triagem (Histotécnica). Atualiza ao vivo.</p>`;
+}
 function renderActive(){
   const list=cats(); if(!list.length){document.getElementById('content').innerHTML='<div style="padding:40px;color:var(--mut)">Sem fila no momento.</div>';return;}
   const x = adjustCat(locked || list[active] || list[0]);
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
   if(x.special && x.kind==='aviso'){ renderAviso(); return; }   // ESPELHO de Avisar cliente (read-only)
   if(x.special && x.kind==='trava'){ renderTrava(); return; }   // 🔒 Travados (trava direto na Produção)
+  if(x.special && x.kind==='histotec'){ renderHistotec(); return; }   // 🔬 espelho da Histotécnica (read-only)
   const special=!!x.special;
   const KIND={
     urg:{c:C.amber,ic:'🚨',sub:'urgentes de todas as categorias',ring:'urgentes',m1l:'Urgentes na fila',work:'Amostras urgentes',m3l:'Marcados pela equipe (★)'},
