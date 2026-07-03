@@ -237,6 +237,13 @@ body{font-family:'Inter',sans-serif;background:
 .sepcat.andon.travamax{animation:flashred .4s steps(1,end) infinite;border:3px solid #fff}
 .sepcat.andon.travamax>.h{color:#fff;font-size:18px;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .sepbtn.trava{background:#dc2626;color:#fff;border:0;margin-left:6px}
+/* bloco explícito do histórico de travados (quem/quando travou e destravou) */
+.travahist{font-size:12.5px;line-height:1.55;margin-top:5px;background:rgba(220,38,38,.07);border-left:3px solid #dc2626;border-radius:6px;padding:5px 10px}
+.travahist>b{display:block;margin-bottom:2px;color:#ff8a9a}
+.travahist b{color:#ffb3bf}
+.travahistrow{background:rgba(22,163,74,.05);border-left:3px solid #16a34a}
+.travahistrow .travahist{background:rgba(22,163,74,.06);border-left-color:#16a34a}
+.travahistrow .travahist>b,.travahistrow .travahist b{color:#86efac}
 /* fogos dentro da ABA (Triagem e Produção) — sempre animando, chama atenção mesmo em 0 */
 .septab.aviso .fwt,.tab.avisotab .fwt{display:inline-block;line-height:1;animation:fwpop .6s ease-in-out infinite;filter:drop-shadow(0 0 5px rgba(249,115,22,.85))}
 .tab.avisotab .fwt:last-child,.septab.aviso .fwt:last-child{animation-delay:.3s}

@@ -95,6 +95,8 @@
   // dias travado (fim = liberação, ou agora se ainda travado)
   const diasTrava = m => { const ini = Number(m.ts_sep) || 0, fim = Number(m.ts_receb) || Date.now(); if (!ini) return null; return Math.max(0, Math.floor((fim - ini) / 86400000)); };
   const labelDias = m => { const d = diasTrava(m); if (d == null) return ''; return d < 1 ? 'menos de 1 dia' : `${d} dia${d > 1 ? 's' : ''}`; };
+  // data + HORA em BRT: "DD/MM/AAAA às HH:MM"
+  const fmtDataHora = ts => { const n = Number(ts); if (!n) return '—'; const iso = new Date(n - 3 * 3600e3).toISOString(); return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)} às ${iso.slice(11, 16)}`; };
 
   /* ---- prazo (corte) relativo à hora de entrada ---- */
   function deadline(it) {
@@ -611,23 +613,27 @@
   function rowTravar(m) {
     const k = m.chave;
     const cl = `<span class="cl ${m.classe}">${m.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
-    const d = dayTs(m.ts_sep); const quando = d ? ` · desde ${d.slice(8, 10)}/${d.slice(5, 7)}` : '';
     const head = `<div class="req">${esc2(m.req)}<span class="y">/${esc2(m.ano)}</span></div>
       <div><div class="pac">${esc2(m.paciente)}${cl}</div>
-      <div class="meta">${esc2(m.exame)} · travado por <b>${esc2(m.por || '')}</b>${quando} · ⏱️ ${labelDias(m)}${vezesTxt(m)}</div>${obsChunk(k)}</div>`;
+      <div class="meta">${esc2(m.exame)}</div>
+      <div class="travahist"><div>🔒 <b>Travou:</b> ${esc2(m.por || '—')} — ${fmtDataHora(m.ts_sep)}</div><div>⏱️ <b>Há:</b> ${labelDias(m)}${vezesTxt(m)}</div></div>${obsChunk(k)}</div>`;
     const btn = `<button class="sepbtn rec" data-act="destravar" data-k="${k}" title="resolvido — volta pro fluxo de separar">✓ Destravar</button>`;
     return `<div class="seprow">${head}<div class="right2"><span class="dl late">🔒 travado</span>${btn}</div></div>`;
   }
-  // linha do HISTÓRICO (já liberado): quem travou, quantas vezes, quantos dias ficou travado, quem liberou e quando
+  // linha do HISTÓRICO (já liberado): EXPLÍCITO — motivo, quem travou (dia/hora), quem destravou (dia/hora), quantas vezes, quantos dias
   function rowTravarHist(m) {
     const cl = `<span class="cl ${m.classe}">${m.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
-    const dlib = dayTs(m.ts_receb); const qLib = dlib ? `${dlib.slice(8, 10)}/${dlib.slice(5, 7)}` : '';
-    return `<div class="seprow" style="opacity:.9">
+    return `<div class="seprow travahistrow">
       <div class="req">${esc2(m.req)}<span class="y">/${esc2(m.ano)}</span></div>
-      <div><div class="pac">${esc2(m.paciente)}${cl}</div>
-      <div class="meta">${esc2(m.exame)}${m.obs ? ` · 🔒 <b>${esc2(m.obs)}</b>` : ''}</div>
-      <div class="meta">travado por <b>${esc2(m.por || '')}</b> · ⏱️ ficou ${labelDias(m)}${vezesTxt(m)} · ✅ liberado por <b>${esc2(m.por_receb || '')}</b>${qLib ? ' em ' + qLib : ''}</div></div>
-      <div class="right2"><span class="est separado" style="background:#dcfce7;color:#166534">✅ liberado</span></div></div>`;
+      <div><div class="pac">${esc2(m.paciente)}${cl} <span class="est separado" style="background:#dcfce7;color:#166534;margin-left:4px">✅ liberado</span></div>
+      <div class="meta">${esc2(m.exame)}</div>
+      <div class="travahist"><b>📋 Histórico</b>
+        <div>🔒 <b>Travado:</b> ${esc2(m.obs || '(sem motivo)')}${vezesTxt(m)}</div>
+        <div>🔒 <b>Travou:</b> ${esc2(m.por || '—')} — ${fmtDataHora(m.ts_sep)}</div>
+        <div>✅ <b>Destravou:</b> ${esc2(m.por_receb || '—')} — ${fmtDataHora(m.ts_receb)}</div>
+        <div>⏱️ <b>Ficou travado:</b> ${labelDias(m)}</div>
+      </div></div>
+      <div class="right2"></div></div>`;
   }
   function viewTravados() {
     const items = aTravar(), hist = aTravarHist();
