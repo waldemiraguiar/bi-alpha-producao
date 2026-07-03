@@ -14,10 +14,12 @@ let avisarMarks=[];
 const exChave=e=>String(e.registro)+'|'+(e.exame||'');
 const exBaixado=e=>prodBaixados.has(exChave(e));
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
-let prodTravados=[], prodTravadoSet=new Set();
+let prodTravados=[], prodTravadoSet=new Set(), prodTravadosHist=[], prodTravaMap={};
 const exTravado=e=>prodTravadoSet.has('prod:'+exChave(e));
+const diasTravaP=m=>{const ini=Number(m.ts_sep)||0,fim=Number(m.ts_receb)||Date.now();if(!ini)return null;return Math.max(0,Math.floor((fim-ini)/86400000));};
+const labelDiasP=m=>{const d=diasTravaP(m);if(d==null)return '';return d<1?'menos de 1 dia':`${d} dia${d>1?'s':''}`;};
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;});}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -55,12 +57,14 @@ async function travarEx(d){
   if(motivo===null) return;
   const chave='prod:'+String(d.reg)+'|'+(d.exm||'');
   const por=(typeof __op!=='undefined'&&__op&&__op.nome)||'produção';
-  try{ await window.SUPA.upsertMark({chave,req:d.reg,exame:d.exm||'',cat:d.cat||'',paciente:d.pac||'',estado:'travado',por,obs:(motivo||'').trim()||null,ts_sep:Date.now()}); await loadManual(); buildTabs(); renderActive(); }
+  const prev=prodTravaMap[chave]; const vezes=((prev&&Number(prev.corte))||0)+1;   // quantas vezes já travou
+  try{ await window.SUPA.upsertMark({chave,req:d.reg,exame:d.exm||'',cat:d.cat||'',paciente:d.pac||'',estado:'travado',por,obs:(motivo||'').trim()||null,ts_sep:Date.now(),corte:vezes,por_receb:null,ts_receb:null}); await loadManual(); buildTabs(); renderActive(); }
   catch(e){ alert('Não consegui travar (a coluna obs já foi criada no banco?).'); }
 }
 async function destravarEx(chave){
-  if(!confirm('Destravar este exame? Volta pra fila da Produção.')) return;
-  try{ await window.SUPA.delMark(chave); await loadManual(); buildTabs(); renderActive(); }
+  if(!confirm('Destravar este exame? Volta pra fila da Produção (fica no histórico).')) return;
+  const por=(typeof __op!=='undefined'&&__op&&__op.nome)||'produção';
+  try{ await window.SUPA.updateMark(chave,{estado:'destravado',por_receb:por,ts_receb:Date.now()}); await loadManual(); buildTabs(); renderActive(); }   // arquiva (não apaga) — guarda o histórico
   catch(e){ alert('Não consegui destravar.'); }
 }
 // --- LOGIN do colaborador p/ baixa de exame (mesma equipe da Triagem) ---
@@ -419,11 +423,17 @@ function renderAviso(){
 function travaBannerHtml(){ const list=prodTravados; if(!list.length) return '';
   return `<div class="urgbanner trava"><span class="ico">🔒</span><span class="ttl">${num(list.length)} EXAME${list.length>1?'S':''} TRAVADO${list.length>1?'S':''} · RESOLVA O MOTIVO E DESTRAVE</span><div class="ul">${list.slice(0,10).map(m=>`<span class="u"><span class="r">#${esc(m.req)}</span>${esc(m.paciente)} · ${esc(m.exame)}${m.obs?' · 🔒 '+esc(m.obs):''}</span>`).join('')}</div></div>`; }
 function renderTrava(){
+  const vez=m=>{const n=Number(m.corte)||1;return n>1?` · 🔁 ${n}×`:'';};
   const list=prodTravados.slice().sort((a,b)=>(Number(a.ts_sep)||0)-(Number(b.ts_sep)||0));
   const rows = list.length
-    ? list.map(m=>`<div class="wl"><span class="reg">#${esc(m.req)}</span><div><div class="pac">${esc(m.paciente)}</div><div class="exm">${esc(m.exame)} · 🔒 <b>${esc(m.obs||'sem motivo')}</b> · por ${esc(m.por||'')}</div></div><div class="wlact"><button class="destravabtn" data-chave="${escA(m.chave)}">✓ destravar</button></div></div>`).join('')
-    : '<div style="color:var(--green);padding:16px;font-size:16px">✓ Nenhum exame travado. 👍</div>';
-  document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados <span class="tag">${num(list.length)} · exames travados na Produção (motivo em texto livre)</span></span></h3><div class="scroll">${rows}</div></div></div>`;
+    ? list.map(m=>`<div class="wl"><span class="reg">#${esc(m.req)}</span><div><div class="pac">${esc(m.paciente)}</div><div class="exm">${esc(m.exame)} · 🔒 <b>${esc(m.obs||'sem motivo')}</b> · por ${esc(m.por||'')} · ⏱️ ${labelDiasP(m)}${vez(m)}</div></div><div class="wlact"><button class="destravabtn" data-chave="${escA(m.chave)}">✓ destravar</button></div></div>`).join('')
+    : '<div style="color:var(--green);padding:16px;font-size:15px">✓ Nenhum exame travado agora. Veja o histórico abaixo. 👍</div>';
+  // 📋 HISTÓRICO (liberados): dias travado, quem travou, quantas vezes, quem liberou e quando
+  const hist=prodTravadosHist;
+  const histHtml = hist.length
+    ? `<div class="card travahistcard"><h3><span>📋 Histórico de travados (liberados) <span class="tag">${num(hist.length)}</span></span></h3><div class="scroll">${hist.slice(0,100).map(m=>{const dlib=Number(m.ts_receb)?new Date(Number(m.ts_receb)-3*3600e3).toISOString().slice(0,10):'';const q=dlib?dlib.slice(8,10)+'/'+dlib.slice(5,7):'';return `<div class="wl"><span class="reg">#${esc(m.req)}</span><div><div class="pac">${esc(m.paciente)}</div><div class="exm">${esc(m.exame)}${m.obs?' · 🔒 '+esc(m.obs):''}</div><div class="exm">travado por <b>${esc(m.por||'')}</b> · ⏱️ ficou ${labelDiasP(m)}${vez(m)} · ✅ liberado por <b>${esc(m.por_receb||'')}</b>${q?' em '+q:''}</div></div><div class="wlact"><span class="db ok">✅ liberado</span></div></div>`;}).join('')}</div></div>`
+    : '';
+  document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados <span class="tag">${num(list.length)} · travados na Produção (motivo em texto livre)</span></span></h3><div class="scroll">${rows}</div></div>${histHtml}</div>`;
 }
 function renderActive(){
   const list=cats(); if(!list.length){document.getElementById('content').innerHTML='<div style="padding:40px;color:var(--mut)">Sem fila no momento.</div>';return;}
