@@ -13,8 +13,11 @@ let prodBaixados=new Set(), prodBaixaInfo=[];
 let avisarMarks=[];
 const exChave=e=>String(e.registro)+'|'+(e.exame||'');
 const exBaixado=e=>prodBaixados.has(exChave(e));
+// 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
+let prodTravados=[], prodTravadoSet=new Set();
+const exTravado=e=>prodTravadoSet.has('prod:'+exChave(e));
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave)));}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -41,8 +44,25 @@ function onContentClick(ev){
   const b=ev.target.closest('.baixabtn'); if(b){darBaixa(b.dataset.reg,b.dataset.pac,b.dataset.exm,b.dataset.manual==='1');return;}
   const d=ev.target.closest('.desfazbtn'); if(d){post({tipo:'baixa',registro:d.dataset.reg,acao:'remove'},'Não foi possível desfazer.');return;}
   const xb=ev.target.closest('.exbaixabtn'); if(xb){exBaixar(xb.dataset);return;}
+  const tv=ev.target.closest('.travarbtn'); if(tv){travarEx(tv.dataset);return;}
+  const dv=ev.target.closest('.destravabtn'); if(dv){destravarEx(dv.dataset.chave);return;}
   const lb=ev.target.closest('.limpabtn'); if(lb){limparAtrasados();return;}
   const hb=ev.target.closest('.histbtn'); if(hb){openHistBaix();return;}}
+// 🔒 travar / destravar exame na Produção (motivo em texto livre)
+async function travarEx(d){
+  if(!(window.SUPA&&window.SUPA.ok)){alert('Trava exige conexão em nuvem.');return;}
+  const motivo=prompt('TRAVAR este exame na Produção.\n\nMotivo (financeiro, cadastro, problema de amostra…):','');
+  if(motivo===null) return;
+  const chave='prod:'+String(d.reg)+'|'+(d.exm||'');
+  const por=(typeof __op!=='undefined'&&__op&&__op.nome)||'produção';
+  try{ await window.SUPA.upsertMark({chave,req:d.reg,exame:d.exm||'',cat:d.cat||'',paciente:d.pac||'',estado:'travado',por,obs:(motivo||'').trim()||null,ts_sep:Date.now()}); await loadManual(); buildTabs(); renderActive(); }
+  catch(e){ alert('Não consegui travar (a coluna obs já foi criada no banco?).'); }
+}
+async function destravarEx(chave){
+  if(!confirm('Destravar este exame? Volta pra fila da Produção.')) return;
+  try{ await window.SUPA.delMark(chave); await loadManual(); buildTabs(); renderActive(); }
+  catch(e){ alert('Não consegui destravar.'); }
+}
 // --- LOGIN do colaborador p/ baixa de exame (mesma equipe da Triagem) ---
 let __op=null, __opTimer=null;            // {nome, senha, papel} — sessão na memória; zera no auto-reload da meia-noite
 // cada colaborador tem o próprio PC -> logout por inatividade bem longo (12h = turno inteiro)
@@ -207,7 +227,7 @@ function catOrderIdx(name){const i=ORDER.findIndex(o=>slug(name).includes(slug(o
 function buildSpecial(list,pred,opts){
   const items=[];
   list.forEach(c=>(c.exames||[]).forEach(e=>{
-    if(pred(e,c)&&!exBaixado(e)) items.push({...e,categoria:c.categoria,_urg:urgentOf(e),_manual:manual.has(String(e.registro))&&!e.urgente&&!baixados.has(String(e.registro))});
+    if(pred(e,c)&&!exBaixado(e)&&!exTravado(e)) items.push({...e,categoria:c.categoria,_urg:urgentOf(e),_manual:manual.has(String(e.registro))&&!e.urgente&&!baixados.has(String(e.registro))});
   }));
   items.sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
   const byCat={}; items.forEach(e=>{const k=e.categoria;(byCat[k]=byCat[k]||{exame:k,em_processo:0,atrasado:0});byCat[k].em_processo++;if(e.atrasado)byCat[k].atrasado++;});
@@ -223,16 +243,19 @@ function buildPetCat(list){return buildSpecial(list,e=>isPetlove(e.paciente),{co
 function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR__',nome:'ATRASADOS',kind:'atras'});}
 // ESPELHO de "Avisar cliente" (amostra insuficiente da Triagem) — read-only na Produção
 function buildAvisoCat(){return {cod:'__AVI__',categoria:'AVISAR CLIENTE',special:true,kind:'aviso',sla:null,em_processo:avisarMarks.length,atrasado:0,no_prazo:avisarMarks.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
-// Desconta os exames baixados (PIN) de uma categoria NORMAL — contadores, derivações e lista batem.
+// 🔒 TRAVADOS na Produção (a equipe trava direto aqui) — vermelho pulsante
+function buildTravaCat(){return {cod:'__TRAVA__',categoria:'TRAVADOS',special:true,kind:'trava',sla:null,em_processo:prodTravados.length,atrasado:0,no_prazo:prodTravados.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
+// Desconta os exames baixados (PIN) E os TRAVADOS de uma categoria NORMAL — contadores, derivações e lista batem.
 function adjustCat(x){
-  if(!x||x.special||!prodBaixados.size) return x;
-  const ex=x.exames||[], baix=ex.filter(exBaixado);
+  if(!x||x.special||(!prodBaixados.size&&!prodTravadoSet.size)) return x;
+  const oculto=e=>exBaixado(e)||exTravado(e);
+  const ex=x.exames||[], baix=ex.filter(oculto);
   if(!baix.length) return x;
   const byT={},byTA={}; baix.forEach(e=>{const t=e.exame||'';byT[t]=(byT[t]||0)+1;if(e.atrasado)byTA[t]=(byTA[t]||0)+1;});
   const nB=baix.length, nBA=baix.filter(e=>e.atrasado).length;
   const emp=Math.max(0,(x.em_processo||0)-nB), atr=Math.max(0,(x.atrasado||0)-nBA);
   const ders=(x.derivacoes||[]).map(d=>{const ep=Math.max(0,d.em_processo-(byT[d.exame]||0)),at=Math.max(0,d.atrasado-(byTA[d.exame]||0));return {...d,em_processo:ep,atrasado:at,pct:ep?Math.round(100*(ep-at)/ep):100};}).filter(d=>d.em_processo>0);
-  return {...x,exames:ex.filter(e=>!exBaixado(e)),em_processo:emp,atrasado:atr,no_prazo:emp-atr,pct_no_prazo:emp?Math.round(100*(emp-atr)/emp):100,derivacoes:ders};
+  return {...x,exames:ex.filter(e=>!oculto(e)),em_processo:emp,atrasado:atr,no_prazo:emp-atr,pct_no_prazo:emp?Math.round(100*(emp-atr)/emp):100,derivacoes:ders};
 }
 
 // Busca o .enc da FUNÇÃO (/api/enc, baratíssimo — atualizado sem deploy) e CAI no arquivo
@@ -292,7 +315,7 @@ function cats(){
   let list=(DATA.categorias||[]).filter(x=>x.em_processo>0 || (x.derivacoes&&x.derivacoes.length));
   if(ORDER.length){ const idx=c=>{const i=ORDER.findIndex(o=>slug(c.categoria).includes(slug(o)));return i<0?99:i;};
     list=[...list].sort((a,b)=>idx(a)-idx(b)); }
-  return [buildUrgentCat(list), buildAvisoCat(), buildPetCat(list), buildAtrasCat(list), ...list];   // especiais primeiro (avisar cliente ao lado de urgentes)
+  return [buildUrgentCat(list), buildAvisoCat(), buildTravaCat(), buildPetCat(list), buildAtrasCat(list), ...list];   // especiais primeiro (avisar cliente + travados ao lado de urgentes)
 }
 function resolveLock(list){
   const h=decodeURIComponent((location.hash||'').replace('#','')).trim();
@@ -351,10 +374,10 @@ function buildTabs(){
   }
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
-  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
+  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},trava:{t:'travatab',i:'🔒',b:'travab'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
   tabsEl.innerHTML=`<button class="atualizar-btn" id="atualizarBtn" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>`
     + list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
-    <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'?'avisopulse':''}" data-i="${i}">
+    <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'?'avisopulse':''} ${x.kind==='trava'&&x.em_processo>0?'travapulse':''}" data-i="${i}">
       <span class="tn">${k&&x.kind==='aviso'?'<span class="fwt">🎆</span> '+k.i+' '+esc(x.categoria)+' <span class="fwt">🎇</span>':(k?k.i+' '+esc(x.categoria):esc(x.categoria))}</span>
       <span class="tb ${k?k.b:(x.atrasado>0?'late':'')}">${x.special?num(x.em_processo):(x.atrasado>0?num(x.atrasado)+' atras':num(x.em_processo))}</span>
       <span class="prog"></span>
@@ -392,11 +415,22 @@ function renderAviso(){
     : '<div style="color:var(--green);padding:16px;font-size:16px">✓ Nenhum cliente a avisar. 👍</div>';
   document.getElementById('content').innerHTML=avisoBannerHtml()+`<div class="cgrid"><div class="card avisocard"><h3><span>📧 Avisar cliente <span class="tag">${num(list.length)} · amostra insuficiente · espelho da Triagem (a ação é feita lá)</span></span></h3><div class="scroll">${rows}</div></div></div>`;
 }
+// banner vermelho "exames travados" — aparece em qualquer aba da Produção
+function travaBannerHtml(){ const list=prodTravados; if(!list.length) return '';
+  return `<div class="urgbanner trava"><span class="ico">🔒</span><span class="ttl">${num(list.length)} EXAME${list.length>1?'S':''} TRAVADO${list.length>1?'S':''} · RESOLVA O MOTIVO E DESTRAVE</span><div class="ul">${list.slice(0,10).map(m=>`<span class="u"><span class="r">#${esc(m.req)}</span>${esc(m.paciente)} · ${esc(m.exame)}${m.obs?' · 🔒 '+esc(m.obs):''}</span>`).join('')}</div></div>`; }
+function renderTrava(){
+  const list=prodTravados.slice().sort((a,b)=>(Number(a.ts_sep)||0)-(Number(b.ts_sep)||0));
+  const rows = list.length
+    ? list.map(m=>`<div class="wl"><span class="reg">#${esc(m.req)}</span><div><div class="pac">${esc(m.paciente)}</div><div class="exm">${esc(m.exame)} · 🔒 <b>${esc(m.obs||'sem motivo')}</b> · por ${esc(m.por||'')}</div></div><div class="wlact"><button class="destravabtn" data-chave="${escA(m.chave)}">✓ destravar</button></div></div>`).join('')
+    : '<div style="color:var(--green);padding:16px;font-size:16px">✓ Nenhum exame travado. 👍</div>';
+  document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados <span class="tag">${num(list.length)} · exames travados na Produção (motivo em texto livre)</span></span></h3><div class="scroll">${rows}</div></div></div>`;
+}
 function renderActive(){
   const list=cats(); if(!list.length){document.getElementById('content').innerHTML='<div style="padding:40px;color:var(--mut)">Sem fila no momento.</div>';return;}
   const x = adjustCat(locked || list[active] || list[0]);
   if(!locked){ [...document.querySelectorAll('.tab')].forEach((t,i)=>t.classList.toggle('on',i===active)); animateProg(); }
   if(x.special && x.kind==='aviso'){ renderAviso(); return; }   // ESPELHO de Avisar cliente (read-only)
+  if(x.special && x.kind==='trava'){ renderTrava(); return; }   // 🔒 Travados (trava direto na Produção)
   const special=!!x.special;
   const KIND={
     urg:{c:C.amber,ic:'🚨',sub:'urgentes de todas as categorias',ring:'urgentes',m1l:'Urgentes na fila',work:'Amostras urgentes',m3l:'Marcados pela equipe (★)'},
@@ -418,7 +452,7 @@ function renderActive(){
       <span class="ttl">${num(urgCount)} URGENTE${urgCount>1?'S':''}</span>
       <div class="ul">${urgItems.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
     </div>` : '';
-  document.getElementById('content').innerHTML=(special?'':avisoBannerHtml())+banner+`
+  document.getElementById('content').innerHTML=(special?'':avisoBannerHtml())+(special?'':travaBannerHtml())+banner+`
     <div class="cgrid">
     <div class="hero">
       <div class="hcat ${special?x.kind+'cat':''}"><div class="nm">${special?K.ic+' ':''}${esc(x.categoria)}</div><span class="sla">${special?K.sub:'prazo de liberação: '+x.sla+(x.sla>1?' dias':' dia')}</span></div>
@@ -458,7 +492,7 @@ function renderActive(){
             <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div></div>
             <div class="wlact">${e._urg
               ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" data-manual="${e._manual?'1':'0'}" title="tira do alerta de urgência (o exame continua na fila)">baixa na urgência</button>`
-              : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<button class="exbaixabtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" data-atr="${e.atrasado?'1':'0'}" title="baixa no EXAME — tira da Produção (não depende do HF)">✓ no exame</button><span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
+              : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<button class="exbaixabtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" data-atr="${e.atrasado?'1':'0'}" title="baixa no EXAME — tira da Produção (não depende do HF)">✓ no exame</button><button class="travarbtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" title="travar o exame (financeiro, cadastro, problema de amostra…)">🔒</button><span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
         </div>
       </div>
     </div></div>`;

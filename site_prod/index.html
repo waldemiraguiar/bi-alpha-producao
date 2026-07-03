@@ -249,6 +249,19 @@ body{font-family:'Inter',sans-serif;background:
 .tab.avisopulse{animation:tabpulseorange .5s ease-in-out infinite}
 @keyframes tabpulseorange{0%,100%{background:rgba(249,115,22,.3);box-shadow:0 0 0 0 rgba(249,115,22,.7)}50%{background:rgba(249,115,22,.6);box-shadow:0 0 0 7px rgba(249,115,22,0)}}
 .card.avisocard{border:2px solid #f97316}
+/* 🔒 TRAVADOS na Produção: aba vermelha pulsante + banner + botões */
+.tab.travatab{border-color:rgba(220,38,38,.6);background:rgba(220,38,38,.12)}
+.tab.travatab .tn{color:#ff5470;font-weight:800}
+.tab.travatab.on{background:rgba(220,38,38,.22)}
+.tab .tb.travab{background:#dc2626;color:#fff}
+.tab.travapulse{animation:tabpulsered .5s ease-in-out infinite}
+@keyframes tabpulsered{0%,100%{background:rgba(220,38,38,.3);box-shadow:0 0 0 0 rgba(255,45,45,.7)}50%{background:rgba(220,38,38,.6);box-shadow:0 0 0 7px rgba(255,45,45,0)}}
+.tab.travapulse .tn,.tab.travapulse{color:#fff!important}
+.urgbanner.trava{animation:flashred .4s steps(1,end) infinite}
+.card.travacard{border:2px solid #dc2626}
+.travarbtn{background:rgba(220,38,38,.14);border:1px solid rgba(220,38,38,.5);color:#ff5470;border-radius:6px;cursor:pointer;font-size:13px;padding:3px 8px;margin-left:4px}
+.travarbtn:hover{background:#dc2626;color:#fff}
+.destravabtn{background:#16a34a;color:#fff;border:0;border-radius:6px;padding:5px 11px;cursor:pointer;font-weight:800;font-size:13px}
 .catpill{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 13px;cursor:pointer;font-weight:700;font-size:13px;color:var(--ink)}
 .catpill:hover{background:var(--card2)}
 .catpill.on{background:var(--card2);border-color:var(--cyan);color:var(--cyan)}
