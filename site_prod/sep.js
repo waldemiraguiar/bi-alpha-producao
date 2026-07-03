@@ -82,21 +82,26 @@
     .filter(m => m.estado === 'insuficiente')
     .filter(m => !descartes.has(m.chave))
     .filter(m => { const d = dayTs(m.ts_sep); return !d || d >= pisoDay(m.cat); });
+  // TRAVA em chave SEPARADA ('trava:'+req-codex) — NÃO mexe na marca de separação (separado/recebido fica intacto)
+  const travaKey = it => 'trava:' + chaveOf(it);
+  const travaRec = it => marks['trava:' + chaveOf(it)];
+  const travadoAtivo = it => { const m = marks['trava:' + chaveOf(it)]; return !!(m && m.estado === 'travado'); };
   // fila "TRAVADOS": exames travados (financeiro, cadastro, problema de amostra…) — motivo em texto livre (obs)
   const aTravar = () => Object.values(marks)
-    .filter(m => m.estado === 'travado')
-    .filter(m => !String(m.chave).startsWith('prod:'))   // 'prod:' = travados da PRODUÇÃO (aba própria lá), não entram na Triagem
+    .filter(m => m.estado === 'travado' && String(m.chave).startsWith('trava:'))   // 'trava:' = travados da TRIAGEM ('prod:' é da Produção)
     .filter(m => !descartes.has(m.chave))
     .filter(m => { const d = dayTs(m.ts_sep); return !d || d >= pisoDay(m.cat); });
   // HISTÓRICO dos travados já LIBERADOS (estado=destravado) — guarda quem/quando/quantas vezes/quantos dias
   const aTravarHist = () => Object.values(marks)
-    .filter(m => m.estado === 'destravado' && !String(m.chave).startsWith('prod:') && !descartes.has(m.chave))
+    .filter(m => m.estado === 'destravado' && String(m.chave).startsWith('trava:') && !descartes.has(m.chave))
     .sort((a, b) => (Number(b.ts_receb) || 0) - (Number(a.ts_receb) || 0));
   // dias travado (fim = liberação, ou agora se ainda travado)
   const diasTrava = m => { const ini = Number(m.ts_sep) || 0, fim = Number(m.ts_receb) || Date.now(); if (!ini) return null; return Math.max(0, Math.floor((fim - ini) / 86400000)); };
   const labelDias = m => { const d = diasTrava(m); if (d == null) return ''; return d < 1 ? 'menos de 1 dia' : `${d} dia${d > 1 ? 's' : ''}`; };
   // data + HORA em BRT: "DD/MM/AAAA às HH:MM"
   const fmtDataHora = ts => { const n = Number(ts); if (!n) return '—'; const iso = new Date(n - 3 * 3600e3).toISOString(); return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)} às ${iso.slice(11, 16)}`; };
+  // histórico de TRAVA que ACOMPANHA o paciente na fila normal (Separar/Receber e Última Chamada) — sem abrir a aba Travados
+  const travHistLineSep = it => { const m = travaRec(it); if (!m || m.estado !== 'destravado') return ''; return `<div class="travahist"><b>📋 Já foi travado</b><div>🔒 <b>Motivo:</b> ${esc2(m.obs || '(sem motivo)')}${vezesTxt(m)}</div><div>🔒 <b>Travou:</b> ${esc2(m.por || '—')} — ${fmtDataHora(m.ts_sep)}</div><div>✅ <b>Destravou:</b> ${esc2(m.por_receb || '—')} — ${fmtDataHora(m.ts_receb)}</div><div>⏱️ <b>Ficou travado:</b> ${labelDias(m)}</div></div>`; };
 
   /* ---- prazo (corte) relativo à hora de entrada ---- */
   function deadline(it) {
@@ -154,7 +159,7 @@
         else if (a === 'avisar') await window.SUPA.updateMark(k, { estado: 'insuficiente_avisado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'desavisar') await window.SUPA.updateMark(k, { estado: 'insuficiente', por_receb: null, ts_receb: null });
         // TRAVAR: ts_sep = quando travou AGORA; corte = quantas VEZES já travou (contador); limpa a liberação anterior
-        else if (a === 'travar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'travado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: (((marks[k] && marks[k].corte) || 0) + 1), obs: (marks[k] ? (marks[k].obs || null) : null), por_receb: null, ts_receb: null });
+        else if (a === 'travar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'travado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: (((marks[k] && marks[k].corte) || 0) + 1), obs: (payload.obs != null ? payload.obs : (marks[k] ? (marks[k].obs || null) : null)), por_receb: null, ts_receb: null });
         // DESTRAVAR: NÃO apaga — arquiva (estado=destravado) guardando QUEM liberou e QUANDO (histórico)
         else if (a === 'destravar') await window.SUPA.updateMark(k, { estado: 'destravado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
@@ -357,10 +362,11 @@
   async function doTravar(it) {
     if (teamMode && !me()) { openLogin(); return; }
     if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
-    const motivo = prompt('TRAVAR este exame.\n\nEscreva o MOTIVO (ex.: pendência financeira, cadastro incompleto, amostra hemolisada…):', (marks[chaveOf(it)] && marks[chaveOf(it)].obs) || '');
+    const rec = travaRec(it);
+    const motivo = prompt('TRAVAR este exame.\n\nEscreva o MOTIVO (ex.: pendência financeira, cadastro incompleto, amostra hemolisada…):', (rec && rec.obs) || '');
     if (motivo === null) return;   // cancelou
-    const ok = await post({ acao: 'travar', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
-    if (ok) { const m = marks[chaveOf(it)]; if (m) { try { await window.SUPA.updateMark(chaveOf(it), { obs: (motivo || '').trim() || null }); await loadMarks(); } catch (e) {} } render(); }
+    const ok = await post({ acao: 'travar', chave: travaKey(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me(), obs: (motivo || '').trim() || null });
+    if (ok) render();
   }
   // marcar TEM AMOSTRA (suficiente) — finaliza e sai da fila na hora
   async function doSuficiente(it) {
@@ -464,7 +470,7 @@
     const entrou = it.entrada ? ` · 📅 entrou <b>${ddmm(it.entrada)}${hent ? ' ' + hent : ''}</b>` : '';
     const head = `<div class="req">${esc2(it.req)}<span class="y">/${esc2(it.ano)}</span></div>
       <div><div class="pac">${esc2(it.paciente)}${cl}${urg}</div>
-      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div>${obsChunk(k)}</div>`;
+      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div>${travHistLineSep(it)}${obsChunk(k)}</div>`;
     const separated = !!(m && m.estado);            // separado / enviado / recebido
     const received = !!(m && m.estado === 'recebido');
     // PASSO 1 — SEPARAR
@@ -542,7 +548,7 @@
   const estadoDe = it => { const m = marks[chaveOf(it)]; return (m && m.estado) || ''; };
   // fora do fluxo: CONFIRMADA (suficiente = tem amostra, finalizada) OU insuficiente (avisar cliente).
   // RECEBIDO agora NÃO sai — fica aguardando a confirmação "tem amostra?" (suficiente/insuficiente).
-  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado' || e === 'travado'; };
+  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado' || travadoAtivo(it); };
   // PENDENTE = item aberto ainda no fluxo (a finalização é o RECEBER). Insuficiente sai do fluxo (vai pra fila de aviso).
   const pendentes = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it));
   const ageItems = (lo, hi) => pendentes().filter(it => (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
@@ -702,7 +708,7 @@
       const dia = (u.dt || '').slice(0, 10); if (!dia || dia < fl) return;
       const k = chaveOf(u); if (descartes.has(k)) return;
       const m = marks[k];
-      rows.push({ chave: k, req: u.req, ano: u.ano, codex: u.codex, cat: u.cat, exame: u.exame, paciente: u.paciente, dt: u.dt, sep: !!(m && m.estado), m });
+      rows.push({ chave: k, req: u.req, ano: u.ano, codex: u.codex, cat: u.cat, exame: u.exame, paciente: u.paciente, dt: u.dt, sep: !!(m && m.estado), m, travaM: marks['trava:' + k] });
     });
     rows.sort((a, b) => (a.sep !== b.sep) ? (a.sep ? 1 : -1) : (a.dt < b.dt ? 1 : a.dt > b.dt ? -1 : 0)); // não-separados primeiro
     return rows;
@@ -743,13 +749,8 @@
       const suficiente = r.sep && r.m.estado === 'suficiente';
       const recebido = r.sep && r.m.estado === 'recebido';
       const insuf = r.sep && (r.m.estado === 'insuficiente' || r.m.estado === 'insuficiente_avisado');
-      const travado = r.sep && (r.m.estado === 'travado' || r.m.estado === 'destravado');
       const status = !r.sep
         ? `<span class="dl late" style="padding:2px 8px">✗ NÃO SEPARADO</span> <span style="color:var(--mut)">— setor ${esc2(r.cat)}</span>`
-        : travado
-          ? (r.m.estado === 'destravado'
-            ? `<span class="est separado" style="background:#dcfce7;color:#166534">✅ liberado</span> travado por <b>${esc2(r.m.por || '')}</b>${(Number(r.m.corte)||1)>1?` · 🔁 ${r.m.corte}×`:''} · liberado por <b>${esc2(r.m.por_receb || '')}</b>`
-            : `<span class="est separado" style="background:#fee2e2;color:#991b1b">🔒 travado</span> por <b>${esc2(r.m.por || '')}</b>`)
         : insuf
           ? `<span class="est separado" style="background:#fee2e2;color:#991b1b">🚫 amostra insuficiente</span> por <b>${esc2(r.m.por || '')}</b>${r.m.estado === 'insuficiente_avisado' ? ` · ✅ cliente avisado por <b>${esc2(r.m.por_receb || '')}</b>` : ' · <span class="dl late" style="padding:1px 5px">⚠️ falta avisar</span>'}`
           : suficiente
@@ -758,6 +759,9 @@
               ? `<span class="est separado" style="background:#fef9c3;color:#854d0e">✓ recebido — aguardando confirmar amostra</span> sep. <b>${esc2(r.m.por || '')}</b> · receb. <b>${esc2(r.m.por_receb || '')}</b>`
               : `<span class="est separado" style="background:#fef9c3;color:#854d0e">⏳ separado — aguardando receber</span> por <b>${esc2(r.m.por || '')}</b>${r.m.no_prazo === false ? ' <span class="dl late" style="padding:1px 5px">atraso</span>' : ''}`;
       const obsHtml = (r.m && r.m.obs) ? `<div class="histobs">📝 ${esc2(r.m.obs)}</div>` : '';
+      // histórico de TRAVA (chave separada) — aparece também no histórico final
+      const tm = r.travaM;
+      const travaHtml = tm ? `<div class="travahist" style="margin-top:4px">${tm.estado === 'travado' ? '<b>🔒 Travado (aberto)</b>' : '<b>📋 Já foi travado</b>'}<div>🔒 <b>Motivo:</b> ${esc2(tm.obs || '(sem motivo)')}${(Number(tm.corte) || 1) > 1 ? ` · 🔁 ${tm.corte}×` : ''}</div><div>🔒 <b>Travou:</b> ${esc2(tm.por || '—')} — ${fmtDataHora(tm.ts_sep)}</div>${tm.estado === 'destravado' ? `<div>✅ <b>Destravou:</b> ${esc2(tm.por_receb || '—')} — ${fmtDataHora(tm.ts_receb)}</div><div>⏱️ <b>Ficou travado:</b> ${labelDias(tm)}</div>` : ''}</div>` : '';
       const del = r.sep
         ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="mark" title="desfazer marcação">↩</button>`
         : (isAdmin() ? `<button class="sepbtn undo" data-del="${r.chave}" data-delkind="miss" title="apagar este não-separado (admin)">✕</button>` : `<span style="color:var(--mut);font-size:13px" title="só admin apaga">🔒</span>`);
@@ -767,7 +771,7 @@
         <td>${esc2(r.paciente)}</td>
         <td style="color:var(--mut)">${esc2(r.exame)}</td>
         <td>${esc2(r.cat)}</td>
-        <td>${status}${obsHtml}</td>
+        <td>${status}${obsHtml}${travaHtml}</td>
         <td style="text-align:right">${del}</td>
       </tr>`;
     }).join('');
