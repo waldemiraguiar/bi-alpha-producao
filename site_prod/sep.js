@@ -473,7 +473,9 @@
     return `<div class="topicwrap">` + all + order.map(t => {
       const cats = groups[t].slice().sort((a, b) => catIdx(a) - catIdx(b));
       const pills = cats.map(c => { const arr = byCat[c] || []; const late = lateFn ? arr.filter(lateFn).length : 0;
-        return `<div class="catpill ${slug(c) === slug(sel) ? 'on' : ''} ${late ? 'haslate' : ''} ${arr.length === 0 ? 'zero' : ''}" data-selview="${viewKey}" data-selcat="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc ${late ? 'late' : ''}">${arr.length}</span></div>`; }).join('');
+        // heatmap SÓ nas abas de trabalho (Separar/Receber e Última Chamada): 0 tarefa = VERDE calmo; com tarefa = VERMELHO piscando forte
+        const heat = showAllCats ? (arr.length > 0 ? 'phot' : 'pzero') : '';
+        return `<div class="catpill ${slug(c) === slug(sel) ? 'on' : ''} ${late ? 'haslate' : ''} ${(arr.length === 0 && !showAllCats) ? 'zero' : ''} ${heat}" data-selview="${viewKey}" data-selcat="${esc2(c)}"><span class="nm">${esc2(c)}</span><span class="cc ${late ? 'late' : ''}">${arr.length}</span></div>`; }).join('');
       return `<div class="topicgrp"><div class="topiclbl">${t}</div><div class="catstrip">${pills}</div></div>`;
     }).join('') + `</div>`;
   }
