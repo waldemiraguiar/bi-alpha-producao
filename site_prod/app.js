@@ -16,7 +16,9 @@ const exBaixado=e=>prodBaixados.has(exChave(e));
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
 let prodTravados=[], prodTravadoSet=new Set(), prodTravadosHist=[], prodTravaMap={};
 // 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only da Triagem, cat Cito/Histo/Necrópsia)
-let sepMarksMap={};
+let sepMarksMap={}, histotecQ='';
+// normaliza p/ busca: tira ACENTO + minúsculas (mantém espaços/números) → busca com e sem acento
+const normAcc=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const HISTOTEC_CATS=['citopatologia','histologia','necropsia'];
 function histotecItens(){ const sep=(typeof DATA!=='undefined'&&DATA&&DATA.separacao&&DATA.separacao.itens)||[]; return sep.filter(it=>HISTOTEC_CATS.includes(slug(it.cat))); }
 const exTravado=e=>prodTravadoSet.has('prod:'+exChave(e));
@@ -240,7 +242,9 @@ function filterWL(){const t=searchTerm.trim().toLowerCase();
     const reg=(row.querySelector('.reg')?.textContent||'').toLowerCase();
     const pac=(row.querySelector('.pac')?.textContent||'').toLowerCase();
     row.style.display=(!t||reg.includes(t)||pac.includes(t))?'':'none';});}
-function onSearch(ev){if(ev.target.id!=='wlsearch')return;
+function onSearch(ev){
+  if(ev.target.id==='htsearch'){histotecQ=ev.target.value; pinned=true; if(ROT)clearInterval(ROT); const rc=document.getElementById('rotctl'); if(rc){rc.classList.add('pinned');rc.textContent='⏸ fixado · clique p/ girar';} filterHistotec(); return;}
+  if(ev.target.id!=='wlsearch')return;
   searchTerm=ev.target.value; pinned=true; if(ROT)clearInterval(ROT);
   const rc=document.getElementById('rotctl'); if(rc){rc.classList.add('pinned');rc.textContent='⏸ fixado · clique p/ girar';}
   filterWL();}
@@ -367,9 +371,9 @@ async function boot(D){
   if(window.__muref)clearInterval(window.__muref);
   // urgentes só importam no modo TV. Com Supabase: Realtime (push, zero polling); senão: polling 90s
   if(window.SUPA&&window.SUPA.ok){
-    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas','sep_marks','sep_descartes'],async()=>{if(document.getElementById('content').style.display!=='none'){await loadManual();buildTabs();renderActive();}});
+    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas','sep_marks','sep_descartes'],async()=>{if(document.getElementById('content').style.display!=='none'&&!typingSearch()){await loadManual();buildTabs();renderActive();}});
   }else{
-    window.__muref=setInterval(async()=>{if(document.hidden||document.getElementById('content').style.display==='none')return;const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},90000);
+    window.__muref=setInterval(async()=>{if(document.hidden||document.getElementById('content').style.display==='none'||typingSearch())return;const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},90000);
   }
   if(!window.__visref){window.__visref=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.getElementById('content').style.display!=='none'){loadManual().then(renderActive).catch(()=>{});}});}
 }
@@ -474,12 +478,26 @@ function renderHistotec(){
   const CATORD=['Citopatologia','Histologia','NECRÓPSIA'];
   const cats=Object.keys(byCat).sort((a,b)=>{const ia=CATORD.findIndex(x=>slug(x)===slug(a)),ib=CATORD.findIndex(x=>slug(x)===slug(b));return (ia<0?9:ia)-(ib<0?9:ib);});
   const banner=`<div class="urgbanner histotec"><span class="ico">🔬</span><span class="ttl">HISTOTÉCNICA · CONTROLE DE AMOSTRAS — ${num(itens.length)} amostra${itens.length!==1?'s':''} (espelho ao vivo da Triagem)</span></div>`;
+  const busca=`<input id="htsearch" class="wlsearch" style="margin:0 0 12px;width:100%;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº, ano, paciente, exame, categoria, status (com ou sem acento)" value="${escA(histotecQ)}">`;
   const cards=cats.length?cats.map(c=>{
     const arr=byCat[c];
-    const rows=arr.map(it=>{const st=histotecStatus(it);const pl=isPetlove(it.paciente);return `<div class="wl"><span class="reg">#${esc(it.req)}<span style="opacity:.5">/${esc(it.ano)}</span></span><div><div class="pac${pl?' petlove':''}">${esc(it.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}</div><div class="exm">${esc(it.exame)} · entrou ${fmtD(it.entrada)}${(it.dias||0)>=1?` · <b style="color:var(--amber)">${it.dias}d parada</b>`:''}</div></div><div class="wlact"><span class="db" style="background:${st.bg};color:${st.c}">${st.t}</span></div></div>`;}).join('');
+    const rows=arr.map(it=>{const st=histotecStatus(it);const pl=isPetlove(it.paciente);
+      const ds=escA(normAcc([it.req,it.ano,it.req+'/'+it.ano,it.paciente,it.exame,it.cat,st.t].join(' ')));
+      return `<div class="wl" data-s="${ds}"><span class="reg">#${esc(it.req)}<span style="opacity:.5">/${esc(it.ano)}</span></span><div><div class="pac${pl?' petlove':''}">${esc(it.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}</div><div class="exm">${esc(it.exame)} · entrou ${fmtD(it.entrada)}${(it.dias||0)>=1?` · <b style="color:var(--amber)">${it.dias}d parada</b>`:''}</div></div><div class="wlact"><span class="db" style="background:${st.bg};color:${st.c}">${st.t}</span></div></div>`;}).join('');
     return `<div class="card"><h3><span>${esc(c)} <span class="tag">${arr.length} amostra(s)</span></span></h3><div class="scroll">${rows}</div></div>`;
   }).join(''):'<div class="card"><div style="color:var(--green);padding:18px;font-size:16px">✓ Nenhuma amostra de Histotécnica em processo agora. 👍</div></div>';
-  document.getElementById('content').innerHTML=banner+`<div class="cgrid histoteccols">${cards}</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only — a separação/recebimento é feita na Triagem (Histotécnica). Atualiza ao vivo.</p>`;
+  document.getElementById('content').innerHTML=banner+busca+`<div class="cgrid histoteccols">${cards}</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only — a separação/recebimento é feita na Triagem (Histotécnica). Atualiza ao vivo.</p><div id="htempty" style="display:none;color:var(--mut);padding:14px">Nada encontrado.</div>`;
+  if(histotecQ) filterHistotec();
+}
+// true enquanto o cursor está numa BUSCA (não deixar o auto-refresh apagar o que se digita)
+function typingSearch(){const a=document.activeElement;return !!(a&&(a.id==='htsearch'||a.id==='wlsearch'));}
+// busca da aba Histotécnica: mostra/esconde linhas (com e sem acento), sem re-render (não perde o foco)
+function filterHistotec(){
+  const t=normAcc(histotecQ.trim()); let vis=0;
+  document.querySelectorAll('#content .wl').forEach(r=>{const s=r.dataset.s||'';const ok=!t||s.includes(t);r.style.display=ok?'':'none';if(ok)vis++;});
+  // esconde cards que ficaram sem nenhuma linha visível
+  document.querySelectorAll('#content .histoteccols .card').forEach(cd=>{const any=[...cd.querySelectorAll('.wl')].some(r=>r.style.display!=='none');cd.style.display=(t&&!any)?'none':'';});
+  const em=document.getElementById('htempty'); if(em) em.style.display=(t&&vis===0)?'':'none';
 }
 function renderActive(){
   const list=cats(); if(!list.length){document.getElementById('content').innerHTML='<div style="padding:40px;color:var(--mut)">Sem fila no momento.</div>';return;}
