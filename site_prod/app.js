@@ -185,18 +185,27 @@ function openHistBaix(){
   el=document.createElement('div'); el.id='histmodal'; el.className='histmodal'; document.body.appendChild(el);
   let period='hoje', q='';
   function render(){
-    const all=(prodBaixaInfo||[]).slice().sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
+    // BIBLIOTECA COMPLETA do exame: baixas + travados (ativos) + liberações — tudo ponta a ponta
+    const vez=m=>{const n=Number(m.corte)||1;return n>1?` · 🔁 ${n}×`:'';};
+    const baixas=(prodBaixaInfo||[]).map(b=>({ts:Number(b.ts)||0,registro:b.registro,exame:b.exame,paciente:b.paciente,cat:b.cat,por:b.por,kind:'baixa',desfeito:b.desfeito,ts_undo:b.ts_undo,chave:b.chave}));
+    const trAtivo=(prodTravados||[]).map(m=>({ts:Number(m.ts_sep)||0,registro:m.req,exame:m.exame,paciente:m.paciente,cat:m.cat,por:m.por,kind:'travado',obs:m.obs,m}));
+    const trLib=(prodTravadosHist||[]).map(m=>({ts:Number(m.ts_receb)||0,registro:m.req,exame:m.exame,paciente:m.paciente,cat:m.cat,por:m.por_receb,kind:'liberado',obs:m.obs,m}));
+    const all=[...baixas,...trAtivo,...trLib].sort((a,b)=>b.ts-a.ts);
     const qq=q.trim().toLowerCase();
     const rows=all.filter(b=>inPeriod(b.ts,period)).filter(b=>!qq||(String(b.registro)+' '+String(b.exame)+' '+String(b.paciente)+' '+String(b.cat)).toLowerCase().includes(qq));
-    const ativos=rows.filter(b=>!b.desfeito).length;
     const per=(k,l)=>`<button class="hper ${period===k?'on':''}" data-per="${k}">${l}</button>`;
+    const statusCell=b=>{
+      if(b.kind==='baixa') return b.desfeito?`<span class="stundo">↩ desfeito ${_fmtDT(b.ts_undo)}</span>`:'<span class="stok">✓ baixado</span>';
+      if(b.kind==='travado') return `<span class="stok" style="background:rgba(220,38,38,.18);color:#ff8a9a">🔒 travado</span> ${esc(b.obs||'')}${vez(b.m)}`;
+      return `<span class="stok" style="background:rgba(22,163,74,.18);color:#86efac">✅ liberado</span> 🔒 ${esc(b.obs||'')} · travou <b>${esc(b.m.por||'')}</b> ${fmtDataHoraP(b.m.ts_sep)} · liberou <b>${esc(b.m.por_receb||'')}</b> · ⏱️ ${labelDiasP(b.m)}${vez(b.m)}`;
+    };
     el.innerHTML=`<div class="histcard">
-      <div class="histhd"><b>🗂 Histórico de exames baixados</b><button class="histclose" data-act="close">✕</button></div>
+      <div class="histhd"><b>🗂 Histórico do exame — tudo (baixas · travados · liberações)</b><button class="histclose" data-act="close">✕</button></div>
       <div class="histbar">${per('hoje','Hoje')}${per('semana','Semana')}${per('mes','Mês')}${per('ano','Ano')}${per('tudo','Tudo')}
         <input class="histq" placeholder="🔍 buscar registro / paciente / exame" value="${escA(q)}">
-        <span class="histcnt">${rows.length} no período · ${ativos} ativos</span></div>
-      <div class="histscroll"><table class="histtbl"><thead><tr><th>Quando</th><th>#Reg</th><th>Exame</th><th>Paciente</th><th>Categoria</th><th>Por</th><th>Status</th><th></th></tr></thead><tbody>
-      ${rows.map(b=>`<tr class="${b.desfeito?'undone':''}"><td>${_fmtDT(b.ts)}</td><td>#${esc(b.registro)}</td><td>${esc(b.exame)}</td><td>${esc(b.paciente||'—')}</td><td>${esc(b.cat||'—')}</td><td>${esc(b.por||'—')}</td><td>${b.desfeito?`<span class="stundo">↩ desfeito ${_fmtDT(b.ts_undo)}</span>`:'<span class="stok">baixado</span>'}</td><td>${b.desfeito?'':`<button class="histundo" data-chave="${escA(b.chave)}">↩ desfazer</button>`}</td></tr>`).join('')||'<tr><td colspan="8" style="padding:16px;color:var(--mut)">Nada no período.</td></tr>'}
+        <span class="histcnt">${rows.length} no período</span></div>
+      <div class="histscroll"><table class="histtbl"><thead><tr><th>Quando</th><th>#Reg</th><th>Exame</th><th>Paciente</th><th>Categoria</th><th>Por</th><th>O que aconteceu</th><th></th></tr></thead><tbody>
+      ${rows.map(b=>`<tr class="${b.kind==='baixa'&&b.desfeito?'undone':''}"><td>${_fmtDT(b.ts)}</td><td>#${esc(b.registro)}</td><td>${esc(b.exame)}</td><td>${esc(b.paciente||'—')}</td><td>${esc(b.cat||'—')}</td><td>${esc(b.por||'—')}</td><td>${statusCell(b)}</td><td>${(b.kind==='baixa'&&!b.desfeito)?`<button class="histundo" data-chave="${escA(b.chave)}">↩ desfazer</button>`:''}</td></tr>`).join('')||'<tr><td colspan="8" style="padding:16px;color:var(--mut)">Nada no período.</td></tr>'}
       </tbody></table></div></div>`;
   }
   el.addEventListener('click',async ev=>{
@@ -496,7 +505,7 @@ function renderActive(){
           <span class="lg"><b style="color:var(--amber,#f0a020)">baixa na urgência</b> = tira só do alerta 🔴 (o exame continua)</span>
           <span class="lg"><b style="color:var(--cyan,#22d3ee)">✓ no exame</b> = tira o exame da Produção · não depende do HF · pede seu login</span>
           ${atrasAlvo.length?`<button class="limpabtn">🧹 Limpar atrasados (${atrasAlvo.length})</button>`:''}
-          <button class="histbtn">🗂 Histórico baixados${prodBaixaInfo.length?` (${prodBaixaInfo.length})`:''}</button>
+          <button class="histbtn">🗂 Histórico do exame${(prodBaixaInfo.length+prodTravados.length+prodTravadosHist.length)?` (${prodBaixaInfo.length+prodTravados.length+prodTravadosHist.length})`:''}</button>
         </div>
         <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
