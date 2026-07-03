@@ -20,9 +20,23 @@ let sepMarksMap={}, histotecQ='', histotecSel='';
 // normaliza p/ busca: tira ACENTO + minúsculas (mantém espaços/números) → busca com e sem acento
 const normAcc=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 // 🔬 ESPELHO do app Histotécnica (tabela amostras, via RPC amostras_espelho). Fluxo de 7 etapas.
-let amostrasEsp=[];
+let amostrasEsp=[], histotecOrig='', histotecStat='';
 const STAGE_NAMES=['Recepção e Triagem','Clivagem Macroscópica','Processamento e Emblocagem','Microtomia','Preparação Final de Lâminas','Leitura e Laudo (Prof. Luís)','Finalização (baixa)'];
-function amEtapas(a){ const e=Array.isArray(a.etapas)?a.etapas:[]; const done=e.filter(x=>x&&x.concluida_em).length; const total=Math.max(e.length,STAGE_NAMES.length); const finalizado=e.length>0&&done>=e.length; const idx=Math.min(done,STAGE_NAMES.length-1); const atualNome=finalizado?'Finalizado':(STAGE_NAMES[idx]||('Etapa '+(idx+1))); const last=[...e].reverse().find(x=>x&&x.concluida_em); return {done,total:e.length||STAGE_NAMES.length,finalizado,atualNome,atualIdx:idx,ultimoPor:last&&last.por,ultimoEm:last&&last.concluida_em}; }
+const STAGE_META=[2,3,5,6,7,15,15];   // meta (dia acumulado) de cada etapa — igual ao app
+// dias ÚTEIS desde a entrada (domingo não conta) — como o app calcula o prazo
+function diasUteis(desde){ if(!desde) return 0; const ini=new Date(desde); if(isNaN(ini)) return 0; const hoje=new Date(); let d=0; const c=new Date(ini); c.setHours(0,0,0,0); const fim=new Date(hoje); fim.setHours(0,0,0,0); while(c<fim){ c.setDate(c.getDate()+1); if(c.getDay()!==0) d++; } return d; }
+function amEtapas(a){
+  const e=Array.isArray(a.etapas)?a.etapas:[]; const done=e.filter(x=>x&&x.concluida_em).length;
+  const finalizado=e.length>0&&done>=e.length; const idx=Math.min(done,STAGE_NAMES.length-1);
+  const atualNome=finalizado?'Finalizado':(STAGE_NAMES[idx]||('Etapa '+(idx+1)));
+  const last=[...e].reverse().find(x=>x&&x.concluida_em);
+  const dia=diasUteis(a.data_entrada), meta=STAGE_META[idx]||15;
+  let cor='green', cortxt='🟢 No prazo';
+  if(finalizado){ cor='done'; cortxt='✅ Finalizado'; }
+  else if(dia>meta){ cor='red'; cortxt='🔴 Atrasado'; }
+  else if(dia===meta){ cor='yellow'; cortxt='🟡 Atenção'; }
+  return {done,total:e.length||STAGE_NAMES.length,finalizado,atualNome,atualIdx:idx,ultimoPor:last&&last.por,ultimoEm:last&&last.concluida_em,dia,meta,cor,cortxt};
+}
 const exTravado=e=>prodTravadoSet.has('prod:'+exChave(e));
 const diasTravaP=m=>{const ini=Number(m.ts_sep)||0,fim=Number(m.ts_receb)||Date.now();if(!ini)return null;return Math.max(0,Math.floor((fim-ini)/86400000));};
 const labelDiasP=m=>{const d=diasTravaP(m);if(d==null)return '';return d<1?'menos de 1 dia':`${d} dia${d>1?'s':''}`;};
@@ -366,6 +380,7 @@ async function boot(D){
   if(!window.__wired){window.__wired=true;
     document.getElementById('content').addEventListener('click',onContentClick);
     document.getElementById('content').addEventListener('input',onSearch);
+    document.getElementById('content').addEventListener('change',onHtFilter);
     window.addEventListener('hashchange',()=>{locked=resolveLock(cats());active=0;buildTabs();renderActive();startRotation();});
   }
   if(REFRESH)clearInterval(REFRESH);
@@ -464,26 +479,32 @@ function renderTrava(){
     : '';
   document.getElementById('content').innerHTML=travaBannerHtml()+`<div class="cgrid"><div class="card travacard"><h3><span>🔒 Travados / Escritório <span class="tag">${num(list.length)} · responsabilidade do Escritório · motivo em texto livre</span></span></h3><div class="scroll">${rows}</div></div>${histHtml}</div>`;
 }
-// linha da AMOSTRA (espelho do app Histotécnica): registro, paciente, origem, material, tutor, entrada, ETAPA atual + progresso das 7 etapas
+// linha da AMOSTRA (espelho COMPLETO da aba Amostras do app): tudo que a aba tem
 function amRow(a){
   const st=amEtapas(a);
-  const origem=a.origem==='externo'?'<span class="am-orig ext">🩷 Externo</span>':'<span class="am-orig int">🔷 Alpha</span>';
+  const origem=a.origem==='externo'
+    ? `<span class="am-orig ext">🩷 Externo${a.cliente_externo?' · '+esc(a.cliente_externo):''}</span>`
+    : `<span class="am-orig int">🔷 Alpha${a.origem_hf?' · HF':''}</span>`;
   const reg=a.numero_registro?`#${esc(a.numero_registro)}`:'<span style="color:var(--mut)">s/ registro</span>';
+  const hf=a.numero_hf?`<span class="am-hf">HF ${esc(a.numero_hf)}</span>`:'';
   const de=a.data_entrada?fmtD(a.data_entrada):'—';
   const esp=a.especie?` · ${esc(a.especie)}`:'';
   const mat=a.tipo_material?`<b style="color:var(--ink)">${esc(a.tipo_material)}</b>`:'';
   const tut=a.tutor?` · tutor <b>${esc(a.tutor)}</b>`:'';
   const obs=a.observacoes?` · 📝 ${esc(a.observacoes)}`:'';
+  const urg=a.urgente?'<span class="hurg">URGENTE</span>':'';
+  const pet=a.pet_love?'<span class="plove">🐾 PET LOVE</span>':'';
   const dots=STAGE_NAMES.map((n,i)=>{const done=i<st.done;const cur=!st.finalizado&&i===st.done;return `<span class="am-dot ${done?'done':(cur?'cur':'')}" title="${escA(n)}${done?' ✓':(cur?' (atual)':'')}"></span>`;}).join('');
   const stageLabel=st.finalizado?`<span class="db" style="background:rgba(22,163,74,.18);color:#86efac;font-size:12.5px">✅ Finalizado</span>`:`<span class="db" style="background:rgba(2,132,199,.18);color:#7dd3fc;font-size:12.5px">🔬 ${esc(st.atualNome)}</span>`;
-  const ultimo=st.ultimoPor?` · última por <b>${esc(st.ultimoPor)}</b>`:'';
-  const ds=escA(normAcc([a.numero_registro,a.nome_paciente,a.tutor,a.especie,a.tipo_material,(a.origem==='externo'?'externo':'alpha interno'),st.atualNome,a.observacoes].join(' ')));
+  const statusB=st.finalizado?'':`<div class="am-stt ${st.cor}">${st.cortxt} · dia ${st.dia}/${st.meta}</div>`;
+  const ultimo=st.ultimoPor?` · última etapa por <b>${esc(st.ultimoPor)}</b>`:'';
+  const ds=escA(normAcc([a.numero_registro,a.numero_hf,a.nome_paciente,a.tutor,a.especie,a.tipo_material,(a.origem==='externo'?'externo '+(a.cliente_externo||''):'alpha interno'),st.atualNome,st.cortxt,(a.urgente?'urgente':''),(a.pet_love?'pet love':''),a.observacoes].join(' ')));
   return `<div class="wl histrow" data-s="${ds}">
-    <span class="reg">${reg}</span>
-    <div class="histmain"><div class="pac">${esc(a.nome_paciente||'—')} ${origem}</div>
+    <span class="reg">${reg}${hf}</span>
+    <div class="histmain"><div class="pac">${esc(a.nome_paciente||'—')} ${origem}${urg}${pet}</div>
       <div class="exm">${mat}${esp}${tut}${obs}</div>
       <div class="exm">📅 entrou <b>${de}</b> · ${st.done}/${STAGE_NAMES.length} etapas${ultimo} <span class="am-prog">${dots}</span></div></div>
-    <div class="wlact">${stageLabel}</div></div>`;
+    <div class="wlact" style="text-align:right">${stageLabel}${statusB}</div></div>`;
 }
 function renderHistotec(){
   const amost=amostrasEsp||[];
@@ -494,17 +515,36 @@ function renderHistotec(){
   const keys=['__ALL__'].concat(STAGE_NAMES,['Finalizado']);
   if(!histotecSel||!keys.includes(histotecSel)) histotecSel='__ALL__';
   const banner=`<div class="urgbanner histotec"><span class="ico">🔬</span><span class="ttl">HISTOTÉCNICA · CONTROLE DE AMOSTRAS — ${num(amost.length)} amostra${amost.length!==1?'s':''} · espelho ao vivo do app Histotécnica</span></div>`;
-  const busca=`<div style="display:flex;gap:8px;margin:0 0 10px;align-items:center"><input id="htsearch" class="wlsearch" style="flex:1;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº registro, paciente, tutor, espécie, material, etapa, origem (com ou sem acento)" value="${escA(histotecQ)}"><button class="atualizar-btn" onclick="atualizarProd(this)" title="puxar agora as amostras">🔄 Atualizar</button></div>`;
+  const busca=`<div style="display:flex;gap:8px;margin:0 0 8px;align-items:center;flex-wrap:wrap"><input id="htsearch" class="wlsearch" style="flex:1;min-width:220px;box-sizing:border-box" placeholder="🔍 buscar — nº registro, nº HF, paciente, tutor, espécie, material, etapa, origem (com/sem acento)" value="${escA(histotecQ)}">
+    <select id="htorigem" class="wlsearch" style="width:auto"><option value="">Todas as origens</option><option value="interno"${histotecOrig==='interno'?' selected':''}>🔷 Alpha (interno)</option><option value="externo"${histotecOrig==='externo'?' selected':''}>🩷 Externo</option></select>
+    <select id="htstatus" class="wlsearch" style="width:auto"><option value="">Todos os status</option><option value="green"${histotecStat==='green'?' selected':''}>🟢 No prazo</option><option value="yellow"${histotecStat==='yellow'?' selected':''}>🟡 Atenção</option><option value="red"${histotecStat==='red'?' selected':''}>🔴 Atrasado</option></select>
+    <button class="atualizar-btn" onclick="atualizarProd(this)" title="puxar agora as amostras">🔄 Atualizar</button>
+    <button class="atualizar-btn" style="background:#334155" onclick="exportAmostrasCSV()" title="baixar CSV do que está filtrado">⬇ CSV</button></div>`;
   // pílulas por ETAPA (0 = verde calmo · com amostra = vermelho) + Todas + Finalizados
   const pill=(key,label,extra)=>{const c=key==='__ALL__'?amost.length:(groups[key]||[]).length;const heat=key==='__ALL__'?'':(c>0?'phot':'pzero');const on=(!searching&&histotecSel===key)?'on':'';return `<div class="catpill ${heat} ${on}" ${extra||''} data-histcat="${escA(key)}"><span class="nm">${esc(label)}</span><span class="cc">${c}</span></div>`;};
   const pills=`<div class="catstrip histotecpills">${pill('__ALL__','Todas')}${STAGE_NAMES.map((n,i)=>pill(n,(i+1)+'· '+n)).join('')}${pill('Finalizado','✅ Finalizados','style="border-color:#16a34a"')}</div>`;
-  const base=searching?amost:(histotecSel==='__ALL__'?amost:(groups[histotecSel]||[]));
+  let base=searching?amost:(histotecSel==='__ALL__'?amost:(groups[histotecSel]||[]));
+  if(histotecOrig) base=base.filter(a=>(a.origem||'interno')===histotecOrig);
+  if(histotecStat) base=base.filter(a=>amEtapas(a).cor===histotecStat);
   const shown=base.slice().sort((a,b)=>String(b.data_entrada||'').localeCompare(String(a.data_entrada||'')));
-  const rowsHtml=shown.length?shown.map(amRow).join(''):`<div style="color:var(--green);padding:16px;font-size:15px">✓ Nenhuma amostra ${searching?'na busca':('em '+esc(histotecSel==='__ALL__'?'andamento':histotecSel))} agora. 👍</div>`;
+  window.__amShown=shown;   // p/ exportar CSV do filtrado
+  const rowsHtml=shown.length?shown.map(amRow).join(''):`<div style="color:var(--green);padding:16px;font-size:15px">✓ Nenhuma amostra ${searching?'na busca':('em '+esc(histotecSel==='__ALL__'?'andamento':histotecSel))} com esse filtro. 👍</div>`;
   const titulo=searching?'🔎 Resultados da busca':(histotecSel==='__ALL__'?'Todas as amostras':esc(histotecSel));
   document.getElementById('content').innerHTML=banner+busca+pills+`<div class="card"><h3><span>${titulo} <span class="tag">${shown.length} amostra(s) · clique numa etapa acima</span></span></h3><div class="scroll" style="max-height:none">${rowsHtml}</div></div><div id="htempty" style="display:none;color:var(--mut);padding:14px">Nada encontrado.</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only do app Histotécnica (Alpha Labs). A operação das etapas é feita lá. Atualiza ao vivo.</p>`;
   if(histotecQ) filterHistotec();
 }
+// exporta CSV do que está filtrado na aba Amostras
+function exportAmostrasCSV(){
+  const rows=window.__amShown||amostrasEsp||[];
+  const head=['Registro','HF','Paciente','Tutor','Espécie','Material','Origem','Cliente externo','Pet Love','Urgente','Etapa atual','Etapas concluídas','Dia','Prazo','Status','Entrada'];
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lines=[head.join(';')].concat(rows.map(a=>{const st=amEtapas(a);return [a.numero_registro,a.numero_hf,a.nome_paciente,a.tutor,a.especie,a.tipo_material,(a.origem==='externo'?'Externo':'Alpha'),a.cliente_externo,(a.pet_love?'Sim':''),(a.urgente?'Sim':''),(st.finalizado?'Finalizado':st.atualNome),st.done+'/'+STAGE_NAMES.length,st.dia,st.meta,st.cortxt.replace(/^[^ ]+ /,''),(a.data_entrada||'').slice(0,10)].map(q).join(';');}));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='amostras_histotecnica.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+window.exportAmostrasCSV=exportAmostrasCSV;
+// filtros de origem/status da aba Amostras (selects)
+function onHtFilter(ev){ if(ev.target.id==='htorigem'){histotecOrig=ev.target.value; renderHistotec();} else if(ev.target.id==='htstatus'){histotecStat=ev.target.value; renderHistotec();} }
 // true enquanto o cursor está numa BUSCA (não deixar o auto-refresh apagar o que se digita)
 function typingSearch(){const a=document.activeElement;return !!(a&&(a.id==='htsearch'||a.id==='wlsearch'));}
 // busca da aba Histotécnica: mostra/esconde linhas (com e sem acento), sem re-render (não perde o foco)
