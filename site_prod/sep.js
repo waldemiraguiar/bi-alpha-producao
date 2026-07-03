@@ -111,6 +111,14 @@
     return { st: 'noprazo', dl };
   }
 
+  /* ---- HISTOTÉCNICA: só David e Eduardo RECEBEM e conduzem as etapas seguintes (tem amostra/insuficiente).
+     O resto da equipe SEPARA, mas não recebe. Decisão Wal 03/jul (gente de outro setor estava recebendo). ---- */
+  const HISTO_CATS = ['citopatologia', 'histologia', 'necropsia'];   // = setor Histotécnica
+  const HISTO_REC = ['david', 'eduardo'];                            // quem pode receber/confirmar aqui
+  const ehHistotecnica = cat => HISTO_CATS.includes(norm(cat));
+  const podeReceberHisto = () => { const n = norm(me()); return HISTO_REC.some(x => n === x || n.split(/[\s.]+/).includes(x)); };
+  const travadoHisto = it => ehHistotecnica(it && it.cat) && !podeReceberHisto();   // este item está travado p/ mim?
+
   /* ---- rede ---- */
   function ingest(j) { marks = {}; (j.marks || []).forEach(m => marks[m.chave] = { ...m, ts_sep: m.ts_sep != null ? Number(m.ts_sep) : m.ts_sep }); descartesList = (j.descartes || []).map(d => ({ ...d, ts: d.ts != null ? Number(d.ts) : d.ts })); descartes = new Set(descartesList.map(d => d.chave)); }
   async function loadMarks() {
@@ -320,6 +328,7 @@
   async function doInsuf(it) {
     if (teamMode && !me()) { openLogin(); return; }
     if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
+    if (travadoHisto(it)) { alert('🔒 Histotécnica: só David e Eduardo confirmam a amostra.'); return; }
     // insuficiente liberado p/ todo mundo logado (sem permissão granular) — decisão Wal 01/jul
     if (!confirm('Marcar AMOSTRA INSUFICIENTE?\n\nEncerra a amostra (depois de recebida) e abre a pendência "📧 Avisar cliente" (nova amostra), que fica piscando até alguém confirmar.')) return;
     const ok = await post({ acao: 'insuf', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
@@ -329,6 +338,7 @@
   async function doSuficiente(it) {
     if (teamMode && !me()) { openLogin(); return; }
     if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
+    if (travadoHisto(it)) { alert('🔒 Histotécnica: só David e Eduardo confirmam a amostra.'); return; }
     const ok = await post({ acao: 'suficiente', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
     if (ok) render();
   }
@@ -365,6 +375,7 @@
   async function step(acao, chave, confirmMsg) {
     if (teamMode && !me()) { openLogin(); return; }
     if ((acao === 'receber' || acao === 'enviar') && !canRec()) { alert('Você entrou como time de SEPARAÇÃO. Só o time de Recebidos dá o recebido — toque em "trocar" pra entrar como recebidos.'); return; }
+    if (acao === 'receber') { const it = itens().find(x => chaveOf(x) === chave); if (it && travadoHisto(it)) { alert('🔒 Histotécnica: só David e Eduardo recebem material (Citopatologia, Histologia e Necrópsia).'); return; } }
     if ((acao === 'enviar' || acao === 'receber') && !me()) { alert('Selecione o seu nome no topo antes.'); return; }
     if (confirmMsg && !confirm(confirmMsg)) return;
     if (await post({ acao, chave, por: me() })) render();
@@ -423,12 +434,14 @@
     let b2;
     if (received) b2 = `<span class="step done rec" title="por ${esc2(m.por_receb || '')}">✓ Recebido</span>`;
     else if (!separated) b2 = `<span class="step wait">2 · Receber</span>`;             // só libera após separar
+    else if (travadoHisto(it)) b2 = `<span class="step lock" title="Histotécnica: só David e Eduardo recebem">🔒 Receber</span>`;
     else if (canRec()) b2 = `<button class="sepbtn rec" data-act="receber" data-k="${k}">2 · Receber</button>`;
     else b2 = `<span class="step lock" title="entre como time de Recebidos">🔒 Receber</span>`;
     // 3º/4º passo — depois de RECEBER, confirma "tem amostra?": ✅ Suficiente (finaliza) OU 🚫 Insuficiente (avisar).
     // Antes de receber fica apagado (off) com a dica do porquê.
     let b3;
-    if (received && canInsuf()) b3 = `<button class="sepbtn sufi" data-act="suficiente" data-k="${k}" title="tem amostra, tudo certo — finaliza e limpa da fila na hora"><span>✅ Tem amostra</span><small>suficiente · finaliza</small></button><button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="não tem amostra / insuficiente — avisa o cliente (recoleta)"><span>🚫 Sem amostra</span><small>insuficiente · avisar</small></button>`;
+    if (received && travadoHisto(it)) { const why = 'Histotécnica: só David e Eduardo confirmam a amostra'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-k="${k}" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Tem amostra?</span><small>🔒 David/Eduardo</small></button>`; }
+    else if (received && canInsuf()) b3 = `<button class="sepbtn sufi" data-act="suficiente" data-k="${k}" title="tem amostra, tudo certo — finaliza e limpa da fila na hora"><span>✅ Tem amostra</span><small>suficiente · finaliza</small></button><button class="sepbtn insuf" data-act="insuf" data-k="${k}" title="não tem amostra / insuficiente — avisa o cliente (recoleta)"><span>🚫 Sem amostra</span><small>insuficiente · avisar</small></button>`;
     else { const why = received ? 'Entre com seu login pra confirmar' : 'Libera só depois de Separar e Receber'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-k="${k}" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Tem amostra?</span><small>${received ? '👤 faça login' : 'após receber'}</small></button>`; }
     // prazo / atraso: mostra a IDADE (dias parada) quando 1 dia+ ; senão o horário do corte de hoje
     const dias = it.dias || 0;
