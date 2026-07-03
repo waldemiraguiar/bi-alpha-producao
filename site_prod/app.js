@@ -202,7 +202,7 @@ function onSearch(ev){if(ev.target.id!=='wlsearch')return;
   filterWL();}
 // ORDEM das abas (nomes/trechos na ordem desejada; vazio = ordem padrão por gravidade).
 // EXAMES URGENTES é sempre a 1ª. Preencher conforme o usuário definir.
-const ORDER=['hematologia','bioquimica','uroanalise','parasito','citopatologia','especializados','molecular','imunologia','bacteriologia','necropsia'];
+const ORDER=['hematologia','bioquimica','uroanalise','parasito','citopatologia','histologia','especializados','molecular','imunologia','bacteriologia','necropsia'];
 function catOrderIdx(name){const i=ORDER.findIndex(o=>slug(name).includes(slug(o)));return i<0?99:i;}
 function buildSpecial(list,pred,opts){
   const items=[];
