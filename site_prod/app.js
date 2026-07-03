@@ -16,7 +16,7 @@ const exBaixado=e=>prodBaixados.has(exChave(e));
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
 let prodTravados=[], prodTravadoSet=new Set(), prodTravadosHist=[], prodTravaMap={};
 // 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only da Triagem, cat Cito/Histo/Necrópsia)
-let sepMarksMap={}, histotecQ='';
+let sepMarksMap={}, histotecQ='', histotecSel='';
 // normaliza p/ busca: tira ACENTO + minúsculas (mantém espaços/números) → busca com e sem acento
 const normAcc=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const HISTOTEC_CATS=['citopatologia','histologia','necropsia'];
@@ -62,6 +62,7 @@ function onContentClick(ev){
   const tv=ev.target.closest('.travarbtn'); if(tv){travarEx(tv.dataset);return;}
   const dv=ev.target.closest('.destravabtn'); if(dv){destravarEx(dv.dataset.chave);return;}
   const lb=ev.target.closest('.limpabtn'); if(lb){limparAtrasados();return;}
+  const hp=ev.target.closest('[data-histcat]'); if(hp){histotecSel=hp.dataset.histcat; histotecQ=''; renderHistotec(); return;}
   const hb=ev.target.closest('.histbtn'); if(hb){openHistBaix();return;}}
 // 🔒 travar / destravar exame na Produção (motivo em texto livre)
 async function travarEx(d){
@@ -472,21 +473,42 @@ function histotecStatus(it){
   if(e==='separado'||e==='enviado') return {t:'✓ separado',c:'#7dd3fc',bg:'rgba(2,132,199,.18)'};
   return {t:'⏳ aguardando separar',c:'#f0a020',bg:'rgba(240,160,32,.14)'};
 }
+// linha COMPLETA (mesma matriz da Triagem): nº, paciente+classe+urgente, exame+tutor+vet+clínica, entrada+hora, dias, status
+function histotecRow(it){
+  const st=histotecStatus(it); const pl=isPetlove(it.paciente);
+  const cl=`<span class="hcl">${it.classe==='apoio'?'📦 apoio':'🏠 interno'}</span>`;
+  const urg=it.urgente?'<span class="hurg">URGENTE</span>':'';
+  const hent=it.entrada_dt?String(it.entrada_dt).replace('T',' ').slice(11,16):'';
+  const entrou=it.entrada?`📅 entrou <b>${fmtD(it.entrada)}${hent?' '+hent:''}</b>`:'';
+  const tut=it.tutor?` · tutor <b>${esc(it.tutor)}</b>`:'';
+  const vet=it.vet?` · vet <b>${esc(it.vet)}</b>`:'';
+  const cli=it.clinica?` · 🏥 ${esc(it.clinica)}`:'';
+  const dias=(it.dias||0)>=1?` · <b style="color:var(--amber)">${it.dias}d parada</b>`:'';
+  const ds=escA(normAcc([it.req,it.ano,it.req+'/'+it.ano,it.paciente,it.exame,it.cat,it.tutor,it.vet,it.clinica,st.t].join(' ')));
+  return `<div class="wl histrow" data-s="${ds}">
+    <span class="reg">#${esc(it.req)}<span style="opacity:.5">/${esc(it.ano)}</span></span>
+    <div class="histmain"><div class="pac${pl?' petlove':''}">${esc(it.paciente)}${cl}${urg}${pl?'<span class="plove">PET LOVE</span>':''}</div>
+      <div class="exm"><b style="color:var(--ink)">${esc(it.exame)}</b>${tut}${vet}${cli}</div>
+      <div class="exm">${entrou}${dias}</div></div>
+    <div class="wlact"><span class="db" style="background:${st.bg};color:${st.c};font-size:12.5px">${st.t}</span></div></div>`;
+}
 function renderHistotec(){
-  const itens=histotecItens().slice().sort((a,b)=>(b.dias||0)-(a.dias||0));
-  const byCat={}; itens.forEach(it=>{const c=it.cat||'—';(byCat[c]=byCat[c]||[]).push(it);});
-  const CATORD=['Citopatologia','Histologia','NECRÓPSIA'];
-  const cats=Object.keys(byCat).sort((a,b)=>{const ia=CATORD.findIndex(x=>slug(x)===slug(a)),ib=CATORD.findIndex(x=>slug(x)===slug(b));return (ia<0?9:ia)-(ib<0?9:ib);});
+  const itens=histotecItens();
+  const CATLIST=['Citopatologia','Histologia','NECRÓPSIA'];
+  const byCat={}; CATLIST.forEach(c=>byCat[c]=[]);
+  itens.forEach(it=>{const c=CATLIST.find(x=>slug(x)===slug(it.cat))||it.cat;(byCat[c]=byCat[c]||[]).push(it);});
+  const cats=CATLIST.concat(Object.keys(byCat).filter(c=>!CATLIST.some(x=>slug(x)===slug(c))));
+  const searching=!!histotecQ.trim();
+  if(!histotecSel||!cats.some(c=>slug(c)===slug(histotecSel))) histotecSel=cats.find(c=>(byCat[c]||[]).length)||cats[0];
   const banner=`<div class="urgbanner histotec"><span class="ico">🔬</span><span class="ttl">HISTOTÉCNICA · CONTROLE DE AMOSTRAS — ${num(itens.length)} amostra${itens.length!==1?'s':''} (espelho ao vivo da Triagem)</span></div>`;
-  const busca=`<input id="htsearch" class="wlsearch" style="margin:0 0 12px;width:100%;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº, ano, paciente, exame, categoria, status (com ou sem acento)" value="${escA(histotecQ)}">`;
-  const cards=cats.length?cats.map(c=>{
-    const arr=byCat[c];
-    const rows=arr.map(it=>{const st=histotecStatus(it);const pl=isPetlove(it.paciente);
-      const ds=escA(normAcc([it.req,it.ano,it.req+'/'+it.ano,it.paciente,it.exame,it.cat,st.t].join(' ')));
-      return `<div class="wl" data-s="${ds}"><span class="reg">#${esc(it.req)}<span style="opacity:.5">/${esc(it.ano)}</span></span><div><div class="pac${pl?' petlove':''}">${esc(it.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}</div><div class="exm">${esc(it.exame)} · entrou ${fmtD(it.entrada)}${(it.dias||0)>=1?` · <b style="color:var(--amber)">${it.dias}d parada</b>`:''}</div></div><div class="wlact"><span class="db" style="background:${st.bg};color:${st.c}">${st.t}</span></div></div>`;}).join('');
-    return `<div class="card"><h3><span>${esc(c)} <span class="tag">${arr.length} amostra(s)</span></span></h3><div class="scroll">${rows}</div></div>`;
-  }).join(''):'<div class="card"><div style="color:var(--green);padding:18px;font-size:16px">✓ Nenhuma amostra de Histotécnica em processo agora. 👍</div></div>';
-  document.getElementById('content').innerHTML=banner+busca+`<div class="cgrid histoteccols">${cards}</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only — a separação/recebimento é feita na Triagem (Histotécnica). Atualiza ao vivo.</p><div id="htempty" style="display:none;color:var(--mut);padding:14px">Nada encontrado.</div>`;
+  const busca=`<input id="htsearch" class="wlsearch" style="margin:0 0 10px;width:100%;box-sizing:border-box" placeholder="🔍 buscar em tudo — nº, ano, paciente, exame, categoria, status, tutor, vet (com ou sem acento)" value="${escA(histotecQ)}">`;
+  // pílulas de categoria (mesma regra da Triagem: 0 = verde calmo · com amostra = vermelho piscando) — clicáveis
+  const pills=`<div class="catstrip histotecpills">${cats.map(c=>{const n=(byCat[c]||[]).length;const heat=n>0?'phot':'pzero';const on=(!searching&&slug(c)===slug(histotecSel))?'on':'';return `<div class="catpill ${heat} ${on}" data-histcat="${escA(c)}"><span class="nm">${esc(c)}</span><span class="cc">${n}</span></div>`;}).join('')}</div>`;
+  // linhas: buscando = todas as categorias; senão = só a selecionada
+  const shown=(searching?itens:(byCat[histotecSel]||[])).slice().sort((a,b)=>(b.dias||0)-(a.dias||0));
+  const rowsHtml=shown.length?shown.map(histotecRow).join(''):`<div style="color:var(--green);padding:16px;font-size:15px">✓ Nenhuma amostra em ${searching?'busca':esc(histotecSel)} agora. 👍</div>`;
+  const titulo=searching?`🔎 Resultados da busca`:`${esc(histotecSel)}`;
+  document.getElementById('content').innerHTML=banner+busca+pills+`<div class="card"><h3><span>${titulo} <span class="tag">${shown.length} amostra(s) · clique numa categoria acima</span></span></h3><div class="scroll" style="max-height:none">${rowsHtml}</div></div><div id="htempty" style="display:none;color:var(--mut);padding:14px">Nada encontrado.</div><p class="note" style="padding:8px 4px">🔬 Espelho read-only — a separação/recebimento é feita na Triagem (Histotécnica). Atualiza ao vivo.</p>`;
   if(histotecQ) filterHistotec();
 }
 // true enquanto o cursor está numa BUSCA (não deixar o auto-refresh apagar o que se digita)
@@ -495,8 +517,6 @@ function typingSearch(){const a=document.activeElement;return !!(a&&(a.id==='hts
 function filterHistotec(){
   const t=normAcc(histotecQ.trim()); let vis=0;
   document.querySelectorAll('#content .wl').forEach(r=>{const s=r.dataset.s||'';const ok=!t||s.includes(t);r.style.display=ok?'':'none';if(ok)vis++;});
-  // esconde cards que ficaram sem nenhuma linha visível
-  document.querySelectorAll('#content .histoteccols .card').forEach(cd=>{const any=[...cd.querySelectorAll('.wl')].some(r=>r.style.display!=='none');cd.style.display=(t&&!any)?'none':'';});
   const em=document.getElementById('htempty'); if(em) em.style.display=(t&&vis===0)?'':'none';
 }
 function renderActive(){
