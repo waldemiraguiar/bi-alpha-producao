@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagnóstico · Lab Alpha</title>
+<style>
+ body{font-family:system-ui,Arial,sans-serif;background:#0b1220;color:#e6edf6;margin:0;padding:18px;font-size:18px}
+ h1{font-size:22px;margin:0 0 6px}
+ .sub{color:#9fb0c8;margin:0 0 16px;font-size:15px}
+ .row{background:#131c2e;border-radius:12px;padding:14px 16px;margin:10px 0;border:1px solid #24304a}
+ .t{font-weight:700;font-size:16px}
+ .r{font-size:20px;margin-top:6px;font-weight:700}
+ .ok{color:#34d399}.bad{color:#f87171}.wait{color:#fbbf24}
+ .d{color:#9fb0c8;font-size:13px;margin-top:4px;word-break:break-all}
+ #resumo{font-size:22px;font-weight:800;padding:16px;border-radius:12px;text-align:center;margin-top:16px}
+</style></head><body>
+<h1>🩺 Diagnóstico do Painel</h1>
+<p class="sub">Abrindo… tire uma FOTO desta tela quando os testes terminarem e mande pro Wal.</p>
+<div class="row"><div class="t">1. Biblioteca do Supabase (local)</div><div class="r wait" id="r1">testando…</div><div class="d" id="d1"></div></div>
+<div class="row"><div class="t">2. LER dados na nuvem (REST)</div><div class="r wait" id="r2">testando…</div><div class="d" id="d2"></div></div>
+<div class="row"><div class="t">3. GRAVAR na nuvem (o que o "separar" faz)</div><div class="r wait" id="r3">testando…</div><div class="d" id="d3"></div></div>
+<div class="row"><div class="t">4. Conexão AO VIVO (WebSocket / Realtime)</div><div class="r wait" id="r4">testando…</div><div class="d" id="d4"></div></div>
+<div id="resumo" class="wait">Rodando testes…</div>
+
+<script src="supabase-js.min.js"></script>
+<script>
+const URL="https://lrwjcdvporaivxvfuiwt.supabase.co";
+const KEY="sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8";
+const set=(id,cls,txt,d)=>{const e=document.getElementById(id);e.className="r "+cls;e.textContent=txt;if(d!=null)document.getElementById(id.replace("r","d")).textContent=d;};
+const res={};
+(async()=>{
+  // 1) lib local
+  if(window.supabase&&window.supabase.createClient){set("r1","ok","✅ OK");res.lib=1;}
+  else{set("r1","bad","❌ NÃO carregou");res.lib=0;}
+
+  // 2) LER (REST)
+  try{const t=performance.now();
+    const x=await fetch(URL+"/rest/v1/sep_marks?select=chave&limit=1",{headers:{apikey:KEY,Authorization:"Bearer "+KEY}});
+    const ms=Math.round(performance.now()-t);
+    if(x.ok){set("r2","ok","✅ OK ("+ms+" ms)");res.read=1;}
+    else{set("r2","bad","❌ HTTP "+x.status+" ("+ms+" ms)");res.read=0;}
+  }catch(e){set("r2","bad","❌ FALHOU","não alcançou o servidor: "+e.message);res.read=0;}
+
+  // 3) GRAVAR (upsert healthcheck + apaga)
+  try{const t=performance.now();
+    const hc="zzz_diag_"+Math.floor(Math.random()*1e6);
+    const x=await fetch(URL+"/rest/v1/sep_marks",{method:"POST",headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({chave:hc,estado:"",por:"diag"})});
+    const ms=Math.round(performance.now()-t);
+    if(x.ok||x.status===201){set("r3","ok","✅ OK ("+ms+" ms)");res.write=1;
+      fetch(URL+"/rest/v1/sep_marks?chave=eq."+hc,{method:"DELETE",headers:{apikey:KEY,Authorization:"Bearer "+KEY}});}
+    else{set("r3","bad","❌ HTTP "+x.status+" ("+ms+" ms)");res.write=0;}
+  }catch(e){set("r3","bad","❌ FALHOU","não gravou: "+e.message);res.write=0;}
+
+  // 4) WebSocket Realtime
+  await new Promise(done=>{
+    try{const ws=new WebSocket("wss://lrwjcdvporaivxvfuiwt.supabase.co/realtime/v1/websocket?apikey="+KEY+"&vsn=1.0.0");
+      const to=setTimeout(()=>{set("r4","bad","❌ TIMEOUT (bloqueado?)","a rede não deixou abrir o WebSocket em 10s");res.ws=0;try{ws.close()}catch(_){ }done();},10000);
+      ws.onopen=()=>{clearTimeout(to);set("r4","ok","✅ OK conectou");res.ws=1;ws.close();done();};
+      ws.onerror=()=>{clearTimeout(to);set("r4","bad","❌ ERRO ao abrir","a rede bloqueia WebSocket");res.ws=0;done();};
+    }catch(e){set("r4","bad","❌ ERRO",e.message);res.ws=0;done();}
+  });
+
+  const rz=document.getElementById("resumo");
+  const bad=Object.keys(res).filter(k=>!res[k]);
+  if(bad.length===0){rz.className="ok";rz.textContent="✅ TUDO OK NESTA MÁQUINA";}
+  else{rz.className="bad";rz.textContent="❌ FALHOU: "+bad.map(k=>({lib:"biblioteca",read:"leitura",write:"gravação",ws:"aovivo"}[k])).join(", ");}
+})();
+</script>
+</body></html>
