@@ -151,8 +151,6 @@
     try {
       if (useSupa()) {
         const a = payload.acao, k = payload.chave;
-        // A gravação de fato (1 tentativa). O auto-retry abaixo chama isso até 3x.
-        const gravarSupa = async () => {
         if (a === 'separar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'separado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: payload.no_prazo !== false, corte: payload.corte || null, obs: (marks[k] ? (marks[k].obs || null) : null) });
         else if (a === 'enviar') await window.SUPA.updateMark(k, { estado: 'enviado', por_env: payload.por || 'equipe', ts_env: Date.now(), data_env: new Date().toISOString().slice(0, 10) });
         else if (a === 'receber') await window.SUPA.updateMark(k, { estado: 'recebido', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
@@ -166,25 +164,13 @@
         else if (a === 'destravar') await window.SUPA.updateMark(k, { estado: 'destravado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
         else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
         else if (a === 'desfazer') await window.SUPA.delMark(k);
-        };
-        // AUTO-RETRY com TIMEOUT: o problema real era a gravação PENDURAR quando a internet
-        // do laboratório "estola" (não cai, mas trava a conexão) → botão congelava ("travando").
-        // Cada tentativa agora tem no MÁX 3s (Promise.race). Se pendurar, NÃO congela: aborta a espera,
-        // tenta de novo (até 3x) e, se a net estiver mesmo fora, mostra a mensagem clara.
-        const comTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout de rede')), ms))]);
-        let ultimoErro = null;
-        for (let tent = 1; tent <= 3; tent++) {
-          try { await comTimeout(gravarSupa(), 3000); ultimoErro = null; break; }
-          catch (e) { ultimoErro = e; if (tent < 3) await new Promise(r => setTimeout(r, 300)); }
-        }
-        if (ultimoErro) { alert('📶 Sem internet agora — sua marcação não foi salva. Toque de novo em alguns segundos.'); return false; }
         touch(); await loadMarks(); return true;
       }
       const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, senha: window.__pwd }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { alert(j.erro || 'Não foi possível salvar.'); return false; }
       touch(); ingest(j); return true;
-    } catch (e) { alert('📶 Sem internet agora — sua marcação não foi salva. Toque de novo em alguns segundos.'); return false; }
+    } catch (e) { alert('Erro ao salvar (Supabase).'); return false; }
   }
   // apagar não-separados (unitário ou lote) — SÓ ADMIN. itens = objetos completos; undo passa só chaves
   async function descartar(itens, undo) {
