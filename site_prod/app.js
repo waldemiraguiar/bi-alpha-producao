@@ -51,18 +51,29 @@ function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro
 async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;}); sepMarksMap={}; (s.marks||[]).forEach(m=>{if(m&&m.chave)sepMarksMap[String(m.chave)]=m;});}catch(e){} try{amostrasEsp=await window.SUPA.loadAmostras();}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
+// AUTO-RETRY: um engasgo de internet (1-2s) não pode travar o colaborador.
+// Tenta a gravação no Supabase até 3x (pausas 0,8s/1,6s). Quase todo engasgo passa sem ninguém perceber.
+async function tentarGravar(fn){
+  let erro=null;
+  for(let t=1;t<=3;t++){ try{ await fn(); return null; } catch(e){ erro=e; if(t<3) await new Promise(r=>setTimeout(r,t*800)); } }
+  return erro;
+}
+const SEM_NET='📶 Sem internet agora — sua ação não foi salva. Toque de novo em alguns segundos.';
 async function post(payload,errMsg){
   try{
     if(window.SUPA&&window.SUPA.ok){
       const tbl=payload.tipo==='baixa'?'urg_baixas':'urg_lista';
-      if(payload.acao==='remove') await window.SUPA.delUrg(tbl,payload.registro);
-      else await window.SUPA.upsertUrg(tbl,{registro:String(payload.registro),paciente:payload.paciente||'',exame:payload.exame||'',por:payload.por||'equipe',ts:Date.now()});
+      const erro=await tentarGravar(async()=>{
+        if(payload.acao==='remove') await window.SUPA.delUrg(tbl,payload.registro);
+        else await window.SUPA.upsertUrg(tbl,{registro:String(payload.registro),paciente:payload.paciente||'',exame:payload.exame||'',por:payload.por||'equipe',ts:Date.now()});
+      });
+      if(erro){ alert(SEM_NET); return; }
       await loadManual(); renderActive(); return;
     }
     const r=await fetch(URG_API,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({...payload,senha:window.__pwd})});
     if(!r.ok){alert(errMsg);return;} setOverlays(await r.json()); renderActive();
-  }catch(e){alert('Erro de conexão.');}
+  }catch(e){alert(SEM_NET);}
 }
 function toggleUrg(reg,pac,exm,isOn){post({tipo:'urgente',registro:reg,paciente:pac,exame:exm,acao:isOn?'remove':'add'},'Não foi possível marcar.');}
 function darBaixa(reg,pac,exm,isManual){
@@ -88,14 +99,16 @@ async function travarEx(d){
   const chave='prod:'+String(d.reg)+'|'+(d.exm||'');
   const por=(typeof __op!=='undefined'&&__op&&__op.nome)||'produção';
   const prev=prodTravaMap[chave]; const vezes=((prev&&Number(prev.corte))||0)+1;   // quantas vezes já travou
-  try{ await window.SUPA.upsertMark({chave,req:d.reg,exame:d.exm||'',cat:d.cat||'',paciente:d.pac||'',estado:'travado',por,obs:(motivo||'').trim()||null,ts_sep:Date.now(),corte:vezes,por_receb:null,ts_receb:null}); await loadManual(); buildTabs(); renderActive(); }
-  catch(e){ alert('Não consegui travar (a coluna obs já foi criada no banco?).'); }
+  const erro=await tentarGravar(()=>window.SUPA.upsertMark({chave,req:d.reg,exame:d.exm||'',cat:d.cat||'',paciente:d.pac||'',estado:'travado',por,obs:(motivo||'').trim()||null,ts_sep:Date.now(),corte:vezes,por_receb:null,ts_receb:null}));
+  if(erro){ alert(SEM_NET); return; }
+  await loadManual(); buildTabs(); renderActive();
 }
 async function destravarEx(chave){
   if(!confirm('Destravar este exame? Volta pra fila da Produção (fica no histórico).')) return;
   const por=(typeof __op!=='undefined'&&__op&&__op.nome)||'produção';
-  try{ await window.SUPA.updateMark(chave,{estado:'destravado',por_receb:por,ts_receb:Date.now()}); await loadManual(); buildTabs(); renderActive(); }   // arquiva (não apaga) — guarda o histórico
-  catch(e){ alert('Não consegui destravar.'); }
+  const erro=await tentarGravar(()=>window.SUPA.updateMark(chave,{estado:'destravado',por_receb:por,ts_receb:Date.now()}));   // arquiva (não apaga) — guarda o histórico
+  if(erro){ alert(SEM_NET); return; }
+  await loadManual(); buildTabs(); renderActive();
 }
 // --- LOGIN do colaborador p/ baixa de exame (mesma equipe da Triagem) ---
 let __op=null, __opTimer=null;            // {nome, senha, papel} — sessão na memória; zera no auto-reload da meia-noite
