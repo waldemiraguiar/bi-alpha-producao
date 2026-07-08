@@ -450,7 +450,9 @@ body{font-family:'Inter',sans-serif;background:
   <div id="sep" class="sep" style="display:none"></div>
   <div id="cli" class="sep" style="display:none"></div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Supabase lib HOSPEDADA LOCAL (mesmo domínio do site) — NÃO depende mais do jsdelivr,
+     que a rede de alguns laboratórios bloqueia/afunila (causa do travamento 08/jul). -->
+<script src="supabase-js.min.js"></script>
 <script src="supa.js"></script>
 <script src="app.js"></script>
 <script src="sep.js"></script>
