@@ -140,80 +140,37 @@
   const travadoHisto = it => ehHistotecnica(it && it.cat) && !podeReceberHisto();   // este item está travado p/ mim?
 
   /* ---- rede ---- */
-  function ingest(j) { marks = {}; (j.marks || []).forEach(m => marks[m.chave] = { ...m, ts_sep: m.ts_sep != null ? Number(m.ts_sep) : m.ts_sep }); descartesList = (j.descartes || []).map(d => ({ ...d, ts: d.ts != null ? Number(d.ts) : d.ts })); descartes = new Set(descartesList.map(d => d.chave)); reconcile(); }
+  function ingest(j) { marks = {}; (j.marks || []).forEach(m => marks[m.chave] = { ...m, ts_sep: m.ts_sep != null ? Number(m.ts_sep) : m.ts_sep }); descartesList = (j.descartes || []).map(d => ({ ...d, ts: d.ts != null ? Number(d.ts) : d.ts })); descartes = new Set(descartesList.map(d => d.chave)); }
   async function loadMarks() {
     try {
       if (useSupa()) { ingest(await window.SUPA.loadSep()); return; }
       const r = await fetch('/api/overlays?_=' + Date.now()); if (r.ok) ingest(await r.json());
     } catch (e) {}
   }
-
-  // ===== OFFLINE-FIRST: clique salva LOCAL na hora + carteiro sobe pra nuvem sozinho =====
-  const outboxOn = () => (typeof window !== 'undefined' && window.OUTBOX);
-  let pendingMap = {};   // chave -> mark otimista (ou {__del:true}) enquanto NÃO sincroniza
-  // reaplica os cliques ainda pendentes POR CIMA do que veio do servidor (leitura atrasada não desfaz clique)
-  function reconcile() { for (const k in pendingMap) { const v = pendingMap[k]; if (v && v.__del) delete marks[k]; else if (v) marks[k] = v; } }
-  // monta, do clique, (a) o mark otimista p/ a tela e (b) a INSTRUÇÃO EXATA de envio (determinística → reenviar é idêntico)
-  function buildOp(payload) {
-    const a = payload.acao, k = payload.chave, prev = marks[k] || {}, por = payload.por || 'equipe', now = Date.now();
-    const base = { chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '' };
-    const up = row => ({ optMark: row, instr: { op: 'upsert', row } });
-    const pat = patch => ({ optMark: { ...prev, ...patch }, instr: { op: 'update', chave: k, patch } });
-    if (a === 'separar') return up({ ...base, estado: 'separado', por, ts_sep: now, no_prazo: payload.no_prazo !== false, corte: payload.corte || null, obs: prev.obs || null });
-    if (a === 'enviar') return pat({ estado: 'enviado', por_env: por, ts_env: now, data_env: new Date().toISOString().slice(0, 10) });
-    if (a === 'receber') return pat({ estado: 'recebido', por_receb: por, ts_receb: now });
-    if (a === 'suficiente') return pat({ estado: 'suficiente' });
-    if (a === 'insuf') return up({ ...base, estado: 'insuficiente', por, ts_sep: now, no_prazo: null, corte: null, obs: prev.obs || null });
-    if (a === 'avisar') return pat({ estado: 'insuficiente_avisado', por_receb: por, ts_receb: now });
-    if (a === 'desavisar') return pat({ estado: 'insuficiente', por_receb: null, ts_receb: null });
-    if (a === 'travar') return up({ ...base, estado: 'travado', por, ts_sep: now, no_prazo: null, corte: (((prev && prev.corte) || 0) + 1), obs: (payload.obs != null ? payload.obs : (prev.obs || null)), por_receb: null, ts_receb: null });
-    if (a === 'destravar') return pat({ estado: 'destravado', por_receb: por, ts_receb: now });
-    if (a === 'voltar') { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(prev.estado); if (p <= 0) return { optMark: null, instr: { op: 'delete', chave: k } }; return pat({ estado: ordem[p - 1] }); }
-    if (a === 'desfazer') return { optMark: null, instr: { op: 'delete', chave: k } };
-    return { optMark: prev, instr: null };
-  }
-  // o ENVIO REAL pro Supabase (o carteiro chama isto por op da fila)
-  async function serverWrite(instr) {
-    if (!instr) return;
-    if (instr.op === 'upsert') await window.SUPA.upsertMark(instr.row);
-    else if (instr.op === 'update') await window.SUPA.updateMark(instr.chave, instr.patch);
-    else if (instr.op === 'delete') await window.SUPA.delMark(instr.chave);
-  }
-  // reconstrói o pendingMap a partir da fila (fonte da verdade) e atualiza tela + selo
-  function refreshPending() {
-    if (!outboxOn()) return;
-    window.OUTBOX.pending().then(ops => {
-      pendingMap = {};
-      ops.sort((a, b) => a.ts - b.ts).forEach(o => { pendingMap[o.chave] = o.optDel ? { __del: true } : o.optMark; });
-      reconcile();
-      const s = document.getElementById('seloPend'); if (s) { const n = window.OUTBOX.count(); s.textContent = n ? ('⏳ ' + n + ' p/ enviar') : '✅ salvo'; s.style.cssText = 'font-size:12px;font-weight:800;padding:3px 9px;border-radius:9px;white-space:nowrap;' + (n ? 'color:#111;background:#fbbf24' : 'color:#34d399;background:rgba(52,211,153,.12)'); }
-      if (MODE === 'sep' && !typingObs()) render();
-    }).catch(() => {});
-  }
-  function bootOutbox() { if (!outboxOn() || bootOutbox._done) return; bootOutbox._done = true; window.OUTBOX.init(op => serverWrite(op.instr)); window.OUTBOX.onChange(() => refreshPending()); }
-
   async function post(payload) {
-    const k = payload.chave;
-    // OFFLINE-FIRST: aplica na tela NA HORA + enfileira (sobe sozinho). Nunca trava, nunca perde.
-    if (outboxOn() && useSupa()) {
-      try {
-        bootOutbox();
-        const { optMark, instr } = buildOp(payload);
-        if (optMark === null) delete marks[k]; else marks[k] = optMark;
-        pendingMap[k] = (optMark === null) ? { __del: true } : optMark;
-        await window.OUTBOX.enqueue({ kind: payload.acao, chave: k, instr, optDel: optMark === null, optMark });
-        touch(); render();
-        return true;
-      } catch (e) { /* se o IndexedDB falhar, cai no modo direto abaixo */ }
-    }
-    // FALLBACK (sem outbox/IndexedDB): grava direto (comportamento antigo)
     try {
-      if (useSupa()) { const { instr } = buildOp(payload); await serverWrite(instr); touch(); await loadMarks(); return true; }
+      if (useSupa()) {
+        const a = payload.acao, k = payload.chave;
+        if (a === 'separar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'separado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: payload.no_prazo !== false, corte: payload.corte || null, obs: (marks[k] ? (marks[k].obs || null) : null) });
+        else if (a === 'enviar') await window.SUPA.updateMark(k, { estado: 'enviado', por_env: payload.por || 'equipe', ts_env: Date.now(), data_env: new Date().toISOString().slice(0, 10) });
+        else if (a === 'receber') await window.SUPA.updateMark(k, { estado: 'recebido', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
+        else if (a === 'suficiente') await window.SUPA.updateMark(k, { estado: 'suficiente' });   // colunas por_conf/ts_conf não existem no sep_marks; por_receb já guarda quem recebeu
+        else if (a === 'insuf') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'insuficiente', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: null, obs: (marks[k] ? (marks[k].obs || null) : null) });
+        else if (a === 'avisar') await window.SUPA.updateMark(k, { estado: 'insuficiente_avisado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
+        else if (a === 'desavisar') await window.SUPA.updateMark(k, { estado: 'insuficiente', por_receb: null, ts_receb: null });
+        // TRAVAR: ts_sep = quando travou AGORA; corte = quantas VEZES já travou (contador); limpa a liberação anterior
+        else if (a === 'travar') await window.SUPA.upsertMark({ chave: k, req: payload.req, ano: payload.ano, codex: payload.codex, exame: payload.exame || '', cat: payload.cat || '', classe: payload.classe || '', paciente: payload.paciente || '', tutor: payload.tutor || '', vet: payload.vet || '', estado: 'travado', por: payload.por || 'equipe', ts_sep: Date.now(), no_prazo: null, corte: (((marks[k] && marks[k].corte) || 0) + 1), obs: (payload.obs != null ? payload.obs : (marks[k] ? (marks[k].obs || null) : null)), por_receb: null, ts_receb: null });
+        // DESTRAVAR: NÃO apaga — arquiva (estado=destravado) guardando QUEM liberou e QUANDO (histórico)
+        else if (a === 'destravar') await window.SUPA.updateMark(k, { estado: 'destravado', por_receb: payload.por || 'equipe', ts_receb: Date.now() });
+        else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
+        else if (a === 'desfazer') await window.SUPA.delMark(k);
+        touch(); await loadMarks(); return true;
+      }
       const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, senha: window.__pwd }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { alert(j.erro || 'Não foi possível salvar.'); return false; }
       touch(); ingest(j); return true;
-    } catch (e) { alert('Não consegui salvar agora. Tente de novo em alguns segundos.'); return false; }
+    } catch (e) { alert('Erro ao salvar (Supabase).'); return false; }
   }
   // apagar não-separados (unitário ou lote) — SÓ ADMIN. itens = objetos completos; undo passa só chaves
   async function descartar(itens, undo) {
@@ -496,7 +453,6 @@
         <button class="atualizar-btn" id="sepAtualizar" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>
       </div>
       <div class="sepme">
-        <span id="seloPend" title="cliques salvos no computador esperando subir pra nuvem" style="font-size:12px;font-weight:800;padding:3px 9px;border-radius:9px;white-space:nowrap;${outboxOn() && window.OUTBOX.count() ? 'color:#111;background:#fbbf24' : 'color:#34d399;background:rgba(52,211,153,.12)'}">${outboxOn() && window.OUTBOX.count() ? ('⏳ ' + window.OUTBOX.count() + ' p/ enviar') : '✅ salvo'}</span>
         <button class="adminbtn ${isAdmin() ? 'on' : ''}" id="adminbtn" title="apagar/restaurar não-separados">${isAdmin() ? '🔓 Admin' : '🔒 Admin'}</button>
         ${eqbtn}${opbox}
       </div>
@@ -977,8 +933,7 @@
     if (timer) { clearInterval(timer); timer = null; }
     if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
     if (m === 'sep') {
-      bootOutbox();                                  // liga a fila local + carteiro (sobe pendentes ao entrar)
-      await loadTeam(); await loadMarks(); refreshPending(); render();
+      await loadTeam(); await loadMarks(); render();
       if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep' && !typingObs()) { await loadMarks(); render(); } });
       else timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden && !typingObs()) { await loadMarks(); render(); } }, 60000);
       // logout automático por inatividade (só faz sentido no modo equipe)
