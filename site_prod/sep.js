@@ -167,12 +167,15 @@
         else if (a === 'voltar') { const m = marks[k]; if (m) { const ordem = ['separado', 'enviado', 'recebido', 'suficiente']; const p = ordem.indexOf(m.estado); if (p <= 0) await window.SUPA.delMark(k); else await window.SUPA.updateMark(k, { estado: ordem[p - 1] }); } }
         else if (a === 'desfazer') await window.SUPA.delMark(k);
         };
-        // AUTO-RETRY: um engasgo de internet (1-2s) não pode travar o colaborador.
-        // Tenta até 3x com pausas curtas (0,8s, 1,6s). Quase todo engasgo passa na 2ª/3ª — sem ninguém perceber.
+        // AUTO-RETRY com TIMEOUT: o problema real era a gravação PENDURAR quando a internet
+        // do laboratório "estola" (não cai, mas trava a conexão) → botão congelava ("travando").
+        // Cada tentativa agora tem no MÁX 3s (Promise.race). Se pendurar, NÃO congela: aborta a espera,
+        // tenta de novo (até 3x) e, se a net estiver mesmo fora, mostra a mensagem clara.
+        const comTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout de rede')), ms))]);
         let ultimoErro = null;
         for (let tent = 1; tent <= 3; tent++) {
-          try { await gravarSupa(); ultimoErro = null; break; }
-          catch (e) { ultimoErro = e; if (tent < 3) await new Promise(r => setTimeout(r, tent * 800)); }
+          try { await comTimeout(gravarSupa(), 3000); ultimoErro = null; break; }
+          catch (e) { ultimoErro = e; if (tent < 3) await new Promise(r => setTimeout(r, 300)); }
         }
         if (ultimoErro) { alert('📶 Sem internet agora — sua marcação não foi salva. Toque de novo em alguns segundos.'); return false; }
         touch(); await loadMarks(); return true;
