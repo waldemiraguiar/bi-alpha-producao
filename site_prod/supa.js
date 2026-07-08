@@ -12,7 +12,10 @@
     ok: !!SB,
     // ---- leitura ----
     async loadCli() { if (!SB) return { flags: [], cli_baixas: [] }; const [f, b] = await Promise.all([SB.from('cli_flags').select('*'), SB.from('cli_baixas').select('*')]); return { flags: arr(f), cli_baixas: arr(b) }; },
-    async loadSep() { if (!SB) return { marks: [], descartes: [] }; const [m, d] = await Promise.all([SB.from('sep_marks').select('*'), SB.from('sep_descartes').select('*')]); return { marks: arr(m), descartes: arr(d) }; },
+    // ⚠️ BUG 08/jul: o Supabase corta o select em 1000 linhas. Quando sep_marks passou de 1000,
+    // o painel parava de carregar as marcas mais novas -> o item aparecia "não separado" mesmo com
+    // a marca gravada (separar/receber "não fazia nada" / "voltava pra separar"). FIX: PAGINAR.
+    async loadSep() { if (!SB) return { marks: [], descartes: [] }; const page = async (t) => { let all = [], from = 0; for (let g = 0; g < 100; g++) { const { data, error } = await SB.from(t).select('*').range(from, from + 999); if (error) break; const c = data || []; all = all.concat(c); if (c.length < 1000) break; from += 1000; } return all; }; const [m, d] = await Promise.all([page('sep_marks'), page('sep_descartes')]); return { marks: m, descartes: d }; },
     async loadUrg() { if (!SB) return { urgentes: [], baixas: [] }; const [l, b] = await Promise.all([SB.from('urg_lista').select('*'), SB.from('urg_baixas').select('*')]); return { urgentes: arr(l), baixas: arr(b) }; },
     // ---- baixa de EXAME na Produção (PIN admin) ----
     async loadProd() { if (!SB) return []; try { const r = await SB.from('prod_baixas').select('*'); return arr(r); } catch (e) { return []; } },
