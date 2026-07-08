@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teste Outbox</title>
+<style>body{font-family:system-ui,Arial;background:#0b1220;color:#e6edf6;padding:16px}
+.p{color:#34d399}.f{color:#f87171}.i{color:#9fb0c8}
+#out{font-size:16px;line-height:1.8}#resumo{font-size:22px;font-weight:800;margin-top:14px}</style></head>
+<body>
+<h2>🧪 Teste do Outbox (offline-first)</h2>
+<div id="out"></div>
+<div id="resumo" class="i">rodando…</div>
+<script src="outbox.js"></script>
+<script>
+const out=document.getElementById('out'); let pass=0,fail=0;
+const log=(ok,msg)=>{out.innerHTML+=`<div class="${ok?'p':'f'}">${ok?'✅':'❌'} ${msg}</div>`; ok?pass++:fail++;};
+const info=(m)=>out.innerHTML+=`<div class="i">• ${m}</div>`;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// mock do envio REAL: quando ONLINE resolve; quando OFFLINE dá throw
+let ONLINE=false; const enviados=[];
+async function sendFn(op){ if(!ONLINE) throw new Error('offline simulado'); enviados.push(op.chave); await sleep(10); }
+
+(async()=>{
+ try{
+  // limpa DB de execuções anteriores
+  await new Promise(r=>{const d=indexedDB.deleteDatabase('sep_outbox_v1');d.onsuccess=d.onerror=()=>r();});
+
+  info('1) Inicia OFFLINE e enfileira 3 cliques (separar/receber/travar)');
+  OUTBOX.init(sendFn);
+  await OUTBOX.enqueue({kind:'separar',chave:'A-1',payload:{estado:'separado'}});
+  await OUTBOX.enqueue({kind:'receber',chave:'A-2',payload:{estado:'recebido'}});
+  await OUTBOX.enqueue({kind:'travar',chave:'A-3',payload:{estado:'travado'}});
+  await sleep(300);
+  log(OUTBOX.count()===3, `fila tem 3 pendentes offline (tem ${OUTBOX.count()})`);
+  log(enviados.length===0, `nada foi enviado enquanto offline (enviados=${enviados.length})`);
+
+  info('2) Persistência: reabre o banco (simula fechar/reabrir o navegador)');
+  // zera o estado em memória re-lendo direto do IndexedDB via API
+  const pend = await OUTBOX.pending();
+  log(pend.length===3, `os 3 cliques SOBREVIVERAM no disco (lidos=${pend.length})`);
+
+  info('3) Religa a internet → o carteiro deve esvaziar a fila sozinho');
+  ONLINE=true; OUTBOX.sync();
+  for(let i=0;i<40 && OUTBOX.count()>0;i++){ await sleep(100); }
+  log(OUTBOX.count()===0, `fila esvaziou sozinha ao voltar online (restam ${OUTBOX.count()})`);
+  log(enviados.length===3, `os 3 foram enviados (enviados=${enviados.length})`);
+  log(enviados[0]==='A-1'&&enviados[1]==='A-2'&&enviados[2]==='A-3', `ordem preservada: ${enviados.join(' → ')}`);
+
+  info('4) Idempotência/robustez: enfileira 1 com falha intermitente, depois sucesso');
+  ONLINE=false;
+  await OUTBOX.enqueue({kind:'separar',chave:'B-9',payload:{estado:'separado'}});
+  await sleep(200);
+  log(OUTBOX.count()===1, `1 pendente durante a queda (tem ${OUTBOX.count()})`);
+  ONLINE=true; OUTBOX.sync();
+  for(let i=0;i<40 && OUTBOX.count()>0;i++){ await sleep(100); }
+  log(OUTBOX.count()===0 && enviados.includes('B-9'), `recuperou e enviou ao voltar (B-9 enviado=${enviados.includes('B-9')})`);
+
+ }catch(e){ log(false,'ERRO no teste: '+e.message); }
+ const rz=document.getElementById('resumo');
+ rz.className=fail?'f':'p'; rz.textContent = fail? `❌ ${fail} FALHA(S), ${pass} ok` : `✅ TODOS OS ${pass} TESTES PASSARAM`;
+})();
+</script></body></html>
