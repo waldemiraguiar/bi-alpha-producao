@@ -226,6 +226,52 @@ async function savePista(it){ if(!it.por) it.por=meuRep()||"equipe";
 }
 async function removePista(id){ try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPista((await r.json()).pista); } }catch(e){} }
 
+/* ---- 📣 RELATOS da pista (voz da rua — inteligência de campo, gravado por ÁUDIO) ---- */
+const RELATOS_API="/api/crm-relatos";
+let RELATOS=[];
+const RORIG={ligacao:{lbl:"Ligação",ic:"📞"}, reuniao:{lbl:"Reunião",ic:"🤝"}, visita:{lbl:"Visita",ic:"🏍️"}, whatsapp:{lbl:"WhatsApp",ic:"💬"}, outro:{lbl:"Outro",ic:"•"}};
+/* dicionário de DORES (inteligência de mercado) — casa no texto normalizado (sem acento) */
+function _norm(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+const PAINS=[
+  {key:"atraso_result", lbl:"Atraso em resultados", ic:"⏱", rx:/atras|demor|nao (saiu|ficou pronto|libera)|prazo|result.*(atras|demor)/},
+  {key:"motoboy_cc",    lbl:"Motoboy/Call-center cobrando", ic:"📞", rx:/motoboy|call.?center|fica(m)? ligando|ligando (todo|toda|as |9|nove)|liga.*saber se tem/},
+  {key:"whatsapp",      lbl:"Demora no WhatsApp", ic:"💬", rx:/whats|zap|nao responde|resposta.*(demor|lenta)|demora.*resposta/},
+  {key:"urgencia",      lbl:"Exame de urgência", ic:"🚨", rx:/urgenc|urgente|emergenc/},
+  {key:"coleta",        lbl:"Horário de coleta", ic:"🕒", rx:/coleta|coletar/},
+  {key:"laudo_erro",    lbl:"Erro no laudo/digitação", ic:"⚠️", rx:/erro|errad|digitac|repetitiv|troc.*laudo|laudo.*erra/},
+  {key:"comunic_pato",  lbl:"Comunicação com patologista", ic:"🔬", rx:/patolog|sem confianc|nao (tem|sentem?) confianc|passando um|passa.*(um|para o) outro/},
+  {key:"clinica_fechou",lbl:"Clínica fechou/mudou", ic:"🚪", rx:/fechou|encerrou|nova clinica|construindo|mudou de endereco|vai fechar/},
+  {key:"preco",         lbl:"Preço / tabela", ic:"💰", rx:/preco|caro|tabela|valor|reajust/},
+  {key:"concorrente",   lbl:"Concorrente / lab próprio", ic:"⚔️", rx:/concorr|outro lab|lab proprio|lab interno|abriu.*lab/},
+];
+function detectPains(txt){ const t=_norm(txt); return PAINS.filter(p=>p.rx.test(t)); }
+function relCritico(txt){ return /\bput[oa]\b|revoltad|indignad|cansad|\bchat[oa]\b|nao aguent|ameac|(vai|vou) (sair|cortar)|parar de mandar|insatisfeit|nao aguenta mais/.test(_norm(txt)); }
+function relTitulo(r){ if(r.titulo&&r.titulo.trim()) return r.titulo.trim();
+  const ps=detectPains((r.titulo||"")+" "+r.texto); const dor=ps.length?ps[0].lbl:"";
+  if(r.clinica) return r.clinica + (dor?(" — "+dor):"");
+  return (r.texto||"").trim().split(/[.\n]/)[0].slice(0,60)||"Relato"; }
+function syncRelatos(arr){ RELATOS=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+async function loadRelatos(){ try{ const r=await fetch(RELATOS_API); if(r.ok) syncRelatos((await r.json()).relatos); }catch(e){} }
+function relatosFiltrados(){ return repFilter ? RELATOS.filter(r=>(r.por||"")===repFilter) : RELATOS; }
+/* fila offline dos relatos (mesmo padrão da pista) */
+function rqLoad(){ try{ return JSON.parse(localStorage.getItem("crm_relato_queue")||"[]"); }catch(e){ return []; } }
+function rqSave(a){ try{ localStorage.setItem("crm_relato_queue", JSON.stringify(a)); }catch(e){} }
+function rqCount(){ return rqLoad().length; }
+async function rqFlush(){ let q=rqLoad(); if(!q.length) return; const rest=[];
+  for(const it of q){ try{ const r=await fetch(RELATOS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:it,senha:window.__pwd})}); if(r.ok){ syncRelatos((await r.json()).relatos); } else rest.push(it); }catch(e){ rest.push(it); } }
+  rqSave(rest); }
+async function saveRelato(item){
+  if(!item.id) item.id="r"+Date.now(); item.ts=item.ts||Date.now();
+  try{ const r=await fetch(RELATOS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão."); return false; }
+    if(r.ok){ syncRelatos((await r.json()).relatos); return true; }
+  }catch(e){}
+  const q=rqLoad(); q.push(item); rqSave(q);   // offline → enfileira + otimista
+  RELATOS=RELATOS.filter(x=>x.id!==item.id); RELATOS.unshift(item); RELATOS.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  return true;
+}
+async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncRelatos((await r.json()).relatos); } }catch(e){} }
+
 /* ---- histórico de EXCLUSÕES (auditoria — nada some sem rastro) ---- */
 const EXCL_API="/api/crm-exclusoes";
 let EXCL=[];
@@ -644,6 +690,67 @@ function openPistaRec(id){
     const ok=await savePista(item);
     if(ok){ visitaClear(); closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>excluirFeedback(F_ID);
+}
+
+/* 📣 NOVO/EDITAR RELATO — o rep GRAVA o áudio contando o cenário; vira card estruturado + dores detectadas */
+function detectMedico(txt){ const m=(" "+(txt||"")).match(/\bdr(?:a|ª|\.)?\s+([A-Za-zÀ-ú]+(?:\s+[A-Za-zÀ-ú]+){0,2})/i); return m?("Dr"+(/\bdra|drª/i.test(m[0])?"ª":".")+" "+m[1].trim().replace(/\b\w/g,c=>c.toUpperCase())):""; }
+function openRelato(id){
+  const r=id?RELATOS.find(x=>x.id===id):null;
+  const now=new Date(), pp=n=>String(n).padStart(2,"0");
+  let ORIG=r?r.origem:"visita";
+  const clis=[...new Set([...RELATOS.map(x=>x.clinica), ...PISTA.map(x=>x.cliente)].filter(Boolean))].sort();
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div><div class="m-cli">${r?"✏️ Editar relato":"📣 Novo relato da rua"}</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">${r?("registrado "+esc(diasAtras(r.ts))+" · "+esc(r.por)):(speechOK()?"toque 🎤 e CONTE o que rolou (ligação/reunião) — organizo em título, clínica, dores":"digite o relato — organizo em título, clínica, dores")}</div></div>
+      <button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">Comercial <span style="color:var(--red)">*</span></div>
+    <input id="rRep" class="m-date" style="width:100%" placeholder="Seu nome" list="repsDL" value="${r?esc(r.por||""):esc(meuRep())}">
+    <datalist id="repsDL">${repList().map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
+    <div class="m-lbl">De onde veio esse relato?</div>
+    <div class="m-opts" id="rOrig">${Object.keys(RORIG).map(k=>`<button class="opt${k===ORIG?" on":""}" data-o="${k}">${RORIG[k].ic} ${RORIG[k].lbl}</button>`).join("")}</div>
+    <div class="m-lbl">Relato <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— ${speechOK()?"toque 🎤 e fale à vontade":"digite (voz indisponível neste aparelho)"}</span></div>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="micbtn" id="rMic" type="button">🎤 Falar</button>
+      <textarea id="rTexto" class="m-ta" style="flex:1;min-height:110px;margin:0" placeholder="Ex.: Liguei pra Veterinária Aguiar, falei com a Drª Erila. Ela está puta com o atraso na liberação de urgência e o motoboy ligando todo dia…">${r?esc(r.texto):""}</textarea>
+    </div>
+    <div id="rHint" class="proxhint" style="display:none"></div>
+    <div class="m-lbl">Clínica <span style="color:var(--red)">*</span></div>
+    <input id="rCli" class="m-date" style="width:100%" placeholder="Nome da clínica" list="clisDL" value="${r?esc(r.clinica||""):""}">
+    <datalist id="clisDL">${clis.map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+    <div class="m-lbl">Médico(a) responsável <span class="t-mut" style="font-weight:500">— opcional</span></div>
+    <input id="rMed" class="m-date" style="width:100%" placeholder="Ex.: Drª Erila Aguiar" value="${r?esc(r.medico||""):""}">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><div class="m-lbl">Data <span style="color:var(--red)">*</span></div><input id="rData" type="date" class="m-date" style="width:100%" value="${r?esc(r.data||hojeISO()):hojeISO()}"></div>
+      <div style="flex:1"><div class="m-lbl">Hora</div><input id="rHora" type="time" class="m-date" style="width:100%" value="${r?esc(r.hora||''):pp(now.getHours())+':'+pp(now.getMinutes())}"></div>
+    </div>
+    <div class="m-lbl">Título <span class="t-mut" style="font-weight:500">— opcional, eu gero sozinho se deixar vazio</span></div>
+    <input id="rTit" class="m-date" style="width:100%" placeholder="(automático)" value="${r?esc(r.titulo||""):""}">
+    <button class="m-save" id="rSave">${r?"Salvar alterações":"Salvar relato"}</button>
+    ${r?`<button class="m-enc" id="rDel" style="border-color:var(--mut);color:var(--mut)">Remover relato</button>`:""}`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  const ta=document.getElementById("rTexto");
+  const previa=()=>{ const val=(document.getElementById("rTit").value+" "+ta.value);
+    const cli=document.getElementById("rCli"); if(cli && !cli.value){ const c=detectCliente(ta.value); if(c) cli.value=c; }
+    const med=document.getElementById("rMed"); if(med && !med.value){ const m=detectMedico(ta.value); if(m) med.value=m; }
+    const ps=detectPains(val), crit=relCritico(val), h=document.getElementById("rHint");
+    if(h){ if(ps.length||crit){ h.style.display="block"; h.innerHTML="🧠 detectei: "+ps.map(p=>`<span class="comp-pill">${p.ic} ${p.lbl}</span>`).join(" ")+(crit?` <span class="comp-pill" style="background:rgba(255,45,85,.2);color:#ff8fa3;border-color:rgba(255,45,85,.5)">🔴 CLIENTE IRRITADO</span>`:""); } else h.style.display="none"; } };
+  ta.addEventListener("input", previa);
+  document.getElementById("rMic").onclick=function(){ pistaMic(this, ta, previa); };
+  document.getElementById("rOrig").onclick=e=>{ const b=e.target.closest("[data-o]"); if(b){ ORIG=b.dataset.o; [...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b)); } };
+  previa();
+  document.getElementById("rSave").onclick=async()=>{
+    try{PREC&&PREC.stop();}catch(e){}
+    const rep=document.getElementById("rRep").value.trim(), texto=ta.value.trim(), clinica=document.getElementById("rCli").value.trim();
+    if(!rep){ alert("Informe o COMERCIAL — obrigatório."); document.getElementById("rRep").focus(); return; }
+    if(!texto){ alert("Grave ou digite o RELATO — obrigatório."); ta.focus(); return; }
+    if(!clinica){ alert("Informe a CLÍNICA — obrigatório."); document.getElementById("rCli").focus(); return; }
+    localStorage.setItem("crm_rep", rep);
+    const btn=document.getElementById("rSave"); btn.disabled=true; btn.textContent="Salvando…";
+    const item={id:r?r.id:null, clinica, medico:document.getElementById("rMed").value.trim(), titulo:document.getElementById("rTit").value.trim(), texto, data:document.getElementById("rData").value||hojeISO(), hora:document.getElementById("rHora").value||"", origem:ORIG, por:rep, ts:r?r.ts:Date.now()};
+    const ok=await saveRelato(item);
+    if(ok){ closeModal(); pistaView="relatos"; renderTab(); } else { btn.disabled=false; btn.textContent=r?"Salvar alterações":"Salvar relato"; } };
+  const del=document.getElementById("rDel"); if(del) del.onclick=async()=>{ if(confirm(`Remover o relato de "${r.clinica||""}"?`)){ await removeRelato(r.id); closeModal(); renderTab(); } };
 }
 
 /* ---------- histórico semanal do radar (snapshots) ---------- */
@@ -1389,7 +1496,7 @@ function renderTab(){
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
-    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='bi'?'on':''}" data-pv="bi">📊 BI</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
+    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='relatos'?'on':''}" data-pv="relatos">📣 Relatos${RELATOS.length?` (${RELATOS.length})`:''}</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='bi'?'on':''}" data-pv="bi">📊 BI</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
@@ -1406,6 +1513,53 @@ function renderTab(){
       const rs=document.getElementById("repSel"); if(rs) rs.onchange=()=>{ repFilter=rs.value; if(repFilter) localStorage.setItem("crm_rep",repFilter); pinned=true; setPin(); search=""; renderTab(); };
       const ra=document.getElementById("repAdd"); if(ra) ra.onclick=()=>{ const n=(prompt("Nome do comercial a cadastrar:")||"").trim(); if(n) addRep(n); };
     };
+
+    if(pistaView==="relatos"){
+      const base=relatosFiltrados();
+      const q=search.trim().toLowerCase();
+      const arr0=q?base.filter(r=>((r.clinica||"")+" "+(r.medico||"")+" "+(r.titulo||"")+" "+(r.texto||"")+" "+(r.por||"")).toLowerCase().includes(q)):base;
+      const now=Date.now(), d0=new Date(); d0.setHours(0,0,0,0);
+      const hoje=base.filter(r=>(r.ts||0)>=d0.getTime()).length, sem=base.filter(r=>(r.ts||0)>=now-7*864e5).length;
+      const clinicas=new Set(base.map(r=>(r.clinica||"").toLowerCase()).filter(Boolean)).size;
+      const criticos=base.filter(r=>relCritico((r.titulo||"")+" "+r.texto)).length;
+      // 🔥 ranking de DORES (inteligência de mercado) — soma as dores de todos os relatos
+      const painCount={}, painCli={};
+      base.forEach(r=>{ detectPains((r.titulo||"")+" "+r.texto).forEach(p=>{ painCount[p.key]=(painCount[p.key]||0)+1; (painCli[p.key]=painCli[p.key]||new Set()).add((r.clinica||"").toLowerCase()); }); });
+      const painArr=PAINS.filter(p=>painCount[p.key]).map(p=>({...p,n:painCount[p.key],cli:(painCli[p.key]||new Set()).size})).sort((a,b)=>b.n-a.n);
+      const maxp=painArr.length?painArr[0].n:1;
+      const doresBars=painArr.map(p=>`<div class="leg-row" style="gap:8px"><span style="width:170px;display:inline-block;font-size:13px">${p.ic} ${p.lbl}</span><div style="flex:1;background:rgba(255,255,255,.06);border-radius:6px;height:16px;overflow:hidden"><div style="width:${Math.round(p.n/maxp*100)}%;height:100%;background:#FF8A00"></div></div><b style="width:70px;text-align:right;font-size:12.5px">${p.n} <span class="t-mut" style="font-weight:500">/${p.cli} clín.</span></b></div>`).join("");
+      let body="",curM=null;
+      arr0.forEach(r=>{ const d=new Date(r.data?r.data+"T00:00:00":r.ts), mk=d.getFullYear()*100+(d.getMonth()+1);
+        if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
+        const ps=detectPains((r.titulo||"")+" "+r.texto), crit=relCritico((r.titulo||"")+" "+r.texto), o=RORIG[r.origem]||RORIG.outro;
+        body+=`<div class="crow" data-rel="${esc(r.id)}" style="cursor:pointer;align-items:flex-start${crit?';border-left:3px solid #FF2D55':''}">
+          <div class="rk">📣</div>
+          <div style="flex:1">
+            <div class="nm">${esc(relTitulo(r))} ${crit?'<span class="pr" style="background:rgba(255,45,85,.2);color:#ff8fa3">🔴 IRRITADO</span>':''}</div>
+            <div class="ci">🏥 <b>${esc(r.clinica||"—")}</b>${r.medico?" · "+esc(r.medico):""} · ${o.ic} ${o.lbl} · 📅 ${esc(fmtDataBR(r.data)||"")}${r.hora?" 🕐 "+esc(r.hora):""} · 👤 ${esc(r.por||"—")}</div>
+            <div class="lastint" style="white-space:normal">"${esc((r.texto||"").slice(0,240))}${(r.texto||"").length>240?"…":""}"</div>
+            ${ps.length?`<div class="complist" style="margin-top:6px">${ps.map(p=>`<span class="comp-pill">${p.ic} ${p.lbl}</span>`).join("")}</div>`:""}
+          </div></div>`; });
+      c.innerHTML=`${toggle}${repBar}
+        ${rqCount()?`<div class="proxhint" style="border-color:#FFB020;color:#ffd94d;background:rgba(255,176,32,.12);margin-bottom:12px">📴 <b>${rqCount()}</b> relato(s) salvos sem sinal — sincroniza sozinho quando a internet voltar</div>`:""}
+        <button class="bigmic" id="relNovo" type="button" style="margin-bottom:6px">📣 Novo relato — 🎤 gravar por voz</button>
+        <div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Conte o que a clínica falou (ligação/reunião). Organizo em título, clínica, médico, data e as dores.</div>
+        <div class="kgrid">
+          ${kpi("g", hoje, "Hoje", "relatos de hoje")}
+          ${kpi("", sem, "Na semana", "últimos 7 dias")}
+          ${kpi("", clinicas, "Clínicas", "com relato")}
+          ${kpi(criticos?"r":"", criticos, "Críticos", "cliente irritado")}
+        </div>
+        ${painArr.length?`<div class="card" style="margin:14px 0;border-color:rgba(255,138,0,.3)"><h3>🔥 Dores mais citadas pelas clínicas <span class="tag">o que a rua está falando</span></h3>${doresBars}<div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">Soma as dores de <b>todos</b> os relatos → mostra onde mais dói (operação, laudo, atendimento) pra direção agir na causa, não no sintoma.</div></div>`:""}
+        <div class="tabsbar" style="margin:12px 0 8px"><div class="seclabel" style="margin:0">📣 Relatos · por mês</div><input class="wlsearch" id="lupaRel" placeholder="🔍 clínica, médico, dor…" value="${esc(search)}"></div>
+        ${base.length?(arr0.length?body:`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhum relato ainda. Toque <b>📣 Novo relato</b> e conte por voz o que a clínica falou — eu organizo em título, clínica, médico e dores. (Ex.: o relatório do Eitor: Animiau, Veterinária Aguiar, Prime Vet…)</div>`}`;
+      wirePista();
+      const rn=document.getElementById("relNovo"); if(rn) rn.onclick=()=>openRelato(null);
+      document.querySelectorAll("#content [data-rel]").forEach(el=>el.onclick=()=>openRelato(el.dataset.rel));
+      const lr=document.getElementById("lupaRel");
+      if(lr){ lr.addEventListener("input", ev=>{ search=ev.target.value; pinned=true; setPin(); const p=lr.selectionStart; renderTab(); const l2=document.getElementById("lupaRel"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
+      return;
+    }
 
     if(pistaView==="retornos"){
       let _rotaSeq=0; PENDING_ROTAS=[];
@@ -1702,10 +1856,10 @@ function render(D){
     });
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
-    window.addEventListener("online", ()=>pqFlush());   // voltou o sinal → sincroniza a fila offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]).then(()=>{ pqFlush(); renderAll(); });
-    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length;
-      await pqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl()]);
+    window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
+    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length;
+      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos()]);
       if(a!==sig()) renderTab(); }, 45000);
   }
 }
