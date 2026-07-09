@@ -4,6 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agente CRM — Matriz · Alpha Labs</title>
+<!-- Sentry (rastreamento de erro) — PRIVACIDADE: sem replay/tela, sem PII -->
+<script>
+  window.sentryOnLoad = function () {
+    try { Sentry.init({
+      environment: "producao",
+      tracesSampleRate: 0, replaysSessionSampleRate: 0, replaysOnErrorSampleRate: 0, sendDefaultPii: false,
+      beforeBreadcrumb: function (b) { try { if (b && b.category === "ui.click") b.message = "[clique]"; if (b && (b.category === "fetch" || b.category === "xhr") && b.data) delete b.data.body; } catch(e){} return b; },
+      beforeSend: function (ev) { try { if (ev.request) { delete ev.request.data; delete ev.request.cookies; delete ev.request.headers; } if (ev.user) ev.user = { id: (ev.user && ev.user.id) || undefined }; } catch(e){} return ev; }
+    }); } catch(e){}
+  };
+</script>
+<script src="https://js.sentry-cdn.com/c0c35b5ecbacdfb66b9cbd0912771dd4.min.js" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
