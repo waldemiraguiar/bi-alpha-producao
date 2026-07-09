@@ -4,6 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Produção · Lab Alpha</title>
+<!-- Sentry (rastreamento de erro) — config com PRIVACIDADE: NÃO grava a tela (sem replay) e NÃO manda dado de paciente. -->
+<script>
+  window.sentryOnLoad = function () {
+    try { Sentry.init({
+      environment: "producao",
+      tracesSampleRate: 0,             // sem performance tracing
+      replaysSessionSampleRate: 0,     // 🔒 SEM session replay (não grava a tela)
+      replaysOnErrorSampleRate: 0,     // 🔒 idem
+      sendDefaultPii: false,
+      beforeBreadcrumb: function (b) { // não guardar texto de clique nem corpo de request (pode ter nome de paciente)
+        try { if (b && b.category === "ui.click") b.message = "[clique]";
+              if (b && (b.category === "fetch" || b.category === "xhr") && b.data) delete b.data.body; } catch(e){}
+        return b;
+      },
+      beforeSend: function (ev) {       // limpa PII antes de enviar
+        try { if (ev.request) { delete ev.request.data; delete ev.request.cookies; delete ev.request.headers; }
+              if (ev.user) ev.user = { id: (ev.user && ev.user.id) || undefined }; } catch(e){}
+        return ev;
+      }
+    }); } catch(e){}
+  };
+</script>
+<script src="https://js.sentry-cdn.com/c0c35b5ecbacdfb66b9cbd0912771dd4.min.js" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
