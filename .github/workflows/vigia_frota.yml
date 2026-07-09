@@ -1,0 +1,114 @@
+name: Vigia da Frota (health check + alerta)
+
+# Roda no servidor do GitHub (independe de app aberto). A cada 15 min no horário de operação,
+# testa DE VERDADE o painel de Triagem/Produção (site, dados, ler, GRAVAR+ler de volta, e se a
+# leitura paginada traz TODAS as marcas — o bug de 08/jul). Só AVISA (e-mail + WhatsApp) se QUEBRAR.
+# Objetivo SRE: detectar a pane ANTES da equipe sentir (ontem a equipe descobriu, horas depois).
+
+on:
+  schedule:
+    - cron: '*/15 9-23 * * *'   # a cada 15 min, ~06h-20h BRT (UTC = BRT+3)
+  workflow_dispatch:            # rodar agora p/ testar
+
+concurrency:
+  group: vigia-frota
+  cancel-in-progress: false
+
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Health check da frota + alerta
+        env:
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+          CALLMEBOT_PHONE:    ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY:   ${{ secrets.CALLMEBOT_APIKEY }}
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request, urllib.parse, datetime, time, smtplib, ssl
+          from email.mime.text import MIMEText
+
+          SUPA="https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1"
+          KEY="sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8"
+          SITE="https://producao-lab-alpha.netlify.app"
+
+          def http(url, method="GET", headers=None, data=None, timeout=25):
+              req=urllib.request.Request(url, method=method, data=data, headers=headers or {})
+              r=urllib.request.urlopen(req, timeout=timeout)
+              return r.status, r.read(), dict(r.headers)
+          def supa(path, method="GET", headers=None, body=None):
+              h={"apikey":KEY,"Authorization":"Bearer "+KEY}
+              if headers: h.update(headers)
+              d=body.encode() if isinstance(body,str) else body
+              return http(SUPA+path, method, h, d)
+
+          falhas=[]; ctx=[]
+          # 1) site do painel no ar
+          try:
+              st,_,_=http(SITE+"/?_="+str(int(time.time())))
+              if st!=200: falhas.append(f"Site do painel: HTTP {st}")
+          except Exception as e: falhas.append(f"Site do painel: {e}")
+          # 2) dados do painel (/api/enc) frescos
+          try:
+              st,b,_=http(SITE+"/api/enc?_="+str(int(time.time())))
+              if st!=200 or len(b)<1000: falhas.append(f"Dados do painel (/api/enc): HTTP {st}, {len(b)}b")
+          except Exception as e: falhas.append(f"Dados do painel (/api/enc): {e}")
+          # 3) Supabase LER
+          try:
+              st,_,_=supa("/sep_marks?select=chave&limit=1")
+              if st!=200: falhas.append(f"Supabase leitura: HTTP {st}")
+          except Exception as e: falhas.append(f"Supabase leitura: {e}")
+          # 4) Supabase GRAVAR + ler de volta + apagar (caminho real do separar)
+          hc="zzz_vigia_"+datetime.datetime.utcnow().strftime("%H%M%S")
+          try:
+              st,_,_=supa("/sep_marks","POST",{"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},json.dumps({"chave":hc,"estado":"separado","por":"vigia"}))
+              if st not in (200,201): falhas.append(f"Supabase gravação: HTTP {st}")
+              else:
+                  st2,b,_=supa("/sep_marks?chave=eq."+hc+"&select=chave")
+                  if not (st2==200 and json.loads(b)): falhas.append("Gravou mas não leu de volta")
+              supa("/sep_marks?chave=eq."+hc,"DELETE")
+          except Exception as e: falhas.append(f"Supabase gravação: {e}")
+          # 5) PAGINAÇÃO: a leitura traz TODAS as marcas? (o bug de 08/jul = corte em 1000)
+          try:
+              st,_,h=supa("/sep_marks?select=chave&limit=1",headers={"Prefer":"count=exact","Range":"0-0"})
+              total=int((h.get("Content-Range") or h.get("content-range") or "/0").split("/")[-1])
+              loaded=0; frm=0
+              while True:
+                  st,b,_=supa(f"/sep_marks?select=chave&offset={frm}&limit=1000")
+                  n=len(json.loads(b)); loaded+=n
+                  if n<1000: break
+                  frm+=1000
+              ctx.append(f"sep_marks: {total} marcas (paginação carregou {loaded})")
+              if loaded<total: falhas.append(f"Painel não carrega TODAS as marcas: {loaded}/{total} (bug tipo 08/jul!)")
+              if total>4000: ctx.append("⚠️ tabela grande — considerar limpeza das finalizadas")
+          except Exception as e: falhas.append(f"Check paginação: {e}")
+
+          agora=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).strftime("%d/%m %H:%M BRT")
+          if not falhas:
+              print(f"[{agora}] ✅ frota OK — {' | '.join(ctx)}")
+              raise SystemExit(0)
+
+          # ---- QUEBROU: alerta e-mail + WhatsApp ----
+          assunto="🚨 PANE no painel de Triagem/Produção"
+          corpo=(f"ALERTA Wal ({agora}) — o painel está com problema pra a equipe:\n\n"
+                 + "\n".join("❌ "+f for f in falhas)
+                 + ("\n\nContexto: "+" | ".join(ctx) if ctx else "")
+                 + "\n\nA equipe pode estar travada. Enquanto verifica: modo papel (separa físico, marca depois — nada se perde).")
+          try:
+              GU=os.environ["GMAIL_USER"]; GP=os.environ["GMAIL_APP_PASSWORD"]; TO=os.environ.get("EMAIL_TO") or GU
+              m=MIMEText(corpo,"plain","utf-8"); m["Subject"]=assunto; m["From"]=GU; m["To"]=TO
+              with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ssl.create_default_context()) as s:
+                  s.login(GU,GP); s.sendmail(GU,[TO],m.as_string())
+              print("email enviado")
+          except Exception as e: print("email falhou:",e)
+          try:
+              ph=os.environ.get("CALLMEBOT_PHONE","").strip(); ak=os.environ.get("CALLMEBOT_APIKEY","").strip()
+              if ph and ak:
+                  wa=f"🚨 PANE no painel Triagem/Produção ({agora}): "+"; ".join(falhas[:3])+". Equipe pode estar travada — modo papel enquanto verifica."
+                  u=("https://api.callmebot.com/whatsapp.php?phone="+urllib.parse.quote(ph)+"&text="+urllib.parse.quote(wa)+"&apikey="+urllib.parse.quote(ak))
+                  urllib.request.urlopen(u,timeout=30).read(); print("whatsapp enviado")
+          except Exception as e: print("whatsapp falhou:",e)
+          PY
