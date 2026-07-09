@@ -72,6 +72,7 @@ jobs:
               supa("/sep_marks?chave=eq."+hc,"DELETE")
           except Exception as e: falhas.append(f"Supabase gravação: {e}")
           # 5) PAGINAÇÃO: a leitura traz TODAS as marcas? (o bug de 08/jul = corte em 1000)
+          total=0
           try:
               st,_,h=supa("/sep_marks?select=chave&limit=1",headers={"Prefer":"count=exact","Range":"0-0"})
               total=int((h.get("Content-Range") or h.get("content-range") or "/0").split("/")[-1])
@@ -83,32 +84,43 @@ jobs:
                   frm+=1000
               ctx.append(f"sep_marks: {total} marcas (paginação carregou {loaded})")
               if loaded<total: falhas.append(f"Painel não carrega TODAS as marcas: {loaded}/{total} (bug tipo 08/jul!)")
-              if total>4000: ctx.append("⚠️ tabela grande — considerar limpeza das finalizadas")
           except Exception as e: falhas.append(f"Check paginação: {e}")
 
           agora=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).strftime("%d/%m %H:%M BRT")
-          if not falhas:
-              print(f"[{agora}] ✅ frota OK — {' | '.join(ctx)}")
+          def alerta(assunto, corpo, wa):
+              try:
+                  GU=os.environ["GMAIL_USER"]; GP=os.environ["GMAIL_APP_PASSWORD"]; TO=os.environ.get("EMAIL_TO") or GU
+                  m=MIMEText(corpo,"plain","utf-8"); m["Subject"]=assunto; m["From"]=GU; m["To"]=TO
+                  with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ssl.create_default_context()) as s:
+                      s.login(GU,GP); s.sendmail(GU,[TO],m.as_string())
+                  print("email enviado:",assunto)
+              except Exception as e: print("email falhou:",e)
+              try:
+                  ph=os.environ.get("CALLMEBOT_PHONE","").strip(); ak=os.environ.get("CALLMEBOT_APIKEY","").strip()
+                  if ph and ak:
+                      u=("https://api.callmebot.com/whatsapp.php?phone="+urllib.parse.quote(ph)+"&text="+urllib.parse.quote(wa)+"&apikey="+urllib.parse.quote(ak))
+                      urllib.request.urlopen(u,timeout=30).read(); print("whatsapp enviado")
+              except Exception as e: print("whatsapp falhou:",e)
+
+          # PANE (qualquer check falhou) -> alerta NA HORA
+          if falhas:
+              corpo=(f"ALERTA Wal ({agora}) — o painel está com problema pra a equipe:\n\n"
+                     + "\n".join("❌ "+f for f in falhas)
+                     + ("\n\nContexto: "+" | ".join(ctx) if ctx else "")
+                     + "\n\nA equipe pode estar travada. Enquanto verifica: modo papel (separa físico, marca depois — nada se perde).")
+              alerta("🚨 PANE no painel de Triagem/Produção", corpo,
+                     f"🚨 PANE no painel Triagem/Produção ({agora}): "+"; ".join(falhas[:3])+". Equipe pode estar travada — modo papel enquanto verifica.")
               raise SystemExit(0)
 
-          # ---- QUEBROU: alerta e-mail + WhatsApp ----
-          assunto="🚨 PANE no painel de Triagem/Produção"
-          corpo=(f"ALERTA Wal ({agora}) — o painel está com problema pra a equipe:\n\n"
-                 + "\n".join("❌ "+f for f in falhas)
-                 + ("\n\nContexto: "+" | ".join(ctx) if ctx else "")
-                 + "\n\nA equipe pode estar travada. Enquanto verifica: modo papel (separa físico, marca depois — nada se perde).")
-          try:
-              GU=os.environ["GMAIL_USER"]; GP=os.environ["GMAIL_APP_PASSWORD"]; TO=os.environ.get("EMAIL_TO") or GU
-              m=MIMEText(corpo,"plain","utf-8"); m["Subject"]=assunto; m["From"]=GU; m["To"]=TO
-              with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ssl.create_default_context()) as s:
-                  s.login(GU,GP); s.sendmail(GU,[TO],m.as_string())
-              print("email enviado")
-          except Exception as e: print("email falhou:",e)
-          try:
-              ph=os.environ.get("CALLMEBOT_PHONE","").strip(); ak=os.environ.get("CALLMEBOT_APIKEY","").strip()
-              if ph and ak:
-                  wa=f"🚨 PANE no painel Triagem/Produção ({agora}): "+"; ".join(falhas[:3])+". Equipe pode estar travada — modo papel enquanto verifica."
-                  u=("https://api.callmebot.com/whatsapp.php?phone="+urllib.parse.quote(ph)+"&text="+urllib.parse.quote(wa)+"&apikey="+urllib.parse.quote(ak))
-                  urllib.request.urlopen(u,timeout=30).read(); print("whatsapp enviado")
-          except Exception as e: print("whatsapp falhou:",e)
+          # SATURAÇÃO: a tabela cresce sempre (finalizadas não são apagadas). Aviso GENTIL 1x/dia
+          # (só na rodada ~08h BRT). NÃO é pane — o painel funciona (paginação lê tudo); é heads-up
+          # p/ arquivar as finalizadas antes de ficar pesado.
+          _h=datetime.datetime.utcnow()
+          if total>3000 and _h.hour==11 and _h.minute<15:
+              alerta("📈 sep_marks grande — hora de arquivar as finalizadas",
+                     f"Heads-up Wal ({agora}): sep_marks está com {total} linhas e cresce sempre. O painel FUNCIONA "
+                     f"(a paginação lê tudo), mas fica mais pesado/lento conforme cresce. Vale rodar a limpeza/arquivo "
+                     f"das marcas antigas 'suficiente'. Sem urgência.",
+                     f"📈 sep_marks: {total} linhas (cresce sempre). Painel ok, mas vale arquivar as finalizadas. Sem urgência.")
+          print(f"[{agora}] ✅ frota OK — {' | '.join(ctx)}")
           PY
