@@ -7,18 +7,20 @@
   const lib = window.supabase;
   const SB = (lib && lib.createClient) ? lib.createClient(URL, KEY, { realtime: { params: { eventsPerSecond: 5 } } }) : null;
   const arr = r => (r && r.data) ? r.data : [];
+  // ⚠️ ARMADILHA (incidente 08/jul): o Supabase/PostgREST CORTA todo select em 1000 linhas.
+  // Quando uma tabela passa de 1000, o select('*') puro deixa de trazer as linhas mais novas ->
+  // os dados "somem" da tela SEM ERRO (o painel de Triagem travou 6h por isso). REGRA: TODA leitura
+  // de tabela que cresce usa pageAll() (busca em blocos de 1000 até acabar). Não usar select('*') solto.
+  const pageAll = async (t) => { if (!SB) return []; let all = [], from = 0; for (let g = 0; g < 200; g++) { const { data, error } = await SB.from(t).select('*').range(from, from + 999); if (error) break; const c = data || []; all = all.concat(c); if (c.length < 1000) break; from += 1000; } return all; };
 
   window.SUPA = {
     ok: !!SB,
-    // ---- leitura ----
-    async loadCli() { if (!SB) return { flags: [], cli_baixas: [] }; const [f, b] = await Promise.all([SB.from('cli_flags').select('*'), SB.from('cli_baixas').select('*')]); return { flags: arr(f), cli_baixas: arr(b) }; },
-    // ⚠️ BUG 08/jul: o Supabase corta o select em 1000 linhas. Quando sep_marks passou de 1000,
-    // o painel parava de carregar as marcas mais novas -> o item aparecia "não separado" mesmo com
-    // a marca gravada (separar/receber "não fazia nada" / "voltava pra separar"). FIX: PAGINAR.
-    async loadSep() { if (!SB) return { marks: [], descartes: [] }; const page = async (t) => { let all = [], from = 0; for (let g = 0; g < 100; g++) { const { data, error } = await SB.from(t).select('*').range(from, from + 999); if (error) break; const c = data || []; all = all.concat(c); if (c.length < 1000) break; from += 1000; } return all; }; const [m, d] = await Promise.all([page('sep_marks'), page('sep_descartes')]); return { marks: m, descartes: d }; },
-    async loadUrg() { if (!SB) return { urgentes: [], baixas: [] }; const [l, b] = await Promise.all([SB.from('urg_lista').select('*'), SB.from('urg_baixas').select('*')]); return { urgentes: arr(l), baixas: arr(b) }; },
+    // ---- leitura (TODAS paginadas — armadilha das 1000 linhas) ----
+    async loadCli() { if (!SB) return { flags: [], cli_baixas: [] }; const [f, b] = await Promise.all([pageAll('cli_flags'), pageAll('cli_baixas')]); return { flags: f, cli_baixas: b }; },
+    async loadSep() { if (!SB) return { marks: [], descartes: [] }; const [m, d] = await Promise.all([pageAll('sep_marks'), pageAll('sep_descartes')]); return { marks: m, descartes: d }; },
+    async loadUrg() { if (!SB) return { urgentes: [], baixas: [] }; const [l, b] = await Promise.all([pageAll('urg_lista'), pageAll('urg_baixas')]); return { urgentes: l, baixas: b }; },
     // ---- baixa de EXAME na Produção (PIN admin) ----
-    async loadProd() { if (!SB) return []; try { const r = await SB.from('prod_baixas').select('*'); return arr(r); } catch (e) { return []; } },
+    async loadProd() { if (!SB) return []; try { return await pageAll('prod_baixas'); } catch (e) { return []; } },
     // ---- ESPELHO da Histotécnica (app separado, mesmo Supabase) — RPC read-only ----
     async loadAmostras() { if (!SB) return []; try { const { data, error } = await SB.rpc('amostras_espelho'); if (error) return []; return data || []; } catch (e) { return []; } },
     async prodBaixar(itens, nome, senha) { const { error } = await SB.rpc('prod_baixar', { p_itens: itens, p_nome: nome, p_senha: senha }); if (error) throw new Error(error.message || 'login'); },
