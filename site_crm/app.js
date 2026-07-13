@@ -396,8 +396,10 @@ async function reagendarRetorno(id){
   const txt=(prompt(`Reagendar "${f.cliente||""}". Nova data (ex.: 12/07, "dia 12 do 7", "segunda que vem"):`)||"").trim(); if(!txt) return;
   const nova=parseDataBR(txt)||(/^\d{4}-\d{2}-\d{2}$/.test(txt)?txt:"");
   if(!nova){ alert("Não entendi a data. Tente 12/07, 'dia 12 do 7' ou 2026-07-12."); return; }
-  const ok=await savePista({...f, proximo:nova, sem_retorno:false, clear_baixa:true});   // limpa baixa → volta pra agenda
-  if(ok){ alert("✅ Reagendado para "+fmtDataBR(nova)+" — voltou pra agenda de rota."); renderTab(); }
+  const motivo=(prompt(`Por que não foi / motivo do reagendamento? (ex.: doutora mal-humorada, achamos melhor não ir)`)||"").trim();
+  const reag_add={motivo, de:f.proximo||"", para:nova, por:meuRep()||quemExcluiu(), ts:Date.now()};   // histórico do porquê
+  const ok=await savePista({...f, proximo:nova, sem_retorno:false, clear_baixa:true, reag_add});   // limpa baixa → volta pra agenda
+  if(ok){ alert("✅ Reagendado para "+fmtDataBR(nova)+(motivo?` — motivo: "${motivo}"`:"")+". Voltou pra agenda de rota."); renderTab(); }
 }
 async function desfazerBaixa(id){   // ↩ voltar etapa: desfaz a baixa (confirmei errado) → volta pra agenda de retornos
   const f=PISTA.find(x=>x.id===id); if(!f) return;
@@ -452,6 +454,44 @@ function openAgendar(){
     const btn=document.getElementById("aSave"); btn.disabled=true; btn.textContent="Agendando…";
     const ok=await savePista({cliente:cli, bairro, por:rep, proximo:data, resultado:"visita", origem:"telefone", texto:obs?("📞 Agendado por telefone: "+obs):"📞 Agendado por telefone"});
     if(ok){ closeModal(); pistaView="retornos"; renderTab(); } else { btn.disabled=false; btn.textContent="📞 Agendar na rota"; } };
+}
+/* ➕ OBSERVAÇÃO do escritório num feedback (a Luciane acompanha e comenta, sem refazer a visita) */
+async function addObs(id){
+  const f=PISTA.find(x=>x.id===id); if(!f) return;
+  const t=(prompt(`Observação sobre "${f.cliente||""}" (ex.: voltou a pedir coleta depois da visita):`)||"").trim(); if(!t) return;
+  const obs_add={texto:t, por:meuRep()||quemExcluiu()||"escritório", ts:Date.now()};
+  const ok=await savePista({...f, obs_add});
+  if(ok){ alert("✅ Observação adicionada ao histórico do cliente."); renderTab(); }
+}
+/* 🎯 LANÇAR CLIENTE PRA VISITAR — SEM DATA (o escritório põe o cliente; o vendedor escolhe QUANDO ir) */
+function openAddCliente(){
+  const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div><div class="m-cli">🎯 Cliente pra visitar (sem data)</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">você lança o cliente; o vendedor escolhe QUANDO ir e dá o feedback lá</div></div>
+      <button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">Comercial (quem vai visitar) <span style="color:var(--red)">*</span></div>
+    <input id="cRep" class="m-date" style="width:100%" list="repsDL" value="${esc(meuRep())}">
+    <datalist id="repsDL">${repList().map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
+    <div class="m-lbl">Cliente / clínica <span style="color:var(--red)">*</span></div>
+    <input id="cCli" class="m-date" style="width:100%" placeholder="Nome do cliente">
+    <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— monta a rota</span></div>
+    <input id="cBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca" list="bairrosDL">
+    <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
+    <div class="m-lbl">Observação <span class="t-mut" style="font-weight:500">— opcional</span></div>
+    <textarea id="cObs" class="m-ta" style="min-height:54px" placeholder="Ex.: cliente do PDF do Heitor; oferecer histopato"></textarea>
+    <button class="m-save" id="cSave">🎯 Lançar na lista do vendedor</button>`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("cSave").onclick=async()=>{
+    const rep=document.getElementById("cRep").value.trim(), cli=document.getElementById("cCli").value.trim(), bairro=document.getElementById("cBairro").value.trim(), obs=document.getElementById("cObs").value.trim();
+    if(!rep){ alert("Informe o COMERCIAL (quem vai visitar)."); return; }
+    if(!cli){ alert("Informe o CLIENTE / clínica."); document.getElementById("cCli").focus(); return; }
+    if(!bairro){ alert("Informe o BAIRRO (monta a rota)."); document.getElementById("cBairro").focus(); return; }
+    localStorage.setItem("crm_rep", rep);
+    const btn=document.getElementById("cSave"); btn.disabled=true; btn.textContent="Lançando…";
+    const ok=await savePista({cliente:cli, bairro, por:rep, proximo:"", a_visitar:true, resultado:"visita", origem:"telefone", texto:obs?("🎯 Cliente pra visitar: "+obs):"🎯 Cliente pra visitar (sem data)"});
+    if(ok){ closeModal(); pistaView="retornos"; renderTab(); } else { btn.disabled=false; btn.textContent="🎯 Lançar na lista do vendedor"; } };
 }
 /* BI da Pista (Chart.js — mesmo CDN da aba Resultados) */
 function drawPistaBI(base){
@@ -1518,14 +1558,17 @@ function renderTab(){
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
           ${f.sem_retorno?`<div class="rtbadge" style="background:rgba(255,138,0,.16);color:#ffc266">🚫 sem retorno</div>`:(f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:"")}
           <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${checkinResumo(f.checkin,f.checkout)}</div>
-          ${f.baixa?`<div class="ci" style="font-size:11.5px">${f.baixa.tipo==="compareceu"?`<span style="color:#7effcf;font-weight:700">✓ baixa: compareceu${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf">📍 mapa</a>`:""}</span>`:`<span style="color:#ffc266;font-weight:700">🚫 baixa: desmarcado · aut. diretoria${f.baixa.motivo?' ("'+esc(f.baixa.motivo)+'")':''}</span>`}</div>`:""}</div>
+          ${f.baixa?`<div class="ci" style="font-size:11.5px">${f.baixa.tipo==="compareceu"?`<span style="color:#7effcf;font-weight:700">✓ baixa: compareceu${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf">📍 mapa</a>`:""}</span>`:`<span style="color:#ffc266;font-weight:700">🚫 baixa: desmarcado · aut. diretoria${f.baixa.motivo?' ("'+esc(f.baixa.motivo)+'")':''}</span>`}</div>`:""}
+          ${(f.reag_hist&&f.reag_hist.length)?`<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">↻ ${f.reag_hist.map(rr=>`reagendado${rr.para?" p/ "+esc(fmtDataBR(rr.para)):""}${rr.motivo?': "'+esc(rr.motivo)+'"':""}`).join(" · ")}</div>`:""}
+          ${(f.obs&&f.obs.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#9fe6ff">${f.obs.map(o=>`<div>💬 "${esc(o.texto)}" <span class="t-mut">— ${esc(o.por||"")} · ${o.ts?diasAtras(o.ts):""}</span></div>`).join("")}</div>`:""}</div>
         <div class="mid"></div>
-        <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
+        <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-obs="${esc(f.id)}" title="Adicionar observação (acompanhamento do escritório)" style="color:#9fe6ff">💬</button><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
     const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='relatos'?'on':''}" data-pv="relatos">📣 Relatos${RELATOS.length?` (${RELATOS.length})`:''}</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='bi'?'on':''}" data-pv="bi">📊 BI</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
+      document.querySelectorAll("#content [data-obs]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); addObs(el.dataset.obs); });
       document.querySelectorAll("#content [data-delfb]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); excluirFeedback(el.dataset.delfb); });
       document.querySelectorAll("#content [data-cheguei]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const f=PISTA.find(x=>x.id===el.dataset.cheguei); if(f) iniciarVisita({id:f.id,cliente:f.cliente,bairro:f.bairro}); });
       document.querySelectorAll("#content [data-desm]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaDesmarcou(el.dataset.desm); });
@@ -1619,18 +1662,31 @@ function renderTab(){
       const agenda=Object.keys(byRep).sort().map(rp=>{ const items=byRep[rp], byDate={}; items.forEach(f=>{(byDate[f.proximo]=byDate[f.proximo]||[]).push(f);});
         const dias=Object.keys(byDate).sort().map(d=>diaCard(d, byDate[d])).join("");
         return `<div class="repagenda"><div class="repagenda-h">👤 <b>${esc(rp)}</b> · agenda de rota <span class="t-mut" style="font-weight:500">(${items.length} retorno${items.length>1?'s':''})</span></div>${dias}</div>`; }).join("");
+      // 🎯 clientes lançados SEM data (o escritório põe; o vendedor decide quando ir)
+      const aVisitar=all.filter(f=>f.a_visitar && !f.baixa && !f.proximo);
+      const avByRep={}; aVisitar.forEach(f=>{ const rp=f.por||"(sem comercial)"; (avByRep[rp]=avByRep[rp]||[]).push(f); });
+      const linhaAV=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">🎯</div>
+        <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· 📍 ${esc(f.bairro||"—")}</span></div><div class="ci">${f.texto?'"'+esc(f.texto.slice(0,70))+'"':"cliente pra visitar — sem data"}</div></div><div class="mid"></div>
+        <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-cheguei="${esc(f.id)}" onclick="event.stopPropagation()" title="Cheguei na clínica — check-in de chegada (depois: feedback + saída)">📍 Cheguei</button><button class="baixabtn no" data-delav="${esc(f.id)}" onclick="event.stopPropagation()" title="Remover da lista de visita">🗑️</button></div></div>`;
+      const avSec=aVisitar.length?`<div class="seclabel" style="margin-top:4px;color:#7effcf">🎯 A visitar — SEM data <span class="t-mut" style="font-weight:500">— lançados pelo escritório; o vendedor escolhe quando ir (${aVisitar.length})</span></div>`+Object.keys(avByRep).sort().map(rp=>`<div class="repagenda" style="border-color:rgba(0,229,160,.3)"><div class="repagenda-h">👤 <b>${esc(rp)}</b> <span class="t-mut" style="font-weight:500">(${avByRep[rp].length} p/ visitar)</span></div>${avByRep[rp].map(linhaAV).join("")}</div>`).join(""):"";
       c.innerHTML=`${toggle}${repBar}
-        <button class="checkinbtn" id="agendarTel" type="button" style="margin-bottom:12px">📞 Agendar visita (prospecção por telefone)</button>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <button class="checkinbtn" id="addCliente" type="button" style="flex:1;min-width:160px;margin:0">🎯 Lançar cliente (sem data)</button>
+          <button class="checkinbtn" id="agendarTel" type="button" style="flex:1;min-width:160px;margin:0">📞 Agendar por telefone</button>
+        </div>
         <div class="kgrid">
           ${kpi("r", atras, "Atrasados", "passaram da data")}
           ${kpi("a", semana, "Esta semana", "próximos 7 dias")}
           ${kpi("", ret.length, "Retornos", repFilter?("de "+esc(repFilter)):"pendentes")}
-          ${kpi("", Object.keys(byRep).length, "Comerciais", "com rota")}
+          ${kpi(aVisitar.length?"g":"", aVisitar.length, "A visitar", "sem data ainda")}
         </div>
+        ${avSec}
         ${ret.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
         <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
-        ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Em cada feedback preencha o retorno + bairro — a agenda se monta aqui, por comercial e por dia.</div>`}`;
+        ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Lance clientes acima (🎯 sem data ou 📞 por telefone) ou preencha o retorno num feedback — a agenda se monta aqui.</div>`}`;
       wirePista();
+      const acb=document.getElementById("addCliente"); if(acb) acb.onclick=()=>openAddCliente();
+      document.querySelectorAll("#content [data-delav]").forEach(el=>el.onclick=async(e)=>{ e.stopPropagation(); const f=PISTA.find(x=>x.id===el.dataset.delav); if(f && confirm(`Remover "${f.cliente||""}" da lista de visita?`)){ await removePista(f.id); renderTab(); } });
       upgradeRotas();   // troca a estimativa por reta pela distância de RUA real (OSRM) quando online
       return;
     }
