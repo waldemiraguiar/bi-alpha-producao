@@ -593,12 +593,18 @@ let F_ID=null, F_RES="visita", F_CHECKIN=null, F_CHECKOUT=null, F_SEMRET=false, 
 function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 function dwellMin(ci,co){ return (ci&&co&&co.ts&&ci.ts)?Math.max(0,Math.round((co.ts-ci.ts)/60000)):null; }
 function mapPin(pt, label){ return (pt&&pt.ts&&pt.lat!=null&&pt.lng!=null)?`<a href="https://maps.google.com/?q=${pt.lat},${pt.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">${label}</a>`:""; }
-/* resumo padronizado do check-in: 🟢 ENTRADA (mapa) · 🔴 SAÍDA (mapa) · ⏱ tempo — identifica cada processo */
+/* distância entre entrada e saída — se grande, o check-out foi longe da clínica (bateu a saída em outro lugar) */
+const CHECKOUT_LONGE_M=300;   // > 300 m entre entrada e saída = suspeito (anti-golpe)
+function checkinDistM(ci, co){ return (ci&&co&&ci.ts&&co.ts&&ci.lat!=null&&co.lat!=null)?Math.round(haversineKm(ci,co)*1000):null; }
+function fmtDist(m){ return m>=1000?(m/1000).toFixed(1).replace(".",",")+" km":m+" m"; }
+/* resumo padronizado do check-in: 🟢 ENTRADA (mapa) · 🔴 SAÍDA (mapa) · ⏱ tempo · 🚩 alerta de distância — identifica cada processo */
 function checkinResumo(ci, co){
   const p=n=>String(n).padStart(2,"0"), hm=x=>{const d=new Date(x.ts); return p(d.getHours())+":"+p(d.getMinutes());}, parts=[];
   if(ci&&ci.ts) parts.push(`🟢 <b>Entrada</b> ${hm(ci)} ${mapPin(ci,"📍 mapa")}`); else parts.push(`<span style="color:#ffc266">⚠️ sem check-in de entrada</span>`);
   if(co&&co.ts) parts.push(`🔴 <b>Saída</b> ${hm(co)} ${mapPin(co,"📍 mapa")}`); else if(ci&&ci.ts) parts.push(`<span style="color:#ffc266">⏳ sem saída (não bateu o check-out)</span>`);
   const dw=dwellMin(ci,co); if(dw!=null) parts.push(`⏱ <b>${dw} min</b> na clínica`);
+  const dist=checkinDistM(ci,co);
+  if(dist!=null && dist>CHECKOUT_LONGE_M) parts.push(`<span style="color:#ff5470;font-weight:700">🚩 saída a ${fmtDist(dist)} da entrada — conferir</span>`);
   return parts.join(" · ");
 }
 /* check-in (entrada) / check-out (saída) por georreferência (Geolocation API — anti-golpe + tempo na clínica) */
