@@ -594,7 +594,7 @@ function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `
 function dwellMin(ci,co){ return (ci&&co&&co.ts&&ci.ts)?Math.max(0,Math.round((co.ts-ci.ts)/60000)):null; }
 function mapPin(pt, label){ return (pt&&pt.ts&&pt.lat!=null&&pt.lng!=null)?`<a href="https://maps.google.com/?q=${pt.lat},${pt.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">${label}</a>`:""; }
 /* distância entre entrada e saída — se grande, o check-out foi longe da clínica (bateu a saída em outro lugar) */
-const CHECKOUT_LONGE_M=300;   // > 300 m entre entrada e saída = suspeito (anti-golpe)
+const CHECKOUT_LONGE_M=200;   // > 200 m entre entrada e saída = suspeito (anti-golpe)
 function checkinDistM(ci, co){ return (ci&&co&&ci.ts&&co.ts&&ci.lat!=null&&co.lat!=null)?Math.round(haversineKm(ci,co)*1000):null; }
 function fmtDist(m){ return m>=1000?(m/1000).toFixed(1).replace(".",",")+" km":m+" m"; }
 /* resumo padronizado do check-in: 🟢 ENTRADA (mapa) · 🔴 SAÍDA (mapa) · ⏱ tempo · 🚩 alerta de distância — identifica cada processo */
