@@ -29,9 +29,10 @@ export default async (req) => {
       lista = lista.filter((x) => x.id !== body.id);
     } else {
       const it = body.item || {};
-      if (!String(it.texto || "").trim() && !String(it.cliente || "").trim())
-        return new Response(JSON.stringify({ erro: "vazio" }), { status: 400, headers: cors });
       const existing = lista.find((x) => x.id === it.id);
+      // "vazio" só barra CRIAÇÃO (item novo). Update parcial (obs_add/reag_add/baixa em item existente) passa.
+      if (!existing && !String(it.texto || "").trim() && !String(it.cliente || "").trim())
+        return new Response(JSON.stringify({ erro: "vazio" }), { status: 400, headers: cors });
       // DESMARCAÇÃO (a visita não aconteceu) exige CÓDIGO DA DIRETORIA — vale p/ "perdido" (baixa desmarcado)
       // E p/ "remarcado" (desmarc_add sem baixa). A diretoria só LIBERA; o rep já escolheu o destino.
       const gateDesmarc = (it.baixa && it.baixa.tipo === "desmarcado") || (it.desmarc_add && typeof it.desmarc_add === "object");
