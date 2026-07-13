@@ -51,6 +51,26 @@ export default async (req) => {
           ts: +it.desmarc_add.ts || Date.now(),
         }]).slice(-50);
       }
+      // histórico de REAGENDAMENTOS (motivo de não ter ido / de remarcar) — permanente
+      let reag_hist = (existing && Array.isArray(existing.reag_hist)) ? existing.reag_hist : [];
+      if (it.reag_add && typeof it.reag_add === "object") {
+        reag_hist = reag_hist.concat([{
+          motivo: String(it.reag_add.motivo || "").slice(0, 300),
+          de: String(it.reag_add.de || "").slice(0, 20),
+          para: String(it.reag_add.para || "").slice(0, 20),
+          por: String(it.reag_add.por || "").slice(0, 40),
+          ts: +it.reag_add.ts || Date.now(),
+        }]).slice(-50);
+      }
+      // OBSERVAÇÕES do escritório (acompanhamento) — append permanente por feedback
+      let obs = (existing && Array.isArray(existing.obs)) ? existing.obs : [];
+      if (it.obs_add && typeof it.obs_add === "object") {
+        obs = obs.concat([{
+          texto: String(it.obs_add.texto || "").slice(0, 1000),
+          por: String(it.obs_add.por || "").slice(0, 40),
+          ts: +it.obs_add.ts || Date.now(),
+        }]).slice(-100);
+      }
       const baixa = it.clear_baixa ? null : (it.baixa && typeof it.baixa === "object") ? {
         tipo: it.baixa.tipo === "desmarcado" ? "desmarcado" : "compareceu",
         ts: +it.baixa.ts || Date.now(),
@@ -77,8 +97,11 @@ export default async (req) => {
           : (existing ? existing.checkout || null : null),   // saída (opcional) — mede o tempo na clínica
         proximo: String(it.proximo || "").slice(0, 20),
         sem_retorno: !!it.sem_retorno,
+        a_visitar: !!it.a_visitar,   // cliente lançado p/ visitar SEM data (o vendedor define quando ir)
         origem: it.origem === "telefone" ? "telefone" : "visita",   // prospecção por telefone × presencial
         desmarc_hist,   // auditoria permanente das desmarcações (motivo/destino/quem/diretoria)
+        reag_hist,      // histórico de reagendamentos com motivo
+        obs,            // observações do escritório (acompanhamento)
         baixa,
         por: String(it.por || "equipe").slice(0, 40),
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
