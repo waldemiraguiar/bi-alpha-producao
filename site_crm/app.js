@@ -592,6 +592,15 @@ function detectCliente(texto){ const m=(" "+(texto||"")).match(/\b(cl[ií]nica|h
 let F_ID=null, F_RES="visita", F_CHECKIN=null, F_CHECKOUT=null, F_SEMRET=false, F_COMPLETING=false;
 function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 function dwellMin(ci,co){ return (ci&&co&&co.ts&&ci.ts)?Math.max(0,Math.round((co.ts-ci.ts)/60000)):null; }
+function mapPin(pt, label){ return (pt&&pt.ts&&pt.lat!=null&&pt.lng!=null)?`<a href="https://maps.google.com/?q=${pt.lat},${pt.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">${label}</a>`:""; }
+/* resumo padronizado do check-in: 🟢 ENTRADA (mapa) · 🔴 SAÍDA (mapa) · ⏱ tempo — identifica cada processo */
+function checkinResumo(ci, co){
+  const p=n=>String(n).padStart(2,"0"), hm=x=>{const d=new Date(x.ts); return p(d.getHours())+":"+p(d.getMinutes());}, parts=[];
+  if(ci&&ci.ts) parts.push(`🟢 <b>Entrada</b> ${hm(ci)} ${mapPin(ci,"📍 mapa")}`); else parts.push(`<span style="color:#ffc266">⚠️ sem check-in de entrada</span>`);
+  if(co&&co.ts) parts.push(`🔴 <b>Saída</b> ${hm(co)} ${mapPin(co,"📍 mapa")}`); else if(ci&&ci.ts) parts.push(`<span style="color:#ffc266">⏳ sem saída (não bateu o check-out)</span>`);
+  const dw=dwellMin(ci,co); if(dw!=null) parts.push(`⏱ <b>${dw} min</b> na clínica`);
+  return parts.join(" · ");
+}
 /* check-in (entrada) / check-out (saída) por georreferência (Geolocation API — anti-golpe + tempo na clínica) */
 function fazerCheckin(btn, kind){
   if(!navigator.geolocation){ alert("Este aparelho não tem localização/GPS."); return; }
@@ -606,11 +615,7 @@ function fazerCheckin(btn, kind){
 }
 function renderCheckinStatus(){
   const el=document.getElementById("fCheckinStatus"); if(!el) return;
-  const p=n=>String(n).padStart(2,"0"), hm=x=>{const d=new Date(x.ts); return p(d.getHours())+":"+p(d.getMinutes());}, s=[];
-  if(F_CHECKIN) s.push(`entrada ${hm(F_CHECKIN)} <a href="https://maps.google.com/?q=${F_CHECKIN.lat},${F_CHECKIN.lng}" target="_blank" style="color:var(--cyan)">📍</a>`);
-  if(F_CHECKOUT) s.push(`saída ${hm(F_CHECKOUT)}`);
-  const dw=dwellMin(F_CHECKIN,F_CHECKOUT); if(dw!=null) s.push(`<b>⏱ ${dw} min na clínica</b>`);
-  el.style.display=s.length?"block":"none"; el.innerHTML="✅ "+s.join(" · ");
+  el.style.display=(F_CHECKIN||F_CHECKOUT)?"block":"none"; el.innerHTML=checkinResumo(F_CHECKIN,F_CHECKOUT);
 }
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
@@ -1491,7 +1496,7 @@ function renderTab(){
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?" · editado":""}</span></div>
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
           ${f.sem_retorno?`<div class="rtbadge" style="background:rgba(255,138,0,.16);color:#ffc266">🚫 sem retorno</div>`:(f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:"")}
-          <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${(f.checkin&&f.checkin.ts)?`<a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in</a>`:`<span style="color:#ffc266">⚠️ sem check-in</span>`}${dwellMin(f.checkin,f.checkout)!=null?` · ⏱ ${dwellMin(f.checkin,f.checkout)} min na clínica`:""}</div>
+          <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${checkinResumo(f.checkin,f.checkout)}</div>
           ${f.baixa?`<div class="ci" style="font-size:11.5px">${f.baixa.tipo==="compareceu"?`<span style="color:#7effcf;font-weight:700">✓ baixa: compareceu${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf">📍 mapa</a>`:""}</span>`:`<span style="color:#ffc266;font-weight:700">🚫 baixa: desmarcado · aut. diretoria${f.baixa.motivo?' ("'+esc(f.baixa.motivo)+'")':''}</span>`}</div>`:""}</div>
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
@@ -1619,7 +1624,8 @@ function renderTab(){
         if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
         body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">✅</div>
           <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· realizado ${dd} ${p2(d.getDate())}/${p2(d.getMonth()+1)} ${p2(d.getHours())}:${p2(d.getMinutes())}</span></div>
-            <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${(f.baixa.checkin&&f.baixa.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.baixa.checkin.lat},${f.baixa.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf;font-weight:700">✅ check-in no mapa</a>`:""}${dwellMin(f.checkin,f.checkout)!=null?` · ⏱ ${dwellMin(f.checkin,f.checkout)} min`:""}</div>
+            <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}</div>
+            <div class="ci" style="font-size:11.5px;margin-top:2px">${checkinResumo(f.checkin&&f.checkin.ts?f.checkin:(f.baixa&&f.baixa.checkin),f.checkout&&f.checkout.ts?f.checkout:(f.baixa&&f.baixa.checkout))}</div>
             ${f.texto?`<div class="lastint">"${esc(f.texto.slice(0,80))}"</div>`:""}</div>
           <div class="mid"></div>
           <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente pediu outra revisita — marca nova data e volta pra Retornos">🔁 Reagendar</button><button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desfazer baixa — confirmei errado">↩ Voltar etapa</button></div></div>`; });
