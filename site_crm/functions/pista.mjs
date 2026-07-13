@@ -82,29 +82,32 @@ export default async (req) => {
         checkin: (it.baixa.checkin && typeof it.baixa.checkin === "object")
           ? { lat: +it.baixa.checkin.lat || 0, lng: +it.baixa.checkin.lng || 0, acc: +it.baixa.checkin.acc || 0, ts: +it.baixa.checkin.ts || 0 } : null,
       } : (existing ? existing.baixa || null : null);
+      // fallback: em update parcial (ex.: só obs_add), preserva o valor existente quando o campo não veio no payload
+      const E = existing || {};
+      const keep = (k, v) => (it[k] !== undefined ? v : (existing ? E[k] : v));
       const clean = {
         id: it.id || ("f" + Date.now()),
-        cliente: String(it.cliente || "").slice(0, 120),
-        bairro: String(it.bairro || "").slice(0, 80),
-        cod: it.cod ? String(it.cod).slice(0, 30) : "",
-        texto: String(it.texto || "").slice(0, 2000),
-        resultado: RES.includes(it.resultado) ? it.resultado : "visita",
-        data_visita: String(it.data_visita || "").slice(0, 20),
+        cliente: keep("cliente", String(it.cliente || "").slice(0, 120)),
+        bairro: keep("bairro", String(it.bairro || "").slice(0, 80)),
+        cod: keep("cod", it.cod ? String(it.cod).slice(0, 30) : ""),
+        texto: keep("texto", String(it.texto || "").slice(0, 2000)),
+        resultado: keep("resultado", RES.includes(it.resultado) ? it.resultado : "visita"),
+        data_visita: keep("data_visita", String(it.data_visita || "").slice(0, 20)),
         checkin: (it.checkin && typeof it.checkin === "object")
           ? { lat: +it.checkin.lat || 0, lng: +it.checkin.lng || 0, acc: +it.checkin.acc || 0, ts: +it.checkin.ts || 0 }
           : (existing ? existing.checkin || null : null),   // não perde o check-in ao editar
         checkout: (it.checkout && typeof it.checkout === "object")
           ? { lat: +it.checkout.lat || 0, lng: +it.checkout.lng || 0, acc: +it.checkout.acc || 0, ts: +it.checkout.ts || 0 }
           : (existing ? existing.checkout || null : null),   // saída (opcional) — mede o tempo na clínica
-        proximo: String(it.proximo || "").slice(0, 20),
-        sem_retorno: !!it.sem_retorno,
-        a_visitar: !!it.a_visitar,   // cliente lançado p/ visitar SEM data (o vendedor define quando ir)
-        origem: it.origem === "telefone" ? "telefone" : "visita",   // prospecção por telefone × presencial
+        proximo: keep("proximo", String(it.proximo || "").slice(0, 20)),
+        sem_retorno: keep("sem_retorno", !!it.sem_retorno),
+        a_visitar: keep("a_visitar", !!it.a_visitar),   // cliente lançado p/ visitar SEM data (o vendedor define quando ir)
+        origem: keep("origem", it.origem === "telefone" ? "telefone" : "visita"),   // prospecção por telefone × presencial
         desmarc_hist,   // auditoria permanente das desmarcações (motivo/destino/quem/diretoria)
         reag_hist,      // histórico de reagendamentos com motivo
         obs,            // observações do escritório (acompanhamento)
         baixa,
-        por: String(it.por || "equipe").slice(0, 40),
+        por: keep("por", String(it.por || "equipe").slice(0, 40)),
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
         ts_upd: Date.now(),
       };
