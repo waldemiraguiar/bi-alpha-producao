@@ -422,12 +422,27 @@ function openAgendar(){
     <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
     <div class="m-lbl">Data da visita agendada <span style="color:var(--red)">*</span></div>
     <input id="aData" type="date" class="m-date" value="${hojeISO()}">
-    <div class="m-lbl">O que combinou no telefone</div>
-    <textarea id="aObs" class="m-ta" style="min-height:54px" placeholder="Ex.: Dra. topou receber orçamento, levar tabela de histopato"></textarea>
+    <div class="m-lbl">O que combinou no telefone <span class="t-mut" style="font-weight:500">— ${speechOK()?"toque 🎤 e fale, ou digite":"digite (voz indisponível neste aparelho)"}</span></div>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="micbtn" id="aMic" type="button">🎤 Falar</button>
+      <textarea id="aObs" class="m-ta" style="flex:1;min-height:70px;margin:0" placeholder="Ex.: Liguei pra clínica Provet no bairro Tijuca, a Dra. topou receber orçamento dia 15, levar tabela de histopato"></textarea>
+    </div>
+    <div id="aHint" class="proxhint" style="display:none"></div>
     <button class="m-save" id="aSave">📞 Agendar na rota</button>`;
   document.getElementById("modal").style.display="flex";
-  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  const ata=document.getElementById("aObs");
+  const aDetect=()=>{ const val=ata.value, got=[];
+    const setIf=(id,v,fmt)=>{ const el=document.getElementById(id); if(el && !el.value && v){ el.value=v; got.push(fmt(v)); } };
+    setIf("aRep", detectRep(val), v=>"👤 "+v);
+    setIf("aCli", detectCliente(val), v=>"🏥 "+v);
+    setIf("aBairro", detectBairro(val, bairrosUsados), v=>"📍 "+v);
+    const dt=parseDataBR(val); if(dt){ const el=document.getElementById("aData"); if(el && el.value===hojeISO()){ el.value=dt; got.push("📅 "+fmtDataBR(dt)); } }
+    const h=document.getElementById("aHint"); if(h){ if(got.length){ h.style.display="block"; h.innerHTML="🧠 detectei da fala (confira/corrija): <b>"+got.join(" · ")+"</b>"; } } };
+  ata.addEventListener("input", aDetect);
+  document.getElementById("aMic").onclick=function(){ pistaMic(this, ata, aDetect); };
   document.getElementById("aSave").onclick=async()=>{
+    try{PREC&&PREC.stop();}catch(e){}
     const rep=document.getElementById("aRep").value.trim(), cli=document.getElementById("aCli").value.trim(), bairro=document.getElementById("aBairro").value.trim(), data=document.getElementById("aData").value, obs=document.getElementById("aObs").value.trim();
     if(!rep){ alert("Informe o COMERCIAL."); return; }
     if(!cli){ alert("Informe o CLIENTE / clínica."); document.getElementById("aCli").focus(); return; }
