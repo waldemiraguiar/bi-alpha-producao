@@ -593,12 +593,17 @@ const BAIRRO_COORD={ // bairro normalizado (sem acento) → [lat, lng] · centro
   "belford roxo":[-22.7640,-43.3990],"nilopolis":[-22.8080,-43.4140],"mesquita":[-22.7820,-43.4290],
   "niteroi":[-22.8830,-43.1030],"icarai":[-22.9060,-43.1080],"sao goncalo":[-22.8270,-43.0540],"alcantara":[-22.8250,-43.0180],
 };
-function bairroKey(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim(); }
+function bairroKey(s){ return (s||"").replace(/\([^)]*\)/g," ").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim(); }  // ignora o "(cerâmica)" — pega só a região (Nova Iguaçu)
 function geoCacheLoad(){ try{ return JSON.parse(localStorage.getItem("crm_bairro_geo")||"{}"); }catch(e){ return {}; } }
 function geoCacheSave(o){ try{ localStorage.setItem("crm_bairro_geo", JSON.stringify(o)); }catch(e){} }
 function ptBairro(f){ const k=bairroKey(f.bairro); if(!k) return null;
   if(BAIRRO_COORD[k]) return {lat:BAIRRO_COORD[k][0],lng:BAIRRO_COORD[k][1],src:"bairro"};
-  const g=geoCacheLoad(); if(g[k]) return {lat:g[k][0],lng:g[k][1],src:"bairro"}; return null; }
+  const g=geoCacheLoad(); if(g[k]) return {lat:g[k][0],lng:g[k][1],src:"bairro"};
+  // fallback: acha a região conhecida contida no texto (ex.: "cerâmica nova iguacu" → nova iguacu)
+  const kw=" "+k+" "; let best=null;
+  for(const bk in BAIRRO_COORD){ if(kw.includes(" "+bk+" ") && (!best||bk.length>best.length)) best=bk; }
+  if(best) return {lat:BAIRRO_COORD[best][0],lng:BAIRRO_COORD[best][1],src:"bairro"};
+  return null; }
 function ptOf(f){ if(f&&f.checkin&&f.checkin.ts&&f.checkin.lat!=null&&f.checkin.lng!=null) return {lat:f.checkin.lat,lng:f.checkin.lng,src:"checkin"}; return ptBairro(f); }
 /* geocoda (1x, cacheado) os bairros que não estão na tabela nem têm check-in — via Nominatim grátis */
 async function geocodeBairros(items){
