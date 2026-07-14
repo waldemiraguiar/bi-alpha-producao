@@ -211,6 +211,7 @@ async function pqFlush(){
   if(rest.length!==q.length && ACTIVE==="pista") renderTab();
 }
 async function savePista(it){ if(!it.por) it.por=meuRep()||"equipe";
+  it.edit_by=operadorAtual()||it.por; it.edit_ts=Date.now();   // QUEM mudou/ajustou (auditoria)
   try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:it,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); return false; }
     if(r.ok){ syncPista((await r.json()).pista); return true; }
@@ -311,8 +312,50 @@ async function addRep(nome){ nome=(nome||"").trim(); if(!nome) return; const por
   try{ const r=await fetch(REPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão."); return; } if(r.ok){ syncReps((await r.json()).reps); renderTab(); } }catch(e){ alert("Falha ao cadastrar."); } }
 async function removeRep(nome){ try{ const r=await fetch(REPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",nome,senha:window.__pwd})}); if(r.ok){ syncReps((await r.json()).reps); renderTab(); } }catch(e){} }
-function repList(){ return [...new Set([...REPS, ...PISTA.map(f=>f.por).filter(Boolean)])].sort((a,b)=>a.localeCompare(b)); }  // cadastrados + já usados
-function meuRep(){ return localStorage.getItem("crm_rep")||""; }
+function repList(){ return [...new Set([...REPS, ...OPERADORES.map(o=>o.nome), ...PISTA.map(f=>f.por).filter(Boolean)])].sort((a,b)=>a.localeCompare(b)); }  // cadastrados + operadores + já usados
+function meuRep(){ return operadorAtual() || (localStorage.getItem("crm_rep")||""); }
+/* ---- 👤 OPERADOR (identidade + PIN — pra saber QUEM mudou/ajustou; mantém a senha do time p/ entrar) ---- */
+const OPS_API="/api/crm-operadores";
+let OPERADORES=[];
+function syncOps(a){ OPERADORES=(a||[]).slice(); }
+async function loadOps(){ try{ const r=await fetch(OPS_API); if(r.ok) syncOps((await r.json()).operadores); }catch(e){} }
+function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
+function setOperador(nome){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } renderOpBtn(); }
+function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+" · trocar"):"👤 identificar-se"; } }
+async function verificaPin(nome, pin){
+  try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"verify",nome,pin,senha:window.__pwd})});
+    if(r.ok){ return (await r.json()).ok; } }catch(e){ return null; }   // null = offline/erro
+  return false; }
+async function criarOperador(nome, pin){
+  try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,senha:window.__pwd})});
+    if(r.status===409){ alert("Já existe um operador com esse nome — escolha ele na lista."); return false; }
+    if(r.status===400){ alert("O PIN precisa de pelo menos 4 dígitos."); return false; }
+    if(r.status===401){ alert("Sessão sem permissão."); return false; }
+    if(r.ok){ syncOps((await r.json()).operadores); return true; } }catch(e){ alert("Sem internet — precisa de conexão pra criar operador."); }
+  return false; }
+async function openIdentidade(force){
+  await loadOps();
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div><div class="m-cli">👤 Quem está usando?</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">identifique-se com seu PIN — tudo que você fizer/ajustar fica no seu nome</div></div>
+      ${force?"":'<button class="m-x" id="mClose">✕</button>'}</div>
+    <div id="opList" style="display:flex;flex-direction:column;gap:8px;margin:10px 0">
+      ${OPERADORES.length?OPERADORES.map(o=>`<button class="checkinbtn" data-op="${esc(o.nome)}" style="text-align:left">👤 ${esc(o.nome)}</button>`).join(""):`<div class="t-mut" style="text-align:center;padding:10px">Nenhum operador ainda. Crie o primeiro 👇</div>`}
+    </div>
+    <button class="m-save" id="opNovo">＋ Novo operador</button>`;
+  document.getElementById("modal").style.display="flex";
+  const mc=document.getElementById("mClose"); if(mc) mc.onclick=closeModal;
+  document.querySelectorAll("#opList [data-op]").forEach(el=>el.onclick=async()=>{
+    const nome=el.dataset.op, pin=(prompt(`PIN de ${nome}:`)||"").trim(); if(!pin) return;
+    const ok=await verificaPin(nome, pin);
+    if(ok===true){ setOperador(nome); closeModal(); renderAll(); }
+    else if(ok===null){ if(confirm("Sem internet pra validar o PIN agora. Entrar como "+nome+" mesmo assim?")){ setOperador(nome); closeModal(); renderAll(); } }
+    else alert("PIN incorreto."); });
+  document.getElementById("opNovo").onclick=async()=>{
+    const nome=(prompt("Nome do novo operador (ex.: Heitor, Luciane, Wal):")||"").trim(); if(!nome) return;
+    const pin=(prompt(`Crie um PIN (mínimo 4 dígitos) para ${nome}:`)||"").trim(); if(pin.length<4){ alert("O PIN precisa de pelo menos 4 dígitos."); return; }
+    const ok=await criarOperador(nome, pin); if(ok){ setOperador(nome); closeModal(); renderAll(); } };
+}
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
 /* VISITA EM ANDAMENTO: check-in na CHEGADA (separado); feedback+check-out na SAÍDA */
 function visitaLoad(){ try{ return JSON.parse(localStorage.getItem("crm_visita")||"null"); }catch(e){ return null; } }
@@ -1554,7 +1597,7 @@ function renderTab(){
       if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
       body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">
         <div class="rk" style="color:${pr.col}">${pr.ic}</div>
-        <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?" · editado":""}</span></div>
+        <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?(" · ✏️ editado"+(f.edit_by?" por "+esc(f.edit_by):"")):""}</span></div>
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
           ${f.sem_retorno?`<div class="rtbadge" style="background:rgba(255,138,0,.16);color:#ffc266">🚫 sem retorno</div>`:(f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:"")}
           <div class="ci" style="font-size:11.5px;margin-top:2px">📍 ${esc(f.bairro||"—")} · ${checkinResumo(f.checkin,f.checkout)}</div>
@@ -1762,9 +1805,10 @@ function renderTab(){
         <div class="rk" style="color:${noPulse?"#FF8A00":"#FFD000"}">${noPulse?"🚫":"⏰"}</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">${badge}</span></div>
           <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${f.texto?' · "'+esc(f.texto.slice(0,50))+'"':''}</div>
-          ${(f.baixa&&f.baixa.motivo)?`<div class="lastint">motivo: "${esc(f.baixa.motivo)}"</div>`:""}</div>
+          ${(f.baixa&&f.baixa.motivo)?`<div class="lastint">motivo: "${esc(f.baixa.motivo)}"</div>`:""}
+          ${(f.obs&&f.obs.length)?`<div class="ci" style="font-size:11.5px;margin-top:2px;color:#9fe6ff">${f.obs.map(o=>`💬 "${esc(o.texto)}" <span class="t-mut">— ${esc(o.por||"")}</span>`).join("<br>")}</div>`:""}</div>
         <div class="mid"></div>
-        <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()">🔁 Reagendar</button>${isDesm?`<button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desmarcaram por engano — desfaz e volta ao retorno original">↩ Voltar etapa</button>`:""}</div></div>`;
+        <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-reag="${esc(f.id)}" onclick="event.stopPropagation()">🔁 Reagendar</button><button class="baixabtn no" data-obs="${esc(f.id)}" onclick="event.stopPropagation()" title="Registrar o motivo de não ter ido (sem reagendar)" style="color:#9fe6ff">📝 Motivo</button>${isDesm?`<button class="baixabtn no" data-undobaixa="${esc(f.id)}" onclick="event.stopPropagation()" title="Desmarcaram por engano — desfaz e volta ao retorno original">↩ Voltar etapa</button>`:""}</div></div>`;
       const secA=naofeitosAtras.length?`<div class="seclabel">🔴 Atrasados — passou da data e não teve baixa (${naofeitosAtras.length})</div>`+naofeitosAtras.map(f=>linhaNF(f,"· venceu "+fmtDataBR(f.proximo))).join(""):"";
       const secB=naofeitosDesmReag.length?`<div class="seclabel" style="margin-top:16px">🚫 Desmarcados — a visita não aconteceu, reagende (${naofeitosDesmReag.length})</div>`+naofeitosDesmReag.map(f=>linhaNF(f,"· desmarcado",true)).join(""):"";
       const secC=naofeitosPerdidos.length?`<div class="seclabel" style="margin-top:16px;color:#ffc266">🚫 Perdidos — cliente não quis mais (fora da agenda, no histórico/BI) (${naofeitosPerdidos.length})</div>`+naofeitosPerdidos.map(f=>linhaNF(f,"· perdido",true,true)).join(""):"";
@@ -1931,6 +1975,9 @@ function render(D){
   document.getElementById("app").style.display="block";
   applyLock();
   footer(); renderAll();
+  renderOpBtn();
+  const _ob=document.getElementById("opBtn"); if(_ob) _ob.onclick=()=>openIdentidade(false);
+  loadOps().then(()=>{ if(!operadorAtual()) openIdentidade(true); });   // pede identidade 1x por aparelho
   if(!window.__fuwired){
     window.__fuwired = true;
     document.getElementById("content").addEventListener("click", e=>{
@@ -1940,7 +1987,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos()]);
       if(a!==sig()) renderTab(); }, 45000);

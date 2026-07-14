@@ -108,6 +108,8 @@ export default async (req) => {
         obs,            // observações do escritório (acompanhamento)
         baixa,
         por: keep("por", String(it.por || "equipe").slice(0, 40)),
+        edit_by: it.edit_by ? String(it.edit_by).slice(0, 40) : (existing ? existing.edit_by || "" : ""),   // quem mudou/ajustou por último
+        edit_ts: +it.edit_ts || (existing ? existing.edit_ts || 0 : 0),
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
         ts_upd: Date.now(),
       };
