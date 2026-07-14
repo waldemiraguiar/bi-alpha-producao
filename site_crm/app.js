@@ -521,12 +521,26 @@ function openAddCliente(){
     <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— monta a rota</span></div>
     <input id="cBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca" list="bairrosDL">
     <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
-    <div class="m-lbl">Observação <span class="t-mut" style="font-weight:500">— opcional</span></div>
-    <textarea id="cObs" class="m-ta" style="min-height:54px" placeholder="Ex.: cliente do PDF do Heitor; oferecer histopato"></textarea>
+    <div class="m-lbl">Observação <span class="t-mut" style="font-weight:500">— ${speechOK()?"toque 🎤 e fale, ou digite (opcional)":"opcional"}</span></div>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="micbtn" id="cMic" type="button">🎤 Falar</button>
+      <textarea id="cObs" class="m-ta" style="flex:1;min-height:70px;margin:0" placeholder="Ex.: cliente do PDF do Heitor, clínica Provet na Tijuca, oferecer histopato"></textarea>
+    </div>
+    <div id="cHint" class="proxhint" style="display:none"></div>
     <button class="m-save" id="cSave">🎯 Lançar na lista do vendedor</button>`;
   document.getElementById("modal").style.display="flex";
-  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  const cta=document.getElementById("cObs");
+  const cDetect=()=>{ const val=cta.value, got=[];
+    const setIf=(id,v,fmt)=>{ const el=document.getElementById(id); if(el && !el.value && v){ el.value=v; got.push(fmt(v)); } };
+    setIf("cRep", detectRep(val), v=>"👤 "+v);
+    setIf("cCli", detectCliente(val), v=>"🏥 "+v);
+    setIf("cBairro", detectBairro(val, bairrosUsados), v=>"📍 "+v);
+    const h=document.getElementById("cHint"); if(h && got.length){ h.style.display="block"; h.innerHTML="🧠 detectei da fala (confira/corrija): <b>"+got.join(" · ")+"</b>"; } };
+  cta.addEventListener("input", cDetect);
+  document.getElementById("cMic").onclick=function(){ pistaMic(this, cta, cDetect); };
   document.getElementById("cSave").onclick=async()=>{
+    try{PREC&&PREC.stop();}catch(e){}
     const rep=document.getElementById("cRep").value.trim(), cli=document.getElementById("cCli").value.trim(), bairro=document.getElementById("cBairro").value.trim(), obs=document.getElementById("cObs").value.trim();
     if(!rep){ alert("Informe o COMERCIAL (quem vai visitar)."); return; }
     if(!cli){ alert("Informe o CLIENTE / clínica."); document.getElementById("cCli").focus(); return; }
