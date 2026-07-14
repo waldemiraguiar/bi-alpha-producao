@@ -251,7 +251,9 @@ function relTitulo(r){ if(r.titulo&&r.titulo.trim()) return r.titulo.trim();
   const ps=detectPains((r.titulo||"")+" "+r.texto); const dor=ps.length?ps[0].lbl:"";
   if(r.clinica) return r.clinica + (dor?(" — "+dor):"");
   return (r.texto||"").trim().split(/[.\n]/)[0].slice(0,60)||"Relato"; }
-function syncRelatos(arr){ RELATOS=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+function syncRelatos(arr){ const base=(arr||[]).slice(), ids=new Set(base.map(x=>x.id));
+  try{ (rqLoad()||[]).forEach(it=>{ if(it&&!ids.has(it.id)) base.push(it); }); }catch(e){}   // mantém os que ainda estão na fila offline (não somem num reload)
+  RELATOS=base.sort((a,b)=>(b.ts||0)-(a.ts||0)); }
 async function loadRelatos(){ try{ const r=await fetch(RELATOS_API); if(r.ok) syncRelatos((await r.json()).relatos); }catch(e){} }
 function relatosFiltrados(){ return repFilter ? RELATOS.filter(r=>(r.por||"")===repFilter) : RELATOS; }
 /* fila offline dos relatos (mesmo padrão da pista) */
@@ -297,8 +299,9 @@ function pistaMic(btn, ta, onDone){
   if(!SR){ alert("Este celular não transcreve voz (comum no iPhone). Pode DIGITAR o feedback normalmente."); return; }
   if(precOn){ try{PREC&&PREC.stop();}catch(e){} return; }
   PREC=new SR(); PREC.lang="pt-BR"; PREC.continuous=true; PREC.interimResults=true;
-  let base=ta.value?ta.value.trim()+" ":"";
-  PREC.onresult=e=>{ let fin="",intr=""; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t+" "; else intr+=t; } if(fin) base+=fin; ta.value=base+intr; };
+  const startBase = ta.value ? ta.value.replace(/\s+$/,"")+" " : "";   // texto que já existia antes de gravar (fixo)
+  // reconstrói do ZERO a cada evento (idempotente) — corrige a repetição "bom dia bom dia bom dia" em alguns Android
+  PREC.onresult=e=>{ let fin="",intr=""; for(let i=0;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t+" "; else intr+=t; } ta.value=startBase+fin+intr; if(onDone) try{onDone();}catch(_){} };
   const stop=()=>{ precOn=false; btn.classList.remove("rec"); btn.innerHTML="🎤 Falar"; if(onDone) try{onDone();}catch(e){} };
   PREC.onend=stop; PREC.onerror=stop;
   try{ PREC.start(); precOn=true; btn.classList.add("rec"); btn.innerHTML="⏹ Parar — gravando…"; }catch(e){ stop(); }
@@ -817,6 +820,11 @@ function openPistaRec(id){
 
 /* 📣 NOVO/EDITAR RELATO — o rep GRAVA o áudio contando o cenário; vira card estruturado + dores detectadas */
 function detectMedico(txt){ const m=(" "+(txt||"")).match(/\bdr(?:a|ª|\.)?\s+([A-Za-zÀ-ú]+(?:\s+[A-Za-zÀ-ú]+){0,2})/i); return m?("Dr"+(/\bdra|drª/i.test(m[0])?"ª":".")+" "+m[1].trim().replace(/\b\w/g,c=>c.toUpperCase())):""; }
+/* RASCUNHO automático do relato (anti-perda) — salva no aparelho enquanto escreve/fala; recupera se a aba fechar/recarregar */
+function relDraftSave(o){ try{ localStorage.setItem("crm_relato_draft", JSON.stringify(o)); }catch(e){} }
+function relDraftLoad(){ try{ return JSON.parse(localStorage.getItem("crm_relato_draft")||"null"); }catch(e){ return null; } }
+function relDraftClear(){ try{ localStorage.removeItem("crm_relato_draft"); }catch(e){} }
+function relDraftVazio(o){ return !o || !((o.texto||"").trim() || (o.clinica||"").trim() || (o.medico||"").trim() || (o.titulo||"").trim()); }
 function openRelato(id){
   const r=id?RELATOS.find(x=>x.id===id):null;
   const now=new Date(), pp=n=>String(n).padStart(2,"0");
@@ -858,9 +866,20 @@ function openRelato(id){
     const med=document.getElementById("rMed"); if(med && !med.value){ const m=detectMedico(ta.value); if(m) med.value=m; }
     const ps=detectPains(val), crit=relCritico(val), h=document.getElementById("rHint");
     if(h){ if(ps.length||crit){ h.style.display="block"; h.innerHTML="🧠 detectei: "+ps.map(p=>`<span class="comp-pill">${p.ic} ${p.lbl}</span>`).join(" ")+(crit?` <span class="comp-pill" style="background:rgba(255,45,85,.2);color:#ff8fa3;border-color:rgba(255,45,85,.5)">🔴 CLIENTE IRRITADO</span>`:""); } else h.style.display="none"; } };
-  ta.addEventListener("input", previa);
-  document.getElementById("rMic").onclick=function(){ pistaMic(this, ta, previa); };
-  document.getElementById("rOrig").onclick=e=>{ const b=e.target.closest("[data-o]"); if(b){ ORIG=b.dataset.o; [...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b)); } };
+  // 💾 RASCUNHO automático (só p/ relato NOVO) — nunca mais perde o que escreveu se a aba fechar/recarregar
+  const _v=id2=>{const el=document.getElementById(id2);return el?el.value:"";};
+  const lerCampos=()=>({rep:_v("rRep"),texto:_v("rTexto"),clinica:_v("rCli"),medico:_v("rMed"),data:_v("rData"),hora:_v("rHora"),titulo:_v("rTit"),origem:ORIG});
+  const salvaRascunho=()=>{ if(r) return; const d=lerCampos(); if(relDraftVazio(d)) relDraftClear(); else relDraftSave(d); };
+  if(!r){ const d=relDraftLoad(); if(d && !relDraftVazio(d)){
+      const setV=(id2,val)=>{const el=document.getElementById(id2); if(el&&val) el.value=val;};
+      setV("rRep",d.rep); setV("rTexto",d.texto); setV("rCli",d.clinica); setV("rMed",d.medico); setV("rData",d.data); setV("rHora",d.hora); setV("rTit",d.titulo);
+      if(d.origem){ ORIG=d.origem; [...document.getElementById("rOrig").children].forEach(c=>c.classList.toggle("on",c.dataset.o===ORIG)); }
+      const h=document.getElementById("rHint"); if(h){ h.style.display="block"; h.style.borderColor="rgba(0,229,160,.4)"; h.style.color="#7effcf"; h.style.background="rgba(0,229,160,.1)"; h.innerHTML='🔄 <b>Recuperei seu rascunho</b> não salvo — continue de onde parou. <a id="rDescartar" style="color:#ff8fa3;cursor:pointer;text-decoration:underline">🗑️ descartar</a>'; const dd=document.getElementById("rDescartar"); if(dd) dd.onclick=()=>{ relDraftClear(); closeModal(); openRelato(null); }; }
+  } }
+  ta.addEventListener("input", ()=>{ previa(); salvaRascunho(); });
+  ["rRep","rCli","rMed","rData","rHora","rTit"].forEach(id2=>{ const el=document.getElementById(id2); if(el) el.addEventListener("input", salvaRascunho); });
+  document.getElementById("rMic").onclick=function(){ pistaMic(this, ta, ()=>{ previa(); salvaRascunho(); }); };
+  document.getElementById("rOrig").onclick=e=>{ const b=e.target.closest("[data-o]"); if(b){ ORIG=b.dataset.o; [...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b)); salvaRascunho(); } };
   previa();
   document.getElementById("rSave").onclick=async()=>{
     try{PREC&&PREC.stop();}catch(e){}
@@ -872,7 +891,7 @@ function openRelato(id){
     const btn=document.getElementById("rSave"); btn.disabled=true; btn.textContent="Salvando…";
     const item={id:r?r.id:null, clinica, medico:document.getElementById("rMed").value.trim(), titulo:document.getElementById("rTit").value.trim(), texto, data:document.getElementById("rData").value||hojeISO(), hora:document.getElementById("rHora").value||"", origem:ORIG, por:rep, ts:r?r.ts:Date.now()};
     const ok=await saveRelato(item);
-    if(ok){ closeModal(); pistaView="relatos"; renderTab(); } else { btn.disabled=false; btn.textContent=r?"Salvar alterações":"Salvar relato"; } };
+    if(ok){ if(!r) relDraftClear(); closeModal(); pistaView="relatos"; renderTab(); } else { btn.disabled=false; btn.textContent=r?"Salvar alterações":"Salvar relato"; } };
   const del=document.getElementById("rDel"); if(del) del.onclick=async()=>{ if(confirm(`Remover o relato de "${r.clinica||""}"?`)){ await removeRelato(r.id); closeModal(); renderTab(); } };
 }
 
