@@ -808,7 +808,9 @@ function openPistaRec(id){
     if(fechou){ /* ✅ Fechou não precisa de retorno — libera automático (mantém a data se ele quis marcar) */ }
     else if(semRet){ prox=""; if(!texto){ alert("Marcou '🚫 Sem retorno' — então escreva o MOTIVO no feedback (ex.: cliente fechou a porta, recusou)."); ta.focus(); return; } }
     else if(!prox){ alert("Informe a DATA DE RETORNO — obrigatória. Fale/escolha a data, OU marque '🚫 Sem retorno' e explique o motivo."); document.getElementById("fProx").focus(); return; }
-    if(!F_CHECKIN){ alert("Faça o CHECK-IN (📍 GPS) — obrigatório: confirma que você está no cliente."); return; }
+    // check-in obrigatório só p/ VISITA de verdade (nova ou finalizando). Editar um agendado/pendente (sem visita ainda) NÃO exige check-in — é só ajuste (pedido do Heitor).
+    const editandoPendente = !!F_ID && !F_COMPLETING && !F_CHECKIN;
+    if(!editandoPendente && !F_CHECKIN){ alert("Faça o CHECK-IN (📍 GPS) — obrigatório: confirma que você está no cliente."); return; }
     localStorage.setItem("crm_rep", rep);   // memoriza quem é neste aparelho
     const btn=document.getElementById("fSave"); btn.disabled=true; btn.textContent="Salvando…";
     const item={id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, sem_retorno:semRet, checkin:F_CHECKIN, checkout:F_CHECKOUT};
