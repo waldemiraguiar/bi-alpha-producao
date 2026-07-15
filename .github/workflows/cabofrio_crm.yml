@@ -1,0 +1,46 @@
+name: Cabo Frio — criar/publicar CRM (isolado da Matriz)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: secret.mjs do Cabo Frio (senhas próprias)
+        env:
+          CRM_PWD:  ${{ secrets.CRM_PWD_CF }}
+          DIR_CODE: ${{ secrets.DIR_CODE_CF }}
+          FIN_KEY:  ${{ secrets.FIN_KEY_CF }}
+        run: |
+          node -e "const fs=require('fs');fs.writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\nexport const DIR_CODE='+JSON.stringify(process.env.DIR_CODE||'')+';\nexport const FIN_KEY='+JSON.stringify(process.env.FIN_KEY||'')+';\n')"
+          cd site_crm/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
+
+      - name: Cache-bust
+        run: |
+          V=$(date +%s)
+          sed -i "s#\(src=\"app\.js\)\"#\1?v=$V\"#g; s#\(src=\"gate-crypto\.js\)\"#\1?v=$V\"#g" site_crm/index.html
+
+      - name: Criar (idempotente) + publicar o site Cabo Frio
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          MATRIZ_SITE: ${{ secrets.CRM_SITE_ID }}
+        run: |
+          set -e
+          NAME=agente-crm-cabofrio
+          CLI="npx --yes netlify-cli@26"
+          # já existe um site com esse nome?
+          SID=$($CLI api listSites --data '{}' | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const a=JSON.parse(d);const s=a.find(x=>x.name==='$NAME');process.stdout.write(s?s.id:'')}catch(e){}})")
+          if [ -z "$SID" ]; then
+            SLUG=$($CLI api getSite --data "{\"site_id\":\"$MATRIZ_SITE\"}" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).account_slug||'')}catch(e){}})")
+            echo "Criando site '$NAME' na conta '$SLUG'…"
+            SID=$($CLI api createSite --data "{\"name\":\"$NAME\",\"account_slug\":\"$SLUG\"}" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const s=JSON.parse(d);process.stdout.write(s.id||s.site_id||'')}catch(e){}})")
+          fi
+          echo "==== CABO FRIO SITE ID = $SID ===="
+          $CLI deploy --prod --dir=site_crm --functions=site_crm/functions --site="$SID"
+          echo "==== URL: https://$NAME.netlify.app ===="
