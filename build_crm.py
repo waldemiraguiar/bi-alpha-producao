@@ -205,7 +205,19 @@ def post_clinicas_rs(D):
         print("post_clinicas_rs: pulado (falta CRM_PWD/FIN_KEY/dados)")
         return
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
-    data = json.dumps(rsmap, ensure_ascii=False, separators=(",", ":")).encode()
+    # R$ DESDE O MARCO ZERO (reconquistadas): puxa a carteira e soma ValorExame a partir da data de reconquista
+    desde = {}
+    try:
+        import urllib.request as _u
+        base0 = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+        cart = json.loads(_u.urlopen(_u.Request(base0 + "/api/crm-carteira?_=" + str(int(time.time())), headers={"User-Agent": "robo"}), timeout=30).read().decode()).get("carteira", [])
+        since_map = {c.get("cod"): c.get("reconq_data") for c in cart if c.get("cod") and c.get("reconq_data")}
+        if since_map:
+            from build_financeiro import clinic_fat_since
+            desde = clinic_fat_since(since_map)
+    except Exception as e:
+        print(f"post_clinicas_rs: R$ desde o marco pulado ({e})")
+    data = json.dumps({"fat": rsmap, "desde": desde}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
     ct = AESGCM(key).encrypt(iv, data, None)

@@ -124,6 +124,28 @@ def clinic_details(cods, since_map=None):
                         "recent": recent[cod]["lst"], "recent_desde": recent[cod]["desde"], "recent_mais": recent[cod]["mais"]}
     return {"det": out, "setores": setores}
 
+def clinic_fat_since(since_map):
+    """R$ (SUM ValorExame) por clínica DESDE o marco zero (data da reconquista). Usado SÓ no fluxo CIFRADO
+    (diretoria) — o R$ de uma reconquistada tem que contar a partir da volta dela, não 12m cheios."""
+    since_map = since_map or {}
+    valid = {str(k): str(v or "")[:10] for k, v in since_map.items() if k is not None and str(v or "")}
+    if not valid:
+        return {}
+    conn = pymysql.connect(**SRC); c = conn.cursor()
+    def q(sql, p=()): c.execute(sql, p); return c.fetchall()
+    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    out = {}
+    for cod, dt in valid.items():
+        try:
+            datetime.date.fromisoformat(dt)
+        except Exception:
+            continue
+        r = q(f"SELECT COALESCE(SUM(s.ValorExame),0) f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+              f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s", (cod, dt, maxd))
+        out[cod] = round(float(r[0]["f"] or 0), 2)
+    conn.close()
+    return out
+
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()

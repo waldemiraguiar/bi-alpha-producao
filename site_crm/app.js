@@ -430,7 +430,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null;   // env cifrado (público) + mapa {cod:fat} decifrado (só na memória da diretoria)
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde o marco} decifrados (só diretoria)
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -438,8 +438,15 @@ async function decDirRS(code){
   try{ const bk=await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
-    CLIN_RS=JSON.parse(new TextDecoder().decode(plain)); return true;
+    const obj=JSON.parse(new TextDecoder().decode(plain));
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; }   // formato novo {fat, desde}
+    else { CLIN_RS=obj; CLIN_RS_DESDE={}; }   // compat formato antigo (mapa plano)
+    return true;
   }catch(e){ return false; } }
+/* R$ da clínica: se ela tem marco zero e há R$ desde o marco, usa esse (reconquista conta da volta); senão 12m */
+function rsVal(cod, marco){ if(!CLIN_RS||cod==null) return null; const k=String(cod);
+  if(marco && CLIN_RS_DESDE && CLIN_RS_DESDE[k]!=null) return CLIN_RS_DESDE[k];
+  return CLIN_RS[k]!=null?CLIN_RS[k]:null; }
 function dirCodeCache(){ return localStorage.getItem("crm_fin_code")||sessionStorage.getItem("crm_dir_code")||""; }   // localStorage = gruda no aparelho da diretoria
 async function verRS(){
   if(!ehDiretoria()){ alert("Só a diretoria vê R$. Identifique-se como diretoria primeiro (🔓)."); return; }
@@ -452,18 +459,52 @@ async function verRS(){
 /* 🔓 UNLOCK financeiro em UMA tocada: pede a senha financeira, e se a decifragem funcionar (prova
    criptográfica de que o código está certo) já promove a diretoria + abre o R$. Serve mesmo que o
    operador ainda não esteja marcado como diretoria neste aparelho. */
+/* 👆 DIGITAL / FACE ID (WebAuthn): depois de destravar 1x com a senha, o Wal ativa a biometria e nas
+   próximas abre com o dedo/rosto. A senha financeira fica salva no aparelho; a biometria é o atalho rápido. */
+async function bioSuportado(){ try{ return !!(window.PublicKeyCredential) && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }catch(e){ return false; } }
+async function bioRegistrar(){
+  try{
+    const cred=await navigator.credentials.create({publicKey:{
+      challenge:crypto.getRandomValues(new Uint8Array(32)),
+      rp:{name:"Agente CRM Alpha", id:location.hostname},
+      user:{id:crypto.getRandomValues(new Uint8Array(16)), name:"diretoria", displayName:"Diretoria"},
+      pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:"platform", userVerification:"required"},
+      timeout:60000, attestation:"none"}});
+    const raw=new Uint8Array(cred.rawId); let s=""; raw.forEach(b=>s+=String.fromCharCode(b));
+    localStorage.setItem("crm_bio_id", btoa(s)); return true;
+  }catch(e){ return false; }
+}
+async function bioUnlock(){
+  const id=localStorage.getItem("crm_bio_id"); if(!id) return false;
+  try{ await navigator.credentials.get({publicKey:{
+      challenge:crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials:[{type:"public-key", id:_b64b(id)}],
+      userVerification:"required", timeout:60000}});
+    return true;   // biometria passou
+  }catch(e){ return false; }
+}
 async function abrirFinanceiro(){
   if(!CLIN_RS_ENV) await loadClinRS();
   if(!CLIN_RS_ENV || !CLIN_RS_ENV.ct){ alert("Os valores em R$ ainda não chegaram do robô — tenta de novo em alguns minutos."); return; }
+  // 1) já tem digital + senha salva no aparelho → abre com o dedo/rosto
+  if(localStorage.getItem("crm_bio_id") && localStorage.getItem("crm_fin_code")){
+    if(await bioUnlock()){ const ok=await decDirRS(localStorage.getItem("crm_fin_code"));
+      if(ok){ localStorage.setItem("crm_operador_papel","diretoria"); sessionStorage.setItem("crm_dir_code",localStorage.getItem("crm_fin_code")); renderOpBtn(); renderAll(); return; } }
+    // biometria falhou/cancelou → cai pro código
+  }
   const code=dirCodeCache()||(prompt("🔒 Senha FINANCEIRA da diretoria (abre o faturamento em R$):")||"").trim();
   if(!code) return;
   const ok=await decDirRS(code);
-  if(ok){ localStorage.setItem("crm_operador_papel","diretoria"); localStorage.setItem("crm_fin_code",code); sessionStorage.setItem("crm_dir_code",code); renderOpBtn(); renderAll(); }   // grava no aparelho → abre sozinho nas próximas
+  if(ok){ localStorage.setItem("crm_operador_papel","diretoria"); localStorage.setItem("crm_fin_code",code); sessionStorage.setItem("crm_dir_code",code); renderOpBtn(); renderAll();   // grava no aparelho → abre sozinho nas próximas
+    if(!localStorage.getItem("crm_bio_id") && await bioSuportado() && confirm("Ativar 👆 Face ID / digital pra abrir o financeiro rápido neste aparelho?")){
+      if(await bioRegistrar()) alert("👆 Pronto! Da próxima é só o dedo/rosto."); } }
   else alert("Código incorreto — não abri o R$. (É a senha financeira, diferente do código do desmarcou.)");
 }
-function rsClin(cod){
+function rsClin(cod, marco){
   if(!ehDiretoria()) return "";   // reps não veem NADA de R$ (nem que existe)
-  if(CLIN_RS && cod!=null && CLIN_RS[String(cod)]!=null) return `<b style="color:#7effcf">${fmtBRL(CLIN_RS[String(cod)])}</b>`;
+  const v=rsVal(cod, marco);
+  if(v!=null) return `<b style="color:#7effcf">${fmtBRL(v)}</b>${marco&&CLIN_RS_DESDE&&CLIN_RS_DESDE[String(cod)]!=null?' <span class="t-mut" style="font-size:10px">desde a reconq.</span>':''}`;
   return `<a onclick="abrirFinanceiro()" style="color:var(--cyan);cursor:pointer;font-weight:700">🔓 ver R$</a>`;
 }
 /* fuzzy match: normaliza, tira palavras genéricas (vet/clínica/pet…), casa por token distintivo — "Guaratiba" acha "Vet Guaratiba" */
@@ -1712,7 +1753,7 @@ function renderTab(){
       const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA)||concentrada;
       const falta=det?(det.falta||[]):[];
       const nClasses=det?((det.cats||[]).length+falta.length):0;
-      const rsvDir=(ehDiretoria()&&CLIN_RS&&x.cod&&CLIN_RS[String(x.cod)]!=null)?+CLIN_RS[String(x.cod)]:null;
+      const rsvDir=ehDiretoria()?rsVal(x.cod, x.reconq_data):null;
       // 🎯 DEIXANDO NA MESA — bloco de alerta que grita o que ela NÃO te manda (share-of-wallet)
       const mesaBox = (vinc && falta.length && (det.cats||[]).length) ? `
         <div style="margin-top:7px;background:linear-gradient(90deg,rgba(255,45,85,.17),rgba(255,45,85,.05));border:1px solid rgba(255,45,85,.5);border-radius:9px;padding:9px 11px">
@@ -1737,7 +1778,7 @@ function renderTab(){
       return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${(flag||mesaBox||c2Alerta)?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
-          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt}${ehDiretoria()?` · 💰 ${rsClin(x.cod)}`:""}</div>
+          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt}${ehDiretoria()?` · 💰 ${rsClin(x.cod, x.reconq_data)}`:""}</div>
           ${marcoLinha}${perdaLinha}${detLinha}
           ${c2Linha}
           ${mesaBox}
@@ -1754,10 +1795,12 @@ function renderTab(){
       // ---- FATURAMENTO AO VIVO (sempre atual — não espera sexta) · só diretoria ----
       const vinc=CARTEIRA.filter(x=>x.cod);
       const dados=vinc.map(x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, det=CLIN_DET[String(x.cod)]||null;
-        const rsv=(CLIN_RS&&CLIN_RS[String(x.cod)]!=null)?+CLIN_RS[String(x.cod)]:null;
-        const tk=(rsv!=null&&prod)?rsv/prod:null; const falta=(det&&det.falta)||[];
+        const rsv=rsVal(x.cod, x.reconq_data);
+        const prodBase=(det&&det.prod_desde!=null&&x.reconq_data)?det.prod_desde:prod;   // exames desde o marco p/ o ticket bater com o R$
+        const tk=(rsv!=null&&prodBase)?rsv/prodBase:null; const falta=(det&&det.falta)||[];
         const zero=!!(det&&Array.isArray(det.recent)&&det.recent.length===0&&!det.prod30);
-        return {x,prod,rsv,tk,falta,zero}; });
+        const desdeMarco=!!(x.reconq_data && det && det.prod_desde!=null);
+        return {x,prod,prodBase,rsv,tk,falta,zero,desdeMarco}; });
       const totRS=dados.reduce((s,d)=>s+(d.rsv||0),0), totEx=dados.reduce((s,d)=>s+(d.prod||0),0);
       const tkGeral=totEx?totRS/totEx:0;
       const comRS=dados.filter(d=>d.rsv!=null).sort((a,b)=>b.rsv-a.rsv);
@@ -1784,7 +1827,7 @@ function renderTab(){
         const rows=comRS.map(d=>`<div class="crow" style="cursor:default;align-items:flex-start">
             <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${d.x.tipo==="nova"?"🆕":"♻️"}</div>
             <div style="flex:1"><div class="nm">${esc(d.x.nome)} ${d.x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl[d.x.porte]}</span>`:""} ${c2mini(d.x.cod)}</div>
-              <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b> · 📊 ${d.prod||0} exames/12m · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
+              <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b>${d.desdeMarco?' <span class="t-mut" style="font-size:10px">desde a reconq.</span>':''} · 📊 ${d.prodBase||0} exames${d.desdeMarco?"":"/12m"} · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
             <div class="mid"></div></div>`).join("");
         const zerLinha=dados.filter(d=>d.rsv==null&&d.x.cod).map(d=>`<div class="ci t-mut" style="font-size:11.5px">• ${esc(d.x.nome)} — sem R$ (0 exames / pendente)</div>`).join("");
         painel=`
@@ -2479,7 +2522,7 @@ function render(D){
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
     Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet()]).then(async ()=>{
-      const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // R$ salvo no aparelho → abre sozinho
+      const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart()]);
