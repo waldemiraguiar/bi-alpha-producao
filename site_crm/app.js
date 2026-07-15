@@ -335,7 +335,7 @@ async function loadOps(){ try{ const r=await fetch(OPS_API); if(r.ok) syncOps((a
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
-function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; try{sessionStorage.removeItem("crm_dir_code");}catch(e){} } } renderOpBtn(); }
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
 function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -424,6 +424,10 @@ function cerebro2(det){
   else { status="ok"; cor="#7effcf"; msg=`🟢 no ritmo — ~${semMed}/semana · última há ${diasSil}d (normal ~${cad}d)`; }
   return {status,cor,msg,semMed,diasSil,cad,alerta};
 }
+function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "";
+  if(c2.status==="parou") return `<span style="color:#ff6b81;font-weight:700">🔴 parou ${c2.diasSil}d</span>`;
+  if(c2.status==="caiu") return `<span style="color:#ffc266;font-weight:700">🟡 caiu</span>`;
+  return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
 let CLIN_RS_ENV=null, CLIN_RS=null;   // env cifrado (público) + mapa {cod:fat} decifrado (só na memória da diretoria)
@@ -436,7 +440,7 @@ async function decDirRS(code){
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     CLIN_RS=JSON.parse(new TextDecoder().decode(plain)); return true;
   }catch(e){ return false; } }
-function dirCodeCache(){ return sessionStorage.getItem("crm_dir_code")||""; }
+function dirCodeCache(){ return localStorage.getItem("crm_fin_code")||sessionStorage.getItem("crm_dir_code")||""; }   // localStorage = gruda no aparelho da diretoria
 async function verRS(){
   if(!ehDiretoria()){ alert("Só a diretoria vê R$. Identifique-se como diretoria primeiro (🔓)."); return; }
   if(!CLIN_RS_ENV) await loadClinRS();
@@ -454,7 +458,7 @@ async function abrirFinanceiro(){
   const code=dirCodeCache()||(prompt("🔒 Senha FINANCEIRA da diretoria (abre o faturamento em R$):")||"").trim();
   if(!code) return;
   const ok=await decDirRS(code);
-  if(ok){ localStorage.setItem("crm_operador_papel","diretoria"); sessionStorage.setItem("crm_dir_code",code); renderOpBtn(); if(ACTIVE==="clinicas") renderTab(); }
+  if(ok){ localStorage.setItem("crm_operador_papel","diretoria"); localStorage.setItem("crm_fin_code",code); sessionStorage.setItem("crm_dir_code",code); renderOpBtn(); renderAll(); }   // grava no aparelho → abre sozinho nas próximas
   else alert("Código incorreto — não abri o R$. (É a senha financeira, diferente do código do desmarcou.)");
 }
 function rsClin(cod){
@@ -1777,7 +1781,7 @@ function renderTab(){
       } else {
         const rows=comRS.map(d=>`<div class="crow" style="cursor:default;align-items:flex-start">
             <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${d.x.tipo==="nova"?"🆕":"♻️"}</div>
-            <div style="flex:1"><div class="nm">${esc(d.x.nome)} ${d.x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl[d.x.porte]}</span>`:""}</div>
+            <div style="flex:1"><div class="nm">${esc(d.x.nome)} ${d.x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl[d.x.porte]}</span>`:""} ${c2mini(d.x.cod)}</div>
               <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b> · 📊 ${d.prod||0} exames/12m · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
             <div class="mid"></div></div>`).join("");
         const zerLinha=dados.filter(d=>d.rsv==null&&d.x.cod).map(d=>`<div class="ci t-mut" style="font-size:11.5px">• ${esc(d.x.nome)} — sem R$ (0 exames / pendente)</div>`).join("");
@@ -2472,7 +2476,9 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet()]).then(async ()=>{
+      const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // R$ salvo no aparelho → abre sozinho
+      pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart()]);
       if(a!==sig()) renderTab(); }, 45000);
