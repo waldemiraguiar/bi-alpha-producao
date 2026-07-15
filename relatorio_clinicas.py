@@ -59,6 +59,32 @@ def week_key(iso_d):
     except Exception:
         return "?"
 
+def cerebro2(recent):
+    """🧠² Aprende o RITMO de envio da clínica (média/semana + cadência típica) e detecta PAROU/CAIU.
+    Alerta ADAPTATIVO: limiar ~2× a cadência da própria clínica (quem manda a cada 2d dispara em ~5d)."""
+    if not isinstance(recent, list) or len(recent) < 4:
+        return None
+    from collections import Counter
+    ds = [e.get("d", "") for e in recent if e.get("d")]
+    days = sorted(set(ds))
+    if len(days) < 2:
+        return None
+    today = datetime.date.today()
+    dias_sil = max(0, (today - datetime.date.fromisoformat(days[-1])).days)
+    wk = Counter(datetime.date.fromisoformat(d).isocalendar()[:2] for d in ds)
+    wv = sorted(wk.values()); sem_med = wv[len(wv) // 2] if wv else 0
+    gaps = sorted((datetime.date.fromisoformat(days[i]) - datetime.date.fromisoformat(days[i - 1])).days for i in range(1, len(days)))
+    cad = gaps[len(gaps) // 2] if gaps else None
+    alerta = max(cad * 2, cad + 3) if cad else 14
+    cut = today - datetime.timedelta(days=14)
+    rec14 = sum(1 for d in ds if datetime.date.fromisoformat(d) >= cut)
+    esp14 = sem_med * 2
+    if dias_sil >= alerta:
+        return {"status": "parou", "dias": dias_sil, "cad": cad, "sem": sem_med}
+    if esp14 > 0 and rec14 < esp14 * 0.5:
+        return {"status": "caiu", "dias": dias_sil, "cad": cad, "sem": sem_med, "rec14": rec14, "esp14": esp14}
+    return {"status": "ok", "dias": dias_sil, "cad": cad, "sem": sem_med}
+
 def enrich(x):
     cod = str(x.get("cod")) if x.get("cod") else None
     m = master.get(cod) if cod else None
@@ -85,7 +111,8 @@ def enrich(x):
             "porte": x.get("porte", ""), "prod": prod, "rs": rs, "flag": flag, "vinc": bool(m),
             "prod30": (d or {}).get("prod30"), "falta": falta, "cats": (d or {}).get("cats", []) or [],
             "rec_n": rec_n, "rec_desde": rec_desde, "byweek": byweek, "pets": len(pets),
-            "marco": marco, "prod_desde": prod_desde, "motivo_perda": x.get("motivo_perda", ""), "zero": zero}
+            "marco": marco, "prod_desde": prod_desde, "motivo_perda": x.get("motivo_perda", ""), "zero": zero,
+            "c2": cerebro2(recent)}
 
 linhas = [enrich(x) for x in carteira]
 nov = [l for l in linhas if l["tipo"] == "nova"]
@@ -94,6 +121,8 @@ prod_total = sum((l["prod"] or 0) for l in linhas)
 rs_total = sum((l["rs"] or 0) for l in linhas if l["rs"] is not None)
 flags = [l for l in linhas if l["flag"]]
 zerados = [l for l in linhas if l["zero"]]   # comissão paga mas 0 exames (auditoria)
+parou = [l for l in linhas if l.get("c2") and l["c2"]["status"] == "parou"]
+caiu = [l for l in linhas if l.get("c2") and l["c2"]["status"] == "caiu"]
 
 def tabela(items):
     if not items:
@@ -118,6 +147,24 @@ flagtxt = ("".join(f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}) — {l
                    + (f"; <b>não te manda: {', '.join(l['falta'][:6])}</b> (vai pra outro lab)" if l['falta'] else "; provavelmente dividindo exame")
                    + "</li>" for l in flags)
            or "<li>Nenhuma clínica sinalizada 👍</li>")
+
+# 🧠² ALERTA DE RITMO — clínicas que pararam / caíram vs a própria média (Cérebro 2)
+if parou or caiu:
+    _it = ""
+    for l in sorted(parou, key=lambda z: -z["c2"]["dias"]):
+        c2 = l["c2"]
+        _it += (f"<li>🔴 <b>{l['nome']}</b> — <b>{c2['dias']} dias</b> sem enviar "
+                f"(costuma a cada ~{c2['cad']}d · ~{c2['sem']}/sem). <b style='color:#c0392b'>Liga hoje.</b></li>")
+    for l in caiu:
+        c2 = l["c2"]
+        _it += (f"<li>🟡 <b>{l['nome']}</b> — caiu vs a média dela "
+                f"(~{c2['sem']}/sem; {c2.get('rec14',0)} nos últimos 14d). Atenção antes de perder.</li>")
+    ritmo_html = (f"<h3 style='color:#c0392b;margin-top:18px'>🧠² Alerta de ritmo — {len(parou)} pararam · {len(caiu)} caíram</h3>"
+                  "<p style='font-size:13px;color:#555;margin:2px 0 4px'>O Cérebro 2 aprende o ritmo de cada clínica e avisa quando ela sai do padrão dela mesma (não é régua fixa).</p>"
+                  f"<ul style='font-size:14px'>{_it}</ul>")
+else:
+    ritmo_html = ("<h3 style='color:#0A1628;margin-top:18px'>🧠² Ritmo de envio</h3>"
+                  "<p style='font-size:14px;color:#0A7A3B'>✅ Nenhuma clínica parou ou caiu vs a própria média. Ritmo saudável.</p>")
 
 # 🎯 DEIXANDO NA MESA — share-of-wallet que grita (o que cada clínica NÃO te manda)
 def _chip(t):
@@ -177,6 +224,7 @@ drill_html = (drill(rec) + drill(nov)) or "<p style='color:#888;font-size:13px'>
 html = f"""<div style='font-family:Arial;max-width:820px;margin:auto;color:#1a1a1a'>
 <h2 style='color:#0A1628'>🏥 Relatório de Clínicas — {label}</h2>
 <p style='font-size:15px'><b>{len(rec)}</b> reconquistadas · <b>{len(nov)}</b> novas · produção somada <b>{prod_total}</b> exames/12m · faturamento <b>{brl(rs_total)}</b>{(' · <b style=color:#c0392b>🚨 ' + str(len(zerados)) + ' zeradas</b>') if zerados else ''}</p>
+{ritmo_html}
 {zero_html}
 {mesa_html}
 <h3 style='color:#0A1628;margin-top:18px'>🚩 Onde trabalhar (porte grande, produção baixa = dividindo exame)</h3>
