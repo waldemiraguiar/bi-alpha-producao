@@ -293,19 +293,28 @@ async function excluirFeedback(id){
 }
 
 /* ---- ditado por voz (grátis, no aparelho — Web Speech API) ---- */
-let PREC=null, precOn=false;
+let PREC=null, precOn=false, precStop=false;
 function speechOK(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+/* Captura em BLOCOS CURTOS (continuous=false) + reinício automático — mata a repetição "bom dia bom dia"
+   que alguns Android faziam no modo contínuo (o navegador re-emitia os mesmos resultados). Cada bloco é
+   uma frase; o texto finalizado vai pro acumulador e a próxima frase começa limpa. */
 function pistaMic(btn, ta, onDone){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alert("Este celular não transcreve voz (comum no iPhone). Pode DIGITAR o feedback normalmente."); return; }
-  if(precOn){ try{PREC&&PREC.stop();}catch(e){} return; }
-  PREC=new SR(); PREC.lang="pt-BR"; PREC.continuous=true; PREC.interimResults=true;
-  const startBase = ta.value ? ta.value.replace(/\s+$/,"")+" " : "";   // texto que já existia antes de gravar (fixo)
-  // reconstrói do ZERO a cada evento (idempotente) — corrige a repetição "bom dia bom dia bom dia" em alguns Android
-  PREC.onresult=e=>{ let fin="",intr=""; for(let i=0;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t+" "; else intr+=t; } ta.value=startBase+fin+intr; if(onDone) try{onDone();}catch(_){} };
-  const stop=()=>{ precOn=false; btn.classList.remove("rec"); btn.innerHTML="🎤 Falar"; if(onDone) try{onDone();}catch(e){} };
-  PREC.onend=stop; PREC.onerror=stop;
-  try{ PREC.start(); precOn=true; btn.classList.add("rec"); btn.innerHTML="⏹ Parar — gravando…"; }catch(e){ stop(); }
+  if(!SR){ alert("Este celular não transcreve voz (comum no iPhone). Pode DIGITAR normalmente, ou usar o 🎤 do teclado."); return; }
+  if(precOn){ precStop=true; try{precStop=true;PREC&&PREC.stop();}catch(e){} return; }   // 2º toque = parar
+  const startBase = ta.value ? ta.value.replace(/\s+$/,"")+" " : "";
+  let acc="", sess="";
+  const paint=intr=>{ ta.value=startBase+acc+sess+intr; if(onDone) try{onDone();}catch(_){} };
+  const stopUI=()=>{ precOn=false; btn.classList.remove("rec"); btn.innerHTML="🎤 Falar"; if(onDone) try{onDone();}catch(e){} };
+  function startSession(){
+    PREC=new SR(); PREC.lang="pt-BR"; PREC.continuous=false; PREC.interimResults=true; sess="";
+    PREC.onresult=e=>{ let fin="",intr=""; for(let i=0;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t+" "; else intr+=t; } sess=fin; paint(intr); };
+    PREC.onend=()=>{ acc+=sess; sess=""; paint(""); if(!precStop){ try{ startSession(); }catch(e){ stopUI(); } } else stopUI(); };
+    PREC.onerror=()=>{};   // deixa o onend decidir (reinicia ou para)
+    try{ PREC.start(); }catch(e){ stopUI(); }
+  }
+  precStop=false; precOn=true; btn.classList.add("rec"); btn.innerHTML="⏹ Parar — gravando…";
+  startSession();
 }
 /* ---- comerciais (reps) da Pista — setorizar por pessoa ---- */
 const REPS_API="/api/crm-reps";
@@ -624,7 +633,7 @@ function openAgendar(){
     <div id="aHint" class="proxhint" style="display:none"></div>
     <button class="m-save" id="aSave">📞 Agendar na rota</button>`;
   document.getElementById("modal").style.display="flex";
-  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  document.getElementById("mClose").onclick=()=>{ try{precStop=true;PREC&&PREC.stop();}catch(e){} closeModal(); };
   const ata=document.getElementById("aObs");
   const aDetect=()=>{ const val=ata.value, got=[];
     const setIf=(id,v,fmt)=>{ const el=document.getElementById(id); if(el && !el.value && v){ el.value=v; got.push(fmt(v)); } };
@@ -636,7 +645,7 @@ function openAgendar(){
   ata.addEventListener("input", aDetect);
   document.getElementById("aMic").onclick=function(){ pistaMic(this, ata, aDetect); };
   document.getElementById("aSave").onclick=async()=>{
-    try{PREC&&PREC.stop();}catch(e){}
+    try{precStop=true;PREC&&PREC.stop();}catch(e){}
     const rep=document.getElementById("aRep").value.trim(), cli=document.getElementById("aCli").value.trim(), bairro=document.getElementById("aBairro").value.trim(), data=document.getElementById("aData").value, obs=document.getElementById("aObs").value.trim();
     if(!rep){ alert("Informe o COMERCIAL."); return; }
     if(!cli){ alert("Informe o CLIENTE / clínica."); document.getElementById("aCli").focus(); return; }
@@ -678,7 +687,7 @@ function openAddCliente(){
     <div id="cHint" class="proxhint" style="display:none"></div>
     <button class="m-save" id="cSave">🎯 Lançar na lista do vendedor</button>`;
   document.getElementById("modal").style.display="flex";
-  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  document.getElementById("mClose").onclick=()=>{ try{precStop=true;PREC&&PREC.stop();}catch(e){} closeModal(); };
   const cta=document.getElementById("cObs");
   const cDetect=()=>{ const val=cta.value, got=[];
     const setIf=(id,v,fmt)=>{ const el=document.getElementById(id); if(el && !el.value && v){ el.value=v; got.push(fmt(v)); } };
@@ -689,7 +698,7 @@ function openAddCliente(){
   cta.addEventListener("input", cDetect);
   document.getElementById("cMic").onclick=function(){ pistaMic(this, cta, cDetect); };
   document.getElementById("cSave").onclick=async()=>{
-    try{PREC&&PREC.stop();}catch(e){}
+    try{precStop=true;PREC&&PREC.stop();}catch(e){}
     const rep=document.getElementById("cRep").value.trim(), cli=document.getElementById("cCli").value.trim(), bairro=document.getElementById("cBairro").value.trim(), obs=document.getElementById("cObs").value.trim();
     if(!rep){ alert("Informe o COMERCIAL (quem vai visitar)."); return; }
     if(!cli){ alert("Informe o CLIENTE / clínica."); document.getElementById("cCli").focus(); return; }
@@ -927,10 +936,15 @@ function openPistaRec(id){
       <button class="checkinbtn${F_CHECKOUT?" done":""}" id="fCheckout" type="button" style="flex:1">${F_CHECKOUT?"✅ Saída (refazer)":"📍 Check-out (saída)"}</button>
     </div>
     <div id="fCheckinStatus" class="proxhint" style="display:none"></div>
+    <div class="m-sec">🗣️ Cliente reclamou de algo? <span class="t-mut" style="font-weight:500">— opcional; vira um Relato (voz da rua), tudo aqui mesmo</span></div>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="micbtn" id="fRecMic" type="button">🎤 Falar</button>
+      <textarea id="fReclama" class="m-ta" style="flex:1;min-height:60px;margin:0" placeholder="Ex.: reclamou de atraso no laudo, motoboy ligando toda hora… (deixe vazio se não teve reclamação)"></textarea>
+    </div>
     <button class="m-save" id="fSave">${f?"Salvar alterações":"Salvar feedback"}</button>
     ${f?`<button class="m-enc" id="fDel" style="border-color:var(--mut);color:var(--mut)">Remover feedback</button>`:""}`;
   document.getElementById("modal").style.display="flex";
-  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  document.getElementById("mClose").onclick=()=>{ try{precStop=true;PREC&&PREC.stop();}catch(e){} closeModal(); };
   const ta=document.getElementById("fTexto");
   const detectarCampos=()=>{ const val=ta.value, got=[];
     const setIf=(id,v,fmt)=>{ const el=document.getElementById(id); if(el && !el.value && v){ el.value=v; got.push(fmt(v)); } };
@@ -942,13 +956,14 @@ function openPistaRec(id){
     if(got.length){ const h=document.getElementById("fProxHint"); if(h){ h.style.display="block"; h.innerHTML="🧠 detectei da fala (confira/corrija): <b>"+got.join(" · ")+"</b>"; } } };
   ta.addEventListener("input", detectarCampos);
   document.getElementById("fMic").onclick=function(){ pistaMic(this, ta, detectarCampos); };
+  const frm=document.getElementById("fRecMic"), rec=document.getElementById("fReclama"); if(frm&&rec) frm.onclick=function(){ pistaMic(this, rec); };
   const fci=document.getElementById("fCheckin"); if(fci) fci.onclick=function(){ fazerCheckin(this, "in"); };
   document.getElementById("fCheckout").onclick=function(){ fazerCheckin(this, "out"); };
   renderCheckinStatus();
   document.getElementById("fRes").onclick=e=>{const b=e.target.closest("[data-r]");if(b){F_RES=b.dataset.r;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));
     const h=document.getElementById("fProxHint"); if(h && F_RES==="fechou"){ h.style.display="block"; h.style.borderColor="rgba(0,229,160,.4)"; h.style.color="#7effcf"; h.style.background="rgba(0,229,160,.1)"; h.innerHTML="🏆 <b>Fechou!</b> — retorno dispensado. Pode salvar direto (check-in + saída)."; } }};
   document.getElementById("fSave").onclick=async()=>{
-    try{PREC&&PREC.stop();}catch(e){}
+    try{precStop=true;PREC&&PREC.stop();}catch(e){}
     const cli=document.getElementById("fCli").value.trim(), texto=ta.value.trim(), bairro=document.getElementById("fBairro").value.trim(), rep=document.getElementById("fRep").value.trim(), dataVisita=document.getElementById("fVisita").value;
     if(!rep){ alert("Informe o COMERCIAL (quem visitou) — obrigatório."); document.getElementById("fRep").focus(); return; }
     if(!cli){ alert("Informe o CLIENTE / clínica visitada — obrigatório."); document.getElementById("fCli").focus(); return; }
@@ -967,7 +982,11 @@ function openPistaRec(id){
     const item={id:F_ID, cliente:cli, bairro, data_visita:dataVisita, texto, resultado:F_RES, por:rep, proximo:prox, sem_retorno:semRet, checkin:F_CHECKIN, checkout:F_CHECKOUT};
     if(F_COMPLETING){ item.baixa={tipo:"compareceu", ts:Date.now(), por:rep, checkin:F_CHECKIN, checkout:F_CHECKOUT}; }   // finalizou o retorno agendado → baixa automática
     const ok=await savePista(item);
-    if(ok){ visitaClear(); closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
+    if(ok){
+      const recl=(document.getElementById("fReclama")||{}).value; const rt=(recl||"").trim();
+      if(rt){ try{ await saveRelato({clinica:cli, texto:rt, data:dataVisita||hojeISO(), origem:"visita", por:rep}); }catch(e){} }   // reclamação → vira Relato, tudo aqui
+      visitaClear(); closeModal(); if(rt) alert("✅ Feedback salvo + 🗣️ reclamação virou Relato."); renderTab();
+    } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>excluirFeedback(F_ID);
 }
 
@@ -1012,7 +1031,7 @@ function openRelato(id){
     <button class="m-save" id="rSave">${r?"Salvar alterações":"Salvar relato"}</button>
     ${r?`<button class="m-enc" id="rDel" style="border-color:var(--mut);color:var(--mut)">Remover relato</button>`:""}`;
   document.getElementById("modal").style.display="flex";
-  document.getElementById("mClose").onclick=()=>{ try{PREC&&PREC.stop();}catch(e){} closeModal(); };
+  document.getElementById("mClose").onclick=()=>{ try{precStop=true;PREC&&PREC.stop();}catch(e){} closeModal(); };
   const ta=document.getElementById("rTexto");
   const previa=()=>{ const val=(document.getElementById("rTit").value+" "+ta.value);
     const cli=document.getElementById("rCli"); if(cli && !cli.value){ const c=detectCliente(ta.value); if(c) cli.value=c; }
@@ -1035,7 +1054,7 @@ function openRelato(id){
   document.getElementById("rOrig").onclick=e=>{ const b=e.target.closest("[data-o]"); if(b){ ORIG=b.dataset.o; [...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b)); salvaRascunho(); } };
   previa();
   document.getElementById("rSave").onclick=async()=>{
-    try{PREC&&PREC.stop();}catch(e){}
+    try{precStop=true;PREC&&PREC.stop();}catch(e){}
     const rep=document.getElementById("rRep").value.trim(), texto=ta.value.trim(), clinica=document.getElementById("rCli").value.trim();
     if(!rep){ alert("Informe o COMERCIAL — obrigatório."); document.getElementById("rRep").focus(); return; }
     if(!texto){ alert("Grave ou digite o RELATO — obrigatório."); ta.focus(); return; }
