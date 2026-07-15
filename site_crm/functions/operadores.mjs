@@ -43,7 +43,7 @@ export default async (req) => {
     // PAPEL diretoria (vê R$) — exige o CÓDIGO DA DIRETORIA (blindagem; só quem tem o código promove)
     if (body.acao === "setpapel") {
       const papel = body.papel === "diretoria" ? "diretoria" : "comercial";
-      if (papel === "diretoria" && (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE))
+      if (papel === "diretoria" && (!SEC.FIN_KEY || body.dir_code !== SEC.FIN_KEY))
         return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
       const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
       if (!o) return new Response(JSON.stringify({ erro: "nao_existe" }), { status: 404, headers: cors });
@@ -63,7 +63,7 @@ export default async (req) => {
     // papel na CRIAÇÃO só vira diretoria com o código da diretoria
     let papel = "comercial";
     if (!existing && body.papel === "diretoria") {
-      if (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE)
+      if (!SEC.FIN_KEY || body.dir_code !== SEC.FIN_KEY)
         return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
       papel = "diretoria";
     }

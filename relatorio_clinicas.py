@@ -41,7 +41,7 @@ def brl(v):
 # ---- dados ----
 carteira = fetch("/api/crm-carteira").get("carteira", [])
 master = {str(c.get("cod")): c for c in fetch("/api/crm-clinicas").get("clinicas", [])}
-rsmap = decrypt_rs(os.environ.get("DIR_CODE", ""))
+rsmap = decrypt_rs(os.environ.get("FIN_KEY", ""))   # senha financeira (só diretoria)
 try:
     detj = fetch("/api/crm-clinicas-det"); DET = detj.get("det", {}) or {}
 except Exception:

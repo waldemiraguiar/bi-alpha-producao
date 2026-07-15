@@ -199,10 +199,10 @@ def post_clinicas_rs(D):
     (AES-256-GCM + PBKDF2-SHA256) e manda o env pro /api/crm-clinicas-rs. Reps não têm o código → nunca veem R$."""
     import urllib.request
     pwd = CRM_PWD
-    dir_code = os.environ.get("DIR_CODE", "")
+    dir_code = os.environ.get("FIN_KEY", "")   # SENHA FINANCEIRA (só diretoria) — separada do código do desmarcou
     full = (D or {}).get("clinicas_full") or []
     if not pwd or not dir_code or not full:
-        print("post_clinicas_rs: pulado (falta CRM_PWD/DIR_CODE/dados)")
+        print("post_clinicas_rs: pulado (falta CRM_PWD/FIN_KEY/dados)")
         return
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
     data = json.dumps(rsmap, ensure_ascii=False, separators=(",", ":")).encode()
