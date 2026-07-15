@@ -1,0 +1,25 @@
+name: Relatório semanal de Clínicas (sexta 9h)
+
+on:
+  schedule:
+    - cron: '0 12 * * 5'    # sexta 12:00 UTC = 09:00 BRT — melhor esforço do GitHub
+  workflow_dispatch:          # gatilho manual
+
+jobs:
+  relatorio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar deps
+        run: pip install cryptography
+      - name: Enviar relatório de clínicas
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          CRM_PWD: ${{ secrets.CRM_PWD }}
+          DIR_CODE: ${{ secrets.DIR_CODE }}
+        run: python relatorio_clinicas.py
