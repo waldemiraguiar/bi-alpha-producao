@@ -366,10 +366,10 @@ async function openIdentidade(force){
       <div class="t-mut" style="font-size:13px;margin-top:2px">identifique-se com seu PIN — tudo que você fizer/ajustar fica no seu nome</div></div>
       ${force?"":'<button class="m-x" id="mClose">✕</button>'}</div>
     <div id="opList" style="display:flex;flex-direction:column;gap:8px;margin:10px 0">
-      ${OPERADORES.length?OPERADORES.map(o=>`<button class="checkinbtn" data-op="${esc(o.nome)}" style="text-align:left">👤 ${esc(o.nome)}${o.papel==="diretoria"?' <span class="t-mut">🔓 diretoria</span>':''}</button>`).join(""):`<div class="t-mut" style="text-align:center;padding:10px">Nenhum operador ainda. Crie o primeiro 👇</div>`}
+      ${OPERADORES.length?OPERADORES.map(o=>`<button class="checkinbtn" data-op="${esc(o.nome)}" style="text-align:left">👤 ${esc(o.nome)}${(o.papel==="diretoria"&&ehDiretoria())?' <span class="t-mut">🔓 diretoria</span>':''}</button>`).join(""):`<div class="t-mut" style="text-align:center;padding:10px">Nenhum operador ainda. Crie o primeiro 👇</div>`}
     </div>
     <button class="m-save" id="opNovo">＋ Novo operador</button>
-    ${operadorAtual()&&!ehDiretoria()?`<button class="m-enc" id="opDir" style="border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Sou da diretoria (ver R$) — precisa do código</button>`:""}`;
+    `;   /* removido o botão público "Sou da diretoria": reps não devem saber que existe R$. Diretoria vem pelo login (papel do operador) ou é promovida via API. */
   document.getElementById("modal").style.display="flex";
   const mc=document.getElementById("mClose"); if(mc) mc.onclick=closeModal;
   document.querySelectorAll("#opList [data-op]").forEach(el=>el.onclick=async()=>{
@@ -462,7 +462,7 @@ async function abrirFinanceiro(){
   else alert("Código incorreto — não abri o R$. (É a senha financeira, diferente do código do desmarcou.)");
 }
 function rsClin(cod){
-  if(!ehDiretoria()) return `<a onclick="abrirFinanceiro()" class="t-mut" style="cursor:pointer" title="abrir valores (diretoria)">🔒 R$</a>`;
+  if(!ehDiretoria()) return "";   // reps não veem NADA de R$ (nem que existe)
   if(CLIN_RS && cod!=null && CLIN_RS[String(cod)]!=null) return `<b style="color:#7effcf">${fmtBRL(CLIN_RS[String(cod)])}</b>`;
   return `<a onclick="abrirFinanceiro()" style="color:var(--cyan);cursor:pointer;font-weight:700">🔓 ver R$</a>`;
 }
@@ -1341,7 +1341,7 @@ function openExames(cod, nome){
           📊 <b>${rec.length}</b> exames · 🐾 <b>${petsTot}</b> pets${desde?` · desde ${esc(fmtDataBR(desde))}`:""}${mais?` <span class="t-mut">(mostrando os ${rec.length} mais recentes)</span>`:""}<br>
           <span style="font-size:11.5px">${catsResumo.map(([k,v])=>`${esc(k)} <b>${v}</b>`).join(" · ")}</span></div>
         <div class="m-opts" style="margin:10px 0 6px">${seg("dia","📅 Dia")}${seg("sem","🗓️ Semana")}${seg("mes","📆 Mês")}</div>
-        <div class="t-mut" style="font-size:11px;margin-bottom:8px">💰 valor em R$ fica travado aqui — só nº de exames. Use o <b>reg</b> pra achar a requisição no HF.</div>
+        <div class="t-mut" style="font-size:11px;margin-bottom:8px">Use o <b>reg</b> pra achar a requisição no HF.</div>
         <div style="max-height:56vh;overflow:auto">${corpo}</div>`}`;
     document.getElementById("mClose").onclick=closeModal;
     document.querySelectorAll("#modalBody [data-exv]").forEach(b=>b.onclick=()=>{ EX_VIEW=b.dataset.exv; render(); });
@@ -1737,7 +1737,7 @@ function renderTab(){
       return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${(flag||mesaBox||c2Alerta)?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
-          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt} · 💰 ${rsClin(x.cod)}</div>
+          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt}${ehDiretoria()?` · 💰 ${rsClin(x.cod)}`:""}</div>
           ${marcoLinha}${perdaLinha}${detLinha}
           ${c2Linha}
           ${mesaBox}
@@ -1772,10 +1772,12 @@ function renderTab(){
       const zeradas=dados.filter(d=>d.zero);
       if(zeradas.length) regras.push(`🚨 <b>${zeradas.map(d=>esc(d.x.nome)).join(", ")}</b>: comissão paga mas <b>0 exames</b> no HF. Confere o vínculo/código — ou a reconquista não converteu.`);
       if(comRS.length) regras.push(`🎫 Ticket médio da carteira = <b>${fmtBRL(tkGeral)}/exame</b>. Acima da média = exames caros (histopato/especializado); abaixo = rotina. Subir ticket > subir volume.`);
-      let painel;
-      if(!CLIN_RS){
+      let painel="";
+      if(!ehDiretoria()){
+        painel="";   // reps NÃO veem nada de R$ — nem que existe
+      } else if(!CLIN_RS){
         painel=`<div class="proxhint" style="border-color:rgba(0,229,160,.45);margin:8px 0 6px;text-align:center;line-height:1.55">
-            <div style="font-size:13px;color:#c9d4e0">💰 O <b>faturamento em R$</b> de cada clínica é <b>privado da diretoria</b> (cifrado — reps não veem).</div>
+            <div style="font-size:13px;color:#c9d4e0">💰 Abra o <b>faturamento em R$</b> da carteira (cifrado — só você).</div>
             <button class="checkinbtn" id="verRSrel" type="button" style="margin:10px auto 2px;max-width:320px;border-color:rgba(0,229,160,.5);color:#7effcf;font-weight:700">🔓 Abrir faturamento (senha financeira)</button>
           </div>`;
       } else {
@@ -1828,7 +1830,7 @@ function renderTab(){
             ${(r.flags&&r.flags.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ffc266">🚩 ${r.flags.map(f=>esc(f.nome)+(f.prod!=null?" ("+f.prod+")":"")).join(" · ")}</div>`:""}</div>
           <div class="mid"></div></div>`;
       c.innerHTML=`${subtabsClin}
-        <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo do robô — você não precisa pedir). O e-mail completo sai <b>toda sexta 9h</b> pra diretoria.</div>
+        <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">${ehDiretoria()?"📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo — você não precisa pedir). E-mail completo toda <b>sexta 9h</b>.":"📊 <b>Evolução da carteira</b> — produção e ritmo de cada clínica (atualiza sozinho a cada ciclo)."}</div>
         ${c2Html}
         ${painel}
         ${mesaHtml}
@@ -1849,7 +1851,7 @@ function renderTab(){
         ${kpi("", CL, "Master HF", CLIN_TS?("sinc. "+new Date(CLIN_TS).toLocaleDateString("pt-BR")):"aguardando robô")}
       </div>
       ${!CL?`<div class="proxhint" style="border-color:rgba(255,138,0,.4);color:#ffc266;margin-bottom:12px">⏳ A lista de clínicas do HF ainda não chegou (o robô sincroniza a cada ciclo). O autocomplete liga assim que ela vier.</div>`:""}
-      ${(ehDiretoria()&&CLIN_RS)?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto (diretoria) · faturamento 12m desta lista: <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Abrir faturamento em R$ (senha financeira · diretoria)</button>`}
+      ${!ehDiretoria()?"":(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto · faturamento 12m desta lista: <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Abrir faturamento em R$ (senha financeira)</button>`)}
       ${(()=>{ const z=CARTEIRA.filter(x=>{ const d=x.cod?CLIN_DET[String(x.cod)]:null; return x.cod&&d&&Array.isArray(d.recent)&&d.recent.length===0&&!d.prod30; });
         if(!z.length) return "";
         return `<div class="proxhint" style="border-color:rgba(255,45,85,.55);color:#ff8fa3;margin-bottom:12px;line-height:1.55">
