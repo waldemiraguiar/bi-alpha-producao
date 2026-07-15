@@ -323,19 +323,32 @@ let OPERADORES=[];
 function syncOps(a){ OPERADORES=(a||[]).slice(); }
 async function loadOps(){ try{ const r=await fetch(OPS_API); if(r.ok) syncOps((await r.json()).operadores); }catch(e){} }
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
-function setOperador(nome){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } renderOpBtn(); }
-function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+" · trocar"):"👤 identificar-se"; } }
+function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
+function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel) localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); renderOpBtn(); }
+function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
+/* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
+function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function rs(v){ return ehDiretoria()?fmtBRL(v):`<span class="t-mut" title="valor visível só para a diretoria">🔒</span>`; }
 async function verificaPin(nome, pin){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"verify",nome,pin,senha:window.__pwd})});
-    if(r.ok){ return (await r.json()).ok; } }catch(e){ return null; }   // null = offline/erro
-  return false; }
-async function criarOperador(nome, pin){
-  try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,senha:window.__pwd})});
+    if(r.ok){ const j=await r.json(); return j.ok?{ok:true, papel:j.papel||"comercial"}:{ok:false}; } }catch(e){ return null; }   // null = offline/erro
+  return {ok:false}; }
+async function criarOperador(nome, pin, papel, dir_code){
+  try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,papel,dir_code,senha:window.__pwd})});
     if(r.status===409){ alert("Já existe um operador com esse nome — escolha ele na lista."); return false; }
+    if(r.status===403){ alert("❌ Código da diretoria inválido — criado como comercial não foi feito."); return false; }
     if(r.status===400){ alert("O PIN precisa de pelo menos 4 dígitos."); return false; }
     if(r.status===401){ alert("Sessão sem permissão."); return false; }
     if(r.ok){ syncOps((await r.json()).operadores); return true; } }catch(e){ alert("Sem internet — precisa de conexão pra criar operador."); }
   return false; }
+async function tornarDiretoria(){
+  const nome=operadorAtual(); if(!nome){ alert("Identifique-se primeiro."); return; }
+  const code=(prompt(`Para VER R$, digite o CÓDIGO DA DIRETORIA (blindagem — só a diretoria tem):`)||"").trim(); if(!code) return;
+  try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"setpapel",nome,papel:"diretoria",dir_code:code,senha:window.__pwd})});
+    if(r.status===403){ alert("❌ Código da diretoria inválido."); return; }
+    if(r.ok){ localStorage.setItem("crm_operador_papel","diretoria"); syncOps((await r.json()).operadores); alert("🔓 Pronto — você agora é DIRETORIA e vê os valores em R$."); renderOpBtn(); renderAll(); } }catch(e){ alert("Sem internet."); }
+}
 async function openIdentidade(force){
   await loadOps();
   document.getElementById("modalBody").innerHTML=`
@@ -343,21 +356,25 @@ async function openIdentidade(force){
       <div class="t-mut" style="font-size:13px;margin-top:2px">identifique-se com seu PIN — tudo que você fizer/ajustar fica no seu nome</div></div>
       ${force?"":'<button class="m-x" id="mClose">✕</button>'}</div>
     <div id="opList" style="display:flex;flex-direction:column;gap:8px;margin:10px 0">
-      ${OPERADORES.length?OPERADORES.map(o=>`<button class="checkinbtn" data-op="${esc(o.nome)}" style="text-align:left">👤 ${esc(o.nome)}</button>`).join(""):`<div class="t-mut" style="text-align:center;padding:10px">Nenhum operador ainda. Crie o primeiro 👇</div>`}
+      ${OPERADORES.length?OPERADORES.map(o=>`<button class="checkinbtn" data-op="${esc(o.nome)}" style="text-align:left">👤 ${esc(o.nome)}${o.papel==="diretoria"?' <span class="t-mut">🔓 diretoria</span>':''}</button>`).join(""):`<div class="t-mut" style="text-align:center;padding:10px">Nenhum operador ainda. Crie o primeiro 👇</div>`}
     </div>
-    <button class="m-save" id="opNovo">＋ Novo operador</button>`;
+    <button class="m-save" id="opNovo">＋ Novo operador</button>
+    ${operadorAtual()&&!ehDiretoria()?`<button class="m-enc" id="opDir" style="border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Sou da diretoria (ver R$) — precisa do código</button>`:""}`;
   document.getElementById("modal").style.display="flex";
   const mc=document.getElementById("mClose"); if(mc) mc.onclick=closeModal;
   document.querySelectorAll("#opList [data-op]").forEach(el=>el.onclick=async()=>{
     const nome=el.dataset.op, pin=(prompt(`PIN de ${nome}:`)||"").trim(); if(!pin) return;
-    const ok=await verificaPin(nome, pin);
-    if(ok===true){ setOperador(nome); closeModal(); renderAll(); }
-    else if(ok===null){ if(confirm("Sem internet pra validar o PIN agora. Entrar como "+nome+" mesmo assim?")){ setOperador(nome); closeModal(); renderAll(); } }
+    const res=await verificaPin(nome, pin);
+    if(res===null){ if(confirm("Sem internet pra validar o PIN agora. Entrar como "+nome+" mesmo assim?")){ setOperador(nome, "comercial"); closeModal(); renderAll(); } }   // offline não libera R$ (segurança)
+    else if(res.ok){ setOperador(nome, res.papel); closeModal(); renderAll(); }
     else alert("PIN incorreto."); });
   document.getElementById("opNovo").onclick=async()=>{
     const nome=(prompt("Nome do novo operador (ex.: Heitor, Luciane, Wal):")||"").trim(); if(!nome) return;
     const pin=(prompt(`Crie um PIN (mínimo 4 dígitos) para ${nome}:`)||"").trim(); if(pin.length<4){ alert("O PIN precisa de pelo menos 4 dígitos."); return; }
-    const ok=await criarOperador(nome, pin); if(ok){ setOperador(nome); closeModal(); renderAll(); } };
+    let papel="comercial", dir_code="";
+    if(confirm(`${nome} é da DIRETORIA (vê valores em R$)?\n\nOK = sim (vai pedir o código da diretoria) · Cancelar = comercial`)){ dir_code=(prompt("Código da diretoria:")||"").trim(); if(dir_code) papel="diretoria"; }
+    const ok=await criarOperador(nome, pin, papel, dir_code); if(ok){ setOperador(nome, papel); closeModal(); renderAll(); } };
+  const od=document.getElementById("opDir"); if(od) od.onclick=()=>tornarDiretoria();
 }
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
 /* VISITA EM ANDAMENTO: check-in na CHEGADA (separado); feedback+check-out na SAÍDA */

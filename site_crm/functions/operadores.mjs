@@ -8,7 +8,7 @@ import * as SEC from "./secret.mjs";
 const SECRET = SEC.SECRET;
 
 const hashPin = (nome, pin) => createHash("sha256").update("crmop:" + nome.trim().toLowerCase() + ":" + String(pin)).digest("hex");
-const pub = (lista) => lista.map((o) => ({ nome: o.nome, ts: o.ts })).sort((a, b) => a.nome.localeCompare(b.nome));
+const pub = (lista) => lista.map((o) => ({ nome: o.nome, papel: o.papel || "comercial", ts: o.ts })).sort((a, b) => a.nome.localeCompare(b.nome));
 
 export default async (req) => {
   const store = getStore("crm-operadores");
@@ -33,12 +33,23 @@ export default async (req) => {
       const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
       if (!o) return Response.json({ ok: false, motivo: "nao_existe" }, { headers: cors });
       const ok = o.pin === hashPin(o.nome, pin);
-      return Response.json({ ok, nome: o.nome }, { headers: cors });
+      return Response.json({ ok, nome: o.nome, papel: o.papel || "comercial" }, { headers: cors });
     }
     if (body.acao === "remove") {
       lista = lista.filter((x) => x.nome.toLowerCase() !== nome.toLowerCase());
       await store.setJSON("lista", lista);
       return Response.json({ ok: true, operadores: pub(lista) }, { headers: cors });
+    }
+    // PAPEL diretoria (vê R$) — exige o CÓDIGO DA DIRETORIA (blindagem; só quem tem o código promove)
+    if (body.acao === "setpapel") {
+      const papel = body.papel === "diretoria" ? "diretoria" : "comercial";
+      if (papel === "diretoria" && (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE))
+        return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
+      const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
+      if (!o) return new Response(JSON.stringify({ erro: "nao_existe" }), { status: 404, headers: cors });
+      o.papel = papel;
+      await store.setJSON("lista", lista);
+      return Response.json({ ok: true, nome: o.nome, papel, operadores: pub(lista) }, { headers: cors });
     }
     // add / setpin (upsert) — cria operador ou troca o PIN
     if (!nome || pin.length < 4)
@@ -49,8 +60,15 @@ export default async (req) => {
     // troca de PIN exige o PIN antigo (a menos que seja criação)
     if (existing && body.acao === "setpin" && existing.pin !== hashPin(existing.nome, body.pin_atual || ""))
       return new Response(JSON.stringify({ erro: "pin_atual_invalido" }), { status: 403, headers: cors });
+    // papel na CRIAÇÃO só vira diretoria com o código da diretoria
+    let papel = "comercial";
+    if (!existing && body.papel === "diretoria") {
+      if (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE)
+        return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
+      papel = "diretoria";
+    }
     lista = lista.filter((x) => x.nome.toLowerCase() !== nome.toLowerCase());
-    lista.push({ nome: existing ? existing.nome : nome, pin: hashPin(existing ? existing.nome : nome, pin), ts: existing ? existing.ts : Date.now() });
+    lista.push({ nome: existing ? existing.nome : nome, pin: hashPin(existing ? existing.nome : nome, pin), papel: existing ? (existing.papel || "comercial") : papel, ts: existing ? existing.ts : Date.now() });
     await store.setJSON("lista", lista);
     return Response.json({ ok: true, operadores: pub(lista) }, { headers: cors });
   }
