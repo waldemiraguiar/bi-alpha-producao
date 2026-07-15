@@ -205,18 +205,31 @@ def post_clinicas_rs(D):
         print("post_clinicas_rs: pulado (falta CRM_PWD/FIN_KEY/dados)")
         return
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
-    # R$ DESDE O MARCO ZERO (reconquistadas): puxa a carteira e soma ValorExame a partir da data de reconquista
+    # R$ da carteira: marco zero (desde) + soma dos CÓDIGOS-EXTRA no principal (Faro: 989898 + 5724)
     desde = {}
     try:
         import urllib.request as _u
         base0 = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
         cart = json.loads(_u.urlopen(_u.Request(base0 + "/api/crm-carteira?_=" + str(int(time.time())), headers={"User-Agent": "robo"}), timeout=30).read().decode()).get("carteira", [])
-        since_map = {c.get("cod"): c.get("reconq_data") for c in cart if c.get("cod") and c.get("reconq_data")}
+        since_map, alias, extras = {}, {}, []
+        for c in cart:
+            p = c.get("cod")
+            if not p: continue
+            if c.get("reconq_data"): since_map[str(p)] = c.get("reconq_data")
+            for e in (c.get("cods_extra") or []):
+                e = str(e).strip()
+                if e: alias[e] = str(p); extras.append(e)
+        from build_financeiro import clinic_fat_since, clinic_fat_12m
         if since_map:
-            from build_financeiro import clinic_fat_since
-            desde = clinic_fat_since(since_map)
+            desde = clinic_fat_since(since_map, alias)
+        # soma o 12m dos códigos-extra (órfãos) no principal, pra o R$ 12m também ficar certo
+        if extras:
+            ex12 = clinic_fat_12m(extras)
+            for e, p in alias.items():
+                if ex12.get(e):
+                    rsmap[p] = round(rsmap.get(p, 0) + ex12[e], 2)
     except Exception as e:
-        print(f"post_clinicas_rs: R$ desde o marco pulado ({e})")
+        print(f"post_clinicas_rs: R$ desde/extra pulado ({e})")
     data = json.dumps({"fat": rsmap, "desde": desde}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
@@ -245,13 +258,21 @@ def post_clinicas_det():
         carteira = json.loads(urllib.request.urlopen(req, timeout=30).read().decode()).get("carteira", [])
     except Exception as e:
         print(f"post_clinicas_det: não li a carteira ({e})"); return
-    cods = [c.get("cod") for c in carteira if c.get("cod")]
+    # códigos: principal + CÓDIGOS-EXTRA (mesma clínica com mais de um cadastro no HF, ex.: Faro Animal 989898+5724)
+    cods, alias = [], {}
+    for c in carteira:
+        p = c.get("cod")
+        if not p: continue
+        cods.append(str(p))
+        for e in (c.get("cods_extra") or []):
+            e = str(e).strip()
+            if e: cods.append(e); alias[e] = str(p)
     if not cods:
         print("post_clinicas_det: carteira sem clínicas vinculadas — pulado"); return
     # MARCO ZERO por clínica: produção conta a partir da data de reconquista (reconq_data) — não do começo
     since_map = {c.get("cod"): c.get("reconq_data") for c in carteira if c.get("cod") and c.get("reconq_data")}
     from build_financeiro import clinic_details
-    res = clinic_details(cods, since_map)
+    res = clinic_details(cods, since_map, alias)
     try:
         payload = json.dumps({"acao": "set", "det": res["det"], "setores": res["setores"], "senha": pwd}).encode()
         r = urllib.request.urlopen(urllib.request.Request(

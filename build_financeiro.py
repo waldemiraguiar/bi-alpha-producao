@@ -34,10 +34,14 @@ PETLOVE = {
     # Produção parcial de jun (atend.) está em data_petlove/petlove_mensal.json p/ a coluna do quadro.
 }
 
-def clinic_details(cods, since_map=None):
+def clinic_details(cods, since_map=None, alias=None):
     """Detalhe por clínica p/ o share-of-wallet do CRM: setores que ela MANDA (L12) + o que NÃO manda
-    (white-space) + produção recente (30d/7d) + produção DESDE O MARCO ZERO (data da reconquista, since_map). SEM R$."""
+    (white-space) + produção recente (30d/7d) + produção DESDE O MARCO ZERO (since_map). SEM R$.
+    alias = {cod_extra: cod_principal} agrega vários códigos do HF numa mesma clínica (ex.: Faro Animal
+    tem o cadastro oficial 989898 + o órfão 5724 onde caíram os exames → somam no principal)."""
     since_map = since_map or {}
+    alias = {str(k): str(v) for k, v in (alias or {}).items()}
+    def prim(cod): return alias.get(str(cod), str(cod))
     cods = [str(x) for x in (cods or []) if x is not None and str(x) != ""]
     if not cods:
         return {"det": {}, "setores": []}
@@ -65,11 +69,11 @@ def clinic_details(cods, since_map=None):
         cod = str(x["cod"]); d = det.setdefault(cod, {"prod30": 0, "prod7": 0, "cats": {}})
         d["cats"][x["setor"]] = d["cats"].get(x["setor"], 0) + int(x["qtd"] or 0)
         d["prod30"] += int(x["p30"] or 0); d["prod7"] += int(x["p7"] or 0)
-    # MARCO ZERO: produção contada a partir da data de reconquista de cada clínica (não do começo do mundo)
+    # MARCO ZERO: produção a partir da data de reconquista (cada cod herda o marco do seu PRINCIPAL)
     prod_desde = {}
-    for cod, dt in since_map.items():
-        cod = str(cod); dt = str(dt or "")[:10]
-        if cod not in cods or not dt:
+    for cod in cods:
+        dt = str(since_map.get(prim(cod)) or "")[:10]
+        if not dt:
             continue
         try:
             datetime.date.fromisoformat(dt)
@@ -83,7 +87,7 @@ def clinic_details(cods, since_map=None):
     recent = {}
     CAP = 260   # máx linhas por clínica (as mais recentes)
     for cod in cods:
-        desde = str(since_map.get(cod) or "")[:10] or d180
+        desde = str(since_map.get(prim(cod)) or "")[:10] or d180
         try:
             datetime.date.fromisoformat(desde)
         except Exception:
@@ -97,52 +101,80 @@ def clinic_details(cods, since_map=None):
                 "pet": (x["pet"] or "")[:40], "tut": (x["tut"] or "")[:40], "req": x["req"]} for x in rows[:CAP]]
         recent[cod] = {"lst": lst, "desde": desde, "mais": len(rows) > CAP}
     conn.close()
-    out = {}
+    # AGREGA por código PRINCIPAL (soma os códigos-extra na mesma clínica)
+    mdet, mpd, mrec = {}, {}, {}
     for cod, d in det.items():
-        cats = sorted(d["cats"].items(), key=lambda kv: -kv[1])
-        row = {"prod30": d["prod30"], "prod7": d["prod7"],
-               "cats": [{"setor": s, "qtd": qn} for s, qn in cats if s != "(sem categoria)"],
-               "falta": [s for s in setores if s not in d["cats"]]}   # white-space (categorias que ela não te manda)
-        if cod in prod_desde:
-            row["prod_desde"] = prod_desde[cod]["n"]
-            row["marco"] = prod_desde[cod]["desde"]
-        if cod in recent:
-            row["recent"] = recent[cod]["lst"]; row["recent_desde"] = recent[cod]["desde"]; row["recent_mais"] = recent[cod]["mais"]
-        out[cod] = row
-    # clínicas com marco zero mas SEM produção no período (0 exames desde a reconquista) — ainda precisam do prod_desde
+        p = prim(cod); m = mdet.setdefault(p, {"prod30": 0, "prod7": 0, "cats": {}})
+        m["prod30"] += d["prod30"]; m["prod7"] += d["prod7"]
+        for s, qn in d["cats"].items(): m["cats"][s] = m["cats"].get(s, 0) + qn
     for cod, pd in prod_desde.items():
-        if cod not in out:
-            row = {"prod30": 0, "prod7": 0, "cats": [], "falta": list(setores),
-                   "prod_desde": pd["n"], "marco": pd["desde"]}
-            if cod in recent:
-                row["recent"] = recent[cod]["lst"]; row["recent_desde"] = recent[cod]["desde"]; row["recent_mais"] = recent[cod]["mais"]
-            out[cod] = row
-    # clínicas SEM prod nem marco mas com recent (ex.: 0 exames no período) — garante o drill-down existir
+        p = prim(cod); e = mpd.setdefault(p, {"n": 0, "desde": pd["desde"]}); e["n"] += pd["n"]
     for cod in cods:
-        if cod not in out and cod in recent:
-            out[cod] = {"prod30": 0, "prod7": 0, "cats": [], "falta": list(setores),
-                        "recent": recent[cod]["lst"], "recent_desde": recent[cod]["desde"], "recent_mais": recent[cod]["mais"]}
+        if cod not in recent: continue
+        p = prim(cod); e = mrec.setdefault(p, {"lst": [], "desde": recent[cod]["desde"], "mais": False})
+        e["lst"].extend(recent[cod]["lst"]); e["mais"] = e["mais"] or recent[cod]["mais"]
+    for p, e in mrec.items():
+        e["lst"].sort(key=lambda x: x["d"], reverse=True)
+        if len(e["lst"]) > CAP: e["mais"] = True; e["lst"] = e["lst"][:CAP]
+    prims = set([prim(c) for c in cods])
+    out = {}
+    for p in prims:
+        d = mdet.get(p, {"prod30": 0, "prod7": 0, "cats": {}})
+        cats = sorted(d["cats"].items(), key=lambda kv: -kv[1])
+        prod12 = sum(qn for s, qn in d["cats"].items() if s != "(sem categoria)")
+        row = {"prod30": d["prod30"], "prod7": d["prod7"], "prod12": prod12,
+               "cats": [{"setor": s, "qtd": qn} for s, qn in cats if s != "(sem categoria)"],
+               "falta": [s for s in setores if s not in d["cats"]]}
+        if p in mpd:
+            row["prod_desde"] = mpd[p]["n"]; row["marco"] = mpd[p]["desde"]
+        if p in mrec:
+            row["recent"] = mrec[p]["lst"]; row["recent_desde"] = mrec[p]["desde"]; row["recent_mais"] = mrec[p]["mais"]
+        out[p] = row
     return {"det": out, "setores": setores}
 
-def clinic_fat_since(since_map):
-    """R$ (SUM ValorExame) por clínica DESDE o marco zero (data da reconquista). Usado SÓ no fluxo CIFRADO
-    (diretoria) — o R$ de uma reconquistada tem que contar a partir da volta dela, não 12m cheios."""
-    since_map = since_map or {}
-    valid = {str(k): str(v or "")[:10] for k, v in since_map.items() if k is not None and str(v or "")}
-    if not valid:
+def clinic_fat_12m(cods):
+    """R$ 12m (SUM ValorExame) de códigos arbitrários — inclusive ÓRFÃOS que não estão em TabCliente
+    (ex.: 5724 do Faro). Usado p/ somar os códigos-extra no principal no fluxo cifrado."""
+    cods = [str(x) for x in (cods or []) if x is not None and str(x) != ""]
+    if not cods:
+        return {}
+    conn = pymysql.connect(**SRC); c = conn.cursor()
+    def q(sql, p=()): c.execute(sql, p); return c.fetchall()
+    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    d365 = (datetime.date.fromisoformat(maxd) - datetime.timedelta(days=365)).isoformat()
+    ph = ",".join(["%s"] * len(cods))
+    rows = q(f"SELECT r.CodCliente cod, COALESCE(SUM(s.ValorExame),0) f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+             f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s GROUP BY r.CodCliente", (*cods, d365, maxd))
+    conn.close()
+    return {str(x["cod"]): round(float(x["f"] or 0), 2) for x in rows}
+
+def clinic_fat_since(since_map, alias=None):
+    """R$ (SUM ValorExame) por clínica DESDE o marco zero. alias={cod_extra:cod_principal} soma os
+    códigos-extra no principal (Faro Animal: 989898 + 5724). Usado SÓ no fluxo CIFRADO (diretoria)."""
+    since_map = {str(k): str(v or "")[:10] for k, v in (since_map or {}).items() if k is not None and str(v or "")}
+    alias = {str(k): str(v) for k, v in (alias or {}).items()}
+    if not since_map:
+        return {}
+    def prim(cod): return alias.get(str(cod), str(cod))
+    # cada cod (principal + extras) herda o marco do seu principal
+    todo = {}
+    for cod in set(list(since_map.keys()) + list(alias.keys())):
+        dt = since_map.get(prim(cod))
+        if dt: todo[str(cod)] = dt
+    if not todo:
         return {}
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
     maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
     out = {}
-    for cod, dt in valid.items():
+    for cod, dt in todo.items():
         try:
             datetime.date.fromisoformat(dt)
         except Exception:
             continue
         r = q(f"SELECT COALESCE(SUM(s.ValorExame),0) f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
               f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s", (cod, dt, maxd))
-        out[cod] = round(float(r[0]["f"] or 0), 2)
+        out[prim(cod)] = round(out.get(prim(cod), 0) + float(r[0]["f"] or 0), 2)
     conn.close()
     return out
 

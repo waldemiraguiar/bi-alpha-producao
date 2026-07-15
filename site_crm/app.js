@@ -536,6 +536,8 @@ function openCarteira(tipo, id){
     <input id="caRecData" type="date" class="m-date" style="width:100%" value="${c?esc(c.reconq_data||""):hojeISO()}">
     <div class="m-lbl">Motivo da perda anterior <span class="t-mut" style="font-weight:500">— por que tinha deixado de mandar (opcional)</span></div>
     <textarea id="caMotivo" class="m-ta" style="min-height:44px" placeholder="Ex.: vazamento de urina na cistocentese — reembolsamos e recuperamos">${c?esc(c.motivo_perda||""):""}</textarea>
+    <div class="m-lbl">Códigos adicionais do HF <span class="t-mut" style="font-weight:500">— se a clínica tem cadastro duplicado/órfão (ex.: exames caíram noutro código). Separe por vírgula.</span></div>
+    <input id="caCodsExtra" class="m-date" style="width:100%" inputmode="numeric" placeholder="Ex.: 5724" value="${c?esc((c.cods_extra||[]).join(", ")):""}">
     <div class="m-lbl">Observação</div>
     <textarea id="caObs" class="m-ta" style="min-height:48px">${c?esc(c.obs||""):""}</textarea>
     <button class="m-save" id="caSave">${c?"Salvar alterações":"Salvar"}</button>
@@ -554,7 +556,8 @@ function openCarteira(tipo, id){
   document.getElementById("caPorte").onclick=e=>{const b=e.target.closest("[data-p]");if(b){P=b.dataset.p;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));}};
   document.getElementById("caSave").onclick=async()=>{
     const nome=nomeEl.value.trim(); if(!nome){ alert("Informe a clínica."); return; }
-    const item={id:c?c.id:null, cod:document.getElementById("caCod").value, cidade:document.getElementById("caCidade").value, nome, tipo:T, porte:P, reconq_data:(document.getElementById("caRecData")||{}).value||"", motivo_perda:(document.getElementById("caMotivo")||{}).value.trim(), obs:document.getElementById("caObs").value.trim(), por:meuRep()||"equipe", ts:c?c.ts:Date.now()};
+    const codsExtra=((document.getElementById("caCodsExtra")||{}).value||"").split(/[,\s]+/).map(s=>s.replace(/\D/g,"")).filter(Boolean);
+    const item={id:c?c.id:null, cod:document.getElementById("caCod").value, cods_extra:codsExtra, cidade:document.getElementById("caCidade").value, nome, tipo:T, porte:P, reconq_data:(document.getElementById("caRecData")||{}).value||"", motivo_perda:(document.getElementById("caMotivo")||{}).value.trim(), obs:document.getElementById("caObs").value.trim(), por:meuRep()||"equipe", ts:c?c.ts:Date.now()};
     const btn=document.getElementById("caSave"); btn.disabled=true; btn.textContent="Salvando…";
     const ok=await saveCart(item); if(ok){ clinView=T; closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent=c?"Salvar alterações":"Salvar"; } };
   const del=document.getElementById("caDel"); if(del) del.onclick=async()=>{ if(confirm(`Remover "${c.nome}" da carteira?`)){ await removeCart(c.id); closeModal(); renderTab(); } };
@@ -1771,8 +1774,8 @@ function renderTab(){
     const porteLbl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno"};
     // R$ total da carteira (só diretoria com R$ aberto)
     const rsTotal=(ehDiretoria()&&CLIN_RS)?lista.reduce((s,x)=>s+(x.cod&&CLIN_RS[String(x.cod)]!=null?+CLIN_RS[String(x.cod)]:0),0):null;
-    const card=x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, vinc=!!x.cod&&!!m;
-      const det=x.cod?CLIN_DET[String(x.cod)]:null;
+    const card=x=>{ const m=clinByCod(x.cod), det=x.cod?CLIN_DET[String(x.cod)]:null;
+      const prod=(det&&det.prod12!=null)?det.prod12:(m?m.prod:null), vinc=!!x.cod&&(!!m||(det&&det.prod12!=null));   // prod12 = soma dos códigos-extra
       const prodDesde=(det&&det.prod_desde!=null)?det.prod_desde:null, temMarco=!!x.reconq_data;
       const concentrada=!!(det && CLIN_SETORES.length>=3 && det.cats.length<=1 && (det.falta||[]).length>=2);
       const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA)||concentrada;
@@ -1819,7 +1822,7 @@ function renderTab(){
       const semLabel=r=>{ if(r.label) return "Sexta "+esc(r.label); const m=String(r.semana||"").match(/(\d{4})-W(\d+)/); return m?`Semana ${m[2]}/${m[1]}`:esc(r.semana||"—"); };
       // ---- FATURAMENTO AO VIVO (sempre atual — não espera sexta) · só diretoria ----
       const vinc=CARTEIRA.filter(x=>x.cod);
-      const dados=vinc.map(x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, det=CLIN_DET[String(x.cod)]||null;
+      const dados=vinc.map(x=>{ const m=clinByCod(x.cod), det=CLIN_DET[String(x.cod)]||null, prod=(det&&det.prod12!=null)?det.prod12:(m?m.prod:null);
         const rsv=rsVal(x.cod, x.reconq_data);
         const prodBase=(det&&det.prod_desde!=null&&x.reconq_data)?det.prod_desde:prod;   // exames desde o marco p/ o ticket bater com o R$
         const tk=(rsv!=null&&prodBase)?rsv/prodBase:null; const falta=(det&&det.falta)||[];
