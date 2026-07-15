@@ -339,7 +339,7 @@ async function criarOperador(nome, pin, papel, dir_code){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,papel,dir_code,senha:window.__pwd})});
     if(r.status===409){ alert("Já existe um operador com esse nome — escolha ele na lista."); return false; }
     if(r.status===403){ alert("❌ Código da diretoria inválido — criado como comercial não foi feito."); return false; }
-    if(r.status===400){ alert("O PIN precisa de pelo menos 4 dígitos."); return false; }
+    if(r.status===400){ alert("O PIN precisa de pelo menos 6 dígitos."); return false; }
     if(r.status===401){ alert("Sessão sem permissão."); return false; }
     if(r.ok){ syncOps((await r.json()).operadores); return true; } }catch(e){ alert("Sem internet — precisa de conexão pra criar operador."); }
   return false; }
@@ -371,7 +371,7 @@ async function openIdentidade(force){
     else alert("PIN incorreto."); });
   document.getElementById("opNovo").onclick=async()=>{
     const nome=(prompt("Nome do novo operador (ex.: Heitor, Luciane, Wal):")||"").trim(); if(!nome) return;
-    const pin=(prompt(`Crie um PIN (mínimo 4 dígitos) para ${nome}:`)||"").trim(); if(pin.length<4){ alert("O PIN precisa de pelo menos 4 dígitos."); return; }
+    const pin=(prompt(`Crie um PIN (mínimo 6 dígitos) para ${nome}:`)||"").trim(); if(pin.length<6){ alert("O PIN precisa de pelo menos 6 dígitos."); return; }
     let papel="comercial", dir_code="";
     if(confirm(`${nome} é da DIRETORIA (vê valores em R$)?\n\nOK = sim (vai pedir a senha financeira) · Cancelar = comercial`)){ dir_code=(prompt("Senha financeira da diretoria (só R$ — não é o código do desmarcou):")||"").trim(); if(dir_code) papel="diretoria"; }
     const ok=await criarOperador(nome, pin, papel, dir_code); if(ok){ setOperador(nome, papel); closeModal(); renderAll(); } };
@@ -2288,7 +2288,7 @@ async function initLogin(){
   document.getElementById("loginNovo").onclick=async()=>{
     const tp=(prompt("Para CRIAR um acesso novo, digite a senha do time (só quem já tem acesso pode criar):")||"").trim(); if(!tp) return;
     const nome=(prompt("Seu nome (ex.: Fábio):")||"").trim(); if(!nome) return;
-    const pin=(prompt("Crie seu PIN (mínimo 4 números):")||"").trim(); if(pin.length<4){ alert("O PIN precisa de pelo menos 4 números."); return; }
+    const pin=(prompt("Crie seu PIN (mínimo 6 números):")||"").trim(); if(pin.length<6){ alert("O PIN precisa de pelo menos 6 números."); return; }
     try{ const r=await fetch("/api/crm-operadores",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,senha:tp})});
       if(r.status===401){ alert("Senha do time incorreta."); return; }
       if(r.status===409){ alert("Já existe esse nome — é só entrar com ele e seu PIN."); return; }

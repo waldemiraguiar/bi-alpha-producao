@@ -63,8 +63,8 @@ export default async (req) => {
       return Response.json({ ok: true, nome: o.nome, papel, operadores: pub(lista) }, { headers: cors });
     }
     // add / setpin (upsert) — cria operador ou troca o PIN
-    if (!nome || pin.length < 4)
-      return new Response(JSON.stringify({ erro: "nome/pin invalido (PIN >= 4 digitos)" }), { status: 400, headers: cors });
+    if (!nome || pin.length < 6)
+      return new Response(JSON.stringify({ erro: "nome/pin invalido (PIN >= 6 digitos)" }), { status: 400, headers: cors });
     const existing = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
     if (existing && body.acao !== "setpin")
       return new Response(JSON.stringify({ erro: "ja_existe" }), { status: 409, headers: cors });
