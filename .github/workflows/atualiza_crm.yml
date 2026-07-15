@@ -65,6 +65,12 @@ jobs:
         run: |
           node -e "const fs=require('fs');fs.writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\nexport const DIR_CODE='+JSON.stringify(process.env.DIR_CODE||'')+';\n')"
           cd site_crm/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
+      - name: Cache-bust dos assets (versão por deploy)
+        if: env.DEPLOY_FULL == 'true'
+        run: |
+          V=$(date +%s)
+          sed -i "s#\(src=\"app\.js\)\"#\1?v=$V\"#g; s#\(src=\"gate-crypto\.js\)\"#\1?v=$V\"#g" site_crm/index.html
+          echo "cache-bust -> $(grep -oE 'app\.js\?v=[0-9]+' site_crm/index.html | head -1)"
       - name: Publicar no Netlify (Agente CRM)
         if: env.DEPLOY_FULL == 'true'
         env:
