@@ -34,6 +34,15 @@ export default async (req) => {
         };
         if (d.prod_desde != null) o.prod_desde = +d.prod_desde || 0;   // produção desde o marco zero (data da reconquista)
         if (d.marco) o.marco = String(d.marco).slice(0, 20);
+        if (Array.isArray(d.recent)) {   // drill-down exame-a-exame (dia · exame · PET · tutor · registro)
+          o.recent = d.recent.slice(0, 300).map((e) => ({
+            d: String(e.d || "").slice(0, 10), ex: String(e.ex || "").slice(0, 60),
+            cat: String(e.cat || "").slice(0, 40), pet: String(e.pet || "").slice(0, 40),
+            tut: String(e.tut || "").slice(0, 40), req: e.req == null ? null : String(e.req).slice(0, 20),
+          }));
+          if (d.recent_desde) o.recent_desde = String(d.recent_desde).slice(0, 10);
+          if (d.recent_mais) o.recent_mais = true;
+        }
         out[String(k).slice(0, 30)] = o;
       }
       await store.setJSON("dados", { det: out, setores, ts: Date.now() });

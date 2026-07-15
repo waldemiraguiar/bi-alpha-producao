@@ -78,6 +78,24 @@ def clinic_details(cods, since_map=None):
         r = q(f"SELECT COUNT(*) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
               f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s", (cod, dt, maxd))
         prod_desde[cod] = {"n": int(r[0]["n"] or 0), "desde": dt}
+    # DRILL-DOWN exame-a-exame por clínica (dia · exame · categoria · PET · tutor · registro) — desde o marco zero, senão 180d
+    d180 = (tdt - datetime.timedelta(days=180)).isoformat()
+    recent = {}
+    CAP = 260   # máx linhas por clínica (as mais recentes)
+    for cod in cods:
+        desde = str(since_map.get(cod) or "")[:10] or d180
+        try:
+            datetime.date.fromisoformat(desde)
+        except Exception:
+            desde = d180
+        rows = q(f"SELECT s.DataExame d, s.Exame ex, COALESCE(cat.Categoria,'') cat, r.Animal pet, r.Proprietario tut, "
+                 f"r.NumeroSequencial req FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                 f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+                 f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s "
+                 f"ORDER BY s.DataExame DESC, r.NumeroSequencial DESC LIMIT %s", (cod, desde, maxd, CAP + 1))
+        lst = [{"d": str(x["d"])[:10], "ex": (x["ex"] or "")[:60], "cat": (x["cat"] or "")[:40],
+                "pet": (x["pet"] or "")[:40], "tut": (x["tut"] or "")[:40], "req": x["req"]} for x in rows[:CAP]]
+        recent[cod] = {"lst": lst, "desde": desde, "mais": len(rows) > CAP}
     conn.close()
     out = {}
     for cod, d in det.items():
@@ -88,12 +106,22 @@ def clinic_details(cods, since_map=None):
         if cod in prod_desde:
             row["prod_desde"] = prod_desde[cod]["n"]
             row["marco"] = prod_desde[cod]["desde"]
+        if cod in recent:
+            row["recent"] = recent[cod]["lst"]; row["recent_desde"] = recent[cod]["desde"]; row["recent_mais"] = recent[cod]["mais"]
         out[cod] = row
     # clínicas com marco zero mas SEM produção no período (0 exames desde a reconquista) — ainda precisam do prod_desde
     for cod, pd in prod_desde.items():
         if cod not in out:
+            row = {"prod30": 0, "prod7": 0, "cats": [], "falta": list(setores),
+                   "prod_desde": pd["n"], "marco": pd["desde"]}
+            if cod in recent:
+                row["recent"] = recent[cod]["lst"]; row["recent_desde"] = recent[cod]["desde"]; row["recent_mais"] = recent[cod]["mais"]
+            out[cod] = row
+    # clínicas SEM prod nem marco mas com recent (ex.: 0 exames no período) — garante o drill-down existir
+    for cod in cods:
+        if cod not in out and cod in recent:
             out[cod] = {"prod30": 0, "prod7": 0, "cats": [], "falta": list(setores),
-                        "prod_desde": pd["n"], "marco": pd["desde"]}
+                        "recent": recent[cod]["lst"], "recent_desde": recent[cod]["desde"], "recent_mais": recent[cod]["mais"]}
     return {"det": out, "setores": setores}
 
 def build():
