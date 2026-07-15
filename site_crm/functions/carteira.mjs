@@ -35,6 +35,8 @@ export default async (req) => {
         cidade: String(it.cidade || "").slice(0, 80),
         tipo: it.tipo === "reconquistada" ? "reconquistada" : "nova",
         porte: ["P", "M", "G"].includes(it.porte) ? it.porte : "",
+        reconq_data: String(it.reconq_data || "").slice(0, 20),   // MARCO ZERO: data da reconquista/entrada — produção conta a partir daqui
+        motivo_perda: String(it.motivo_perda || "").slice(0, 400), // por que tinha perdido antes (histórico)
         obs: String(it.obs || "").slice(0, 500),
         por: String(it.por || "equipe").slice(0, 40),
         ts: existing ? existing.ts : (it.ts || Date.now()),

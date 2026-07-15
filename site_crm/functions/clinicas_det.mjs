@@ -27,11 +27,14 @@ export default async (req) => {
       const keys = Object.keys(det).slice(0, 500), out = {};
       for (const k of keys) {
         const d = det[k] || {};
-        out[String(k).slice(0, 30)] = {
+        const o = {
           prod30: +d.prod30 || 0, prod7: +d.prod7 || 0,
           cats: Array.isArray(d.cats) ? d.cats.slice(0, 20).map((c) => ({ setor: String(c.setor || "").slice(0, 40), qtd: +c.qtd || 0 })) : [],
           falta: Array.isArray(d.falta) ? d.falta.slice(0, 20).map((s) => String(s).slice(0, 40)) : [],
         };
+        if (d.prod_desde != null) o.prod_desde = +d.prod_desde || 0;   // produção desde o marco zero (data da reconquista)
+        if (d.marco) o.marco = String(d.marco).slice(0, 20);
+        out[String(k).slice(0, 30)] = o;
       }
       await store.setJSON("dados", { det: out, setores, ts: Date.now() });
       return Response.json({ ok: true, n: keys.length }, { headers: cors });

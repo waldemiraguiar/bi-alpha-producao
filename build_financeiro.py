@@ -34,9 +34,10 @@ PETLOVE = {
     # Produção parcial de jun (atend.) está em data_petlove/petlove_mensal.json p/ a coluna do quadro.
 }
 
-def clinic_details(cods):
+def clinic_details(cods, since_map=None):
     """Detalhe por clínica p/ o share-of-wallet do CRM: setores que ela MANDA (L12) + o que NÃO manda
-    (white-space = setores do lab que ela não te envia) + produção recente (30d/7d). SEM R$."""
+    (white-space) + produção recente (30d/7d) + produção DESDE O MARCO ZERO (data da reconquista, since_map). SEM R$."""
+    since_map = since_map or {}
     cods = [str(x) for x in (cods or []) if x is not None and str(x) != ""]
     if not cods:
         return {"det": {}, "setores": []}
@@ -64,13 +65,35 @@ def clinic_details(cods):
         cod = str(x["cod"]); d = det.setdefault(cod, {"prod30": 0, "prod7": 0, "cats": {}})
         d["cats"][x["setor"]] = d["cats"].get(x["setor"], 0) + int(x["qtd"] or 0)
         d["prod30"] += int(x["p30"] or 0); d["prod7"] += int(x["p7"] or 0)
+    # MARCO ZERO: produção contada a partir da data de reconquista de cada clínica (não do começo do mundo)
+    prod_desde = {}
+    for cod, dt in since_map.items():
+        cod = str(cod); dt = str(dt or "")[:10]
+        if cod not in cods or not dt:
+            continue
+        try:
+            datetime.date.fromisoformat(dt)
+        except Exception:
+            continue
+        r = q(f"SELECT COUNT(*) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+              f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s", (cod, dt, maxd))
+        prod_desde[cod] = {"n": int(r[0]["n"] or 0), "desde": dt}
     conn.close()
     out = {}
     for cod, d in det.items():
         cats = sorted(d["cats"].items(), key=lambda kv: -kv[1])
-        out[cod] = {"prod30": d["prod30"], "prod7": d["prod7"],
-                    "cats": [{"setor": s, "qtd": qn} for s, qn in cats if s != "(sem categoria)"],
-                    "falta": [s for s in setores if s not in d["cats"]]}   # white-space (categorias que ela não te manda)
+        row = {"prod30": d["prod30"], "prod7": d["prod7"],
+               "cats": [{"setor": s, "qtd": qn} for s, qn in cats if s != "(sem categoria)"],
+               "falta": [s for s in setores if s not in d["cats"]]}   # white-space (categorias que ela não te manda)
+        if cod in prod_desde:
+            row["prod_desde"] = prod_desde[cod]["n"]
+            row["marco"] = prod_desde[cod]["desde"]
+        out[cod] = row
+    # clínicas com marco zero mas SEM produção no período (0 exames desde a reconquista) — ainda precisam do prod_desde
+    for cod, pd in prod_desde.items():
+        if cod not in out:
+            out[cod] = {"prod30": 0, "prod7": 0, "cats": [], "falta": list(setores),
+                        "prod_desde": pd["n"], "marco": pd["desde"]}
     return {"det": out, "setores": setores}
 
 def build():
