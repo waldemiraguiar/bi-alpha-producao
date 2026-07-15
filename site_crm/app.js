@@ -1673,20 +1673,33 @@ function renderTab(){
       const prodDesde=(det&&det.prod_desde!=null)?det.prod_desde:null, temMarco=!!x.reconq_data;
       const concentrada=!!(det && CLIN_SETORES.length>=3 && det.cats.length<=1 && (det.falta||[]).length>=2);
       const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA)||concentrada;
-      // 🧠 interpretação do agente (share-of-wallet + porte)
+      const falta=det?(det.falta||[]):[];
+      const nClasses=det?((det.cats||[]).length+falta.length):0;
+      const rsvDir=(ehDiretoria()&&CLIN_RS&&x.cod&&CLIN_RS[String(x.cod)]!=null)?+CLIN_RS[String(x.cod)]:null;
+      // 🎯 DEIXANDO NA MESA — bloco de alerta que grita o que ela NÃO te manda (share-of-wallet)
+      const mesaBox = (vinc && falta.length) ? `
+        <div style="margin-top:7px;background:linear-gradient(90deg,rgba(255,45,85,.17),rgba(255,45,85,.05));border:1px solid rgba(255,45,85,.5);border-radius:9px;padding:9px 11px">
+          <div style="font-size:12px;font-weight:800;color:#ff6b81;letter-spacing:.4px;text-transform:uppercase">🎯 Deixando na mesa · ${falta.length} classe${falta.length>1?"s":""} que ela NÃO te manda</div>
+          <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">
+            ${falta.slice(0,8).map(f=>`<span style="background:rgba(255,45,85,.22);color:#ffc9d2;border:1px solid rgba(255,45,85,.45);border-radius:20px;padding:2px 10px;font-size:11.5px;font-weight:700">${esc(f)}</span>`).join("")}
+            ${falta.length>8?`<span style="color:#ff8fa3;font-size:11.5px;align-self:center;font-weight:700">+${falta.length-8}</span>`:""}
+          </div>
+          <div style="font-size:11.5px;color:#ffb3c0;margin-top:7px;font-weight:600">⚠️ Isso vai pro concorrente. ${rsvDir!=null?`Ela já te rende <b style="color:#7effcf">${fmtBRL(rsvDir)}</b> mandando só <b>${(det.cats||[]).length} de ${nClasses}</b> classes — imagina com o resto. <b style="color:#ff6b81">Puxa.</b>`:`<b style="color:#ff6b81">Puxa essas classes.</b>`}</div>
+        </div>` : "";
+      // 🧠 interpretação do agente (só quando NÃO há white-space — senão o bloco acima já manda o recado)
       let interp="";
-      if(det && (det.falta||[]).length) interp=`🧠 Manda ${det.cats.slice(0,3).map(c=>esc(c.setor)).join(", ")||"pouco"}, mas <b>NÃO te manda ${det.falta.slice(0,4).map(esc).join(", ")}</b> — essas classes vão pra outro lab. Puxa essas.`;
-      else if(x.porte==="G" && prod!=null && prod<PORTE_PROD_BAIXA) interp=`🧠 ${det?"Manda todas as classes, MAS ":""}o volume é baixo pra um <b>porte grande</b> — o potencial é bem maior; provavelmente divide a QUANTIDADE com outro lab. Trabalhar.`;
-      else if(det && (det.falta||[]).length===0) interp=`🧠 Manda todas as classes de exame 👍${x.porte==="G"?" (porte grande bem aproveitado)":""}`;
-      const detLinha=det?`<div class="ci" style="font-size:11.5px;margin-top:2px">📆 recente: <b>${det.prod30||0}</b> em 30d · ${det.prod7||0} em 7d${det.cats&&det.cats.length?` · ✅ manda: ${det.cats.slice(0,4).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}`:""}</div>`:"";
+      if(!falta.length && x.porte==="G" && prod!=null && prod<PORTE_PROD_BAIXA) interp=`🧠 ${det?"Manda todas as classes, MAS ":""}o volume é baixo pra um <b>porte grande</b> — potencial bem maior; provavelmente divide a QUANTIDADE com outro lab. Trabalhar.`;
+      else if(det && !falta.length) interp=`🧠 Manda <b>todas</b> as classes de exame 👍${x.porte==="G"?" (porte grande bem aproveitado)":""}`;
+      const detLinha=det?`<div class="ci" style="font-size:11.5px;margin-top:2px">📆 recente: <b>${det.prod30||0}</b> em 30d · ${det.prod7||0} em 7d${det.cats&&det.cats.length?` · <span style="color:#7effcf">✅ manda: ${det.cats.slice(0,4).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</span>`:""}</div>`:"";
       const prodTxt = (prodDesde!=null&&temMarco) ? `📊 desde a reconquista: <b>${prodDesde}</b> exames` : (prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>');
       const marcoLinha = temMarco ? `<div class="ci" style="font-size:11.5px;margin-top:2px;color:#7effcf">♻️ ${x.tipo==="nova"?"entrou":"reconquistada"} em <b>${esc(fmtDataBR(x.reconq_data))}</b> <span class="t-mut">(marco zero)</span></div>` : `<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">⚠️ sem marco zero — edite e ponha a data da reconquista</div>`;
       const perdaLinha = x.motivo_perda ? `<div class="ci" style="font-size:11.5px;margin-top:1px;color:#ffb3c0">💔 perdeu antes: "${esc(x.motivo_perda)}"</div>` : "";
-      return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${flag?';border-left:3px solid #FF2D55':''}">
+      return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${(flag||mesaBox)?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
           <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt} · 💰 ${rsClin(x.cod)}</div>
           ${marcoLinha}${perdaLinha}${detLinha}
+          ${mesaBox}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
           ${interp?`<div class="ci" style="font-size:11.5px;margin-top:3px;${flag?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div>`:""}
           ${x.cod?`<button class="exbtn" data-exames="${esc(x.cod)}" data-exnome="${esc(x.nome)}" type="button" style="margin-top:6px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:#9fe6ff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">🔬 Ver exames (dia · PET · registro)</button>`:""}
