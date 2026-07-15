@@ -194,12 +194,30 @@ def post_snapshot(D2):
         print(f"snapshot {week} falhou (ok, tenta no próximo ciclo): {e}")
 
 
+def post_clinicas(D):
+    """Manda o MASTER de clínicas do HF (nome+cod+cidade+produção, SEM R$) p/ o autocomplete das abas
+    Novas/Reconquistadas (/api/crm-clinicas). O R$ (fat) NÃO vai — fica gated p/ diretoria (Fase 3b)."""
+    import urllib.request
+    pwd = CRM_PWD
+    full = (D or {}).get("clinicas_full") or []
+    if not pwd or not full:
+        return
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+    clis = [{"cod": c.get("cod"), "nome": c.get("nome"), "cidade": c.get("cidade"), "prod": int(c.get("qtd") or 0)} for c in full]
+    try:
+        payload = json.dumps({"acao": "set", "clinicas": clis, "senha": pwd}).encode()
+        r = urllib.request.urlopen(urllib.request.Request(
+            base + "/api/crm-clinicas", data=payload, headers={"Content-Type": "application/json"}), timeout=45)
+        print(f"clinicas master -> HTTP {r.status} ({len(clis)} clínicas)")
+    except Exception as e:
+        print(f"post_clinicas falhou (ok, tenta no próximo ciclo): {e}")
+
 if __name__ == "__main__":
     from build_financeiro import build  # importado só na nuvem (precisa do MySQL)
     last = None
     for attempt in range(1, 4):
         try:
-            D2 = crm_from(build()); encrypt(D2); post_snapshot(D2); break
+            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); break
         except Exception as e:
             import pymysql
             if isinstance(e, pymysql.err.OperationalError):

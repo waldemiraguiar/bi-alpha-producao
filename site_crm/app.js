@@ -26,6 +26,7 @@ const TABS = [
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"pista",           ic:"🏍️", nm:"Pista",           cls:"",         bcls:""},
+  {k:"clinicas",        ic:"🏥", nm:"Clínicas",        cls:"",         bcls:""},
   {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
@@ -377,6 +378,65 @@ async function openIdentidade(force){
   const od=document.getElementById("opDir"); if(od) od.onclick=()=>tornarDiretoria();
 }
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
+/* ---- 🏥 CLÍNICAS: master do HF (autocomplete) + carteira Novas/Reconquistadas ---- */
+const CLIN_API="/api/crm-clinicas", CART_API="/api/crm-carteira";
+let CLINICAS=[], CLIN_TS=0, CARTEIRA=[], clinView="reconquistada";
+const PORTE_PROD_BAIXA=40;   // porte Grande com produção L12 abaixo disso = 🚩 pode estar dividindo exame (heurística até ter categoria)
+function syncClin(o){ CLINICAS=(o&&o.clinicas)||[]; CLIN_TS=(o&&o.ts)||0; }
+async function loadClin(){ try{ const r=await fetch(CLIN_API); if(r.ok) syncClin(await r.json()); }catch(e){} }
+function syncCart(a){ CARTEIRA=(a||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0)); }
+async function loadCart(){ try{ const r=await fetch(CART_API); if(r.ok) syncCart((await r.json()).carteira); }catch(e){} }
+async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
+async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
+function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
+/* fuzzy match: normaliza, tira palavras genéricas (vet/clínica/pet…), casa por token distintivo — "Guaratiba" acha "Vet Guaratiba" */
+const _CLIN_STOP=new Set(["vet","veterinaria","veterinario","clinica","hospital","pet","petshop","shop","centro","dr","dra","drs","de","da","do","dos","das","e","o","a"]);
+function _clinNorm(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim(); }
+function _clinToks(s){ return _clinNorm(s).split(" ").filter(t=>t && !_CLIN_STOP.has(t)); }
+function matchClinicas(q, lim){ lim=lim||8; const qt=_clinToks(q), qn=_clinNorm(q); if(!qt.length) return [];
+  const scored=CLINICAS.map(c=>{ const cn=_clinNorm(c.nome), ct=_clinToks(c.nome); let sc=0;
+    qt.forEach(t=>{ if(ct.includes(t)) sc+=10; else if(ct.some(x=>x.startsWith(t)||t.startsWith(x))) sc+=6; else if(cn.includes(t)) sc+=4; });
+    if(cn.startsWith(qn)) sc+=5; if(cn===qn) sc+=25;
+    return {c, sc}; }).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc||((b.c.prod||0)-(a.c.prod||0)));
+  return scored.slice(0,lim).map(x=>x.c); }
+function openCarteira(tipo, id){
+  const c=id?CARTEIRA.find(x=>x.id===id):null; let T=c?c.tipo:(tipo||"reconquistada"), P=c?c.porte:"";
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div><div class="m-cli">${c?"✏️ Editar clínica":"➕ Adicionar clínica"}</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">digite o nome; eu acho no HF e vinculo (correlaciona a produção)</div></div>
+      <button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">Clínica <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— digite e escolha a do HF</span></div>
+    <input id="caNome" class="m-date" style="width:100%" autocomplete="off" placeholder="Ex.: Guaratiba…" value="${c?esc(c.nome):""}">
+    <div id="caSug" style="display:flex;flex-direction:column;gap:4px;margin-top:6px"></div>
+    <input type="hidden" id="caCod" value="${c?esc(c.cod||""):""}"><input type="hidden" id="caCidade" value="${c?esc(c.cidade||""):""}">
+    <div id="caVinc" class="proxhint" style="display:${(c&&c.cod)?"block":"none"}">${(c&&c.cod)?("🔗 vinculada ao HF"+(c.cidade?" · "+esc(c.cidade):"")):""}</div>
+    <div class="m-lbl">Tipo</div>
+    <div class="m-opts" id="caTipo"><button class="opt${T==="reconquistada"?" on":""}" data-t="reconquistada">♻️ Reconquistada</button><button class="opt${T==="nova"?" on":""}" data-t="nova">🆕 Nova</button></div>
+    <div class="m-lbl">Porte <span class="t-mut" style="font-weight:500">— ajuda a saber se manda muito ou pouco</span></div>
+    <div class="m-opts" id="caPorte">${[["G","🐘 Grande"],["M","🐎 Médio"],["P","🐇 Pequeno"]].map(([v,l])=>`<button class="opt${P===v?" on":""}" data-p="${v}">${l}</button>`).join("")}</div>
+    <div class="m-lbl">Observação</div>
+    <textarea id="caObs" class="m-ta" style="min-height:48px">${c?esc(c.obs||""):""}</textarea>
+    <button class="m-save" id="caSave">${c?"Salvar alterações":"Salvar"}</button>
+    ${c?`<button class="m-enc" id="caDel" style="border-color:var(--mut);color:var(--mut)">Remover</button>`:""}`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  const nomeEl=document.getElementById("caNome"), sug=document.getElementById("caSug"), vinc=document.getElementById("caVinc");
+  const pickClin=m=>{ nomeEl.value=m.nome; document.getElementById("caCod").value=m.cod; document.getElementById("caCidade").value=m.cidade||""; sug.innerHTML=""; vinc.style.display="block"; vinc.style.borderColor="rgba(0,229,160,.4)"; vinc.style.color="#7effcf"; vinc.innerHTML=`🔗 vinculada ao HF: <b>${esc(m.nome)}</b>${m.cidade?" · "+esc(m.cidade):""} · produção ${m.prod||0}`; };
+  const doSug=()=>{ document.getElementById("caCod").value=""; const ms=matchClinicas(nomeEl.value);
+    if(!nomeEl.value.trim()||!ms.length){ sug.innerHTML=""; if(nomeEl.value.trim()&&CLINICAS.length){ vinc.style.display="block"; vinc.style.borderColor="rgba(255,138,0,.4)"; vinc.style.color="#ffc266"; vinc.innerHTML="⚠️ não achei no HF — pode salvar como <b>pendente de vínculo</b> e conciliar depois"; } else vinc.style.display="none"; return; }
+    vinc.style.display="none";
+    sug.innerHTML=ms.map((m,i)=>`<button class="checkinbtn" data-sug="${i}" style="text-align:left;font-size:13px">🏥 ${esc(m.nome)}${m.cidade?` <span class="t-mut">· ${esc(m.cidade)}</span>`:""} <span class="t-mut">· prod ${m.prod||0}</span></button>`).join("");
+    sug.querySelectorAll("[data-sug]").forEach(b=>b.onclick=()=>pickClin(ms[+b.dataset.sug])); };
+  nomeEl.addEventListener("input", doSug);
+  document.getElementById("caTipo").onclick=e=>{const b=e.target.closest("[data-t]");if(b){T=b.dataset.t;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));}};
+  document.getElementById("caPorte").onclick=e=>{const b=e.target.closest("[data-p]");if(b){P=b.dataset.p;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));}};
+  document.getElementById("caSave").onclick=async()=>{
+    const nome=nomeEl.value.trim(); if(!nome){ alert("Informe a clínica."); return; }
+    const item={id:c?c.id:null, cod:document.getElementById("caCod").value, cidade:document.getElementById("caCidade").value, nome, tipo:T, porte:P, obs:document.getElementById("caObs").value.trim(), por:meuRep()||"equipe", ts:c?c.ts:Date.now()};
+    const btn=document.getElementById("caSave"); btn.disabled=true; btn.textContent="Salvando…";
+    const ok=await saveCart(item); if(ok){ clinView=T; closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent=c?"Salvar alterações":"Salvar"; } };
+  const del=document.getElementById("caDel"); if(del) del.onclick=async()=>{ if(confirm(`Remover "${c.nome}" da carteira?`)){ await removeCart(c.id); closeModal(); renderTab(); } };
+}
 /* VISITA EM ANDAMENTO: check-in na CHEGADA (separado); feedback+check-out na SAÍDA */
 function visitaLoad(){ try{ return JSON.parse(localStorage.getItem("crm_visita")||"null"); }catch(e){ return null; } }
 function visitaSave(v){ try{ localStorage.setItem("crm_visita", JSON.stringify(v)); }catch(e){} }
@@ -1487,6 +1547,44 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="clinicas"){
+    const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada");
+    const lista=(clinView==="nova"?nov:rec);
+    const q=search.trim().toLowerCase();
+    const arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista;
+    const semVinc=CARTEIRA.filter(x=>!x.cod).length;
+    const porteLbl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno"};
+    const card=x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, vinc=!!x.cod&&!!m;
+      const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA);
+      return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${flag?';border-left:3px solid #FF2D55':''}">
+        <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
+        <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
+          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>'} · ${ehDiretoria()?'<span class="t-mut">💰 R$ chega na Fase 3b</span>':'<span class="t-mut" title="valor só para a diretoria">🔒 R$</span>'}</div>
+          ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
+          ${flag?`<div class="ci" style="color:#ff8fa3;font-weight:600;margin-top:2px">🚩 porte grande com produção baixa — provavelmente dividindo exame com outro lab (trabalhar essa clínica)</div>`:""}
+          <div class="ci t-mut" style="font-size:11px;margin-top:2px">👤 ${esc(x.por||"—")}</div></div>
+        <div class="mid"></div></div>`; };
+    const CL=CLINICAS.length;
+    c.innerHTML=`
+      <div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button></div>
+      <button class="checkinbtn" id="addCart" type="button" style="margin-bottom:6px">➕ Adicionar clínica ${clinView==='nova'?'NOVA':'RECONQUISTADA'}</button>
+      <div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Você digita o nome; eu acho no HF (${CL?CL+" clínicas":"aguardando o robô"}) e vinculo → puxo a produção. O input é seu.</div>
+      <div class="kgrid">
+        ${kpi("g", clinView==='nova'?nov.length:rec.length, clinView==='nova'?"Novas":"Reconquistadas", "na carteira")}
+        ${kpi("", arr.filter(x=>x.cod).length, "Vinculadas ao HF", "produção correlacionada")}
+        ${kpi(semVinc?"a":"", semVinc, "Pendentes", "sem vínculo HF")}
+        ${kpi("", CL, "Master HF", CLIN_TS?("sinc. "+new Date(CLIN_TS).toLocaleDateString("pt-BR")):"aguardando robô")}
+      </div>
+      ${!CL?`<div class="proxhint" style="border-color:rgba(255,138,0,.4);color:#ffc266;margin-bottom:12px">⏳ A lista de clínicas do HF ainda não chegou (o robô sincroniza a cada ciclo). O autocomplete liga assim que ela vier.</div>`:""}
+      <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${clinView==='nova'?"🆕 Clínicas novas":"♻️ Clínicas reconquistadas"}</div><input class="wlsearch" id="lupaCart" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
+      ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma clínica ${clinView==='nova'?"nova":"reconquistada"} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
+    document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+    const ac=document.getElementById("addCart"); if(ac) ac.onclick=()=>openCarteira(clinView, null);
+    document.querySelectorAll("#content [data-cart]").forEach(el=>el.onclick=()=>openCarteira(null, el.dataset.cart));
+    const lc=document.getElementById("lupaCart"); if(lc){ lc.addEventListener("input", e=>{ search=e.target.value; const p=lc.selectionStart; renderTab(); const l2=document.getElementById("lupaCart"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
+    return;
+  }
+
   if(ACTIVE==="prospeccao"){
     const q=search.trim().toLowerCase();
     const all = q ? PROSP.filter(p=>(p.nome||"").toLowerCase().includes(q)||(p.cidade||"").toLowerCase().includes(q)||(p.contato||"").toLowerCase().includes(q)) : PROSP;
@@ -2096,9 +2194,9 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
-    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length;
-      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos()]);
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
+    setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
+      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart()]);
       if(a!==sig()) renderTab(); }, 45000);
   }
 }
