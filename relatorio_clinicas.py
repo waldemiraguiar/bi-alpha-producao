@@ -42,6 +42,10 @@ def brl(v):
 carteira = fetch("/api/crm-carteira").get("carteira", [])
 master = {str(c.get("cod")): c for c in fetch("/api/crm-clinicas").get("clinicas", [])}
 rsmap = decrypt_rs(os.environ.get("DIR_CODE", ""))
+try:
+    detj = fetch("/api/crm-clinicas-det"); DET = detj.get("det", {}) or {}
+except Exception:
+    DET = {}
 
 hoje = datetime.date.today()
 iso = hoje.isocalendar()
@@ -49,12 +53,17 @@ semana = f"{iso[0]}-W{int(iso[1]):02d}"
 label = hoje.strftime("%d/%m/%Y")
 
 def enrich(x):
-    m = master.get(str(x.get("cod"))) if x.get("cod") else None
+    cod = str(x.get("cod")) if x.get("cod") else None
+    m = master.get(cod) if cod else None
     prod = int(m.get("prod")) if m else None
-    rs = rsmap.get(str(x.get("cod"))) if x.get("cod") else None
-    flag = (x.get("porte") == "G" and prod is not None and prod < PORTE_PROD_BAIXA)
+    rs = rsmap.get(cod) if cod else None
+    d = DET.get(cod) if cod else None
+    falta = (d or {}).get("falta", []) or []
+    concentrada = bool(d and len((d.get("cats") or [])) <= 1 and len(falta) >= 2)
+    flag = (x.get("porte") == "G" and prod is not None and prod < PORTE_PROD_BAIXA) or concentrada
     return {"nome": x.get("nome", ""), "cidade": x.get("cidade", ""), "tipo": x.get("tipo", "nova"),
-            "porte": x.get("porte", ""), "prod": prod, "rs": rs, "flag": flag, "vinc": bool(m)}
+            "porte": x.get("porte", ""), "prod": prod, "rs": rs, "flag": flag, "vinc": bool(m),
+            "prod30": (d or {}).get("prod30"), "falta": falta}
 
 linhas = [enrich(x) for x in carteira]
 nov = [l for l in linhas if l["tipo"] == "nova"]
@@ -82,8 +91,10 @@ def tabela(items):
             "<th style='padding:6px 8px;text-align:right'>Produção 12m</th><th style='padding:6px 8px;text-align:right'>R$ 12m</th></tr>"
             + rows + "</table>")
 
-flagtxt = ("".join(f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}) — só {l['prod']} exames/12m: provavelmente dividindo exame com outro lab</li>" for l in flags)
-           or "<li>Nenhuma clínica grande com produção baixa 👍</li>")
+flagtxt = ("".join(f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}) — {l['prod']} exames/12m"
+                   + (f"; <b>não te manda: {', '.join(l['falta'][:6])}</b> (vai pra outro lab)" if l['falta'] else "; provavelmente dividindo exame")
+                   + "</li>" for l in flags)
+           or "<li>Nenhuma clínica sinalizada 👍</li>")
 
 html = f"""<div style='font-family:Arial;max-width:820px;margin:auto;color:#1a1a1a'>
 <h2 style='color:#0A1628'>🏥 Relatório de Clínicas — {label}</h2>

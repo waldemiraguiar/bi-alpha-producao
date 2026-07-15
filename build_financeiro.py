@@ -34,6 +34,44 @@ PETLOVE = {
     # Produção parcial de jun (atend.) está em data_petlove/petlove_mensal.json p/ a coluna do quadro.
 }
 
+def clinic_details(cods):
+    """Detalhe por clínica p/ o share-of-wallet do CRM: setores que ela MANDA (L12) + o que NÃO manda
+    (white-space = setores do lab que ela não te envia) + produção recente (30d/7d). SEM R$."""
+    cods = [str(x) for x in (cods or []) if x is not None and str(x) != ""]
+    if not cods:
+        return {"det": {}, "setores": []}
+    conn = pymysql.connect(**SRC); c = conn.cursor()
+    def q(sql, p=()): c.execute(sql, p); return c.fetchall()
+    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    tdt = datetime.date.fromisoformat(maxd)
+    d365 = (tdt - datetime.timedelta(days=365)).isoformat()
+    d30 = (tdt - datetime.timedelta(days=30)).isoformat()
+    d7 = (tdt - datetime.timedelta(days=7)).isoformat()
+    uni = q(f"SELECT COALESCE(cat.Setor,'(sem setor)') setor, COUNT(*) qtd FROM {EX} s "
+            f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Setor ORDER BY qtd DESC", (d365, maxd))
+    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem setor)" and u["qtd"] > 0][:12]
+    ph = ",".join(["%s"] * len(cods))
+    rows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Setor,'(sem setor)') setor, COUNT(*) qtd, "
+             f"SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p30, SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p7 "
+             f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+             f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s "
+             f"GROUP BY r.CodCliente, cat.Setor", (d30, d7, *cods, d365, maxd))
+    det = {}
+    for x in rows:
+        cod = str(x["cod"]); d = det.setdefault(cod, {"prod30": 0, "prod7": 0, "cats": {}})
+        d["cats"][x["setor"]] = d["cats"].get(x["setor"], 0) + int(x["qtd"] or 0)
+        d["prod30"] += int(x["p30"] or 0); d["prod7"] += int(x["p7"] or 0)
+    conn.close()
+    out = {}
+    for cod, d in det.items():
+        cats = sorted(d["cats"].items(), key=lambda kv: -kv[1])
+        out[cod] = {"prod30": d["prod30"], "prod7": d["prod7"],
+                    "cats": [{"setor": s, "qtd": qn} for s, qn in cats if s != "(sem setor)"],
+                    "falta": [s for s in setores if s not in d["cats"]]}   # white-space
+    return {"det": out, "setores": setores}
+
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
