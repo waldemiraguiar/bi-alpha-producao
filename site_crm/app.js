@@ -388,6 +388,45 @@ function cancelVisita(){
 }
 
 let pistaView="feed";   // "feed" | "retornos"
+/* ---- ☑️ SELEÇÃO EM LOTE (marcar isolado/todos + mover entre abas) ---- */
+let selMode=false; const SEL=new Set();
+function selReset(){ selMode=false; SEL.clear(); }
+function selBox(id){ return selMode?`<input type="checkbox" class="selbox" data-sel="${esc(id)}" ${SEL.has(id)?"checked":""} onclick="event.stopPropagation()" style="width:20px;height:20px;flex:0 0 auto;accent-color:#00E5A0;margin:2px 6px 0 0;cursor:pointer">`:""; }
+function selBar(ids){
+  ids=ids||[]; const n=SEL.size, isRel=(pistaView==="relatos");
+  const acts=(selMode&&n)?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${isRel?"":`<button class="baixabtn ok" id="selRetorno" style="margin:0">📅 Jogar pra Retorno</button><button class="baixabtn ok" id="selRelato" style="margin:0">📣 Copiar p/ Relato</button>`}
+      <button class="baixabtn no" id="selDel" style="margin:0">🗑️ Excluir (${n})</button>
+      <button class="subtab" id="selClear" style="margin:0">limpar</button></div>`:"";
+  return `<div class="card" style="margin-bottom:12px;padding:10px 12px;border-color:${selMode?'rgba(0,229,160,.4)':'rgba(255,255,255,.08)'}">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="subtab ${selMode?'on':''}" id="selToggle" style="margin:0">${selMode?"✖ Sair da seleção":"☑️ Selecionar em lote"}</button>
+        ${selMode?`<button class="subtab" id="selAll" data-ids="${esc(ids.join(","))}" style="margin:0">${(ids.length&&ids.every(i=>SEL.has(i)))?"Desmarcar todos":"Selecionar todos"} (${ids.length})</button><span class="t-mut" style="font-size:12.5px">${n} selecionado(s)</span>`:""}
+      </div>${acts}</div>`;
+}
+async function bulkRetorno(){
+  const ids=[...SEL].filter(id=>PISTA.find(x=>x.id===id)); if(!ids.length){ alert("Nada selecionado."); return; }
+  const txt=(prompt(`Jogar ${ids.length} cliente(s) pra Retorno. Qual data? (ex.: 20/07, "dia 20 do 7")`)||"").trim(); if(!txt) return;
+  const nova=parseDataBR(txt)||(/^\d{4}-\d{2}-\d{2}$/.test(txt)?txt:""); if(!nova){ alert("Não entendi a data. Tente 20/07 ou 2026-07-20."); return; }
+  for(const id of ids){ const f=PISTA.find(x=>x.id===id); if(f) await savePista({...f, proximo:nova, sem_retorno:false, clear_baixa:true}); }
+  selReset(); alert("✅ "+ids.length+" jogado(s) pra Retorno em "+fmtDataBR(nova)); pistaView="retornos"; renderTab();
+}
+async function bulkRelato(){
+  const ids=[...SEL].filter(id=>PISTA.find(x=>x.id===id)); if(!ids.length){ alert("Nada selecionado."); return; }
+  if(!confirm(`Copiar ${ids.length} p/ Relatos (voz da rua)?`)) return;
+  for(const id of ids){ const f=PISTA.find(x=>x.id===id); if(f) await saveRelato({clinica:f.cliente, texto:f.texto||("Visita "+(f.cliente||"")), data:hojeISO(), origem:"visita", por:f.por||meuRep()}); }
+  selReset(); alert("✅ "+ids.length+" copiado(s) p/ Relatos"); pistaView="relatos"; renderTab();
+}
+async function bulkExcluir(){
+  const ids=[...SEL]; if(!ids.length){ alert("Nada selecionado."); return; }
+  if(!confirm(`Excluir ${ids.length} item(ns)? Vai pro 🗑️ Histórico de exclusão (permanente).`)) return;
+  const por=operadorAtual()||quemExcluiu()||"escritório", motivo=(prompt("Motivo da exclusão em lote (opcional):")||"").trim();
+  for(const id of ids){
+    if(pistaView==="relatos"){ const r=RELATOS.find(x=>x.id===id); if(r){ try{ await fetch(EXCL_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",senha:window.__pwd,item:{tipo:"Relato pista",cliente:r.clinica,resumo:(r.texto||"").slice(0,200),por_registro:r.por,por_exclusao:por,motivo,ts_original:r.ts}})}); }catch(e){} await removeRelato(id); } }
+    else { const f=PISTA.find(x=>x.id===id); if(f){ try{ await fetch(EXCL_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",senha:window.__pwd,item:{tipo:"Feedback pista",cliente:f.cliente,bairro:f.bairro,resumo:(f.texto||"").slice(0,200),por_registro:f.por,por_exclusao:por,motivo,ts_original:f.ts}})}); }catch(e){} await removePista(id); } }
+  }
+  await loadExcl(); selReset(); renderTab();
+}
 function pistaRetornos(list){ // retornos PENDENTES (com data e SEM baixa) — o que ainda falta visitar
   const src=list||PISTA, byCli={};
   src.filter(f=>f.proximo && !f.baixa).forEach(f=>{ const k=(f.cliente||f.id).trim().toLowerCase(); if(!byCli[k]||(f.ts||0)>(byCli[k].ts||0)) byCli[k]=f; });
@@ -1636,7 +1675,7 @@ function renderTab(){
     arr.forEach(f=>{ const d=new Date(f.ts), mk=d.getFullYear()*100+(d.getMonth()+1), pr=PRES[f.resultado]||PRES.visita;
       if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
       body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">
-        <div class="rk" style="color:${pr.col}">${pr.ic}</div>
+        ${selBox(f.id)}<div class="rk" style="color:${pr.col}">${pr.ic}</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${fmt(f.ts)}${(f.ts_upd&&f.ts_upd-f.ts>60000)?(" · ✏️ editado"+(f.edit_by?" por "+esc(f.edit_by):"")):""}</span></div>
           ${f.texto?`<div class="lastint" style="cursor:pointer">"${esc(f.texto)}"</div>`:""}
           ${f.sem_retorno?`<div class="rtbadge" style="background:rgba(255,138,0,.16);color:#ffc266">🚫 sem retorno</div>`:(f.proximo?`<div class="rtbadge fut">↻ retorno ${esc(f.proximo)}</div>`:"")}
@@ -1649,8 +1688,16 @@ function renderTab(){
       </div>`; });
     const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='relatos'?'on':''}" data-pv="relatos">📣 Relatos${RELATOS.length?` (${RELATOS.length})`:''}</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='bi'?'on':''}" data-pv="bi">📊 BI</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
-      document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; pinned=true; setPin(); search=""; renderTab(); });
-      document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>openPistaRec(el.dataset.fb));
+      document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; selReset(); pinned=true; setPin(); search=""; renderTab(); });
+      document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>{ if(selMode){ const id=el.dataset.fb; SEL.has(id)?SEL.delete(id):SEL.add(id); renderTab(); return; } openPistaRec(el.dataset.fb); });
+      // ☑️ seleção em lote
+      const _st=document.getElementById("selToggle"); if(_st) _st.onclick=()=>{ selMode=!selMode; if(!selMode) SEL.clear(); renderTab(); };
+      const _sa=document.getElementById("selAll"); if(_sa) _sa.onclick=()=>{ const ids=(_sa.dataset.ids||"").split(",").filter(Boolean); const all=ids.length&&ids.every(i=>SEL.has(i)); ids.forEach(i=>all?SEL.delete(i):SEL.add(i)); renderTab(); };
+      const _sc=document.getElementById("selClear"); if(_sc) _sc.onclick=()=>{ SEL.clear(); renderTab(); };
+      document.querySelectorAll("#content [data-sel]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const id=el.dataset.sel; el.checked?SEL.add(id):SEL.delete(id); renderTab(); });
+      const _sr=document.getElementById("selRetorno"); if(_sr) _sr.onclick=()=>bulkRetorno();
+      const _srl=document.getElementById("selRelato"); if(_srl) _srl.onclick=()=>bulkRelato();
+      const _sd=document.getElementById("selDel"); if(_sd) _sd.onclick=()=>bulkExcluir();
       document.querySelectorAll("#content [data-obs]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); addObs(el.dataset.obs); });
       document.querySelectorAll("#content [data-delfb]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); excluirFeedback(el.dataset.delfb); });
       document.querySelectorAll("#content [data-cheguei]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const f=PISTA.find(x=>x.id===el.dataset.cheguei); if(f) iniciarVisita({id:f.id,cliente:f.cliente,bairro:f.bairro}); });
@@ -1685,7 +1732,7 @@ function renderTab(){
         if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
         const ps=detectPains((r.titulo||"")+" "+r.texto), crit=relCritico((r.titulo||"")+" "+r.texto), o=RORIG[r.origem]||RORIG.outro;
         body+=`<div class="crow" data-rel="${esc(r.id)}" style="cursor:pointer;align-items:flex-start${crit?';border-left:3px solid #FF2D55':''}">
-          <div class="rk">📣</div>
+          ${selBox(r.id)}<div class="rk">📣</div>
           <div style="flex:1">
             <div class="nm">${esc(relTitulo(r))} ${crit?'<span class="pr" style="background:rgba(255,45,85,.2);color:#ff8fa3">🔴 IRRITADO</span>':''}</div>
             <div class="ci">🏥 <b>${esc(r.clinica||"—")}</b>${r.medico?" · "+esc(r.medico):""} · ${o.ic} ${o.lbl} · 📅 ${esc(fmtDataBR(r.data)||"")}${r.hora?" 🕐 "+esc(r.hora):""} · 👤 ${esc(r.por||"—")}</div>
@@ -1704,10 +1751,11 @@ function renderTab(){
         </div>
         ${painArr.length?`<div class="card" style="margin:14px 0;border-color:rgba(255,138,0,.3)"><h3>🔥 Dores mais citadas pelas clínicas <span class="tag">o que a rua está falando</span></h3>${doresBars}<div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">Soma as dores de <b>todos</b> os relatos → mostra onde mais dói (operação, laudo, atendimento) pra direção agir na causa, não no sintoma.</div></div>`:""}
         <div class="tabsbar" style="margin:12px 0 8px"><div class="seclabel" style="margin:0">📣 Relatos · por mês</div><input class="wlsearch" id="lupaRel" placeholder="🔍 clínica, médico, dor…" value="${esc(search)}"></div>
+        ${selBar(arr0.map(r=>r.id))}
         ${base.length?(arr0.length?body:`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhum relato ainda. Toque <b>📣 Novo relato</b> e conte por voz o que a clínica falou — eu organizo em título, clínica, médico e dores. (Ex.: o relatório do Eitor: Animiau, Veterinária Aguiar, Prime Vet…)</div>`}`;
       wirePista();
       const rn=document.getElementById("relNovo"); if(rn) rn.onclick=()=>openRelato(null);
-      document.querySelectorAll("#content [data-rel]").forEach(el=>el.onclick=()=>openRelato(el.dataset.rel));
+      document.querySelectorAll("#content [data-rel]").forEach(el=>el.onclick=()=>{ if(selMode){ const id=el.dataset.rel; SEL.has(id)?SEL.delete(id):SEL.add(id); renderTab(); return; } openRelato(el.dataset.rel); });
       const lr=document.getElementById("lupaRel");
       if(lr){ lr.addEventListener("input", ev=>{ search=ev.target.value; pinned=true; setPin(); const p=lr.selectionStart; renderTab(); const l2=document.getElementById("lupaRel"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
       return;
@@ -1721,7 +1769,7 @@ function renderTab(){
       const atras=ret.filter(f=>f.proximo<tISO).length, semana=ret.filter(f=>f.proximo>=tISO&&f.proximo<=semFimISO).length;
       const bc={}; ret.forEach(f=>{const b=f.bairro||"(sem bairro)"; bc[b]=(bc[b]||0)+1;});
       const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
-      const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">↻</div>
+      const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">${selBox(f.id)}<div class="rk" style="color:#00D4FF">↻</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")}${f.origem==="telefone"?' <span class="pr" style="background:rgba(0,212,255,.16);color:#9fe6ff;font-size:11px">📞 telefone</span>':""}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div>
         <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-cheguei="${esc(f.id)}" onclick="event.stopPropagation()" title="Cheguei na clínica — check-in de chegada (depois: feedback + saída)">📍 Cheguei</button><button class="baixabtn no" data-desm="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente desmarcou — precisa do código da diretoria">🚫 desmarcou</button></div></div>`;
       // agenda por COMERCIAL → dia → bairro (cada vendedor tem a SUA rota; incompatibilidade vale por vendedor)
@@ -1748,7 +1796,7 @@ function renderTab(){
       // 🎯 clientes lançados SEM data (o escritório põe; o vendedor decide quando ir)
       const aVisitar=all.filter(f=>f.a_visitar && !f.baixa && !f.proximo);
       const avByRep={}; aVisitar.forEach(f=>{ const rp=f.por||"(sem comercial)"; (avByRep[rp]=avByRep[rp]||[]).push(f); });
-      const linhaAV=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">🎯</div>
+      const linhaAV=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">${selBox(f.id)}<div class="rk" style="color:#00E5A0">🎯</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· 📍 ${esc(f.bairro||"—")}</span></div><div class="ci">${f.texto?'"'+esc(f.texto.slice(0,70))+'"':"cliente pra visitar — sem data"}</div></div><div class="mid"></div>
         <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-cheguei="${esc(f.id)}" onclick="event.stopPropagation()" title="Cheguei na clínica — check-in de chegada (depois: feedback + saída)">📍 Cheguei</button><button class="baixabtn no" data-delav="${esc(f.id)}" onclick="event.stopPropagation()" title="Remover da lista de visita">🗑️</button></div></div>`;
       const avSec=aVisitar.length?`<div class="seclabel" style="margin-top:4px;color:#7effcf">🎯 A visitar — SEM data <span class="t-mut" style="font-weight:500">— lançados pelo escritório; o vendedor escolhe quando ir (${aVisitar.length})</span></div>`+Object.keys(avByRep).sort().map(rp=>`<div class="repagenda" style="border-color:rgba(0,229,160,.3)"><div class="repagenda-h">👤 <b>${esc(rp)}</b> <span class="t-mut" style="font-weight:500">(${avByRep[rp].length} p/ visitar)</span></div>${avByRep[rp].map(linhaAV).join("")}</div>`).join(""):"";
@@ -1763,6 +1811,7 @@ function renderTab(){
           ${kpi("", ret.length, "Retornos", repFilter?("de "+esc(repFilter)):"pendentes")}
           ${kpi(aVisitar.length?"g":"", aVisitar.length, "A visitar", "sem data ainda")}
         </div>
+        ${selBar([...ret.map(f=>f.id), ...aVisitar.map(f=>f.id)])}
         ${avSec}
         ${ret.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
         <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
@@ -1782,7 +1831,7 @@ function renderTab(){
       let body="",curM=null;
       arr.forEach(f=>{ const d=new Date(f.baixa.ts||f.ts), mk=d.getFullYear()*100+(d.getMonth()+1), pr=PRES[f.resultado]||PRES.visita, dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()];
         if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
-        body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">✅</div>
+        body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">${selBox(f.id)}<div class="rk" style="color:#00E5A0">✅</div>
           <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· realizado ${dd} ${p2(d.getDate())}/${p2(d.getMonth()+1)} ${p2(d.getHours())}:${p2(d.getMinutes())}</span></div>
             <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}</div>
             <div class="ci" style="font-size:11.5px;margin-top:2px">${checkinResumo(f.checkin&&f.checkin.ts?f.checkin:(f.baixa&&f.baixa.checkin),f.checkout&&f.checkout.ts?f.checkout:(f.baixa&&f.baixa.checkout))}</div>
@@ -1800,6 +1849,7 @@ function renderTab(){
           <div class="seclabel" style="margin:0">✅ Visitas realizadas · por mês e ano <span class="t-mut" style="font-weight:500">— baixa por check-in (prova de presença)</span></div>
           <input class="wlsearch" id="lupaReal" placeholder="🔍 cliente, comercial, bairro…" value="${esc(search)}">
         </div>
+        ${selBar(arr.map(f=>f.id))}
         ${realizados.length?(arr.length?body:`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma visita com baixa ainda. Dê baixa num retorno (✓ check-in na clínica) e ela aparece aqui como realizada — com data, comercial e o pino do mapa.</div>`}`;
       wirePista();
       const lpr=document.getElementById("lupaReal");
@@ -1841,8 +1891,8 @@ function renderTab(){
     }
 
     if(pistaView==="naofeitos"){
-      const linhaNF=(f, badge, isDesm, noPulse)=>`<div class="crow retday-card${noPulse?"":" retday-pulse"}" style="margin-bottom:8px;padding:10px">
-        <div class="rk" style="color:${noPulse?"#FF8A00":"#FFD000"}">${noPulse?"🚫":"⏰"}</div>
+      const linhaNF=(f, badge, isDesm, noPulse)=>`<div class="crow retday-card${noPulse?"":" retday-pulse"}" data-fb="${esc(f.id)}" style="margin-bottom:8px;padding:10px;cursor:pointer">
+        ${selBox(f.id)}<div class="rk" style="color:${noPulse?"#FF8A00":"#FFD000"}">${noPulse?"🚫":"⏰"}</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">${badge}</span></div>
           <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${f.texto?' · "'+esc(f.texto.slice(0,50))+'"':''}</div>
           ${(f.baixa&&f.baixa.motivo)?`<div class="lastint">motivo: "${esc(f.baixa.motivo)}"</div>`:""}
@@ -1860,6 +1910,7 @@ function renderTab(){
           ${kpi("", naofeitosPerdidos.length, "Perdidos", "não quis mais")}
         </div>
         <div class="t-mut" style="font-size:12.5px;margin:2px 0 10px;line-height:1.5">⏰ Retornos que <b>não foram feitos</b> (venceram sem baixa) + <b>desmarcados</b> (a visita não aconteceu). A diretoria só <b>libera o código</b> — o <b>rep</b> escolhe o destino: <b>🔁 remarcar</b> (volta pra rota) ou <b>🚫 perdido</b> (sai da agenda, fica no histórico/BI). Nada some sem rastro.</div>
+        ${selBar([...naofeitosAtras,...naofeitosDesmReag,...naofeitosPerdidos].map(f=>f.id))}
         ${temAlgo?(secA+secB+secC):`<div class="empty">Nada pendente aqui 👌 — retornos em dia.</div>`}`;
       wirePista();
       return;
@@ -1914,6 +1965,7 @@ function renderTab(){
         <div class="seclabel" style="margin:0">🏍️ Feedbacks da pista · por mês e ano <span class="t-mut" style="font-weight:500">— toque p/ editar</span></div>
         <input class="wlsearch" id="lupaPista" placeholder="🔍 cliente, texto ou resultado…" value="${esc(search)}">
       </div>
+      ${selBar(arr.map(f=>f.id))}
       ${all.length ? (arr.length? body : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`) : `<div class="empty">Nenhum feedback ainda. Toque <b>🎤 Gravar feedback</b> ao sair do cliente — fala 20s e pronto.</div>`}`;
     wirePista();
     const lp=document.getElementById("lupaPista");
