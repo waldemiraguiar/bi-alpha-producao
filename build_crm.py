@@ -194,6 +194,32 @@ def post_snapshot(D2):
         print(f"snapshot {week} falhou (ok, tenta no próximo ciclo): {e}")
 
 
+def post_clinicas_rs(D):
+    """R$ por clínica CIFRADO só p/ diretoria: cifra {cod: fat} com a chave derivada do CÓDIGO DA DIRETORIA
+    (AES-256-GCM + PBKDF2-SHA256) e manda o env pro /api/crm-clinicas-rs. Reps não têm o código → nunca veem R$."""
+    import urllib.request
+    pwd = CRM_PWD
+    dir_code = os.environ.get("DIR_CODE", "")
+    full = (D or {}).get("clinicas_full") or []
+    if not pwd or not dir_code or not full:
+        print("post_clinicas_rs: pulado (falta CRM_PWD/DIR_CODE/dados)")
+        return
+    rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
+    data = json.dumps(rsmap, ensure_ascii=False, separators=(",", ":")).encode()
+    salt, iv = os.urandom(16), os.urandom(12)
+    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
+    ct = AESGCM(key).encrypt(iv, data, None)
+    env = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": ITER, "salt": base64.b64encode(salt).decode(),
+           "iv": base64.b64encode(iv).decode(), "ct": base64.b64encode(ct).decode()}
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+    try:
+        payload = json.dumps({"acao": "set", "env": env, "senha": pwd}).encode()
+        r = urllib.request.urlopen(urllib.request.Request(
+            base + "/api/crm-clinicas-rs", data=payload, headers={"Content-Type": "application/json"}), timeout=45)
+        print(f"clinicas R$ (cifrado) -> HTTP {r.status} ({len(rsmap)} clínicas)")
+    except Exception as e:
+        print(f"post_clinicas_rs falhou (ok, tenta no próximo ciclo): {e}")
+
 def post_clinicas(D):
     """Manda o MASTER de clínicas do HF (nome+cod+cidade+produção, SEM R$) p/ o autocomplete das abas
     Novas/Reconquistadas (/api/crm-clinicas). O R$ (fat) NÃO vai — fica gated p/ diretoria (Fase 3b)."""
@@ -217,7 +243,7 @@ if __name__ == "__main__":
     last = None
     for attempt in range(1, 4):
         try:
-            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); break
+            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); break
         except Exception as e:
             import pymysql
             if isinstance(e, pymysql.err.OperationalError):
