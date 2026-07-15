@@ -1,0 +1,9 @@
+# Nunca cachear o shell do app — sempre baixa a versão nova (evita "não carrega as mudanças")
+/index.html
+  Cache-Control: no-store, max-age=0, must-revalidate
+/app.js
+  Cache-Control: no-store, max-age=0, must-revalidate
+/gate-crypto.js
+  Cache-Control: no-store, max-age=0, must-revalidate
+/telao.html
+  Cache-Control: no-store, max-age=0, must-revalidate
