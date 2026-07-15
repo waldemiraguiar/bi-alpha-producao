@@ -402,6 +402,7 @@ async function loadDet(){ try{ const r=await fetch("/api/crm-clinicas-det"); if(
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
+const AUTO_REL_NOTE='<span class="t-mut" style="font-size:11px">· 🔄 automático</span>';
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
 let CLIN_RS_ENV=null, CLIN_RS=null;   // env cifrado (público) + mapa {cod:fat} decifrado (só na memória da diretoria)
@@ -1694,17 +1695,71 @@ function renderTab(){
     const CL=CLINICAS.length;
     const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
     if(clinView==="relatorios"){
+      const pl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno","":"—"};
+      const semLabel=r=>{ if(r.label) return "Sexta "+esc(r.label); const m=String(r.semana||"").match(/(\d{4})-W(\d+)/); return m?`Semana ${m[2]}/${m[1]}`:esc(r.semana||"—"); };
+      // ---- FATURAMENTO AO VIVO (sempre atual — não espera sexta) · só diretoria ----
+      const vinc=CARTEIRA.filter(x=>x.cod);
+      const dados=vinc.map(x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, det=CLIN_DET[String(x.cod)]||null;
+        const rsv=(CLIN_RS&&CLIN_RS[String(x.cod)]!=null)?+CLIN_RS[String(x.cod)]:null;
+        const tk=(rsv!=null&&prod)?rsv/prod:null; const falta=(det&&det.falta)||[];
+        const zero=!!(det&&Array.isArray(det.recent)&&det.recent.length===0&&!det.prod30);
+        return {x,prod,rsv,tk,falta,zero}; });
+      const totRS=dados.reduce((s,d)=>s+(d.rsv||0),0), totEx=dados.reduce((s,d)=>s+(d.prod||0),0);
+      const tkGeral=totEx?totRS/totEx:0;
+      const comRS=dados.filter(d=>d.rsv!=null).sort((a,b)=>b.rsv-a.rsv);
+      const mediaRS=comRS.length?totRS/comRS.length:0;
+      // regras de mercado (interpretação automática)
+      const regras=[];
+      if(comRS.length){ const top=comRS[0]; regras.push(`🥇 <b>${esc(top.x.nome)}</b> é a que mais fatura (${fmtBRL(top.rsv)} = ${totRS?Math.round(top.rsv/totRS*100):0}% da carteira). Proteja essa — ligue antes que o concorrente.`); }
+      const dividindo=dados.filter(d=>d.x.porte==="G" && d.rsv!=null && d.rsv<mediaRS*0.6);
+      if(dividindo.length) regras.push(`⚖️ <b>${dividindo.map(d=>esc(d.x.nome)).join(", ")}</b> — porte grande faturando abaixo da média: quase certo que <b>dividem exame</b> com outro lab. Cada +10% de share = R$ direto.`);
+      const semWallet=dados.filter(d=>d.falta.length>=3 && d.rsv!=null);
+      if(semWallet.length) regras.push(`🎯 <b>${semWallet.slice(0,3).map(d=>esc(d.x.nome)).join(", ")}</b> não te mandam classes inteiras de exame (${esc((semWallet[0].falta||[]).slice(0,3).join(", "))}…) — dinheiro que vai pro concorrente. Puxa essas classes.`);
+      const zeradas=dados.filter(d=>d.zero);
+      if(zeradas.length) regras.push(`🚨 <b>${zeradas.map(d=>esc(d.x.nome)).join(", ")}</b>: comissão paga mas <b>0 exames</b> no HF. Confere o vínculo/código — ou a reconquista não converteu.`);
+      if(comRS.length) regras.push(`🎫 Ticket médio da carteira = <b>${fmtBRL(tkGeral)}/exame</b>. Acima da média = exames caros (histopato/especializado); abaixo = rotina. Subir ticket > subir volume.`);
+      let painel;
+      if(!ehDiretoria()){
+        painel=`<div class="proxhint" style="margin:8px 0 14px">🔒 O <b>faturamento (R$)</b> é visível só para a <b>diretoria</b>. Você vê a produção (nº de exames). ${AUTO_REL_NOTE}</div>`;
+      } else if(!CLIN_RS){
+        painel=`<button class="checkinbtn" id="verRSrel" type="button" style="margin:8px 0 14px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Ver faturamento em R$ (código da diretoria)</button>`;
+      } else {
+        const rows=comRS.map(d=>`<div class="crow" style="cursor:default;align-items:flex-start">
+            <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${d.x.tipo==="nova"?"🆕":"♻️"}</div>
+            <div style="flex:1"><div class="nm">${esc(d.x.nome)} ${d.x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl[d.x.porte]}</span>`:""}</div>
+              <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b> · 📊 ${d.prod||0} exames/12m · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
+            <div class="mid"></div></div>`).join("");
+        const zerLinha=dados.filter(d=>d.rsv==null&&d.x.cod).map(d=>`<div class="ci t-mut" style="font-size:11.5px">• ${esc(d.x.nome)} — sem R$ (0 exames / pendente)</div>`).join("");
+        painel=`
+          <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}</div>
+          <div class="kgrid">
+            ${kpi("g", fmtBRL(totRS), "Faturamento total", "12m · carteira vinculada")}
+            ${kpi("", totEx, "Exames (12m)", "produção somada")}
+            ${kpi("", fmtBRL(tkGeral), "Ticket médio", "R$ por exame")}
+            ${kpi("g", comRS.length, "Clínicas com R$", `${dados.length} na carteira`)}
+          </div>
+          <div class="seclabel" style="margin:12px 0 6px">💰 Faturamento por clínica <span class="t-mut" style="font-weight:500;font-size:11px">(maior → menor)</span></div>
+          ${rows||'<div class="t-mut" style="font-size:12.5px">Sem R$ vinculado ainda.</div>'}
+          ${zerLinha?`<div style="margin-top:6px">${zerLinha}</div>`:""}
+          <div class="card" style="margin:14px 0 6px;border-color:rgba(0,212,255,.3)">
+            <h3>🧠 Como ler isso (regras de mercado)</h3>
+            <div style="font-size:12.5px;line-height:1.65">${regras.map(r=>`<div style="margin:4px 0">${r}</div>`).join("")}</div>
+          </div>`;
+      }
       const rcard=r=>`<div class="crow" style="cursor:default;align-items:flex-start">
           <div class="rk" style="color:#00D4FF">📈</div>
-          <div style="flex:1"><div class="nm">Semana ${esc(r.semana||"")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${esc(r.label||"")}</span></div>
+          <div style="flex:1"><div class="nm">📅 ${semLabel(r)}</div>
             <div class="ci">♻️ <b>${r.n_reconq||0}</b> reconquistadas · 🆕 <b>${r.n_novas||0}</b> novas · 📊 <b>${r.prod_total||0}</b> exames (12m)${(r.flags&&r.flags.length)?` · 🚩 <b>${r.flags.length}</b> p/ trabalhar`:""}${(r.zerados&&r.zerados.length)?` · 🚨 <b>${r.zerados.length}</b> zeradas`:""}</div>
             ${(r.zerados&&r.zerados.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ff8fa3">🚨 comissão paga mas 0 exames: ${r.zerados.map(f=>esc(f.nome)+(f.cidade?" ("+esc(f.cidade)+")":"")).join(" · ")}</div>`:""}
             ${(r.flags&&r.flags.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ffc266">🚩 ${r.flags.map(f=>esc(f.nome)+(f.prod!=null?" ("+f.prod+")":"")).join(" · ")}</div>`:""}</div>
           <div class="mid"></div></div>`;
       c.innerHTML=`${subtabsClin}
-        <div class="t-mut" style="font-size:12.5px;margin:8px 0 12px;text-align:center;line-height:1.5">Foto do relatório de clínicas de <b>toda sexta 9h</b> (produção + o que trabalhar). O <b>R$</b> vai no <b>e-mail da diretoria</b>. Aqui fica o histórico pra ver a evolução.</div>
-        ${RELATORIOS.length?RELATORIOS.map(rcard).join(""):`<div class="empty">Ainda sem relatório. O primeiro sai na sexta 9h (ou dispare manual). Vai listando a evolução das clínicas novas/reconquistadas aqui.</div>`}`;
+        <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo do robô — você não precisa pedir). O e-mail completo sai <b>toda sexta 9h</b> pra diretoria.</div>
+        ${painel}
+        <div class="seclabel" style="margin:14px 0 6px">🗂️ Histórico semanal <span class="t-mut" style="font-weight:500;font-size:11px">(evolução — sem R$, foto de cada sexta)</span></div>
+        ${RELATORIOS.length?RELATORIOS.map(rcard).join(""):`<div class="empty">Ainda sem foto semanal. A 1ª já foi gerada — recarregue em instantes. Depois vai listando a evolução aqui.</div>`}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+      const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>verRS();
       return;
     }
     c.innerHTML=`
