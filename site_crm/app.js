@@ -326,7 +326,7 @@ async function loadOps(){ try{ const r=await fetch(OPS_API); if(r.ok) syncOps((a
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
-function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel) localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); renderOpBtn(); }
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; try{sessionStorage.removeItem("crm_dir_code");}catch(e){} } } renderOpBtn(); }
 function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -348,7 +348,7 @@ async function tornarDiretoria(){
   const code=(prompt(`Para VER R$, digite o CÓDIGO DA DIRETORIA (blindagem — só a diretoria tem):`)||"").trim(); if(!code) return;
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"setpapel",nome,papel:"diretoria",dir_code:code,senha:window.__pwd})});
     if(r.status===403){ alert("❌ Código da diretoria inválido."); return; }
-    if(r.ok){ localStorage.setItem("crm_operador_papel","diretoria"); syncOps((await r.json()).operadores); alert("🔓 Pronto — você agora é DIRETORIA e vê os valores em R$."); renderOpBtn(); renderAll(); } }catch(e){ alert("Sem internet."); }
+    if(r.ok){ localStorage.setItem("crm_operador_papel","diretoria"); sessionStorage.setItem("crm_dir_code",code); syncOps((await r.json()).operadores); if(!CLIN_RS_ENV) await loadClinRS(); await decDirRS(code); alert("🔓 Pronto — você agora é DIRETORIA e vê os valores em R$."); renderOpBtn(); renderAll(); } }catch(e){ alert("Sem internet."); }
 }
 async function openIdentidade(force){
   await loadOps();
@@ -389,6 +389,32 @@ async function loadCart(){ try{ const r=await fetch(CART_API); if(r.ok) syncCart
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
+/* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
+const CLIN_RS_API="/api/crm-clinicas-rs";
+let CLIN_RS_ENV=null, CLIN_RS=null;   // env cifrado (público) + mapa {cod:fat} decifrado (só na memória da diretoria)
+async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
+function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
+async function decDirRS(code){
+  if(!CLIN_RS_ENV||!CLIN_RS_ENV.ct||!code) return false;
+  try{ const bk=await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
+    const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+    const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
+    CLIN_RS=JSON.parse(new TextDecoder().decode(plain)); return true;
+  }catch(e){ return false; } }
+function dirCodeCache(){ return sessionStorage.getItem("crm_dir_code")||""; }
+async function verRS(){
+  if(!ehDiretoria()){ alert("Só a diretoria vê R$. Identifique-se como diretoria primeiro (🔓)."); return; }
+  if(!CLIN_RS_ENV) await loadClinRS();
+  const code=dirCodeCache()||(prompt("Código da diretoria (pra abrir os valores em R$):")||"").trim(); if(!code) return;
+  const ok=await decDirRS(code);
+  if(ok){ sessionStorage.setItem("crm_dir_code", code); if(ACTIVE==="clinicas") renderTab(); }
+  else alert("Não consegui abrir o R$ — código incorreto, ou os valores ainda não chegaram do robô.");
+}
+function rsClin(cod){
+  if(!ehDiretoria()) return `<span class="t-mut" title="valor só para a diretoria">🔒 R$</span>`;
+  if(CLIN_RS && cod!=null && CLIN_RS[String(cod)]!=null) return `<b style="color:#7effcf">${fmtBRL(CLIN_RS[String(cod)])}</b>`;
+  return `<a onclick="verRS()" style="color:var(--cyan);cursor:pointer;font-weight:700">🔓 ver R$</a>`;
+}
 /* fuzzy match: normaliza, tira palavras genéricas (vet/clínica/pet…), casa por token distintivo — "Guaratiba" acha "Vet Guaratiba" */
 const _CLIN_STOP=new Set(["vet","veterinaria","veterinario","clinica","hospital","pet","petshop","shop","centro","dr","dra","drs","de","da","do","dos","das","e","o","a"]);
 function _clinNorm(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim(); }
@@ -1548,18 +1574,22 @@ function renderTab(){
   }
 
   if(ACTIVE==="clinicas"){
+    // diretoria com o código na sessão: decifra o R$ sozinho e re-renderiza
+    if(ehDiretoria() && !CLIN_RS && CLIN_RS_ENV && dirCodeCache()){ decDirRS(dirCodeCache()).then(ok=>{ if(ok&&ACTIVE==="clinicas") renderTab(); }); }
     const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada");
     const lista=(clinView==="nova"?nov:rec);
     const q=search.trim().toLowerCase();
     const arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista;
     const semVinc=CARTEIRA.filter(x=>!x.cod).length;
     const porteLbl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno"};
+    // R$ total da carteira (só diretoria com R$ aberto)
+    const rsTotal=(ehDiretoria()&&CLIN_RS)?lista.reduce((s,x)=>s+(x.cod&&CLIN_RS[String(x.cod)]!=null?+CLIN_RS[String(x.cod)]:0),0):null;
     const card=x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, vinc=!!x.cod&&!!m;
       const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA);
       return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${flag?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
-          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>'} · ${ehDiretoria()?'<span class="t-mut">💰 R$ chega na Fase 3b</span>':'<span class="t-mut" title="valor só para a diretoria">🔒 R$</span>'}</div>
+          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>'} · 💰 ${rsClin(x.cod)}</div>
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
           ${flag?`<div class="ci" style="color:#ff8fa3;font-weight:600;margin-top:2px">🚩 porte grande com produção baixa — provavelmente dividindo exame com outro lab (trabalhar essa clínica)</div>`:""}
           <div class="ci t-mut" style="font-size:11px;margin-top:2px">👤 ${esc(x.por||"—")}</div></div>
@@ -1576,10 +1606,12 @@ function renderTab(){
         ${kpi("", CL, "Master HF", CLIN_TS?("sinc. "+new Date(CLIN_TS).toLocaleDateString("pt-BR")):"aguardando robô")}
       </div>
       ${!CL?`<div class="proxhint" style="border-color:rgba(255,138,0,.4);color:#ffc266;margin-bottom:12px">⏳ A lista de clínicas do HF ainda não chegou (o robô sincroniza a cada ciclo). O autocomplete liga assim que ela vier.</div>`:""}
+      ${ehDiretoria()?(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto (diretoria) · faturamento 12m desta lista: <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Ver valores em R$ (código da diretoria)</button>`):`<div class="proxhint" style="margin-bottom:12px">🔒 Valores em R$ são visíveis só para a diretoria. Você vê a <b>produção</b> (nº de exames).</div>`}
       <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${clinView==='nova'?"🆕 Clínicas novas":"♻️ Clínicas reconquistadas"}</div><input class="wlsearch" id="lupaCart" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
       ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma clínica ${clinView==='nova'?"nova":"reconquistada"} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
     document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
     const ac=document.getElementById("addCart"); if(ac) ac.onclick=()=>openCarteira(clinView, null);
+    const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>verRS();
     document.querySelectorAll("#content [data-cart]").forEach(el=>el.onclick=()=>openCarteira(null, el.dataset.cart));
     const lc=document.getElementById("lupaCart"); if(lc){ lc.addEventListener("input", e=>{ search=e.target.value; const p=lc.selectionStart; renderTab(); const l2=document.getElementById("lupaCart"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
     return;
@@ -2194,7 +2226,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart()]);
       if(a!==sig()) renderTab(); }, 45000);

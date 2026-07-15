@@ -40,6 +40,7 @@ jobs:
           MYSQL_DB:   ${{ secrets.MYSQL_DB }}
           BI_PWD:     ${{ secrets.BI_PWD }}
           CRM_PWD:    ${{ secrets.CRM_PWD }}
+          DIR_CODE:   ${{ secrets.DIR_CODE }}
         run: python build_crm.py
 
       # PUBLICA OS DADOS por função (todo run): atualiza o .enc SEM deploy. Fallback estático cobre se falhar.
