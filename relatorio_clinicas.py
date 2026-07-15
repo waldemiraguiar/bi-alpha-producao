@@ -30,7 +30,8 @@ def decrypt_rs(dir_code):
         key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=base64.b64decode(env["salt"]),
                          iterations=int(env.get("iter") or 250000)).derive(dir_code.encode())
         pt = AESGCM(key).decrypt(base64.b64decode(env["iv"]), base64.b64decode(env["ct"]), None)
-        return json.loads(pt.decode())
+        obj = json.loads(pt.decode())
+        return obj if isinstance(obj, dict) and "fat" in obj else {"fat": obj, "desde": {}}
     except Exception as e:
         print(f"decrypt_rs falhou: {e}")
         return {}
@@ -89,7 +90,12 @@ def enrich(x):
     cod = str(x.get("cod")) if x.get("cod") else None
     m = master.get(cod) if cod else None
     prod = int(m.get("prod")) if m else None
-    rs = rsmap.get(cod) if cod else None
+    # R$ desde o marco zero se a clínica tem reconq_data; senão 12m
+    _marco = x.get("reconq_data") or ""
+    rs = None
+    if cod:
+        _desde = (rsmap.get("desde") or {}).get(cod)
+        rs = _desde if (_marco and _desde is not None) else (rsmap.get("fat") or {}).get(cod)
     d = DET.get(cod) if cod else None
     falta = (d or {}).get("falta", []) or []
     recent = (d or {}).get("recent")   # None = detalhe ainda não veio; [] = 0 exames de verdade
