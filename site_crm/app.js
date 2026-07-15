@@ -1255,6 +1255,62 @@ function openReg(cod){
     if(ok){ closeModal(); renderAll(); } else { mib.disabled=false; mib.textContent="🚫 Marcar inativo"; } };
   const mir=document.getElementById("mInatReabrir"); if(mir) mir.onclick=()=>reativarInat(M_COD);
 }
+let EX_VIEW="dia";
+function openExames(cod, nome){
+  cod=String(cod||""); const d=CLIN_DET[cod]||{}; const rec=(d.recent||[]).slice();
+  const desde=d.recent_desde||d.marco||"", mais=!!d.recent_mais;
+  const MES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  const mesLabel=k=>{ const [y,m]=k.split("-"); return (MES[(+m||1)-1]||"?")+"/"+y; };
+  const weekKey=iso=>{ const dt=new Date(iso+"T00:00:00"); const off=(dt.getDay()+6)%7; const mon=new Date(dt); mon.setDate(dt.getDate()-off); const sun=new Date(mon); sun.setDate(mon.getDate()+6); const p=n=>String(n).padStart(2,"0"); return { key:mon.getFullYear()+"-"+p(mon.getMonth()+1)+"-"+p(mon.getDate()), lab:`Semana ${p(mon.getDate())}/${p(mon.getMonth()+1)}–${p(sun.getDate())}/${p(sun.getMonth()+1)}` }; };
+  const catCount={}; rec.forEach(e=>{ const k=e.cat||"(sem categoria)"; catCount[k]=(catCount[k]||0)+1; });
+  const catsResumo=Object.entries(catCount).sort((a,b)=>b[1]-a[1]);
+  const petsTot=new Set(rec.map(e=>e.pet).filter(Boolean)).size;
+  const render=()=>{
+    let groups=[];
+    if(EX_VIEW==="dia"){ const by={}; rec.forEach(e=>{ (by[e.d]=by[e.d]||[]).push(e); }); groups=Object.keys(by).sort().reverse().map(k=>({label:fmtDataBR(k), items:by[k]})); }
+    else if(EX_VIEW==="sem"){ const by={}; rec.forEach(e=>{ const w=weekKey(e.d); (by[w.key]=by[w.key]||{lab:w.lab,items:[]}); by[w.key].items.push(e); }); groups=Object.keys(by).sort().reverse().map(k=>({label:by[k].lab, items:by[k].items})); }
+    else { const by={}; rec.forEach(e=>{ const mk=(e.d||"").slice(0,7); (by[mk]=by[mk]||[]).push(e); }); groups=Object.keys(by).sort().reverse().map(k=>({label:mesLabel(k), items:by[k]})); }
+    const corpo=groups.map(g=>{
+      const gc={}; g.items.forEach(e=>{ const k=e.cat||"?"; gc[k]=(gc[k]||0)+1; });
+      const catline=Object.entries(gc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(k)} <b>${v}</b>`).join(" · ");
+      let linhas;
+      if(EX_VIEW==="dia"){
+        linhas=g.items.map(e=>`<div style="display:flex;gap:8px;padding:6px 8px;border-top:1px solid rgba(255,255,255,.05);font-size:12.5px;align-items:baseline">
+          <span style="flex:1;min-width:0"><b>${esc(e.ex||"—")}</b> <span class="t-mut" style="font-size:11px">${esc(e.cat||"")}</span></span>
+          <span style="color:#9fe6ff;white-space:nowrap">🐾 ${esc(e.pet||"—")}</span>
+          ${e.tut?`<span class="t-mut" style="font-size:11px;white-space:nowrap">tutor ${esc(e.tut)}</span>`:""}
+          ${e.req?`<span class="t-mut" style="font-size:11px;white-space:nowrap">reg ${esc(e.req)}</span>`:""}
+        </div>`).join("");
+      } else {
+        const gp=[...new Set(g.items.map(e=>e.pet).filter(Boolean))];
+        linhas=`<div style="padding:6px 8px;border-top:1px solid rgba(255,255,255,.05);font-size:12px">${catline}<div class="t-mut" style="margin-top:3px">🐾 ${gp.length} pets: ${gp.slice(0,14).map(esc).join(", ")}${gp.length>14?"…":""}</div></div>`;
+      }
+      return `<div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.15);border-radius:8px;margin-bottom:8px;overflow:hidden">
+        <div style="padding:7px 9px;background:rgba(0,212,255,.1);font-weight:700;font-size:12.5px;display:flex;justify-content:space-between">
+          <span>${esc(g.label)}</span><span style="color:#00D4FF">${g.items.length} exames</span></div>${linhas}</div>`;
+    }).join("");
+    const seg=(k,l)=>`<button class="opt${EX_VIEW===k?" on":""}" data-exv="${k}" type="button">${l}</button>`;
+    const zero = !rec.length;
+    document.getElementById("modalBody").innerHTML=`
+      <div class="m-head"><div><div class="m-cli">🔬 ${esc(nome||"Clínica")}</div>
+        <div class="t-mut" style="font-size:12.5px;margin-top:2px">exames lançados no HF · cod <b>${esc(cod)}</b>${desde?` · desde ${esc(fmtDataBR(desde))}`:""}</div></div>
+        <button class="m-x" id="mClose">✕</button></div>
+      ${zero?`<div class="proxhint" style="border-color:rgba(255,45,85,.5);color:#ff8fa3;line-height:1.5">
+          ⚠️ <b>0 exames</b> neste código (${esc(cod)})${desde?` desde ${esc(fmtDataBR(desde))}`:""}.<br>
+          Se a comissão já saiu, provavelmente é: (1) comissão de <b>reconquista</b> (paga na volta, antes do volume) — normal; ou (2) os exames estão sendo lançados em <b>outro cadastro/código</b> no HF; ou (3) ainda não digitaram.<br>
+          <span class="t-mut">👉 confira no HF pelo nome da clínica e me passa o código certo que eu revinculo — a produção passa a bater na hora.</span></div>`:`
+        <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;line-height:1.5">
+          📊 <b>${rec.length}</b> exames · 🐾 <b>${petsTot}</b> pets${desde?` · desde ${esc(fmtDataBR(desde))}`:""}${mais?` <span class="t-mut">(mostrando os ${rec.length} mais recentes)</span>`:""}<br>
+          <span style="font-size:11.5px">${catsResumo.map(([k,v])=>`${esc(k)} <b>${v}</b>`).join(" · ")}</span></div>
+        <div class="m-opts" style="margin:10px 0 6px">${seg("dia","📅 Dia")}${seg("sem","🗓️ Semana")}${seg("mes","📆 Mês")}</div>
+        <div class="t-mut" style="font-size:11px;margin-bottom:8px">💰 valor em R$ fica travado aqui — só nº de exames. Use o <b>reg</b> pra achar a requisição no HF.</div>
+        <div style="max-height:56vh;overflow:auto">${corpo}</div>`}`;
+    document.getElementById("mClose").onclick=closeModal;
+    document.querySelectorAll("#modalBody [data-exv]").forEach(b=>b.onclick=()=>{ EX_VIEW=b.dataset.exv; render(); });
+  };
+  EX_VIEW="dia"; render();
+  document.getElementById("modal").style.display="flex";
+}
 function closeModal(){ document.getElementById("modal").style.display="none"; }
 async function submitReg(){
   const por=quem(); if(por===null) return;
@@ -1632,7 +1688,8 @@ function renderTab(){
           ${marcoLinha}${perdaLinha}${detLinha}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
           ${interp?`<div class="ci" style="font-size:11.5px;margin-top:3px;${flag?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div>`:""}
-          <div class="ci t-mut" style="font-size:11px;margin-top:2px">👤 ${esc(x.por||"—")}</div></div>
+          ${x.cod?`<button class="exbtn" data-exames="${esc(x.cod)}" data-exnome="${esc(x.nome)}" type="button" style="margin-top:6px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:#9fe6ff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">🔬 Ver exames (dia · PET · registro)</button>`:""}
+          <div class="ci t-mut" style="font-size:11px;margin-top:4px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
     const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
@@ -1667,6 +1724,7 @@ function renderTab(){
     const ac=document.getElementById("addCart"); if(ac) ac.onclick=()=>openCarteira(clinView, null);
     const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>verRS();
     document.querySelectorAll("#content [data-cart]").forEach(el=>el.onclick=()=>openCarteira(null, el.dataset.cart));
+    document.querySelectorAll("#content [data-exames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openExames(el.dataset.exames, el.dataset.exnome); });
     const lc=document.getElementById("lupaCart"); if(lc){ lc.addEventListener("input", e=>{ search=e.target.value; const p=lc.selectionStart; renderTab(); const l2=document.getElementById("lupaCart"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
     return;
   }
