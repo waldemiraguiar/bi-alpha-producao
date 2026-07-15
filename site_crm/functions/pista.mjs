@@ -81,6 +81,8 @@ export default async (req) => {
         autorizado_por: it.baixa.tipo === "desmarcado" ? "diretoria" : "",
         checkin: (it.baixa.checkin && typeof it.baixa.checkin === "object")
           ? { lat: +it.baixa.checkin.lat || 0, lng: +it.baixa.checkin.lng || 0, acc: +it.baixa.checkin.acc || 0, ts: +it.baixa.checkin.ts || 0 } : null,
+        manual: !!it.baixa.manual,   // baixa do ESCRITÓRIO (sem GPS) — Luciane marcou "já foi"
+        marcou: String(it.baixa.marcou || "").slice(0, 40),
       } : (existing ? existing.baixa || null : null);
       // fallback: em update parcial (ex.: só obs_add), preserva o valor existente quando o campo não veio no payload
       const E = existing || {};

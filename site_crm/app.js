@@ -587,6 +587,7 @@ function cancelVisita(){
 }
 
 let pistaView="feed";   // "feed" | "retornos"
+let retHoje=false;   // Retornos/rotas: ver "atividade de hoje" (o que o rep fez hoje) em vez da agenda futura
 /* ---- ☑️ SELEÇÃO EM LOTE (marcar isolado/todos + mover entre abas) ---- */
 let selMode=false; const SEL=new Set();
 function selReset(){ selMode=false; SEL.clear(); }
@@ -626,9 +627,18 @@ async function bulkExcluir(){
   }
   await loadExcl(); selReset(); renderTab();
 }
+/* Presença comprovada (check-in de chegada) — vale como visita REALIZADA mesmo sem a baixa formal do retorno */
+function temPresenca(f){ return !!((f.checkin&&f.checkin.ts)||(f.baixa&&f.baixa.checkin&&f.baixa.checkin.ts)); }
+function ehVisitaReal(f){ return (f.origem||"visita")!=="telefone"; }   // visita presencial ≠ contato por telefone
+function ehRealizada(f){ return (f.baixa&&f.baixa.tipo==="compareceu") || (temPresenca(f) && !(f.baixa&&f.baixa.tipo==="desmarcado")); }
+function realizadaTs(f){ return (f.baixa&&f.baixa.ts)||(f.checkin&&f.checkin.ts)||f.ts||0; }
 function pistaRetornos(list){ // retornos PENDENTES (com data e SEM baixa) — o que ainda falta visitar
   const src=list||PISTA, byCli={};
-  src.filter(f=>f.proximo && !f.baixa).forEach(f=>{ const k=(f.cliente||f.id).trim().toLowerCase(); if(!byCli[k]||(f.ts||0)>(byCli[k].ts||0)) byCli[k]=f; });
+  // clientes que JÁ têm visita realizada (check-in/baixa) → não ficam piscando como pendentes (resolve o "São Miguel")
+  const visitados={}; src.filter(ehRealizada).forEach(f=>{ const k=(f.cliente||"").trim().toLowerCase(); if(k) visitados[k]=Math.max(visitados[k]||0, realizadaTs(f)); });
+  src.filter(f=>f.proximo && !f.baixa).forEach(f=>{ const k=(f.cliente||f.id).trim().toLowerCase();
+    if(visitados[k] && visitados[k]>=(f.ts||0)) return;   // já foi visitado depois de agendado → sai da pendência
+    if(!byCli[k]||(f.ts||0)>(byCli[k].ts||0)) byCli[k]=f; });
   return Object.values(byCli).sort((a,b)=>a.proximo<b.proximo?-1:(a.proximo>b.proximo?1:0));
 }
 /* BAIXA da visita (blindagem): compareceu=check-in GPS | desmarcado=código da diretoria */
@@ -645,6 +655,15 @@ function darBaixaCheckin(id){
     const baixa={tipo:"compareceu",ts:Date.now(),por:meuRep()||quemExcluiu(),checkin:{lat:+c.latitude.toFixed(6),lng:+c.longitude.toFixed(6),acc:Math.round(c.accuracy||0),ts:Date.now()}};
     const ok=await saveBaixaItem(f,baixa); if(ok){ alert("✅ Baixa registrada com check-in!"); renderTab(); }
   }, ()=>alert("Não consegui pegar sua localização. Ative o GPS e permita o acesso."), {enableHighAccuracy:true,timeout:15000,maximumAge:0});
+}
+/* BAIXA DO ESCRITÓRIO (Luciane, sem GPS): o rep já foi mas o retorno ficou pendente. Marca como visitado
+   SEM check-in de GPS — fica registrado quem marcou e que foi manual (auditoria), pra não fingir presença. */
+async function baixaEscritorio(id){
+  const f=PISTA.find(x=>x.id===id); if(!f) return;
+  const quem=meuRep()||quemExcluiu(); if(!quem) return;
+  if(!confirm(`Marcar "${f.cliente||""}" como JÁ VISITADO? (baixa do escritório, sem GPS — use só quando o rep já foi e você tem certeza)`)) return;
+  const baixa={tipo:"compareceu", ts:Date.now(), por:f.por||quem, manual:true, marcou:quem};   // sem checkin = baixa manual do escritório
+  const ok=await saveBaixaItem(f,baixa); if(ok){ alert("✅ Marcado como visitado (baixa do escritório)."); renderTab(); }
 }
 /* salva uma operação de DESMARCAÇÃO com o código da diretoria (server valida DIR_CODE; 403 se inválido) */
 async function saveDesmarc(item, dir_code){
@@ -801,9 +820,12 @@ function drawPistaBI(base){
   if(g("pbRep")) CHARTS.push(new Chart(g("pbRep"),{type:"bar",data:{labels:porRep.map(r=>r[0]),datasets:[{data:porRep.map(r=>r[1]),backgroundColor:"#00D4FF"}]},options:{animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}}}}));
   const porRes=PRORDER.map(k=>base.filter(f=>f.resultado===k).length);
   if(g("pbRes")) CHARTS.push(new Chart(g("pbRes"),{type:"doughnut",data:{labels:PRORDER.map(k=>PRES[k].lbl),datasets:[{data:porRes,backgroundColor:PRORDER.map(k=>PRES[k].col),borderColor:"#0A1628",borderWidth:3}]},options:{animation:false,cutout:"60%",plugins:{legend:{position:"right",labels:{boxWidth:12}}}}}));
-  const dias=[]; for(let i=13;i>=0;i--){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-i);dias.push({lbl:`${p(d.getDate())}/${p(d.getMonth()+1)}`,key:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`,n:0});}
-  base.forEach(f=>{const dv=f.data_visita||new Date(f.ts).toISOString().slice(0,10);const d=dias.find(x=>x.key===dv);if(d)d.n++;});
-  if(g("pbDia")) CHARTS.push(new Chart(g("pbDia"),{type:"line",data:{labels:dias.map(d=>d.lbl),datasets:[{data:dias.map(d=>d.n),borderColor:"#00E5A0",backgroundColor:"rgba(0,229,160,.15)",fill:true,tension:.35,pointRadius:2}]},options:{animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}}}}));
+  const dias=[]; for(let i=13;i>=0;i--){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-i);dias.push({lbl:`${p(d.getDate())}/${p(d.getMonth()+1)}`,key:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`,v:0,t:0});}
+  base.forEach(f=>{const dv=f.data_visita||new Date(f.ts).toISOString().slice(0,10);const d=dias.find(x=>x.key===dv);if(d){ if(ehVisitaReal(f)) d.v++; else d.t++; }});   // separa VISITA presencial de CONTATO por telefone
+  if(g("pbDia")) CHARTS.push(new Chart(g("pbDia"),{type:"line",data:{labels:dias.map(d=>d.lbl),datasets:[
+      {label:"🚶 Visitas",data:dias.map(d=>d.v),borderColor:"#00E5A0",backgroundColor:"rgba(0,229,160,.15)",fill:true,tension:.35,pointRadius:2},
+      {label:"📞 Telefone",data:dias.map(d=>d.t),borderColor:"#00D4FF",backgroundColor:"rgba(0,212,255,.10)",fill:true,tension:.35,pointRadius:2}]},
+    options:{animation:false,plugins:{legend:{display:true,labels:{boxWidth:12,font:{size:11}}}},scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}}}}));
   const obj=[["🛑 Objeção",base.filter(f=>f.resultado==="objecao").length],["❌ Sem interesse",base.filter(f=>f.resultado==="sem_interesse").length],["🚫 Desmarcado",base.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").length]];
   if(g("pbObj")) CHARTS.push(new Chart(g("pbObj"),{type:"bar",data:{labels:obj.map(o=>o[0]),datasets:[{data:obj.map(o=>o[1]),backgroundColor:"#FF8A00"}]},options:{indexAxis:"y",animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}},y:{grid:{display:false}}}}}));
 }
@@ -1240,11 +1262,14 @@ function findClient(cod){
 function reativadosEvents(){
   const D=DATA||{};
   const ainda=new Set([...(D.parados||[]),...(D.em_queda||[]),...(D.queda_forte||[]),...(D.novos_esfriando||[])].map(x=>String(x.cod)));
+  // CHURNED = saiu do radar porque PAROU/foi encerrado/inativado — NÃO é reativação (Luciane: "tá misturado quem não voltou")
+  const churn=new Set([...ENCERR.keys(),...INAT.keys()].map(String));
+  const reativou=cod=>!churn.has(cod) && !ainda.has(cod);   // só conta se hoje NÃO está ruim e NÃO churnou = voltou a mandar
   const evts=[], visto=new Set();
   for(let i=1;i<HIST.length;i++){ const d=weekDiff(HIST[i-1],HIST[i]), ts=isoMonday(HIST[i].week).getTime();
-    d.sairam.forEach(x=>{ const cod=String(x.cod); evts.push({cod,cliente:x.nome,cidade:x.cidade,motivo:x.motivo,ts,week:HIST[i].week,fonte:"semana"}); visto.add(cod); }); }
+    d.sairam.forEach(x=>{ const cod=String(x.cod); if(!reativou(cod)) return; evts.push({cod,cliente:x.nome,cidade:x.cidade,motivo:x.motivo,ts,week:HIST[i].week,fonte:"semana"}); visto.add(cod); }); }
   [...new Set(INTER.map(x=>String(x.cod)))].forEach(cod=>{
-    if(visto.has(cod) || ainda.has(cod)) return;
+    if(visto.has(cod) || !reativou(cod)) return;
     const bad=interOf(cod).find(h=>["parado","queda","queda_forte","novo_esfriando"].includes((h.snapshot||{}).situacao));
     if(bad){ const nm=interOf(cod).map(i=>i.cliente).find(Boolean)||("#"+cod);
       evts.push({cod,cliente:nm,cidade:(findClient(cod)||{}).cidade||"",motivo:(bad.snapshot||{}).situacao,ts:Date.now(),week:isoWeekKey(new Date()),fonte:"atual"}); } });
@@ -2108,7 +2133,7 @@ function renderTab(){
     const naofeitosDesmReag=naofeitosDesm.filter(f=>!_ehPerdido(f));   // desmarcado a REAGENDAR (pisca)
     const naofeitosPerdidos=naofeitosDesm.filter(_ehPerdido);         // PERDIDO — resolvido, não pisca
     const naofeitosN=naofeitosAtras.length+naofeitosDesmReag.length;  // alerta da aba = só o que está pendente
-    const realizados=all.filter(f=>f.baixa&&f.baixa.tipo==="compareceu").sort((a,b)=>((b.baixa||{}).ts||0)-((a.baixa||{}).ts||0));
+    const realizados=all.filter(ehRealizada).sort((a,b)=>realizadaTs(b)-realizadaTs(a));   // check-in de chegada JÁ conta como realizada (não precisa da baixa formal)
     const arr= q ? all.filter(f=>(f.cliente||"").toLowerCase().includes(q)||(f.texto||"").toLowerCase().includes(q)||((PRES[f.resultado]||{}).lbl||"").toLowerCase().includes(q)) : all;
     const now=Date.now(), d0=new Date(); d0.setHours(0,0,0,0);
     const hoje=all.filter(f=>f.ts>=d0.getTime()).length, sem=all.filter(f=>f.ts>=now-7*864e5).length, fechou=all.filter(f=>f.resultado==="fechou").length;
@@ -2144,6 +2169,7 @@ function renderTab(){
       document.querySelectorAll("#content [data-delfb]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); excluirFeedback(el.dataset.delfb); });
       document.querySelectorAll("#content [data-cheguei]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const f=PISTA.find(x=>x.id===el.dataset.cheguei); if(f) iniciarVisita({id:f.id,cliente:f.cliente,bairro:f.bairro}); });
       document.querySelectorAll("#content [data-desm]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); darBaixaDesmarcou(el.dataset.desm); });
+      document.querySelectorAll("#content [data-jafoi]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); baixaEscritorio(el.dataset.jafoi); });
       document.querySelectorAll("#content [data-reag]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); reagendarRetorno(el.dataset.reag); });
       document.querySelectorAll("#content [data-undobaixa]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); desfazerBaixa(el.dataset.undobaixa); });
       const rec=document.getElementById("pistaRec"); if(rec) rec.onclick=()=>openPistaRec(null);
@@ -2213,7 +2239,7 @@ function renderTab(){
       const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
       const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">${selBox(f.id)}<div class="rk" style="color:#00D4FF">↻</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")}${f.origem==="telefone"?' <span class="pr" style="background:rgba(0,212,255,.16);color:#9fe6ff;font-size:11px">📞 telefone</span>':""}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div>
-        <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-cheguei="${esc(f.id)}" onclick="event.stopPropagation()" title="Cheguei na clínica — check-in de chegada (depois: feedback + saída)">📍 Cheguei</button><button class="baixabtn no" data-desm="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente desmarcou — precisa do código da diretoria">🚫 desmarcou</button></div></div>`;
+        <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-cheguei="${esc(f.id)}" onclick="event.stopPropagation()" title="Cheguei na clínica — check-in de chegada (depois: feedback + saída)">📍 Cheguei</button><button class="baixabtn" data-jafoi="${esc(f.id)}" onclick="event.stopPropagation()" style="border-color:rgba(0,229,160,.4);color:#7effcf" title="O rep já foi mas ficou pendente — marcar como visitado (escritório, sem GPS)">✓ Já foi</button><button class="baixabtn no" data-desm="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente desmarcou — precisa do código da diretoria">🚫 desmarcou</button></div></div>`;
       // agenda por COMERCIAL → dia → bairro (cada vendedor tem a SUA rota; incompatibilidade vale por vendedor)
       const byRep={}; ret.forEach(f=>{ const rp=f.por||"(sem comercial)"; (byRep[rp]=byRep[rp]||[]).push(f); });
       const diaCard=(d, items)=>{ const bgrp={}; items.forEach(f=>{const b=f.bairro||"(sem bairro)"; (bgrp[b]=bgrp[b]||[]).push(f);});
@@ -2242,11 +2268,29 @@ function renderTab(){
         <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· 📍 ${esc(f.bairro||"—")}</span></div><div class="ci">${f.texto?'"'+esc(f.texto.slice(0,70))+'"':"cliente pra visitar — sem data"}</div></div><div class="mid"></div>
         <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-cheguei="${esc(f.id)}" onclick="event.stopPropagation()" title="Cheguei na clínica — check-in de chegada (depois: feedback + saída)">📍 Cheguei</button><button class="baixabtn no" data-delav="${esc(f.id)}" onclick="event.stopPropagation()" title="Remover da lista de visita">🗑️</button></div></div>`;
       const avSec=aVisitar.length?`<div class="seclabel" style="margin-top:4px;color:#7effcf">🎯 A visitar — SEM data <span class="t-mut" style="font-weight:500">— lançados pelo escritório; o vendedor escolhe quando ir (${aVisitar.length})</span></div>`+Object.keys(avByRep).sort().map(rp=>`<div class="repagenda" style="border-color:rgba(0,229,160,.3)"><div class="repagenda-h">👤 <b>${esc(rp)}</b> <span class="t-mut" style="font-weight:500">(${avByRep[rp].length} p/ visitar)</span></div>${avByRep[rp].map(linhaAV).join("")}</div>`).join(""):"";
+      // 📅 ATIVIDADE DE HOJE — o que cada rep JÁ FEZ hoje (visitas realizadas + contatos por telefone), pra Luciane não caçar um por um
+      const t0=today.getTime();
+      const atvHoje=all.filter(f=>Math.max(f.ts||0, realizadaTs(f))>=t0)
+        .filter(f=>ehRealizada(f)||f.origem==="telefone"||(f.baixa&&f.baixa.tipo==="desmarcado"))
+        .sort((a,b)=>Math.max(b.ts||0,realizadaTs(b))-Math.max(a.ts||0,realizadaTs(a)));
+      const atvByRep={}; atvHoje.forEach(f=>{ const rp=f.por||"(sem comercial)"; (atvByRep[rp]=atvByRep[rp]||[]).push(f); });
+      const p3=n=>String(n).padStart(2,"0");
+      const linhaAtv=f=>{ const t=new Date(Math.max(f.ts||0,realizadaTs(f)));
+        const tipo=f.origem==="telefone"?'<span class="pr" style="background:rgba(0,212,255,.16);color:#9fe6ff;font-size:11px">📞 telefone</span>':(f.baixa&&f.baixa.tipo==="desmarcado")?'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">🚫 desmarcou</span>':'<span class="pr" style="background:rgba(0,229,160,.16);color:#7effcf;font-size:11px">🚶 visita</span>';
+        const mapa=(f.checkin&&f.checkin.ts)?` · <a href="https://maps.google.com/?q=${f.checkin.lat},${f.checkin.lng}" target="_blank" onclick="event.stopPropagation()" style="color:#7effcf">📍</a>`:"";
+        return `<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF;font-size:12px;font-weight:700">${p3(t.getHours())}:${p3(t.getMinutes())}</div>
+          <div><div class="nm">${esc(f.cliente||"(sem nome)")} ${tipo}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}${mapa}</div></div><div class="mid"></div></div>`; };
+      const hojeSec=Object.keys(atvByRep).sort().map(rp=>`<div class="repagenda"><div class="repagenda-h">👤 <b>${esc(rp)}</b> · fez hoje <span class="t-mut" style="font-weight:500">(${atvByRep[rp].length})</span></div>${atvByRep[rp].map(linhaAtv).join("")}</div>`).join("")||`<div class="empty">Ninguém registrou visita ou contato hoje ainda.</div>`;
       c.innerHTML=`${toggle}${repBar}
         <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
           <button class="checkinbtn" id="addCliente" type="button" style="flex:1;min-width:160px;margin:0">🎯 Lançar cliente (sem data)</button>
           <button class="checkinbtn" id="agendarTel" type="button" style="flex:1;min-width:160px;margin:0">📞 Agendar por telefone</button>
         </div>
+        <div class="subtabs" style="margin-bottom:10px"><button class="subtab ${!retHoje?'on':''}" id="retAgenda">📋 Agenda de rota</button><button class="subtab ${retHoje?'on':''}" id="retHojeBtn">📅 Fez hoje${atvHoje.length?` (${atvHoje.length})`:''}</button></div>
+        ${retHoje?`
+          <div class="seclabel">📅 Atividade de HOJE · por comercial <span class="t-mut" style="font-weight:500">— visitas e contatos que o rep fez hoje (não precisa procurar um por um)</span></div>
+          ${hojeSec}
+        `:`
         <div class="kgrid">
           ${kpi("r", atras, "Atrasados", "passaram da data")}
           ${kpi("a", semana, "Esta semana", "próximos 7 dias")}
@@ -2257,8 +2301,10 @@ function renderTab(){
         ${avSec}
         ${ret.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
         <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
-        ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Lance clientes acima (🎯 sem data ou 📞 por telefone) ou preencha o retorno num feedback — a agenda se monta aqui.</div>`}`;
+        ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Lance clientes acima (🎯 sem data ou 📞 por telefone) ou preencha o retorno num feedback — a agenda se monta aqui.</div>`}`}`;
       wirePista();
+      const rAg=document.getElementById("retAgenda"); if(rAg) rAg.onclick=()=>{ retHoje=false; renderTab(); };
+      const rHj=document.getElementById("retHojeBtn"); if(rHj) rHj.onclick=()=>{ retHoje=true; renderTab(); };
       const acb=document.getElementById("addCliente"); if(acb) acb.onclick=()=>openAddCliente();
       document.querySelectorAll("#content [data-delav]").forEach(el=>el.onclick=async(e)=>{ e.stopPropagation(); const f=PISTA.find(x=>x.id===el.dataset.delav); if(f && confirm(`Remover "${f.cliente||""}" da lista de visita?`)){ await removePista(f.id); renderTab(); } });
       upgradeRotas();   // troca a estimativa por reta pela distância de RUA real (OSRM) quando online
@@ -2267,15 +2313,15 @@ function renderTab(){
 
     if(pistaView==="realizados"){
       const p2=n=>String(n).padStart(2,"0"), now=Date.now(); const d0=new Date(); d0.setHours(0,0,0,0);
-      const rHoje=realizados.filter(f=>(f.baixa.ts||0)>=d0.getTime()).length, rSem=realizados.filter(f=>(f.baixa.ts||0)>=now-7*864e5).length, rMes=realizados.filter(f=>(f.baixa.ts||0)>=now-30*864e5).length;
+      const rHoje=realizados.filter(f=>realizadaTs(f)>=d0.getTime()).length, rSem=realizados.filter(f=>realizadaTs(f)>=now-7*864e5).length, rMes=realizados.filter(f=>realizadaTs(f)>=now-30*864e5).length;
       const q=search.trim().toLowerCase();
       const arr=q?realizados.filter(f=>((f.cliente||"")+" "+(f.por||"")+" "+(f.bairro||"")).toLowerCase().includes(q)):realizados;
       let body="",curM=null;
-      arr.forEach(f=>{ const d=new Date(f.baixa.ts||f.ts), mk=d.getFullYear()*100+(d.getMonth()+1), pr=PRES[f.resultado]||PRES.visita, dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()];
+      arr.forEach(f=>{ const d=new Date(realizadaTs(f)), mk=d.getFullYear()*100+(d.getMonth()+1), pr=PRES[f.resultado]||PRES.visita, dd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()];
         if(mk!==curM){ curM=mk; body+=`<div class="monthhead">${MESF[d.getMonth()+1]} ${d.getFullYear()}</div>`; }
         body+=`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">${selBox(f.id)}<div class="rk" style="color:#00E5A0">✅</div>
-          <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· realizado ${dd} ${p2(d.getDate())}/${p2(d.getMonth()+1)} ${p2(d.getHours())}:${p2(d.getMinutes())}</span></div>
-            <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}</div>
+          <div><div class="nm">${esc(f.cliente||"(sem nome)")} <span class="t-mut" style="font-weight:500;font-size:12px">· realizado ${dd} ${p2(d.getDate())}/${p2(d.getMonth()+1)} ${p2(d.getHours())}:${p2(d.getMinutes())}</span>${(f.baixa&&f.baixa.manual)?' <span class="pr" style="background:rgba(255,196,0,.18);color:#ffd94d;font-size:10px">escritório (sem GPS)</span>':(temPresenca(f)?' <span class="pr" style="background:rgba(0,229,160,.16);color:#7effcf;font-size:10px">✓ check-in</span>':'')}</div>
+            <div class="ci">👤 ${esc(f.por||"—")} · 📍 ${esc(f.bairro||"—")}${(f.baixa&&f.baixa.manual&&f.baixa.marcou)?` · marcou: ${esc(f.baixa.marcou)}`:''}</div>
             <div class="ci" style="font-size:11.5px;margin-top:2px">${checkinResumo(f.checkin&&f.checkin.ts?f.checkin:(f.baixa&&f.baixa.checkin),f.checkout&&f.checkout.ts?f.checkout:(f.baixa&&f.baixa.checkout))}</div>
             ${f.texto?`<div class="lastint">"${esc(f.texto.slice(0,80))}"</div>`:""}</div>
           <div class="mid"></div>
@@ -2301,7 +2347,7 @@ function renderTab(){
 
     if(pistaView==="bi"){
       const base=all, total=base.length;
-      const realiz=base.filter(f=>f.baixa&&f.baixa.tipo==="compareceu").length;
+      const realiz=base.filter(ehRealizada).length;   // conta check-in de chegada, não só a baixa formal
       const desm=base.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").length;
       const fechou=base.filter(f=>f.resultado==="fechou").length;
       const taxaReal=(realiz+desm)?Math.round(100*realiz/(realiz+desm)):0;
