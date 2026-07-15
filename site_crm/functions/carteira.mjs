@@ -31,6 +31,7 @@ export default async (req) => {
       const clean = {
         id: it.id || ("c" + Date.now()),
         cod: String(it.cod == null ? "" : it.cod).slice(0, 30),   // CodCliente do HF ("" = pendente de vínculo)
+        cods_extra: Array.isArray(it.cods_extra) ? [...new Set(it.cods_extra.map((x) => String(x).replace(/\D/g, "").slice(0, 20)).filter(Boolean))].slice(0, 10) : [],   // códigos-extra do HF (mesma clínica, cadastro duplicado/órfão)
         nome: String(it.nome || "").slice(0, 120),
         cidade: String(it.cidade || "").slice(0, 80),
         tipo: it.tipo === "reconquistada" ? "reconquistada" : "nova",

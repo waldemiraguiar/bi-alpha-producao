@@ -32,6 +32,7 @@ export default async (req) => {
           cats: Array.isArray(d.cats) ? d.cats.slice(0, 20).map((c) => ({ setor: String(c.setor || "").slice(0, 40), qtd: +c.qtd || 0 })) : [],
           falta: Array.isArray(d.falta) ? d.falta.slice(0, 20).map((s) => String(s).slice(0, 40)) : [],
         };
+        if (d.prod12 != null) o.prod12 = +d.prod12 || 0;   // produção 12m somando os códigos-extra (sobrepõe o master quando há cadastro duplicado)
         if (d.prod_desde != null) o.prod_desde = +d.prod_desde || 0;   // produção desde o marco zero (data da reconquista)
         if (d.marco) o.marco = String(d.marco).slice(0, 20);
         if (Array.isArray(d.recent)) {   // drill-down exame-a-exame (dia · exame · PET · tutor · registro)
