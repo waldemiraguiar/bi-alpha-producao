@@ -248,6 +248,52 @@ def post_clinicas_det():
     except Exception as e:
         print(f"post_clinicas_det falhou (ok, tenta no próximo ciclo): {e}")
 
+def post_relatorio(D):
+    """AUTOMÁTICO: grava a FOTO semanal do relatório de clínicas (SEM R$) a cada ciclo do robô — o histórico
+    fica sempre atual sem ninguém pedir. Upsert por semana ISO. O e-mail com R$ continua saindo sexta 9h."""
+    import urllib.request, datetime as _dt
+    pwd = CRM_PWD
+    if not pwd:
+        return
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+    def _get(path):
+        req = urllib.request.Request(base + path + "?_=" + str(int(time.time())), headers={"User-Agent": "robo"})
+        return json.loads(urllib.request.urlopen(req, timeout=30).read().decode())
+    try:
+        carteira = _get("/api/crm-carteira").get("carteira", [])
+        DET = _get("/api/crm-clinicas-det").get("det", {}) or {}
+    except Exception as e:
+        print(f"post_relatorio: não li carteira/det ({e})"); return
+    master = {str(c.get("cod")): int(c.get("qtd") or 0) for c in ((D or {}).get("clinicas_full") or [])}
+    PORTE_BAIXA = 40
+    nov = [x for x in carteira if x.get("tipo") != "reconquistada"]
+    rec = [x for x in carteira if x.get("tipo") == "reconquistada"]
+    flags, zerados, prod_total = [], [], 0
+    for x in carteira:
+        cod = str(x.get("cod")) if x.get("cod") else None
+        prod = master.get(cod) if cod else None
+        d = DET.get(cod) if cod else None
+        falta = (d or {}).get("falta", []) or []
+        recent = (d or {}).get("recent")
+        prod_total += (prod or 0)
+        concentrada = bool(d and len((d.get("cats") or [])) <= 1 and len(falta) >= 2)
+        if (x.get("porte") == "G" and prod is not None and prod < PORTE_BAIXA) or concentrada:
+            flags.append({"nome": x.get("nome", ""), "porte": x.get("porte", ""), "prod": prod})
+        if cod and master.get(cod) is not None and isinstance(recent, list) and len(recent) == 0 and not (d or {}).get("prod30"):
+            zerados.append({"nome": x.get("nome", ""), "cidade": x.get("cidade", ""), "porte": x.get("porte", ""), "marco": x.get("reconq_data", "")})
+    hoje = _dt.date.today(); iso = hoje.isocalendar()
+    item = {"id": f"{iso[0]}-W{int(iso[1]):02d}", "semana": f"{iso[0]}-W{int(iso[1]):02d}", "label": hoje.strftime("%d/%m/%Y"),
+            "n_novas": len(nov), "n_reconq": len(rec), "prod_total": prod_total, "flags": flags, "zerados": zerados,
+            "linhas": [{"nome": x.get("nome",""), "cidade": x.get("cidade",""), "tipo": x.get("tipo","nova"), "porte": x.get("porte","")} for x in carteira],
+            "ts": int(time.time()) * 1000}
+    try:
+        payload = json.dumps({"acao": "save", "item": item, "senha": pwd}).encode()
+        r = urllib.request.urlopen(urllib.request.Request(base + "/api/crm-relatorios", data=payload,
+            headers={"Content-Type": "application/json"}), timeout=30)
+        print(f"relatorio semanal (auto) {item['id']} -> HTTP {r.status} · {len(rec)}rec {len(nov)}nov {len(flags)}flags {len(zerados)}zeradas")
+    except Exception as e:
+        print(f"post_relatorio falhou (ok, tenta no próximo ciclo): {e}")
+
 def post_clinicas(D):
     """Manda o MASTER de clínicas do HF (nome+cod+cidade+produção, SEM R$) p/ o autocomplete das abas
     Novas/Reconquistadas (/api/crm-clinicas). O R$ (fat) NÃO vai — fica gated p/ diretoria (Fase 3b)."""
@@ -271,7 +317,7 @@ if __name__ == "__main__":
     last = None
     for attempt in range(1, 4):
         try:
-            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); post_clinicas_det(); break
+            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); post_clinicas_det(); post_relatorio(D0); break
         except Exception as e:
             import pymysql
             if isinstance(e, pymysql.err.OperationalError):
