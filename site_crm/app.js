@@ -403,6 +403,27 @@ async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
 const AUTO_REL_NOTE='<span class="t-mut" style="font-size:11px">· 🔄 automático</span>';
+/* 🧠² CÉREBRO 2 — aprende o RITMO de envio de cada clínica (média/semana + cadência típica) e detecta
+   PAROU / CAIU. O alerta é ADAPTATIVO: cada clínica tem seu próprio limiar (~2× a cadência dela) —
+   quem manda a cada 2 dias dispara em ~4-5 dias; quem manda semanal, em ~14. Aprende do histórico real. */
+function cerebro2(det){
+  const r=(det&&det.recent)||[];
+  if(r.length<4) return null;   // pouco histórico p/ aprender o ritmo
+  const DAY=864e5, hoje=Date.now();
+  const days=[...new Set(r.map(e=>e.d))].sort();   // dias com exame, ISO asc
+  const diasSil=Math.max(0,Math.floor((hoje-Date.parse(days[days.length-1]+"T00:00:00"))/DAY));
+  const wk={}; r.forEach(e=>{ const b=Math.floor(Date.parse(e.d+"T00:00:00")/(7*DAY)); wk[b]=(wk[b]||0)+1; });
+  const wv=Object.values(wk).sort((a,b)=>a-b); const semMed=wv.length?wv[Math.floor(wv.length/2)]:0;   // exames/semana (mediana)
+  const gaps=[]; for(let i=1;i<days.length;i++) gaps.push(Math.round((Date.parse(days[i]+"T00:00:00")-Date.parse(days[i-1]+"T00:00:00"))/DAY));
+  gaps.sort((a,b)=>a-b); const cad=gaps.length?gaps[Math.floor(gaps.length/2)]:null;   // cadência típica (dias entre envios)
+  const alerta=cad?Math.max(cad*2, cad+3):14;   // limiar adaptativo por clínica
+  const cut=hoje-14*DAY, rec14=r.filter(e=>Date.parse(e.d+"T00:00:00")>=cut).length, esp14=semMed*2;
+  let status,cor,msg;
+  if(diasSil>=alerta){ status="parou"; cor="#ff6b81"; msg=`🔴 PAROU — <b>${diasSil} dias</b> sem enviar (costuma a cada ~${cad}d · ~${semMed}/sem). <b>Liga hoje.</b>`; }
+  else if(esp14>0 && rec14<esp14*0.5){ status="caiu"; cor="#ffc266"; const q=Math.round((1-rec14/esp14)*100); msg=`🟡 CAIU — ${rec14} em 14d vs ~${esp14} do normal (−${q}%). Atenção antes de perder.`; }
+  else { status="ok"; cor="#7effcf"; msg=`🟢 no ritmo — ~${semMed}/semana · última há ${diasSil}d (normal ~${cad}d)`; }
+  return {status,cor,msg,semMed,diasSil,cad,alerta};
+}
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
 let CLIN_RS_ENV=null, CLIN_RS=null;   // env cifrado (público) + mapa {cod:fat} decifrado (só na memória da diretoria)
@@ -424,10 +445,22 @@ async function verRS(){
   if(ok){ sessionStorage.setItem("crm_dir_code", code); if(ACTIVE==="clinicas") renderTab(); }
   else alert("Não consegui abrir o R$ — código incorreto, ou os valores ainda não chegaram do robô.");
 }
+/* 🔓 UNLOCK financeiro em UMA tocada: pede a senha financeira, e se a decifragem funcionar (prova
+   criptográfica de que o código está certo) já promove a diretoria + abre o R$. Serve mesmo que o
+   operador ainda não esteja marcado como diretoria neste aparelho. */
+async function abrirFinanceiro(){
+  if(!CLIN_RS_ENV) await loadClinRS();
+  if(!CLIN_RS_ENV || !CLIN_RS_ENV.ct){ alert("Os valores em R$ ainda não chegaram do robô — tenta de novo em alguns minutos."); return; }
+  const code=dirCodeCache()||(prompt("🔒 Senha FINANCEIRA da diretoria (abre o faturamento em R$):")||"").trim();
+  if(!code) return;
+  const ok=await decDirRS(code);
+  if(ok){ localStorage.setItem("crm_operador_papel","diretoria"); sessionStorage.setItem("crm_dir_code",code); renderOpBtn(); if(ACTIVE==="clinicas") renderTab(); }
+  else alert("Código incorreto — não abri o R$. (É a senha financeira, diferente do código do desmarcou.)");
+}
 function rsClin(cod){
-  if(!ehDiretoria()) return `<span class="t-mut" title="valor só para a diretoria">🔒 R$</span>`;
+  if(!ehDiretoria()) return `<a onclick="abrirFinanceiro()" class="t-mut" style="cursor:pointer" title="abrir valores (diretoria)">🔒 R$</a>`;
   if(CLIN_RS && cod!=null && CLIN_RS[String(cod)]!=null) return `<b style="color:#7effcf">${fmtBRL(CLIN_RS[String(cod)])}</b>`;
-  return `<a onclick="verRS()" style="color:var(--cyan);cursor:pointer;font-weight:700">🔓 ver R$</a>`;
+  return `<a onclick="abrirFinanceiro()" style="color:var(--cyan);cursor:pointer;font-weight:700">🔓 ver R$</a>`;
 }
 /* fuzzy match: normaliza, tira palavras genéricas (vet/clínica/pet…), casa por token distintivo — "Guaratiba" acha "Vet Guaratiba" */
 const _CLIN_STOP=new Set(["vet","veterinaria","veterinario","clinica","hospital","pet","petshop","shop","centro","dr","dra","drs","de","da","do","dos","das","e","o","a"]);
@@ -1691,14 +1724,18 @@ function renderTab(){
       if(!falta.length && x.porte==="G" && prod!=null && prod<PORTE_PROD_BAIXA) interp=`🧠 ${det?"Manda todas as classes, MAS ":""}o volume é baixo pra um <b>porte grande</b> — potencial bem maior; provavelmente divide a QUANTIDADE com outro lab. Trabalhar.`;
       else if(det && !falta.length) interp=`🧠 Manda <b>todas</b> as classes de exame 👍${x.porte==="G"?" (porte grande bem aproveitado)":""}`;
       const detLinha=det?`<div class="ci" style="font-size:11.5px;margin-top:2px">📆 recente: <b>${det.prod30||0}</b> em 30d · ${det.prod7||0} em 7d${det.cats&&det.cats.length?` · <span style="color:#7effcf">✅ manda: ${det.cats.slice(0,4).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</span>`:""}</div>`:"";
+      const c2=cerebro2(det);
+      const c2Linha=c2?`<div class="ci" style="font-size:11.5px;margin-top:4px;color:${c2.cor};font-weight:${c2.status==="ok"?"500":"700"}">🧠² ${c2.msg}</div>`:"";
+      const c2Alerta=!!(c2 && (c2.status==="parou"||c2.status==="caiu"));
       const prodTxt = (prodDesde!=null&&temMarco) ? `📊 desde a reconquista: <b>${prodDesde}</b> exames` : (prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>');
       const marcoLinha = temMarco ? `<div class="ci" style="font-size:11.5px;margin-top:2px;color:#7effcf">♻️ ${x.tipo==="nova"?"entrou":"reconquistada"} em <b>${esc(fmtDataBR(x.reconq_data))}</b> <span class="t-mut">(marco zero)</span></div>` : `<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">⚠️ sem marco zero — edite e ponha a data da reconquista</div>`;
       const perdaLinha = x.motivo_perda ? `<div class="ci" style="font-size:11.5px;margin-top:1px;color:#ffb3c0">💔 perdeu antes: "${esc(x.motivo_perda)}"</div>` : "";
-      return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${(flag||mesaBox)?';border-left:3px solid #FF2D55':''}">
+      return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${(flag||mesaBox||c2Alerta)?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
           <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt} · 💰 ${rsClin(x.cod)}</div>
           ${marcoLinha}${perdaLinha}${detLinha}
+          ${c2Linha}
           ${mesaBox}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
           ${interp?`<div class="ci" style="font-size:11.5px;margin-top:3px;${flag?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div>`:""}
@@ -1732,10 +1769,11 @@ function renderTab(){
       if(zeradas.length) regras.push(`🚨 <b>${zeradas.map(d=>esc(d.x.nome)).join(", ")}</b>: comissão paga mas <b>0 exames</b> no HF. Confere o vínculo/código — ou a reconquista não converteu.`);
       if(comRS.length) regras.push(`🎫 Ticket médio da carteira = <b>${fmtBRL(tkGeral)}/exame</b>. Acima da média = exames caros (histopato/especializado); abaixo = rotina. Subir ticket > subir volume.`);
       let painel;
-      if(!ehDiretoria()){
-        painel=`<div class="proxhint" style="margin:8px 0 14px">🔒 O <b>faturamento (R$)</b> é visível só para a <b>diretoria</b>. Você vê a produção (nº de exames). ${AUTO_REL_NOTE}</div>`;
-      } else if(!CLIN_RS){
-        painel=`<button class="checkinbtn" id="verRSrel" type="button" style="margin:8px 0 14px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Ver faturamento em R$ (código da diretoria)</button>`;
+      if(!CLIN_RS){
+        painel=`<div class="proxhint" style="border-color:rgba(0,229,160,.45);margin:8px 0 6px;text-align:center;line-height:1.55">
+            <div style="font-size:13px;color:#c9d4e0">💰 O <b>faturamento em R$</b> de cada clínica é <b>privado da diretoria</b> (cifrado — reps não veem).</div>
+            <button class="checkinbtn" id="verRSrel" type="button" style="margin:10px auto 2px;max-width:320px;border-color:rgba(0,229,160,.5);color:#7effcf;font-weight:700">🔓 Abrir faturamento (senha financeira)</button>
+          </div>`;
       } else {
         const rows=comRS.map(d=>`<div class="crow" style="cursor:default;align-items:flex-start">
             <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${d.x.tipo==="nova"?"🆕":"♻️"}</div>
@@ -1759,6 +1797,15 @@ function renderTab(){
             <div style="font-size:12.5px;line-height:1.65">${regras.map(r=>`<div style="margin:4px 0">${r}</div>`).join("")}</div>
           </div>`;
       }
+      // 🧠² alerta de ritmo consolidado (pararam / caíram) — o mais urgente, vai no topo
+      const c2all=CARTEIRA.filter(x=>x.cod).map(x=>({x,c2:cerebro2(CLIN_DET[String(x.cod)])})).filter(o=>o.c2);
+      const parou=c2all.filter(o=>o.c2.status==="parou").sort((a,b)=>b.c2.diasSil-a.c2.diasSil), caiu=c2all.filter(o=>o.c2.status==="caiu");
+      const c2Html=(parou.length||caiu.length)?`
+        <div style="background:rgba(255,45,85,.1);border:1px solid rgba(255,45,85,.45);border-left:3px solid #FF2D55;border-radius:9px;padding:10px 12px;margin:8px 0 4px">
+          <div style="font-size:12px;font-weight:800;color:#ff6b81;text-transform:uppercase;letter-spacing:.3px">🧠² Alerta de ritmo · ${parou.length} pararam · ${caiu.length} caíram</div>
+          ${parou.map(o=>`<div style="font-size:12px;color:#ffc9d2;margin-top:6px">🔴 <b>${esc(o.x.nome)}</b> — <b>${o.c2.diasSil} dias</b> sem enviar (costuma a cada ~${o.c2.cad}d · ~${o.c2.semMed}/sem). <b style="color:#ff6b81">Liga hoje.</b></div>`).join("")}
+          ${caiu.map(o=>`<div style="font-size:12px;color:#ffc266;margin-top:6px">🟡 <b>${esc(o.x.nome)}</b> — caiu vs a média dela (~${o.c2.semMed}/sem). Atenção antes de perder.</div>`).join("")}
+        </div>`:"";
       // 🎯 consolidado "deixando na mesa" (só quem MANDA algo e deixa o resto) — visível a todos; R$ só diretoria
       const mesaList=dados.filter(d=>{ const det=CLIN_DET[String(d.x.cod)]; return det&&(det.cats||[]).length&&(d.falta||[]).length; }).sort((a,b)=>b.falta.length-a.falta.length);
       const mesaHtml = mesaList.length ? `
@@ -1778,12 +1825,13 @@ function renderTab(){
           <div class="mid"></div></div>`;
       c.innerHTML=`${subtabsClin}
         <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo do robô — você não precisa pedir). O e-mail completo sai <b>toda sexta 9h</b> pra diretoria.</div>
+        ${c2Html}
         ${painel}
         ${mesaHtml}
         <div class="seclabel" style="margin:14px 0 6px">🗂️ Histórico semanal <span class="t-mut" style="font-weight:500;font-size:11px">(evolução — sem R$, foto de cada sexta)</span></div>
         ${RELATORIOS.length?RELATORIOS.map(rcard).join(""):`<div class="empty">Ainda sem foto semanal. A 1ª já foi gerada — recarregue em instantes. Depois vai listando a evolução aqui.</div>`}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
-      const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>verRS();
+      const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>abrirFinanceiro();
       return;
     }
     c.innerHTML=`
@@ -1797,7 +1845,7 @@ function renderTab(){
         ${kpi("", CL, "Master HF", CLIN_TS?("sinc. "+new Date(CLIN_TS).toLocaleDateString("pt-BR")):"aguardando robô")}
       </div>
       ${!CL?`<div class="proxhint" style="border-color:rgba(255,138,0,.4);color:#ffc266;margin-bottom:12px">⏳ A lista de clínicas do HF ainda não chegou (o robô sincroniza a cada ciclo). O autocomplete liga assim que ela vier.</div>`:""}
-      ${ehDiretoria()?(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto (diretoria) · faturamento 12m desta lista: <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Ver valores em R$ (código da diretoria)</button>`):`<div class="proxhint" style="margin-bottom:12px">🔒 Valores em R$ são visíveis só para a diretoria. Você vê a <b>produção</b> (nº de exames).</div>`}
+      ${(ehDiretoria()&&CLIN_RS)?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto (diretoria) · faturamento 12m desta lista: <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Abrir faturamento em R$ (senha financeira · diretoria)</button>`}
       ${(()=>{ const z=CARTEIRA.filter(x=>{ const d=x.cod?CLIN_DET[String(x.cod)]:null; return x.cod&&d&&Array.isArray(d.recent)&&d.recent.length===0&&!d.prod30; });
         if(!z.length) return "";
         return `<div class="proxhint" style="border-color:rgba(255,45,85,.55);color:#ff8fa3;margin-bottom:12px;line-height:1.55">
@@ -1808,7 +1856,7 @@ function renderTab(){
       ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma clínica ${clinView==='nova'?"nova":"reconquistada"} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
     document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
     const ac=document.getElementById("addCart"); if(ac) ac.onclick=()=>openCarteira(clinView, null);
-    const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>verRS();
+    const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>abrirFinanceiro();
     document.querySelectorAll("#content [data-cart]").forEach(el=>el.onclick=()=>openCarteira(null, el.dataset.cart));
     document.querySelectorAll("#content [data-exames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openExames(el.dataset.exames, el.dataset.exnome); });
     const lc=document.getElementById("lupaCart"); if(lc){ lc.addEventListener("input", e=>{ search=e.target.value; const p=lc.selectionStart; renderTab(); const l2=document.getElementById("lupaCart"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
