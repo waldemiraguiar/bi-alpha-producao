@@ -47,17 +47,18 @@ def clinic_details(cods):
     d365 = (tdt - datetime.timedelta(days=365)).isoformat()
     d30 = (tdt - datetime.timedelta(days=30)).isoformat()
     d7 = (tdt - datetime.timedelta(days=7)).isoformat()
-    uni = q(f"SELECT COALESCE(cat.Setor,'(sem setor)') setor, COUNT(*) qtd FROM {EX} s "
+    # usa CATEGORIA (granular: Hematologia, Bioquímica, Histopatologia…) — Setor é grosso demais p/ white-space
+    uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd FROM {EX} s "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Setor ORDER BY qtd DESC", (d365, maxd))
-    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem setor)" and u["qtd"] > 0][:12]
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY qtd DESC", (d365, maxd))
+    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and u["qtd"] > 0][:14]
     ph = ",".join(["%s"] * len(cods))
-    rows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Setor,'(sem setor)') setor, COUNT(*) qtd, "
+    rows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd, "
              f"SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p30, SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p7 "
              f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
              f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
              f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s "
-             f"GROUP BY r.CodCliente, cat.Setor", (d30, d7, *cods, d365, maxd))
+             f"GROUP BY r.CodCliente, cat.Categoria", (d30, d7, *cods, d365, maxd))
     det = {}
     for x in rows:
         cod = str(x["cod"]); d = det.setdefault(cod, {"prod30": 0, "prod7": 0, "cats": {}})
@@ -68,8 +69,8 @@ def clinic_details(cods):
     for cod, d in det.items():
         cats = sorted(d["cats"].items(), key=lambda kv: -kv[1])
         out[cod] = {"prod30": d["prod30"], "prod7": d["prod7"],
-                    "cats": [{"setor": s, "qtd": qn} for s, qn in cats if s != "(sem setor)"],
-                    "falta": [s for s in setores if s not in d["cats"]]}   # white-space
+                    "cats": [{"setor": s, "qtd": qn} for s, qn in cats if s != "(sem categoria)"],
+                    "falta": [s for s in setores if s not in d["cats"]]}   # white-space (categorias que ela não te manda)
     return {"det": out, "setores": setores}
 
 def build():
