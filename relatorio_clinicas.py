@@ -52,6 +52,13 @@ iso = hoje.isocalendar()
 semana = f"{iso[0]}-W{int(iso[1]):02d}"
 label = hoje.strftime("%d/%m/%Y")
 
+def week_key(iso_d):
+    try:
+        y, w, _ = datetime.date.fromisoformat(iso_d).isocalendar()
+        return f"{y}-W{int(w):02d}"
+    except Exception:
+        return "?"
+
 def enrich(x):
     cod = str(x.get("cod")) if x.get("cod") else None
     m = master.get(cod) if cod else None
@@ -59,11 +66,26 @@ def enrich(x):
     rs = rsmap.get(cod) if cod else None
     d = DET.get(cod) if cod else None
     falta = (d or {}).get("falta", []) or []
+    recent = (d or {}).get("recent")   # None = detalhe ainda não veio; [] = 0 exames de verdade
+    rec_n = len(recent) if isinstance(recent, list) else None
+    rec_desde = (d or {}).get("recent_desde") or (d or {}).get("marco")
+    marco = x.get("reconq_data") or ""
+    prod_desde = (d or {}).get("prod_desde")
+    # semana a semana (drill-down espelhado) + pets
+    byweek, pets = {}, set()
+    for e in (recent or []):
+        byweek[week_key(e.get("d", ""))] = byweek.get(week_key(e.get("d", "")), 0) + 1
+        if e.get("pet"):
+            pets.add(e["pet"])
     concentrada = bool(d and len((d.get("cats") or [])) <= 1 and len(falta) >= 2)
     flag = (x.get("porte") == "G" and prod is not None and prod < PORTE_PROD_BAIXA) or concentrada
+    # 🚨 comissão paga mas 0 exames: está na carteira (alguém ganhou comissão) e o HF confirma 0 no período
+    zero = bool(m) and (rec_n == 0) and ((prod_desde in (0, None)) if marco else (prod in (0, None)))
     return {"nome": x.get("nome", ""), "cidade": x.get("cidade", ""), "tipo": x.get("tipo", "nova"),
             "porte": x.get("porte", ""), "prod": prod, "rs": rs, "flag": flag, "vinc": bool(m),
-            "prod30": (d or {}).get("prod30"), "falta": falta}
+            "prod30": (d or {}).get("prod30"), "falta": falta, "cats": (d or {}).get("cats", []) or [],
+            "rec_n": rec_n, "rec_desde": rec_desde, "byweek": byweek, "pets": len(pets),
+            "marco": marco, "prod_desde": prod_desde, "motivo_perda": x.get("motivo_perda", ""), "zero": zero}
 
 linhas = [enrich(x) for x in carteira]
 nov = [l for l in linhas if l["tipo"] == "nova"]
@@ -71,6 +93,7 @@ rec = [l for l in linhas if l["tipo"] == "reconquistada"]
 prod_total = sum((l["prod"] or 0) for l in linhas)
 rs_total = sum((l["rs"] or 0) for l in linhas if l["rs"] is not None)
 flags = [l for l in linhas if l["flag"]]
+zerados = [l for l in linhas if l["zero"]]   # comissão paga mas 0 exames (auditoria)
 
 def tabela(items):
     if not items:
@@ -96,11 +119,49 @@ flagtxt = ("".join(f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}) — {l
                    + "</li>" for l in flags)
            or "<li>Nenhuma clínica sinalizada 👍</li>")
 
+# 🚨 comissão paga mas 0 exames (auditoria — pega todo "Faro Animal" da carteira)
+if zerados:
+    zrows = "".join(
+        f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}, {l['cidade'] or '—'}) — "
+        f"<b style='color:#c0392b'>0 exames</b>"
+        + (f" desde o marco {l['marco']}" if l['marco'] else " nos últimos 180 dias")
+        + " → conferir: comissão de reconquista (normal) × exames lançados em OUTRO código × ainda não digitados."
+        + "</li>" for l in zerados)
+    zero_html = (f"<h3 style='color:#c0392b;margin-top:18px'>🚨 Comissão paga mas 0 exames — auditar ({len(zerados)})</h3>"
+                 f"<p style='font-size:13px;color:#555;margin:2px 0 6px'>Clínica na carteira (alguém ganhou comissão pela volta/entrada) mas o HF não registra <b>nenhum exame</b> no período. Vale checar o vínculo/código no HF.</p>"
+                 f"<ul style='font-size:14px'>{zrows}</ul>")
+else:
+    zero_html = "<h3 style='color:#0A1628;margin-top:18px'>🚨 Comissão paga mas 0 exames</h3><p style='font-size:14px;color:#0A7A3B'>✅ Nenhuma clínica da carteira está zerada. Todo mundo com comissão tem exame entrando.</p>"
+
+# 🔬 drill-down espelhado: movimento recente por clínica (semana a semana + pets)
+def drill(items):
+    vis = [l for l in items if l["rec_n"] not in (None, 0)]
+    if not vis:
+        return ""
+    out = ""
+    for l in sorted(vis, key=lambda z: -(z["rec_n"] or 0)):
+        wks = sorted(l["byweek"].items(), reverse=True)[:5]
+        wtxt = " · ".join(f"{k.split('-W')[-1]}: <b>{v}</b>" for k, v in wks)
+        cats = ", ".join(f"{c['setor']} ({c['qtd']})" for c in (l["cats"] or [])[:4])
+        falta = f" · <span style='color:#c0392b'>não manda: {', '.join(l['falta'][:4])}</span>" if l["falta"] else ""
+        out += (f"<div style='padding:8px 10px;border-left:3px solid #00D4FF;background:#f4fbff;margin:6px 0'>"
+                f"<b>{l['nome']}</b> — <b>{l['rec_n']}</b> exames · 🐾 {l['pets']} pets"
+                + (f" · desde {l['rec_desde']}" if l["rec_desde"] else "")
+                + (f"<br><span style='font-size:13px;color:#333'>por semana → {wtxt}</span>" if wtxt else "")
+                + (f"<br><span style='font-size:13px;color:#333'>✅ manda: {cats}{falta}</span>" if cats else "")
+                + "</div>")
+    return out
+
+drill_html = (drill(rec) + drill(nov)) or "<p style='color:#888;font-size:13px'>Detalhe por clínica chega quando o robô sincroniza o drill-down.</p>"
+
 html = f"""<div style='font-family:Arial;max-width:820px;margin:auto;color:#1a1a1a'>
 <h2 style='color:#0A1628'>🏥 Relatório de Clínicas — {label}</h2>
-<p style='font-size:15px'><b>{len(rec)}</b> reconquistadas · <b>{len(nov)}</b> novas · produção somada <b>{prod_total}</b> exames/12m · faturamento <b>{brl(rs_total)}</b></p>
+<p style='font-size:15px'><b>{len(rec)}</b> reconquistadas · <b>{len(nov)}</b> novas · produção somada <b>{prod_total}</b> exames/12m · faturamento <b>{brl(rs_total)}</b>{(' · <b style=color:#c0392b>🚨 ' + str(len(zerados)) + ' zeradas</b>') if zerados else ''}</p>
+{zero_html}
 <h3 style='color:#0A1628;margin-top:18px'>🚩 Onde trabalhar (porte grande, produção baixa = dividindo exame)</h3>
 <ul style='font-size:14px'>{flagtxt}</ul>
+<h3 style='color:#0A1628;margin-top:18px'>🔬 Movimento recente por clínica (semana a semana)</h3>
+{drill_html}
 <h3 style='color:#0A1628;margin-top:18px'>♻️ Reconquistadas</h3>{tabela(rec)}
 <h3 style='color:#0A1628;margin-top:18px'>🆕 Novas</h3>{tabela(nov)}
 <p style='color:#888;font-size:12px;margin-top:18px'>Produção = nº de exames (HF). R$ visível só para a diretoria (este e-mail). Relatório automático · sexta 9h.
@@ -114,6 +175,7 @@ def post_snapshot():
     item = {"id": semana, "semana": semana, "label": label, "n_novas": len(nov), "n_reconq": len(rec),
             "prod_total": prod_total,
             "flags": [{"nome": l["nome"], "porte": l["porte"], "prod": l["prod"]} for l in flags],
+            "zerados": [{"nome": l["nome"], "cidade": l["cidade"], "porte": l["porte"], "marco": l["marco"]} for l in zerados],
             "linhas": [{"nome": l["nome"], "cidade": l["cidade"], "tipo": l["tipo"], "porte": l["porte"],
                         "prod": l["prod"], "flag": l["flag"], "vinc": l["vinc"]} for l in linhas], "ts": NOW * 1000}
     try:
