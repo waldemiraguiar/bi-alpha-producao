@@ -345,7 +345,7 @@ async function criarOperador(nome, pin, papel, dir_code){
   return false; }
 async function tornarDiretoria(){
   const nome=operadorAtual(); if(!nome){ alert("Identifique-se primeiro."); return; }
-  const code=(prompt(`Para VER R$, digite o CÓDIGO DA DIRETORIA (blindagem — só a diretoria tem):`)||"").trim(); if(!code) return;
+  const code=(prompt(`Para VER R$, digite a SENHA FINANCEIRA da diretoria (só você e o Fúlvio têm — NÃO é o código do desmarcou):`)||"").trim(); if(!code) return;
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"setpapel",nome,papel:"diretoria",dir_code:code,senha:window.__pwd})});
     if(r.status===403){ alert("❌ Código da diretoria inválido."); return; }
     if(r.ok){ localStorage.setItem("crm_operador_papel","diretoria"); sessionStorage.setItem("crm_dir_code",code); syncOps((await r.json()).operadores); if(!CLIN_RS_ENV) await loadClinRS(); await decDirRS(code); alert("🔓 Pronto — você agora é DIRETORIA e vê os valores em R$."); renderOpBtn(); renderAll(); } }catch(e){ alert("Sem internet."); }
@@ -373,7 +373,7 @@ async function openIdentidade(force){
     const nome=(prompt("Nome do novo operador (ex.: Heitor, Luciane, Wal):")||"").trim(); if(!nome) return;
     const pin=(prompt(`Crie um PIN (mínimo 4 dígitos) para ${nome}:`)||"").trim(); if(pin.length<4){ alert("O PIN precisa de pelo menos 4 dígitos."); return; }
     let papel="comercial", dir_code="";
-    if(confirm(`${nome} é da DIRETORIA (vê valores em R$)?\n\nOK = sim (vai pedir o código da diretoria) · Cancelar = comercial`)){ dir_code=(prompt("Código da diretoria:")||"").trim(); if(dir_code) papel="diretoria"; }
+    if(confirm(`${nome} é da DIRETORIA (vê valores em R$)?\n\nOK = sim (vai pedir a senha financeira) · Cancelar = comercial`)){ dir_code=(prompt("Senha financeira da diretoria (só R$ — não é o código do desmarcou):")||"").trim(); if(dir_code) papel="diretoria"; }
     const ok=await criarOperador(nome, pin, papel, dir_code); if(ok){ setOperador(nome, papel); closeModal(); renderAll(); } };
   const od=document.getElementById("opDir"); if(od) od.onclick=()=>tornarDiretoria();
 }
@@ -409,7 +409,7 @@ function dirCodeCache(){ return sessionStorage.getItem("crm_dir_code")||""; }
 async function verRS(){
   if(!ehDiretoria()){ alert("Só a diretoria vê R$. Identifique-se como diretoria primeiro (🔓)."); return; }
   if(!CLIN_RS_ENV) await loadClinRS();
-  const code=dirCodeCache()||(prompt("Código da diretoria (pra abrir os valores em R$):")||"").trim(); if(!code) return;
+  const code=dirCodeCache()||(prompt("Senha financeira da diretoria (pra abrir os valores em R$):")||"").trim(); if(!code) return;
   const ok=await decDirRS(code);
   if(ok){ sessionStorage.setItem("crm_dir_code", code); if(ACTIVE==="clinicas") renderTab(); }
   else alert("Não consegui abrir o R$ — código incorreto, ou os valores ainda não chegaram do robô.");
