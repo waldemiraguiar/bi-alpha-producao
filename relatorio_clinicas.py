@@ -119,6 +119,26 @@ flagtxt = ("".join(f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}) — {l
                    + "</li>" for l in flags)
            or "<li>Nenhuma clínica sinalizada 👍</li>")
 
+# 🎯 DEIXANDO NA MESA — share-of-wallet que grita (o que cada clínica NÃO te manda)
+def _chip(t):
+    return (f"<span style='display:inline-block;background:#fdecef;color:#a3242f;border:1px solid #f1a9b4;"
+            f"border-radius:14px;padding:2px 11px;font-size:12px;font-weight:700;margin:3px 4px 0 0'>{t}</span>")
+mesa = [l for l in linhas if l["vinc"] and l["falta"] and l["cats"]]   # só quem MANDA algo e deixa o resto (zerados vão na auditoria)
+if mesa:
+    blocks = ""
+    for l in sorted(mesa, key=lambda z: -len(z["falta"])):
+        nsend = len(l["cats"]); ntot = nsend + len(l["falta"])
+        chips = "".join(_chip(f) for f in l["falta"][:10]) + (f"<span style='color:#c0392b;font-size:12px;font-weight:700'> +{len(l['falta'])-10}</span>" if len(l["falta"]) > 10 else "")
+        rsline = (f"Já te rende <b>{brl(l['rs'])}</b> mandando só {nsend} de {ntot} classes — imagina com o resto. " if l["rs"] is not None else "")
+        blocks += (f"<div style='border:1px solid #f1a9b4;border-left:4px solid #e24b4a;background:#fff6f7;border-radius:8px;padding:11px 13px;margin:9px 0'>"
+                   f"<div style='font-weight:800;color:#c0392b;font-size:14px;text-transform:uppercase;letter-spacing:.3px'>🎯 {l['nome']} — {len(l['falta'])} classes na mesa</div>"
+                   f"<div style='margin-top:6px'>{chips}</div>"
+                   f"<div style='font-size:12.5px;color:#7a2230;margin-top:8px'>⚠️ Isso vai pro concorrente. {rsline}<b style='color:#c0392b'>Puxa essas classes.</b></div></div>")
+    mesa_html = ("<h3 style='color:#c0392b;margin-top:18px'>🎯 Deixando na mesa — o que a clínica NÃO te manda (share-of-wallet)</h3>"
+                 "<p style='font-size:13px;color:#555;margin:2px 0 4px'>Classes de exame que a clínica <b>já poderia mandar e não manda</b> — vão pro concorrente. É onde o Heitor/Fábio devem focar.</p>" + blocks)
+else:
+    mesa_html = "<h3 style='color:#0A1628;margin-top:18px'>🎯 Deixando na mesa</h3><p style='font-size:14px;color:#0A7A3B'>✅ As clínicas vinculadas mandam as classes que o lab faz. Sem white-space relevante.</p>"
+
 # 🚨 comissão paga mas 0 exames (auditoria — pega todo "Faro Animal" da carteira)
 if zerados:
     zrows = "".join(
@@ -158,6 +178,7 @@ html = f"""<div style='font-family:Arial;max-width:820px;margin:auto;color:#1a1a
 <h2 style='color:#0A1628'>🏥 Relatório de Clínicas — {label}</h2>
 <p style='font-size:15px'><b>{len(rec)}</b> reconquistadas · <b>{len(nov)}</b> novas · produção somada <b>{prod_total}</b> exames/12m · faturamento <b>{brl(rs_total)}</b>{(' · <b style=color:#c0392b>🚨 ' + str(len(zerados)) + ' zeradas</b>') if zerados else ''}</p>
 {zero_html}
+{mesa_html}
 <h3 style='color:#0A1628;margin-top:18px'>🚩 Onde trabalhar (porte grande, produção baixa = dividindo exame)</h3>
 <ul style='font-size:14px'>{flagtxt}</ul>
 <h3 style='color:#0A1628;margin-top:18px'>🔬 Movimento recente por clínica (semana a semana)</h3>

@@ -1677,7 +1677,7 @@ function renderTab(){
       const nClasses=det?((det.cats||[]).length+falta.length):0;
       const rsvDir=(ehDiretoria()&&CLIN_RS&&x.cod&&CLIN_RS[String(x.cod)]!=null)?+CLIN_RS[String(x.cod)]:null;
       // 🎯 DEIXANDO NA MESA — bloco de alerta que grita o que ela NÃO te manda (share-of-wallet)
-      const mesaBox = (vinc && falta.length) ? `
+      const mesaBox = (vinc && falta.length && (det.cats||[]).length) ? `
         <div style="margin-top:7px;background:linear-gradient(90deg,rgba(255,45,85,.17),rgba(255,45,85,.05));border:1px solid rgba(255,45,85,.5);border-radius:9px;padding:9px 11px">
           <div style="font-size:12px;font-weight:800;color:#ff6b81;letter-spacing:.4px;text-transform:uppercase">🎯 Deixando na mesa · ${falta.length} classe${falta.length>1?"s":""} que ela NÃO te manda</div>
           <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">
@@ -1759,6 +1759,16 @@ function renderTab(){
             <div style="font-size:12.5px;line-height:1.65">${regras.map(r=>`<div style="margin:4px 0">${r}</div>`).join("")}</div>
           </div>`;
       }
+      // 🎯 consolidado "deixando na mesa" (só quem MANDA algo e deixa o resto) — visível a todos; R$ só diretoria
+      const mesaList=dados.filter(d=>{ const det=CLIN_DET[String(d.x.cod)]; return det&&(det.cats||[]).length&&(d.falta||[]).length; }).sort((a,b)=>b.falta.length-a.falta.length);
+      const mesaHtml = mesaList.length ? `
+        <div class="seclabel" style="margin:14px 0 6px;color:#ff6b81">🎯 Deixando na mesa <span class="t-mut" style="font-weight:500;font-size:11px">(o que cada clínica NÃO te manda — vai pro concorrente)</span></div>
+        ${mesaList.map(d=>{ const det=CLIN_DET[String(d.x.cod)]||{}, nsend=(det.cats||[]).length, ntot=nsend+d.falta.length;
+          return `<div style="background:rgba(255,45,85,.1);border:1px solid rgba(255,45,85,.4);border-left:3px solid #FF2D55;border-radius:8px;padding:8px 11px;margin-bottom:7px">
+            <div style="font-weight:800;color:#ff6b81;font-size:12px;text-transform:uppercase;letter-spacing:.3px">🎯 ${esc(d.x.nome)} · ${d.falta.length} na mesa</div>
+            <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${d.falta.slice(0,8).map(f=>`<span style="background:rgba(255,45,85,.2);color:#ffc9d2;border:1px solid rgba(255,45,85,.4);border-radius:16px;padding:1px 9px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}${d.falta.length>8?`<span style="color:#ff8fa3;font-size:11px;font-weight:700;align-self:center">+${d.falta.length-8}</span>`:""}</div>
+            ${d.rsv!=null?`<div style="font-size:11px;color:#ffb3c0;margin-top:6px">já te rende <b style="color:#7effcf">${fmtBRL(d.rsv)}</b> mandando só <b>${nsend} de ${ntot}</b> classes — <b style="color:#ff6b81">puxa o resto</b></div>`:""}
+          </div>`; }).join("")}` : "";
       const rcard=r=>`<div class="crow" style="cursor:default;align-items:flex-start">
           <div class="rk" style="color:#00D4FF">📈</div>
           <div style="flex:1"><div class="nm">📅 ${semLabel(r)}</div>
@@ -1769,6 +1779,7 @@ function renderTab(){
       c.innerHTML=`${subtabsClin}
         <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo do robô — você não precisa pedir). O e-mail completo sai <b>toda sexta 9h</b> pra diretoria.</div>
         ${painel}
+        ${mesaHtml}
         <div class="seclabel" style="margin:14px 0 6px">🗂️ Histórico semanal <span class="t-mut" style="font-weight:500;font-size:11px">(evolução — sem R$, foto de cada sexta)</span></div>
         ${RELATORIOS.length?RELATORIOS.map(rcard).join(""):`<div class="empty">Ainda sem foto semanal. A 1ª já foi gerada — recarregue em instantes. Depois vai listando a evolução aqui.</div>`}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
