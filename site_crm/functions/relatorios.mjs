@@ -32,6 +32,7 @@ export default async (req) => {
         n_reconq: +it.n_reconq || 0,
         prod_total: +it.prod_total || 0,
         flags: Array.isArray(it.flags) ? it.flags.slice(0, 200) : [],   // clínicas a trabalhar (sem R$)
+        zerados: Array.isArray(it.zerados) ? it.zerados.slice(0, 200) : [], // comissão paga mas 0 exames (auditoria)
         linhas: Array.isArray(it.linhas) ? it.linhas.slice(0, 500) : [], // {nome,cidade,tipo,porte,prod,flag}
         ts: +it.ts || Date.now(),
       };

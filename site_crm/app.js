@@ -1697,8 +1697,9 @@ function renderTab(){
       const rcard=r=>`<div class="crow" style="cursor:default;align-items:flex-start">
           <div class="rk" style="color:#00D4FF">📈</div>
           <div style="flex:1"><div class="nm">Semana ${esc(r.semana||"")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${esc(r.label||"")}</span></div>
-            <div class="ci">♻️ <b>${r.n_reconq||0}</b> reconquistadas · 🆕 <b>${r.n_novas||0}</b> novas · 📊 <b>${r.prod_total||0}</b> exames (12m)${(r.flags&&r.flags.length)?` · 🚩 <b>${r.flags.length}</b> p/ trabalhar`:""}</div>
-            ${(r.flags&&r.flags.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ff8fa3">🚩 ${r.flags.map(f=>esc(f.nome)+(f.prod!=null?" ("+f.prod+")":"")).join(" · ")}</div>`:""}</div>
+            <div class="ci">♻️ <b>${r.n_reconq||0}</b> reconquistadas · 🆕 <b>${r.n_novas||0}</b> novas · 📊 <b>${r.prod_total||0}</b> exames (12m)${(r.flags&&r.flags.length)?` · 🚩 <b>${r.flags.length}</b> p/ trabalhar`:""}${(r.zerados&&r.zerados.length)?` · 🚨 <b>${r.zerados.length}</b> zeradas`:""}</div>
+            ${(r.zerados&&r.zerados.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ff8fa3">🚨 comissão paga mas 0 exames: ${r.zerados.map(f=>esc(f.nome)+(f.cidade?" ("+esc(f.cidade)+")":"")).join(" · ")}</div>`:""}
+            ${(r.flags&&r.flags.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ffc266">🚩 ${r.flags.map(f=>esc(f.nome)+(f.prod!=null?" ("+f.prod+")":"")).join(" · ")}</div>`:""}</div>
           <div class="mid"></div></div>`;
       c.innerHTML=`${subtabsClin}
         <div class="t-mut" style="font-size:12.5px;margin:8px 0 12px;text-align:center;line-height:1.5">Foto do relatório de clínicas de <b>toda sexta 9h</b> (produção + o que trabalhar). O <b>R$</b> vai no <b>e-mail da diretoria</b>. Aqui fica o histórico pra ver a evolução.</div>
@@ -1718,6 +1719,12 @@ function renderTab(){
       </div>
       ${!CL?`<div class="proxhint" style="border-color:rgba(255,138,0,.4);color:#ffc266;margin-bottom:12px">⏳ A lista de clínicas do HF ainda não chegou (o robô sincroniza a cada ciclo). O autocomplete liga assim que ela vier.</div>`:""}
       ${ehDiretoria()?(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto (diretoria) · faturamento 12m desta lista: <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Ver valores em R$ (código da diretoria)</button>`):`<div class="proxhint" style="margin-bottom:12px">🔒 Valores em R$ são visíveis só para a diretoria. Você vê a <b>produção</b> (nº de exames).</div>`}
+      ${(()=>{ const z=CARTEIRA.filter(x=>{ const d=x.cod?CLIN_DET[String(x.cod)]:null; return x.cod&&d&&Array.isArray(d.recent)&&d.recent.length===0&&!d.prod30; });
+        if(!z.length) return "";
+        return `<div class="proxhint" style="border-color:rgba(255,45,85,.55);color:#ff8fa3;margin-bottom:12px;line-height:1.55">
+          🚨 <b>Comissão paga mas 0 exames (${z.length})</b> — clínica na carteira mas o HF não registra <b>nenhum exame</b>:<br>
+          ${z.map(x=>`• <b>${esc(x.nome)}</b>${x.cidade?" ("+esc(x.cidade)+")":""}${x.reconq_data?" · desde "+esc(fmtDataBR(x.reconq_data)):""}`).join("<br>")}
+          <br><span class="t-mut" style="font-size:11.5px">Confira no HF: comissão de reconquista (normal) × exames em OUTRO código × ainda não digitados. Toque a clínica → 🔬 Ver exames.</span></div>`; })()}
       <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${clinView==='nova'?"🆕 Clínicas novas":"♻️ Clínicas reconquistadas"}</div><input class="wlsearch" id="lupaCart" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
       ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma clínica ${clinView==='nova'?"nova":"reconquistada"} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
     document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
