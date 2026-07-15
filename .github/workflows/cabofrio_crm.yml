@@ -21,26 +21,21 @@ jobs:
           node -e "const fs=require('fs');fs.writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\nexport const DIR_CODE='+JSON.stringify(process.env.DIR_CODE||'')+';\nexport const FIN_KEY='+JSON.stringify(process.env.FIN_KEY||'')+';\n')"
           cd site_crm/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
 
-      - name: Cache-bust
+      - name: Marca "Cabo Frio" (isola visualmente da Matriz)
         run: |
+          sed -i 's/Agente CRM — Matriz/Agente CRM — Cabo Frio/g; s/Agente CRM · Matriz/Agente CRM · Cabo Frio/g' site_crm/index.html
           V=$(date +%s)
           sed -i "s#\(src=\"app\.js\)\"#\1?v=$V\"#g; s#\(src=\"gate-crypto\.js\)\"#\1?v=$V\"#g" site_crm/index.html
 
-      - name: Criar (idempotente) + publicar o site Cabo Frio
+      - name: Renomear (URL bonita) + publicar
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          MATRIZ_SITE: ${{ secrets.CRM_SITE_ID }}
+          CF_SITE: ${{ secrets.CRM_SITE_ID_CF }}
         run: |
           set -e
-          NAME=agente-crm-cabofrio
           CLI="npx --yes netlify-cli@26"
-          # já existe um site com esse nome?
-          SID=$($CLI api listSites --data '{}' | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const a=JSON.parse(d);const s=a.find(x=>x.name==='$NAME');process.stdout.write(s?s.id:'')}catch(e){}})")
-          if [ -z "$SID" ]; then
-            SLUG=$($CLI api getSite --data "{\"site_id\":\"$MATRIZ_SITE\"}" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).account_slug||'')}catch(e){}})")
-            echo "Criando site '$NAME' na conta '$SLUG'…"
-            SID=$($CLI api createSite --data "{\"name\":\"$NAME\",\"account_slug\":\"$SLUG\"}" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const s=JSON.parse(d);process.stdout.write(s.id||s.site_id||'')}catch(e){}})")
-          fi
+          SID="$CF_SITE"
+          # tenta deixar a URL bonita (se o nome estiver livre)
+          $CLI api updateSite --data "{\"site_id\":\"$SID\",\"body\":{\"name\":\"agente-crm-cabofrio\"}}" >/dev/null 2>&1 && echo "URL renomeada" || echo "nome ocupado — mantém a atual"
           echo "==== CABO FRIO SITE ID = $SID ===="
           $CLI deploy --prod --dir=site_crm --functions=site_crm/functions --site="$SID"
-          echo "==== URL: https://$NAME.netlify.app ===="
