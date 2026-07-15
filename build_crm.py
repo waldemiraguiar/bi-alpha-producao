@@ -220,6 +220,32 @@ def post_clinicas_rs(D):
     except Exception as e:
         print(f"post_clinicas_rs falhou (ok, tenta no próximo ciclo): {e}")
 
+def post_clinicas_det():
+    """Detalhe (setores/white-space + produção 30d/7d) SÓ das clínicas da carteira → /api/crm-clinicas-det.
+    SEM R$. Puxa a carteira (função pública) e consulta o MySQL só p/ esses CodCliente."""
+    import urllib.request
+    pwd = CRM_PWD
+    if not pwd:
+        return
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+    try:
+        req = urllib.request.Request(base + "/api/crm-carteira?_=" + str(int(time.time())), headers={"User-Agent": "robo"})
+        carteira = json.loads(urllib.request.urlopen(req, timeout=30).read().decode()).get("carteira", [])
+    except Exception as e:
+        print(f"post_clinicas_det: não li a carteira ({e})"); return
+    cods = [c.get("cod") for c in carteira if c.get("cod")]
+    if not cods:
+        print("post_clinicas_det: carteira sem clínicas vinculadas — pulado"); return
+    from build_financeiro import clinic_details
+    res = clinic_details(cods)
+    try:
+        payload = json.dumps({"acao": "set", "det": res["det"], "setores": res["setores"], "senha": pwd}).encode()
+        r = urllib.request.urlopen(urllib.request.Request(
+            base + "/api/crm-clinicas-det", data=payload, headers={"Content-Type": "application/json"}), timeout=45)
+        print(f"clinicas detalhe -> HTTP {r.status} ({len(res['det'])} clínicas · {len(res['setores'])} setores)")
+    except Exception as e:
+        print(f"post_clinicas_det falhou (ok, tenta no próximo ciclo): {e}")
+
 def post_clinicas(D):
     """Manda o MASTER de clínicas do HF (nome+cod+cidade+produção, SEM R$) p/ o autocomplete das abas
     Novas/Reconquistadas (/api/crm-clinicas). O R$ (fat) NÃO vai — fica gated p/ diretoria (Fase 3b)."""
@@ -243,7 +269,7 @@ if __name__ == "__main__":
     last = None
     for attempt in range(1, 4):
         try:
-            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); break
+            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); post_clinicas_det(); break
         except Exception as e:
             import pymysql
             if isinstance(e, pymysql.err.OperationalError):

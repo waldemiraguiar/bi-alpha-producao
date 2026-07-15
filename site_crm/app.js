@@ -388,6 +388,8 @@ function syncCart(a){ CARTEIRA=(a||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0));
 async function loadCart(){ try{ const r=await fetch(CART_API); if(r.ok) syncCart((await r.json()).carteira); }catch(e){} }
 const REL_API="/api/crm-relatorios"; let RELATORIOS=[];
 async function loadRel(){ try{ const r=await fetch(REL_API); if(r.ok) RELATORIOS=((await r.json()).relatorios||[]).slice().sort((a,b)=>(a.id<b.id?1:-1)); }catch(e){} }
+let CLIN_DET={}, CLIN_SETORES=[];   // share-of-wallet por clínica (setores que manda / não manda + prod 30d/7d) — SEM R$
+async function loadDet(){ try{ const r=await fetch("/api/crm-clinicas-det"); if(r.ok){ const j=await r.json(); CLIN_DET=(j&&j.det)||{}; CLIN_SETORES=(j&&j.setores)||[]; } }catch(e){} }
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
@@ -1587,13 +1589,17 @@ function renderTab(){
     // R$ total da carteira (só diretoria com R$ aberto)
     const rsTotal=(ehDiretoria()&&CLIN_RS)?lista.reduce((s,x)=>s+(x.cod&&CLIN_RS[String(x.cod)]!=null?+CLIN_RS[String(x.cod)]:0),0):null;
     const card=x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, vinc=!!x.cod&&!!m;
-      const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA);
+      const det=x.cod?CLIN_DET[String(x.cod)]:null;
+      const concentrada=!!(det && CLIN_SETORES.length>=3 && det.cats.length<=1 && (det.falta||[]).length>=2);   // manda 1 setor só = dividindo
+      const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA)||concentrada;
+      const detLinha=det?`<div class="ci" style="font-size:11.5px;margin-top:2px">📆 recente: <b>${det.prod30||0}</b> em 30d · ${det.prod7||0} em 7d${det.cats&&det.cats.length?` · ✅ manda: ${det.cats.slice(0,4).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}`:""}</div>${(det.falta&&det.falta.length)?`<div class="ci" style="font-size:11.5px;margin-top:1px;color:#ffc266">🎯 NÃO te manda: <b>${det.falta.slice(0,6).map(esc).join(", ")}</b> <span class="t-mut">— oportunidade (vai pra outro lab)</span></div>`:""}`:"";
       return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${flag?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
           <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>'} · 💰 ${rsClin(x.cod)}</div>
+          ${detLinha}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
-          ${flag?`<div class="ci" style="color:#ff8fa3;font-weight:600;margin-top:2px">🚩 porte grande com produção baixa — provavelmente dividindo exame com outro lab (trabalhar essa clínica)</div>`:""}
+          ${flag?`<div class="ci" style="color:#ff8fa3;font-weight:600;margin-top:2px">🚩 ${concentrada?"manda pouca variedade de exame — está dividindo com outro lab":"porte grande com produção baixa — provavelmente dividindo exame"} (trabalhar essa clínica)</div>`:""}
           <div class="ci t-mut" style="font-size:11px;margin-top:2px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
@@ -2242,7 +2248,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart()]);
       if(a!==sig()) renderTab(); }, 45000);
