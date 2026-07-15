@@ -23,6 +23,17 @@ export default async (req) => {
 
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({}));
+    // LOGIN INDIVIDUAL: entra com nome + PIN pessoal; NÃO exige a senha do time (é o próprio gate).
+    // Se o PIN bate e o operador está ativo, devolve a CHAVE dos dados (p/ decifrar o crm.enc).
+    if (body.acao === "login") {
+      const lista0 = await load();
+      const o = lista0.find((x) => x.nome.toLowerCase() === String(body.nome || "").trim().toLowerCase());
+      if (!o) return Response.json({ ok: false, motivo: "nao_existe" }, { headers: cors });
+      if (o.ativo === false) return Response.json({ ok: false, motivo: "inativo" }, { headers: cors });
+      const ok = o.pin === hashPin(o.nome, String(body.pin || "").trim());
+      if (!ok) return Response.json({ ok: false }, { headers: cors });
+      return Response.json({ ok: true, nome: o.nome, papel: o.papel || "comercial", key: SECRET }, { headers: cors });
+    }
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
     let lista = await load();

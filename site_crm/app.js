@@ -2262,3 +2262,40 @@ setInterval(clock, 1000); clock();
 setInterval(()=>{ if(DATA) rotate(); }, ROT_MS);
 
 initGate({ encUrl:"data/crm.enc", lsKey:"agente_crm_matriz", onData:render, refreshMs:600000 });
+
+/* ---- LOGIN INDIVIDUAL (nome + PIN) — acaba a senha única; senha do time vira recuperação ---- */
+async function initLogin(){
+  const form=document.getElementById("loginForm"); if(!form) return;
+  const nomeEl=document.getElementById("loginNome"), pinEl=document.getElementById("loginPin"),
+        err=document.getElementById("loginErr"), dl=document.getElementById("loginNomes"), btn=document.getElementById("loginBtn");
+  const fillNomes=()=>{ if(dl) dl.innerHTML=OPERADORES.map(o=>`<option value="${esc(o.nome)}">`).join(""); };
+  try{ await loadOps(); fillNomes(); }catch(e){}
+  form.addEventListener("submit", async e=>{ e.preventDefault(); err.textContent="";
+    const nome=nomeEl.value.trim(), pin=pinEl.value.trim();
+    if(!nome||!pin){ err.textContent="Preencha nome e PIN."; return; }
+    btn.disabled=true; btn.textContent="Entrando…";
+    try{
+      const r=await fetch("/api/crm-operadores",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"login",nome,pin})});
+      const j=await r.json();
+      if(!j.ok){ err.textContent = j.motivo==="inativo" ? "Acesso desativado — fale com a diretoria." : (j.motivo==="nao_existe" ? "Nome não encontrado. Toque '➕ Criar meu acesso'." : "PIN incorreto."); btn.disabled=false; btn.textContent="Entrar"; pinEl.select(); return; }
+      const D=await decryptEnc("data/crm.enc", j.key);
+      localStorage.setItem("agente_crm_matriz", j.key); window.__pwd=j.key;
+      setOperador(j.nome, j.papel);
+      document.getElementById("gate").style.display="none";
+      render(D);
+    }catch(ex){ err.textContent="Erro ao entrar (sem internet?)."; btn.disabled=false; btn.textContent="Entrar"; }
+  });
+  document.getElementById("loginNovo").onclick=async()=>{
+    const tp=(prompt("Para CRIAR um acesso novo, digite a senha do time (só quem já tem acesso pode criar):")||"").trim(); if(!tp) return;
+    const nome=(prompt("Seu nome (ex.: Fábio):")||"").trim(); if(!nome) return;
+    const pin=(prompt("Crie seu PIN (mínimo 4 números):")||"").trim(); if(pin.length<4){ alert("O PIN precisa de pelo menos 4 números."); return; }
+    try{ const r=await fetch("/api/crm-operadores",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,senha:tp})});
+      if(r.status===401){ alert("Senha do time incorreta."); return; }
+      if(r.status===409){ alert("Já existe esse nome — é só entrar com ele e seu PIN."); return; }
+      if(r.ok){ syncOps((await r.json()).operadores); fillNomes(); nomeEl.value=nome; alert("✅ Acesso criado! Agora entre com seu nome + PIN."); pinEl.focus(); }
+      else alert("Não consegui criar (tente de novo).");
+    }catch(ex){ alert("Sem internet — precisa de conexão."); } };
+  document.getElementById("loginAdmin").onclick=()=>{ form.style.display="none"; document.getElementById("gateForm").style.display=""; document.getElementById("gatePwd").focus(); };
+  const vlt=document.getElementById("loginVoltar"); if(vlt) vlt.onclick=()=>{ document.getElementById("gateForm").style.display="none"; form.style.display=""; nomeEl.focus(); };
+}
+initLogin();
