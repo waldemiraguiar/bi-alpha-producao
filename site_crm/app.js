@@ -386,6 +386,8 @@ function syncClin(o){ CLINICAS=(o&&o.clinicas)||[]; CLIN_TS=(o&&o.ts)||0; }
 async function loadClin(){ try{ const r=await fetch(CLIN_API); if(r.ok) syncClin(await r.json()); }catch(e){} }
 function syncCart(a){ CARTEIRA=(a||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0)); }
 async function loadCart(){ try{ const r=await fetch(CART_API); if(r.ok) syncCart((await r.json()).carteira); }catch(e){} }
+const REL_API="/api/crm-relatorios"; let RELATORIOS=[];
+async function loadRel(){ try{ const r=await fetch(REL_API); if(r.ok) RELATORIOS=((await r.json()).relatorios||[]).slice().sort((a,b)=>(a.id<b.id?1:-1)); }catch(e){} }
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
@@ -1595,8 +1597,22 @@ function renderTab(){
           <div class="ci t-mut" style="font-size:11px;margin-top:2px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
+    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
+    if(clinView==="relatorios"){
+      const rcard=r=>`<div class="crow" style="cursor:default;align-items:flex-start">
+          <div class="rk" style="color:#00D4FF">📈</div>
+          <div style="flex:1"><div class="nm">Semana ${esc(r.semana||"")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${esc(r.label||"")}</span></div>
+            <div class="ci">♻️ <b>${r.n_reconq||0}</b> reconquistadas · 🆕 <b>${r.n_novas||0}</b> novas · 📊 <b>${r.prod_total||0}</b> exames (12m)${(r.flags&&r.flags.length)?` · 🚩 <b>${r.flags.length}</b> p/ trabalhar`:""}</div>
+            ${(r.flags&&r.flags.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ff8fa3">🚩 ${r.flags.map(f=>esc(f.nome)+(f.prod!=null?" ("+f.prod+")":"")).join(" · ")}</div>`:""}</div>
+          <div class="mid"></div></div>`;
+      c.innerHTML=`${subtabsClin}
+        <div class="t-mut" style="font-size:12.5px;margin:8px 0 12px;text-align:center;line-height:1.5">Foto do relatório de clínicas de <b>toda sexta 9h</b> (produção + o que trabalhar). O <b>R$</b> vai no <b>e-mail da diretoria</b>. Aqui fica o histórico pra ver a evolução.</div>
+        ${RELATORIOS.length?RELATORIOS.map(rcard).join(""):`<div class="empty">Ainda sem relatório. O primeiro sai na sexta 9h (ou dispare manual). Vai listando a evolução das clínicas novas/reconquistadas aqui.</div>`}`;
+      document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+      return;
+    }
     c.innerHTML=`
-      <div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button></div>
+      ${subtabsClin}
       <button class="checkinbtn" id="addCart" type="button" style="margin-bottom:6px">➕ Adicionar clínica ${clinView==='nova'?'NOVA':'RECONQUISTADA'}</button>
       <div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Você digita o nome; eu acho no HF (${CL?CL+" clínicas":"aguardando o robô"}) e vinculo → puxo a produção. O input é seu.</div>
       <div class="kgrid">
@@ -2226,7 +2242,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel()]).then(()=>{ pqFlush(); rqFlush(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart()]);
       if(a!==sig()) renderTab(); }, 45000);
