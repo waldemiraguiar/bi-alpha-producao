@@ -236,8 +236,10 @@ def post_clinicas_det():
     cods = [c.get("cod") for c in carteira if c.get("cod")]
     if not cods:
         print("post_clinicas_det: carteira sem clínicas vinculadas — pulado"); return
+    # MARCO ZERO por clínica: produção conta a partir da data de reconquista (reconq_data) — não do começo
+    since_map = {c.get("cod"): c.get("reconq_data") for c in carteira if c.get("cod") and c.get("reconq_data")}
     from build_financeiro import clinic_details
-    res = clinic_details(cods)
+    res = clinic_details(cods, since_map)
     try:
         payload = json.dumps({"acao": "set", "det": res["det"], "setores": res["setores"], "senha": pwd}).encode()
         r = urllib.request.urlopen(urllib.request.Request(

@@ -453,6 +453,10 @@ function openCarteira(tipo, id){
     <div class="m-opts" id="caTipo"><button class="opt${T==="reconquistada"?" on":""}" data-t="reconquistada">♻️ Reconquistada</button><button class="opt${T==="nova"?" on":""}" data-t="nova">🆕 Nova</button></div>
     <div class="m-lbl">Porte <span class="t-mut" style="font-weight:500">— ajuda a saber se manda muito ou pouco</span></div>
     <div class="m-opts" id="caPorte">${[["G","🐘 Grande"],["M","🐎 Médio"],["P","🐇 Pequeno"]].map(([v,l])=>`<button class="opt${P===v?" on":""}" data-p="${v}">${l}</button>`).join("")}</div>
+    <div class="m-lbl">📅 Marco zero — data da reconquista/entrada <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— a produção conta a partir daqui</span></div>
+    <input id="caRecData" type="date" class="m-date" style="width:100%" value="${c?esc(c.reconq_data||""):hojeISO()}">
+    <div class="m-lbl">Motivo da perda anterior <span class="t-mut" style="font-weight:500">— por que tinha deixado de mandar (opcional)</span></div>
+    <textarea id="caMotivo" class="m-ta" style="min-height:44px" placeholder="Ex.: vazamento de urina na cistocentese — reembolsamos e recuperamos">${c?esc(c.motivo_perda||""):""}</textarea>
     <div class="m-lbl">Observação</div>
     <textarea id="caObs" class="m-ta" style="min-height:48px">${c?esc(c.obs||""):""}</textarea>
     <button class="m-save" id="caSave">${c?"Salvar alterações":"Salvar"}</button>
@@ -471,7 +475,7 @@ function openCarteira(tipo, id){
   document.getElementById("caPorte").onclick=e=>{const b=e.target.closest("[data-p]");if(b){P=b.dataset.p;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));}};
   document.getElementById("caSave").onclick=async()=>{
     const nome=nomeEl.value.trim(); if(!nome){ alert("Informe a clínica."); return; }
-    const item={id:c?c.id:null, cod:document.getElementById("caCod").value, cidade:document.getElementById("caCidade").value, nome, tipo:T, porte:P, obs:document.getElementById("caObs").value.trim(), por:meuRep()||"equipe", ts:c?c.ts:Date.now()};
+    const item={id:c?c.id:null, cod:document.getElementById("caCod").value, cidade:document.getElementById("caCidade").value, nome, tipo:T, porte:P, reconq_data:(document.getElementById("caRecData")||{}).value||"", motivo_perda:(document.getElementById("caMotivo")||{}).value.trim(), obs:document.getElementById("caObs").value.trim(), por:meuRep()||"equipe", ts:c?c.ts:Date.now()};
     const btn=document.getElementById("caSave"); btn.disabled=true; btn.textContent="Salvando…";
     const ok=await saveCart(item); if(ok){ clinView=T; closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent=c?"Salvar alterações":"Salvar"; } };
   const del=document.getElementById("caDel"); if(del) del.onclick=async()=>{ if(confirm(`Remover "${c.nome}" da carteira?`)){ await removeCart(c.id); closeModal(); renderTab(); } };
@@ -1609,16 +1613,25 @@ function renderTab(){
     const rsTotal=(ehDiretoria()&&CLIN_RS)?lista.reduce((s,x)=>s+(x.cod&&CLIN_RS[String(x.cod)]!=null?+CLIN_RS[String(x.cod)]:0),0):null;
     const card=x=>{ const m=clinByCod(x.cod), prod=m?m.prod:null, vinc=!!x.cod&&!!m;
       const det=x.cod?CLIN_DET[String(x.cod)]:null;
-      const concentrada=!!(det && CLIN_SETORES.length>=3 && det.cats.length<=1 && (det.falta||[]).length>=2);   // manda 1 setor só = dividindo
+      const prodDesde=(det&&det.prod_desde!=null)?det.prod_desde:null, temMarco=!!x.reconq_data;
+      const concentrada=!!(det && CLIN_SETORES.length>=3 && det.cats.length<=1 && (det.falta||[]).length>=2);
       const flag=(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA)||concentrada;
-      const detLinha=det?`<div class="ci" style="font-size:11.5px;margin-top:2px">📆 recente: <b>${det.prod30||0}</b> em 30d · ${det.prod7||0} em 7d${det.cats&&det.cats.length?` · ✅ manda: ${det.cats.slice(0,4).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}`:""}</div>${(det.falta&&det.falta.length)?`<div class="ci" style="font-size:11.5px;margin-top:1px;color:#ffc266">🎯 NÃO te manda: <b>${det.falta.slice(0,6).map(esc).join(", ")}</b> <span class="t-mut">— oportunidade (vai pra outro lab)</span></div>`:""}`:"";
+      // 🧠 interpretação do agente (share-of-wallet + porte)
+      let interp="";
+      if(det && (det.falta||[]).length) interp=`🧠 Manda ${det.cats.slice(0,3).map(c=>esc(c.setor)).join(", ")||"pouco"}, mas <b>NÃO te manda ${det.falta.slice(0,4).map(esc).join(", ")}</b> — essas classes vão pra outro lab. Puxa essas.`;
+      else if(x.porte==="G" && prod!=null && prod<PORTE_PROD_BAIXA) interp=`🧠 ${det?"Manda todas as classes, MAS ":""}o volume é baixo pra um <b>porte grande</b> — o potencial é bem maior; provavelmente divide a QUANTIDADE com outro lab. Trabalhar.`;
+      else if(det && (det.falta||[]).length===0) interp=`🧠 Manda todas as classes de exame 👍${x.porte==="G"?" (porte grande bem aproveitado)":""}`;
+      const detLinha=det?`<div class="ci" style="font-size:11.5px;margin-top:2px">📆 recente: <b>${det.prod30||0}</b> em 30d · ${det.prod7||0} em 7d${det.cats&&det.cats.length?` · ✅ manda: ${det.cats.slice(0,4).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}`:""}</div>`:"";
+      const prodTxt = (prodDesde!=null&&temMarco) ? `📊 desde a reconquista: <b>${prodDesde}</b> exames` : (prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>');
+      const marcoLinha = temMarco ? `<div class="ci" style="font-size:11.5px;margin-top:2px;color:#7effcf">♻️ ${x.tipo==="nova"?"entrou":"reconquistada"} em <b>${esc(fmtDataBR(x.reconq_data))}</b> <span class="t-mut">(marco zero)</span></div>` : `<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">⚠️ sem marco zero — edite e ponha a data da reconquista</div>`;
+      const perdaLinha = x.motivo_perda ? `<div class="ci" style="font-size:11.5px;margin-top:1px;color:#ffb3c0">💔 perdeu antes: "${esc(x.motivo_perda)}"</div>` : "";
       return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${flag?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
-          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>'} · 💰 ${rsClin(x.cod)}</div>
-          ${detLinha}
+          <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt} · 💰 ${rsClin(x.cod)}</div>
+          ${marcoLinha}${perdaLinha}${detLinha}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
-          ${flag?`<div class="ci" style="color:#ff8fa3;font-weight:600;margin-top:2px">🚩 ${concentrada?"manda pouca variedade de exame — está dividindo com outro lab":"porte grande com produção baixa — provavelmente dividindo exame"} (trabalhar essa clínica)</div>`:""}
+          ${interp?`<div class="ci" style="font-size:11.5px;margin-top:3px;${flag?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div>`:""}
           <div class="ci t-mut" style="font-size:11px;margin-top:2px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
