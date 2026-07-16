@@ -1801,7 +1801,7 @@ function renderTab(){
       const c2Linha=c2?`<div class="ci" style="font-size:11.5px;margin-top:4px;color:${c2.cor};font-weight:${c2.status==="ok"?"500":"700"}">🧠² ${c2.msg}</div>`:"";
       const c2Alerta=!!(c2 && (c2.status==="parou"||c2.status==="caiu"));
       const prodTxt = (prodDesde!=null&&temMarco) ? `📊 desde a reconquista: <b>${prodDesde}</b> exames` : (prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>');
-      const marcoLinha = temMarco ? `<div class="ci" style="font-size:11.5px;margin-top:2px;color:#7effcf">♻️ ${x.tipo==="nova"?"entrou":"reconquistada"} em <b>${esc(fmtDataBR(x.reconq_data))}</b> <span class="t-mut">(marco zero)</span></div>` : `<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">⚠️ sem marco zero — edite e ponha a data da reconquista</div>`;
+      const marcoLinha = temMarco ? `<div class="ci" style="font-size:11.5px;margin-top:2px;color:#7effcf">${x.tipo==="nova"?"🆕 conquistada":"♻️ reconquistada"} em <b>${esc(fmtDataBR(x.reconq_data))}</b> <span class="t-mut">(${x.tipo==="nova"?"data da conquista":"marco zero"})</span></div>` : `<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">⚠️ sem data — edite e ponha a data da ${x.tipo==="nova"?"conquista":"reconquista"}</div>`;
       const perdaLinha = x.motivo_perda ? `<div class="ci" style="font-size:11.5px;margin-top:1px;color:#ffb3c0">💔 perdeu antes: "${esc(x.motivo_perda)}"</div>` : "";
       return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${(flag||mesaBox||c2Alerta)?';border-left:3px solid #FF2D55':''}">
         <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
@@ -1852,9 +1852,11 @@ function renderTab(){
             <button class="checkinbtn" id="verRSrel" type="button" style="margin:10px auto 2px;max-width:320px;border-color:rgba(0,229,160,.5);color:#7effcf;font-weight:700">🔓 Abrir faturamento (senha financeira)</button>
           </div>`;
       } else {
+        const dataBadge=x=> x.reconq_data ? `<span style="color:#7effcf;font-weight:600">${x.tipo==="nova"?"🆕 conquistada":"♻️ reconquistada"} ${esc(fmtDataBR(x.reconq_data))}</span>` : `<span style="color:#ffc266;font-weight:600">${x.tipo==="nova"?"🆕 nova":"♻️ reconq."} · <span class="t-mut">sem data</span></span>`;
         const rows=comRS.map(d=>`<div class="crow" style="cursor:default;align-items:flex-start">
             <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${d.x.tipo==="nova"?"🆕":"♻️"}</div>
             <div style="flex:1"><div class="nm">${esc(d.x.nome)} ${d.x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl[d.x.porte]}</span>`:""} ${c2mini(d.x.cod)}</div>
+              <div class="ci" style="font-size:11.5px">${dataBadge(d.x)}</div>
               <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b>${d.desdeMarco?' <span class="t-mut" style="font-size:10px">desde a reconq.</span>':''} · 📊 ${d.prodBase||0} exames${d.desdeMarco?"":"/12m"} · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
             <div class="mid"></div></div>`).join("");
         const zerLinha=dados.filter(d=>d.rsv==null&&d.x.cod).map(d=>`<div class="ci t-mut" style="font-size:11.5px">• ${esc(d.x.nome)} — sem R$ (0 exames / pendente)</div>`).join("");
