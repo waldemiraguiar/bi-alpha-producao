@@ -1773,7 +1773,7 @@ function renderTab(){
     const semVinc=CARTEIRA.filter(x=>!x.cod).length;
     const porteLbl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno"};
     // R$ total da carteira (só diretoria com R$ aberto)
-    const rsTotal=(ehDiretoria()&&CLIN_RS)?lista.reduce((s,x)=>s+(x.cod&&CLIN_RS[String(x.cod)]!=null?+CLIN_RS[String(x.cod)]:0),0):null;
+    const rsTotal=(ehDiretoria()&&CLIN_RS)?lista.reduce((s,x)=>{ const v=rsVal(x.cod, x.reconq_data); return s+(v!=null?v:0); },0):null;   // desde a data de corte de cada clínica
     const card=x=>{ const m=clinByCod(x.cod), det=x.cod?CLIN_DET[String(x.cod)]:null;
       const prod=(det&&det.prod12!=null)?det.prod12:(m?m.prod:null), vinc=!!x.cod&&(!!m||(det&&det.prod12!=null));   // prod12 = soma dos códigos-extra
       const prodDesde=(det&&det.prod_desde!=null)?det.prod_desde:null, temMarco=!!x.reconq_data;
@@ -1829,8 +1829,10 @@ function renderTab(){
         const zero=!!(det&&Array.isArray(det.recent)&&det.recent.length===0&&!det.prod30);
         const desdeMarco=!!(x.reconq_data && det && det.prod_desde!=null);
         return {x,prod,prodBase,rsv,tk,falta,zero,desdeMarco}; });
-      const totRS=dados.reduce((s,d)=>s+(d.rsv||0),0), totEx=dados.reduce((s,d)=>s+(d.prod||0),0);
+      // TUDO em função da DATA DE CORTE (reconquista/conquista): R$ e exames contam desde o marco de cada clínica
+      const totRS=dados.reduce((s,d)=>s+(d.rsv||0),0), totEx=dados.reduce((s,d)=>s+(d.prodBase||0),0);
       const tkGeral=totEx?totRS/totEx:0;
+      const semDataN=dados.filter(d=>d.rsv!=null && !d.desdeMarco).length;   // clínicas ainda sem data de corte (caem no 12m)
       const comRS=dados.filter(d=>d.rsv!=null).sort((a,b)=>b.rsv-a.rsv);
       const mediaRS=comRS.length?totRS/comRS.length:0;
       // regras de mercado (interpretação automática)
@@ -1863,10 +1865,10 @@ function renderTab(){
         painel=`
           <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}</div>
           <div class="kgrid">
-            ${kpi("g", fmtBRL(totRS), "Faturamento total", "12m · carteira vinculada")}
-            ${kpi("", totEx, "Exames (12m)", "produção somada")}
+            ${kpi("g", fmtBRL(totRS), "Faturamento total", "desde a data de corte")}
+            ${kpi("", totEx, "Exames", "desde a reconq./conquista")}
             ${kpi("", fmtBRL(tkGeral), "Ticket médio", "R$ por exame")}
-            ${kpi("g", comRS.length, "Clínicas com R$", `${dados.length} na carteira`)}
+            ${kpi("g", comRS.length, "Clínicas com R$", semDataN?`${semDataN} ainda sem data (12m)`:`${dados.length} na carteira`)}
           </div>
           <div class="seclabel" style="margin:12px 0 6px">💰 Faturamento por clínica <span class="t-mut" style="font-weight:500;font-size:11px">(maior → menor)</span></div>
           ${rows||'<div class="t-mut" style="font-size:12.5px">Sem R$ vinculado ainda.</div>'}
@@ -1924,7 +1926,7 @@ function renderTab(){
         ${kpi("", CL, "Master HF", CLIN_TS?("sinc. "+new Date(CLIN_TS).toLocaleDateString("pt-BR")):"aguardando robô")}
       </div>
       ${!CL?`<div class="proxhint" style="border-color:rgba(255,138,0,.4);color:#ffc266;margin-bottom:12px">⏳ A lista de clínicas do HF ainda não chegou (o robô sincroniza a cada ciclo). O autocomplete liga assim que ela vier.</div>`:""}
-      ${!ehDiretoria()?"":(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto · faturamento 12m desta lista: <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Abrir faturamento em R$ (senha financeira)</button>`)}
+      ${!ehDiretoria()?"":(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto · faturamento desta lista (desde a data de corte): <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Abrir faturamento em R$ (senha financeira)</button>`)}
       ${(()=>{ const z=CARTEIRA.filter(x=>{ const d=x.cod?CLIN_DET[String(x.cod)]:null; return x.cod&&d&&Array.isArray(d.recent)&&d.recent.length===0&&!d.prod30; });
         if(!z.length) return "";
         return `<div class="proxhint" style="border-color:rgba(255,45,85,.55);color:#ff8fa3;margin-bottom:12px;line-height:1.55">
