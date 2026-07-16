@@ -109,12 +109,20 @@ def enrich(x):
         byweek[week_key(e.get("d", ""))] = byweek.get(week_key(e.get("d", "")), 0) + 1
         if e.get("pet"):
             pets.add(e["pet"])
+    # produção 12m considerando códigos-extra (prod12 do det sobrepõe o master)
+    prod12u = (d or {}).get("prod12")
+    if prod12u is None:
+        prod12u = prod
+    # PRODUÇÃO EM FUNÇÃO DA DATA DE CORTE: desde o marco se houver, senão 12m (com aviso)
+    desde_corte = bool(marco and prod_desde is not None)
+    prod_corte = prod_desde if desde_corte else prod12u
     concentrada = bool(d and len((d.get("cats") or [])) <= 1 and len(falta) >= 2)
-    flag = (x.get("porte") == "G" and prod is not None and prod < PORTE_PROD_BAIXA) or concentrada
-    # 🚨 comissão paga mas 0 exames: está na carteira (alguém ganhou comissão) e o HF confirma 0 no período
-    zero = bool(m) and (rec_n == 0) and ((prod_desde in (0, None)) if marco else (prod in (0, None)))
+    flag = (x.get("porte") == "G" and (prod12u or 0) < PORTE_PROD_BAIXA and prod12u is not None) or concentrada
+    # 🚨 comissão paga mas 0 exames
+    zero = bool(m) and (rec_n == 0) and ((prod_desde in (0, None)) if marco else ((prod12u or 0) == 0))
     return {"nome": x.get("nome", ""), "cidade": x.get("cidade", ""), "tipo": x.get("tipo", "nova"),
-            "porte": x.get("porte", ""), "prod": prod, "rs": rs, "flag": flag, "vinc": bool(m),
+            "porte": x.get("porte", ""), "prod": prod, "prod12u": prod12u, "prod_corte": prod_corte, "desde_corte": desde_corte,
+            "rs": rs, "flag": flag, "vinc": bool(m),
             "prod30": (d or {}).get("prod30"), "falta": falta, "cats": (d or {}).get("cats", []) or [],
             "rec_n": rec_n, "rec_desde": rec_desde, "byweek": byweek, "pets": len(pets),
             "marco": marco, "prod_desde": prod_desde, "motivo_perda": x.get("motivo_perda", ""), "zero": zero,
@@ -123,33 +131,46 @@ def enrich(x):
 linhas = [enrich(x) for x in carteira]
 nov = [l for l in linhas if l["tipo"] == "nova"]
 rec = [l for l in linhas if l["tipo"] == "reconquistada"]
-prod_total = sum((l["prod"] or 0) for l in linhas)
+prod_total = sum((l["prod_corte"] or 0) for l in linhas)   # exames DESDE A DATA DE CORTE (coerente com o R$)
 rs_total = sum((l["rs"] or 0) for l in linhas if l["rs"] is not None)
+sem_data_n = sum(1 for l in linhas if l["vinc"] and not l["desde_corte"])   # ainda sem data de corte (caem no 12m)
 flags = [l for l in linhas if l["flag"]]
 zerados = [l for l in linhas if l["zero"]]   # comissão paga mas 0 exames (auditoria)
 parou = [l for l in linhas if l.get("c2") and l["c2"]["status"] == "parou"]
 caiu = [l for l in linhas if l.get("c2") and l["c2"]["status"] == "caiu"]
 
+def fmt_data(iso):
+    try:
+        d = datetime.date.fromisoformat(str(iso)[:10]); return d.strftime("%d/%m")
+    except Exception:
+        return "—"
+
 def tabela(items):
     if not items:
         return "<p style='color:#888'>— nenhuma —</p>"
     rows = ""
-    for l in sorted(items, key=lambda z: -(z["prod"] or 0)):
+    for l in sorted(items, key=lambda z: -(z["prod_corte"] or 0)):
         rsc = brl(l["rs"]) if l["rs"] is not None else ("—" if not l["vinc"] else "R$ —")
         flagtxt = " <b style='color:#c0392b'>🚩 trabalhar</b>" if l["flag"] else ""
         vinc = "" if l["vinc"] else " <span style='color:#e67e22'>⚠️ pendente</span>"
+        ico = "🆕" if l["tipo"] == "nova" else "♻️"
+        data = f"{ico} {fmt_data(l['marco'])}" if l["marco"] else f"{ico} <span style='color:#e67e22'>sem data</span>"
+        prodc = l["prod_corte"] if l["prod_corte"] is not None else "—"
+        prodc_s = f"{prodc}" + ("" if l["desde_corte"] else " <span style='color:#999;font-size:12px'>(12m)</span>")
         rows += (f"<tr><td style='padding:6px 8px;border-bottom:1px solid #eee'>{l['nome']}{vinc}{flagtxt}</td>"
                  f"<td style='padding:6px 8px;border-bottom:1px solid #eee'>{l['cidade']}</td>"
                  f"<td style='padding:6px 8px;border-bottom:1px solid #eee'>{PORTE_LBL.get(l['porte'],'—')}</td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:right'>{l['prod'] if l['prod'] is not None else '—'}</td>"
+                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee'>{data}</td>"
+                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:right'>{prodc_s}</td>"
                  f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:right'>{rsc}</td></tr>")
     return ("<table style='border-collapse:collapse;width:100%;font-size:14px'>"
             "<tr style='background:#0A1628;color:#fff'><th style='padding:6px 8px;text-align:left'>Clínica</th>"
             "<th style='padding:6px 8px;text-align:left'>Cidade</th><th style='padding:6px 8px;text-align:left'>Porte</th>"
-            "<th style='padding:6px 8px;text-align:right'>Produção 12m</th><th style='padding:6px 8px;text-align:right'>R$ 12m</th></tr>"
+            "<th style='padding:6px 8px;text-align:left'>Corte</th>"
+            "<th style='padding:6px 8px;text-align:right'>Exames (desde corte)</th><th style='padding:6px 8px;text-align:right'>R$ (desde corte)</th></tr>"
             + rows + "</table>")
 
-flagtxt = ("".join(f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}) — {l['prod']} exames/12m"
+flagtxt = ("".join(f"<li><b>{l['nome']}</b> ({PORTE_LBL.get(l['porte'])}) — {l['prod_corte']} exames desde o corte"
                    + (f"; <b>não te manda: {', '.join(l['falta'][:6])}</b> (vai pra outro lab)" if l['falta'] else "; provavelmente dividindo exame")
                    + "</li>" for l in flags)
            or "<li>Nenhuma clínica sinalizada 👍</li>")
@@ -229,7 +250,8 @@ drill_html = (drill(rec) + drill(nov)) or "<p style='color:#888;font-size:13px'>
 
 html = f"""<div style='font-family:Arial;max-width:820px;margin:auto;color:#1a1a1a'>
 <h2 style='color:#0A1628'>🏥 Relatório de Clínicas — {label}</h2>
-<p style='font-size:15px'><b>{len(rec)}</b> reconquistadas · <b>{len(nov)}</b> novas · produção somada <b>{prod_total}</b> exames/12m · faturamento <b>{brl(rs_total)}</b>{(' · <b style=color:#c0392b>🚨 ' + str(len(zerados)) + ' zeradas</b>') if zerados else ''}</p>
+<p style='font-size:15px'><b>{len(rec)}</b> reconquistadas · <b>{len(nov)}</b> novas · <b>{prod_total}</b> exames e faturamento <b>{brl(rs_total)}</b> <span style='color:#555;font-size:13px'>(desde a data de corte de cada uma)</span>{(' · <b style=color:#c0392b>🚨 ' + str(len(zerados)) + ' zeradas</b>') if zerados else ''}{(" · <span style='color:#e67e22'>" + str(sem_data_n) + " sem data (12m)</span>") if sem_data_n else ''}</p>
+<p style='font-size:12.5px;color:#666;margin-top:-6px'>📅 Todo o raciocínio (R$ + exames) conta <b>a partir da data de reconquista/conquista</b> de cada clínica — não 12 meses cheios. Clínicas sem data preenchida caem no 12m até a equipe lançar.</p>
 {ritmo_html}
 {zero_html}
 {mesa_html}
