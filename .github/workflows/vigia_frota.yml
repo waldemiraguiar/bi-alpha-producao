@@ -26,6 +26,7 @@ jobs:
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
           CALLMEBOT_PHONE:    ${{ secrets.CALLMEBOT_PHONE }}
           CALLMEBOT_APIKEY:   ${{ secrets.CALLMEBOT_APIKEY }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           python3 - <<'PY'
           import os, json, urllib.request, urllib.parse, datetime, time, smtplib, ssl
@@ -101,6 +102,48 @@ jobs:
                       u=("https://api.callmebot.com/whatsapp.php?phone="+urllib.parse.quote(ph)+"&text="+urllib.parse.quote(wa)+"&apikey="+urllib.parse.quote(ak))
                       urllib.request.urlopen(u,timeout=30).read(); print("whatsapp enviado")
               except Exception as e: print("whatsapp falhou:",e)
+
+          # ---- RAJADA DE DEPLOY (caça-runaway) — roda toda rodada (a cada 15 min) ----
+          # Conta deploys de PRODUÇÃO de TODOS os sites nos últimos ~35 min. Loop de máquina
+          # dispara muitos rápido (passa do limite); dev manual do Wal faz poucos com pausa (não passa).
+          # Baseado em TAXA (não total/dia) → não precisa de estado e não spama nos dias de dev.
+          BURST_MIN=35; BURST_N=12
+          try:
+              NT=os.environ.get("NETLIFY_AUTH_TOKEN","").strip()
+              if NT:
+                  def napi(p):
+                      r=urllib.request.Request("https://api.netlify.com/api/v1"+p,headers={"Authorization":"Bearer "+NT})
+                      return json.load(urllib.request.urlopen(r,timeout=25))
+                  corte=datetime.datetime.utcnow()-datetime.timedelta(minutes=BURST_MIN)
+                  quentes=[]
+                  for s in napi("/sites?per_page=100"):
+                      sid=s.get("id"); nm=s.get("name","")
+                      if not sid: continue
+                      try: deps=napi(f"/sites/{sid}/deploys?per_page=100")
+                      except Exception: continue
+                      n=0
+                      for d in deps:
+                          if d.get("context")!="production": continue
+                          ts=(d.get("created_at") or "")[:19]
+                          try: t=datetime.datetime.strptime(ts,"%Y-%m-%dT%H:%M:%S")
+                          except Exception: continue
+                          if t>=corte: n+=1
+                      if n>=BURST_N: quentes.append((nm,n))
+                  if quentes:
+                      det=", ".join(f"{nm}: {n} deploys/{BURST_MIN}min" for nm,n in quentes)
+                      alerta("🔥 RAJADA de deploy — possível runaway",
+                             (f"ATENÇÃO Wal ({agora}): rajada de deploys AGORA — pode ser loop/auto-deploy "
+                              f"desgovernado queimando crédito.\n\n🔥 {det}\n\n"
+                              f"Se foi VOCÊ publicando, ignore. Se NÃO foi, entre e corte o disparo — cada deploy "
+                              f"~15 créditos (~US$0,10); um loop custa centenas antes de alguém perceber."),
+                             f"🔥 Rajada de deploy ({agora}): {det}. Se não foi você, é runaway — corte o disparo.")
+                      print("RAJADA:",det)
+                  else:
+                      print("rajada: nenhuma (limite %d/%dmin)"%(BURST_N,BURST_MIN))
+              else:
+                  print("rajada: NETLIFY_AUTH_TOKEN ausente")
+          except Exception as e:
+              print("burst check falhou:",e)
 
           # PANE (qualquer check falhou) -> alerta NA HORA
           if falhas:
