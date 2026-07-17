@@ -201,6 +201,7 @@ def clinic_fat_mensal(since_map, alias=None):
             datetime.date.fromisoformat(dt)
         except Exception:
             continue
+        dt = dt[:7] + "-01"   # MÊS CHEIO da entrada (escolha do Wal): entrou 26/05 → conta maio inteiro
         rows = q(f"SELECT DATE_FORMAT(s.DataExame,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
                  f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
                  f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s GROUP BY ym", (cod, dt, maxd))

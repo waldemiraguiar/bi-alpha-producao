@@ -120,7 +120,7 @@ def enrich(x):
     flag = (x.get("porte") == "G" and (prod12u or 0) < PORTE_PROD_BAIXA and prod12u is not None) or concentrada
     # 🚨 comissão paga mas 0 exames
     zero = bool(m) and (rec_n == 0) and ((prod_desde in (0, None)) if marco else ((prod12u or 0) == 0))
-    return {"nome": x.get("nome", ""), "cidade": x.get("cidade", ""), "tipo": x.get("tipo", "nova"),
+    return {"cod": cod, "nome": x.get("nome", ""), "cidade": x.get("cidade", ""), "tipo": x.get("tipo", "nova"),
             "porte": x.get("porte", ""), "prod": prod, "prod12u": prod12u, "prod_corte": prod_corte, "desde_corte": desde_corte,
             "rs": rs, "flag": flag, "vinc": bool(m),
             "prod30": (d or {}).get("prod30"), "falta": falta, "cats": (d or {}).get("cats", []) or [],
@@ -248,10 +248,42 @@ def drill(items):
 
 drill_html = (drill(rec) + drill(nov)) or "<p style='color:#888;font-size:13px'>Detalhe por clínica chega quando o robô sincroniza o drill-down.</p>"
 
+# 💰 SAFRA — dinheiro mês a mês por clínica desde o marco zero (o pedido do Wal: entender o dinheiro entrando por mês)
+_MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+def _mlab(ym):
+    y, m = ym.split("-"); return _MES[int(m) - 1] + "/" + y[2:]
+fatmes = rsmap.get("fatmes") or {}
+safra_rows = [l for l in linhas if l.get("cod") and (fatmes.get(l["cod"]) or [])]
+safra_rows.sort(key=lambda l: -sum(mm["fat"] for mm in fatmes.get(l["cod"], [])))
+meses = sorted({mm["ym"] for l in safra_rows for mm in fatmes.get(l["cod"], [])})
+if safra_rows and meses:
+    tot_col = {ym: 0.0 for ym in meses}; grand = 0.0
+    trs = []
+    for l in safra_rows:
+        arr = {mm["ym"]: mm["fat"] for mm in fatmes.get(l["cod"], [])}
+        tot = sum(arr.values()); grand += tot
+        for ym in meses:
+            tot_col[ym] += arr.get(ym, 0)
+        cells = "".join(f"<td style='text-align:right;padding:4px 8px;color:{'#0A7A3B' if arr.get(ym) else '#bbb'}'>{brl(arr[ym]) if arr.get(ym) else '–'}</td>" for ym in meses)
+        ic = "🆕" if l["tipo"] == "nova" else "♻️"
+        trs.append(f"<tr><td style='padding:4px 8px;border-right:1px solid #eee'>{ic} {l['nome']}</td>{cells}<td style='text-align:right;padding:4px 8px;font-weight:bold;color:#0A7A3B'>{brl(tot)}</td></tr>")
+    head = "".join(f"<th style='text-align:right;padding:4px 8px;color:#555'>{_mlab(ym)}</th>" for ym in meses)
+    foot = "".join(f"<td style='text-align:right;padding:4px 8px;font-weight:bold'>{brl(tot_col[ym])}</td>" for ym in meses)
+    safra_html = (f"<h3 style='color:#0A1628;margin-top:18px'>💰 Dinheiro por mês (safra) — desde a entrada de cada clínica</h3>"
+                  f"<p style='font-size:12.5px;color:#666;margin:2px 0 6px'>Cada coluna = o que a clínica trouxe naquele mês desde que voltou. O <b>TOTAL</b> embaixo é o quanto a carteira já recuperou — sua munição pra estimular o time.</p>"
+                  f"<table style='border-collapse:collapse;font-size:13px;width:100%'>"
+                  f"<thead><tr style='background:#f0f5fa'><th style='text-align:left;padding:4px 8px'>Clínica</th>{head}<th style='text-align:right;padding:4px 8px'>Total</th></tr></thead>"
+                  f"<tbody>{''.join(trs)}</tbody>"
+                  f"<tfoot><tr style='border-top:2px solid #0A7A3B;background:#f0faf4'><td style='padding:4px 8px;font-weight:bold'>TOTAL RECUPERADO</td>{foot}<td style='text-align:right;padding:4px 8px;font-weight:bold;color:#0A7A3B;font-size:15px'>{brl(grand)}</td></tr></tfoot>"
+                  f"</table>")
+else:
+    safra_html = ""
+
 html = f"""<div style='font-family:Arial;max-width:820px;margin:auto;color:#1a1a1a'>
 <h2 style='color:#0A1628'>🏥 Relatório de Clínicas — {label}</h2>
 <p style='font-size:15px'><b>{len(rec)}</b> reconquistadas · <b>{len(nov)}</b> novas · <b>{prod_total}</b> exames e faturamento <b>{brl(rs_total)}</b> <span style='color:#555;font-size:13px'>(desde a data de corte de cada uma)</span>{(' · <b style=color:#c0392b>🚨 ' + str(len(zerados)) + ' zeradas</b>') if zerados else ''}{(" · <span style='color:#e67e22'>" + str(sem_data_n) + " sem data (12m)</span>") if sem_data_n else ''}</p>
 <p style='font-size:12.5px;color:#666;margin-top:-6px'>📅 Todo o raciocínio (R$ + exames) conta <b>a partir da data de reconquista/conquista</b> de cada clínica — não 12 meses cheios. Clínicas sem data preenchida caem no 12m até a equipe lançar.</p>
+{safra_html}
 {ritmo_html}
 {zero_html}
 {mesa_html}
