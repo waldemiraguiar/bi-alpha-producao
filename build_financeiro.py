@@ -178,6 +178,42 @@ def clinic_fat_since(since_map, alias=None):
     conn.close()
     return out
 
+def clinic_fat_mensal(since_map, alias=None):
+    """Faturamento REAL mês a mês por clínica DESDE o marco zero → {cod_principal: [{ym, n, fat}, ...]} ordenado.
+    Soma código-extra no principal (alias). CIFRADO (diretoria) — dinheiro entrando por mês p/ estimular a equipe."""
+    since_map = {str(k): str(v or "")[:10] for k, v in (since_map or {}).items() if k is not None and str(v or "")}
+    alias = {str(k): str(v) for k, v in (alias or {}).items()}
+    if not since_map:
+        return {}
+    def prim(cod): return alias.get(str(cod), str(cod))
+    todo = {}
+    for cod in set(list(since_map.keys()) + list(alias.keys())):
+        dt = since_map.get(prim(cod))
+        if dt: todo[str(cod)] = dt
+    if not todo:
+        return {}
+    conn = pymysql.connect(**SRC); c = conn.cursor()
+    def q(sql, p=()): c.execute(sql, p); return c.fetchall()
+    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    acc = {}   # {prim: {ym: [n, fat]}}
+    for cod, dt in todo.items():
+        try:
+            datetime.date.fromisoformat(dt)
+        except Exception:
+            continue
+        rows = q(f"SELECT DATE_FORMAT(s.DataExame,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
+                 f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                 f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s GROUP BY ym", (cod, dt, maxd))
+        p = prim(cod); m = acc.setdefault(p, {})
+        for x in rows:
+            ym = x["ym"]; cur = m.setdefault(ym, [0, 0.0])
+            cur[0] += int(x["n"] or 0); cur[1] += float(x["f"] or 0)
+    conn.close()
+    out = {}
+    for p, m in acc.items():
+        out[p] = [{"ym": ym, "n": m[ym][0], "fat": round(m[ym][1], 2)} for ym in sorted(m)]
+    return out
+
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()

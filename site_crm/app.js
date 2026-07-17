@@ -335,7 +335,7 @@ async function loadOps(){ try{ const r=await fetch(OPS_API); if(r.ok) syncOps((a
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
-function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
 function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -430,7 +430,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde o marco} decifrados (só diretoria)
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde o marco} + {cod:[{ym,n,fat}]} mês a mês (só diretoria)
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -439,8 +439,8 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; }   // formato novo {fat, desde}
-    else { CLIN_RS=obj; CLIN_RS_DESDE={}; }   // compat formato antigo (mapa plano)
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; }   // formato novo {fat, desde, fatmes}
+    else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
 /* R$ da clínica: se ela tem marco zero e há R$ desde o marco, usa esse (reconquista conta da volta); senão 12m */
@@ -1372,6 +1372,16 @@ function openExames(cod, nome){
   const catCount={}; rec.forEach(e=>{ const k=e.cat||"(sem categoria)"; catCount[k]=(catCount[k]||0)+1; });
   const catsResumo=Object.entries(catCount).sort((a,b)=>b[1]-a[1]);
   const petsTot=new Set(rec.map(e=>e.pet).filter(Boolean)).size;
+  const dir=ehDiretoria(), fmes=(dir&&CLIN_FATMES&&CLIN_FATMES[cod])?CLIN_FATMES[cod]:null;
+  // 💰 dinheiro entrando mês a mês desde o marco zero (SÓ diretoria) — pra estimular a equipe sem mostrar R$ a eles
+  let moneyHTML="";
+  if(dir&&fmes&&fmes.length){ let acc=0; const rows=fmes.map(m=>{ acc+=m.fat; return `<tr><td style="padding:4px 8px">${mesLabel(m.ym)}</td><td style="padding:4px 8px;text-align:right">${m.n}</td><td style="padding:4px 8px;text-align:right;color:#7effcf;font-weight:700">${fmtBRL(m.fat)}</td><td style="padding:4px 8px;text-align:right;color:#9fe6ff">${fmtBRL(acc)}</td></tr>`; }).join("");
+    moneyHTML=`<div style="background:rgba(0,229,160,.07);border:1px solid rgba(0,229,160,.3);border-radius:8px;padding:10px;margin:10px 0">
+      <div style="font-weight:700;color:#7effcf;font-size:13px;margin-bottom:6px">💰 Dinheiro entrando por mês <span class="t-mut" style="font-weight:500">— desde o marco zero${desde?" ("+esc(fmtDataBR(desde))+")":""}</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--mut);font-size:11px"><th style="text-align:left;padding:2px 8px">Mês</th><th style="text-align:right;padding:2px 8px">Exames</th><th style="text-align:right;padding:2px 8px">R$ no mês</th><th style="text-align:right;padding:2px 8px">Acumulado</th></tr></thead><tbody>${rows}</tbody></table>
+      <div style="text-align:right;font-weight:800;color:#00E5A0;margin-top:6px">Total recuperado: ${fmtBRL(acc)}</div>
+      <div class="t-mut" style="font-size:10.5px;margin-top:3px">🔒 Só a diretoria vê R$. A equipe vê exames/PET — não o dinheiro. É essa informação que você usa pra estimular o time (“olha o que a gente estava perdendo”).</div></div>`;
+  }
   const render=()=>{
     let groups=[];
     if(EX_VIEW==="dia"){ const by={}; rec.forEach(e=>{ (by[e.d]=by[e.d]||[]).push(e); }); groups=Object.keys(by).sort().reverse().map(k=>({label:fmtDataBR(k), items:by[k]})); }
@@ -1402,10 +1412,12 @@ function openExames(cod, nome){
       <div class="m-head"><div><div class="m-cli">🔬 ${esc(nome||"Clínica")}</div>
         <div class="t-mut" style="font-size:12.5px;margin-top:2px">exames lançados no HF · cod <b>${esc(cod)}</b>${desde?` · desde ${esc(fmtDataBR(desde))}`:""}</div></div>
         <button class="m-x" id="mClose">✕</button></div>
+      ${moneyHTML}
       ${zero?`<div class="proxhint" style="border-color:rgba(255,45,85,.5);color:#ff8fa3;line-height:1.5">
           ⚠️ <b>0 exames</b> neste código (${esc(cod)})${desde?` desde ${esc(fmtDataBR(desde))}`:""}.<br>
-          Se a comissão já saiu, provavelmente é: (1) comissão de <b>reconquista</b> (paga na volta, antes do volume) — normal; ou (2) os exames estão sendo lançados em <b>outro cadastro/código</b> no HF; ou (3) ainda não digitaram.<br>
-          <span class="t-mut">👉 confira no HF pelo nome da clínica e me passa o código certo que eu revinculo — a produção passa a bater na hora.</span></div>`:`
+          Conferi no HF por todos os ângulos (requisição por data de entrada + exames com data futura/nula): <b>nada foi lançado neste cadastro</b>.<br>
+          Se a comissão já saiu, provavelmente é: (1) comissão de <b>reconquista</b> (paga na volta, antes do volume) — normal; ou (2) os exames entram em <b>outro cadastro/código</b> no HF; ou (3) ainda não digitaram.
+          ${(function(){ const sim=(typeof matchClinicas==="function"?matchClinicas(nome||""):[]).filter(m=>String(m.cod)!==cod&&(m.prod||0)>0).slice(0,6); return sim.length?`<div style="margin-top:8px;color:#9fe6ff;font-size:12px">🔎 Cadastros parecidos <b>com produção</b> (possível código certo):</div>${sim.map(m=>`<div style="font-size:12px;margin-top:2px">• <b>${esc(m.nome)}</b>${m.cidade?" · "+esc(m.cidade):""} · cod <b>${esc(m.cod)}</b> · 📊 ${m.prod||0}</div>`).join("")}<div class="t-mut" style="font-size:11px;margin-top:6px">Se for a mesma clínica, edite e vincule a esse código — ou me avise que eu somo os dois como código-extra.</div>`:`<br><span class="t-mut">👉 confira no HF pelo nome e me passa o código certo que eu revinculo.</span>`; })()}</div>`:`
         <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;line-height:1.5">
           📊 <b>${rec.length}</b> exames · 🐾 <b>${petsTot}</b> pets${desde?` · desde ${esc(fmtDataBR(desde))}`:""}${mais?` <span class="t-mut">(mostrando os ${rec.length} mais recentes)</span>`:""}<br>
           <span style="font-size:11.5px">${catsResumo.map(([k,v])=>`${esc(k)} <b>${v}</b>`).join(" · ")}</span></div>

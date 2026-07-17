@@ -206,7 +206,7 @@ def post_clinicas_rs(D):
         return
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
     # R$ da carteira: marco zero (desde) + soma dos CÓDIGOS-EXTRA no principal (Faro: 989898 + 5724)
-    desde = {}
+    desde = {}; fatmes = {}
     try:
         import urllib.request as _u
         base0 = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
@@ -219,9 +219,10 @@ def post_clinicas_rs(D):
             for e in (c.get("cods_extra") or []):
                 e = str(e).strip()
                 if e: alias[e] = str(p); extras.append(e)
-        from build_financeiro import clinic_fat_since, clinic_fat_12m
+        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal
         if since_map:
             desde = clinic_fat_since(since_map, alias)
+            fatmes = clinic_fat_mensal(since_map, alias)   # dinheiro mês a mês desde o marco zero (cifrado, diretoria)
         # soma o 12m dos códigos-extra (órfãos) no principal, pra o R$ 12m também ficar certo
         if extras:
             ex12 = clinic_fat_12m(extras)
@@ -230,7 +231,7 @@ def post_clinicas_rs(D):
                     rsmap[p] = round(rsmap.get(p, 0) + ex12[e], 2)
     except Exception as e:
         print(f"post_clinicas_rs: R$ desde/extra pulado ({e})")
-    data = json.dumps({"fat": rsmap, "desde": desde}, ensure_ascii=False, separators=(",", ":")).encode()
+    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
     ct = AESGCM(key).encrypt(iv, data, None)
