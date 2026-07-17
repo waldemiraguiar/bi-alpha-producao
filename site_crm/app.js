@@ -1874,6 +1874,29 @@ function renderTab(){
               <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b>${d.desdeMarco?' <span class="t-mut" style="font-size:10px">desde a reconq.</span>':''} · 📊 ${d.prodBase||0} exames${d.desdeMarco?"":"/12m"} · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
             <div class="mid"></div></div>`).join("");
         const zerLinha=dados.filter(d=>d.rsv==null&&d.x.cod).map(d=>`<div class="ci t-mut" style="font-size:11.5px">• ${esc(d.x.nome)} — sem R$ (0 exames / pendente)</div>`).join("");
+        // 💰 SAFRA — dinheiro mês a mês por clínica desde o marco zero (matriz consolidada, pedido do Wal)
+        let cohortHtml="";
+        if(CLIN_FATMES){
+          const fmRows=comRS.map(d=>({nome:d.x.nome,tipo:d.x.tipo,arr:(CLIN_FATMES[String(d.x.cod)]||[])})).filter(r=>r.arr.length);
+          const mset={}; fmRows.forEach(r=>r.arr.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort();
+          if(fmRows.length&&meses.length){
+            const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
+            const fatOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?x.fat:0;};
+            const totCol={}; meses.forEach(ym=>totCol[ym]=0); let grand=0;
+            const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:5px 8px;border-right:1px solid rgba(0,229,160,.25)";
+            const th="padding:5px 8px;text-align:right;color:var(--mut);font-size:10.5px";
+            const td="padding:5px 8px;text-align:right";
+            const body=fmRows.map(r=>{const tot=r.arr.reduce((s,a)=>s+a.fat,0);grand+=tot;meses.forEach(ym=>totCol[ym]+=fatOf(r.arr,ym));
+              return `<tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="${sc}">${r.tipo==='nova'?'🆕':'♻️'} ${esc(r.nome)}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:#00E5A0">${fmtBRL(tot)}</td></tr>`;}).join("");
+            const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
+            cohortHtml=`<div class="seclabel" style="margin:14px 0 6px">💰 Dinheiro por mês <span class="t-mut" style="font-weight:500;font-size:11px">(safra — desde a entrada de cada clínica)</span></div>
+              <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,229,160,.25);border-radius:8px">
+                <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
+                  <thead><tr style="background:rgba(0,229,160,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#7effcf">Total</th></tr></thead>
+                  <tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
+              <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Cada linha = uma clínica recuperada; cada coluna = o dinheiro que ela trouxe naquele mês desde que voltou. O <b>TOTAL</b> embaixo é o quanto a carteira já recuperou — sua munição pra estimular o time (a equipe não vê R$).</div>`;
+          }
+        }
         painel=`
           <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}</div>
           <div class="kgrid">
@@ -1885,6 +1908,7 @@ function renderTab(){
           <div class="seclabel" style="margin:12px 0 6px">💰 Faturamento por clínica <span class="t-mut" style="font-weight:500;font-size:11px">(maior → menor)</span></div>
           ${rows||'<div class="t-mut" style="font-size:12.5px">Sem R$ vinculado ainda.</div>'}
           ${zerLinha?`<div style="margin-top:6px">${zerLinha}</div>`:""}
+          ${cohortHtml}
           <div class="card" style="margin:14px 0 6px;border-color:rgba(0,212,255,.3)">
             <h3>🧠 Como ler isso (regras de mercado)</h3>
             <div style="font-size:12.5px;line-height:1.65">${regras.map(r=>`<div style="margin:4px 0">${r}</div>`).join("")}</div>
