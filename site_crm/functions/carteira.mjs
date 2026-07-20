@@ -34,7 +34,7 @@ export default async (req) => {
         cods_extra: Array.isArray(it.cods_extra) ? [...new Set(it.cods_extra.map((x) => String(x).replace(/\D/g, "").slice(0, 20)).filter(Boolean))].slice(0, 10) : [],   // códigos-extra do HF (mesma clínica, cadastro duplicado/órfão)
         nome: String(it.nome || "").slice(0, 120),
         cidade: String(it.cidade || "").slice(0, 80),
-        tipo: it.tipo === "reconquistada" ? "reconquistada" : "nova",
+        tipo: ["reconquistada", "divide"].includes(it.tipo) ? it.tipo : "nova",   // divide = clínica que reparte material (só manda 1 categoria)
         porte: ["P", "M", "G"].includes(it.porte) ? it.porte : "",
         reconq_data: String(it.reconq_data || "").slice(0, 20),   // MARCO ZERO: data da reconquista/entrada — produção conta a partir daqui
         motivo_perda: String(it.motivo_perda || "").slice(0, 400), // por que tinha perdido antes (histórico)

@@ -399,6 +399,8 @@ const REL_API="/api/crm-relatorios"; let RELATORIOS=[];
 async function loadRel(){ try{ const r=await fetch(REL_API); if(r.ok) RELATORIOS=((await r.json()).relatorios||[]).slice().sort((a,b)=>(a.id<b.id?1:-1)); }catch(e){} }
 let CLIN_DET={}, CLIN_SETORES=[];   // share-of-wallet por clínica (setores que manda / não manda + prod 30d/7d) — SEM R$
 async function loadDet(){ try{ const r=await fetch("/api/crm-clinicas-det"); if(r.ok){ const j=await r.json(); CLIN_DET=(j&&j.det)||{}; CLIN_SETORES=(j&&j.setores)||[]; } }catch(e){} }
+let AAA=[], AAA_TS=0, AAA_SETORES=[], AAA_PCT=80;   // clínicas Triplo A (top faturamento 12m, curva A) + share-of-wallet 12m (ordem = ranking; SEM R$ no payload)
+async function loadAAA(){ try{ const r=await fetch("/api/crm-aaa"); if(r.ok){ const j=await r.json(); AAA=(j&&j.aaa)||[]; AAA_TS=(j&&j.ts)||0; AAA_SETORES=(j&&j.setores)||[]; AAA_PCT=(j&&j.pct)||80; } }catch(e){} }
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
@@ -529,7 +531,7 @@ function openCarteira(tipo, id){
     <input type="hidden" id="caCod" value="${c?esc(c.cod||""):""}"><input type="hidden" id="caCidade" value="${c?esc(c.cidade||""):""}">
     <div id="caVinc" class="proxhint" style="display:${(c&&c.cod)?"block":"none"}">${(c&&c.cod)?("🔗 vinculada ao HF"+(c.cidade?" · "+esc(c.cidade):"")):""}</div>
     <div class="m-lbl">Tipo</div>
-    <div class="m-opts" id="caTipo"><button class="opt${T==="reconquistada"?" on":""}" data-t="reconquistada">♻️ Reconquistada</button><button class="opt${T==="nova"?" on":""}" data-t="nova">🆕 Nova</button></div>
+    <div class="m-opts" id="caTipo"><button class="opt${T==="reconquistada"?" on":""}" data-t="reconquistada">♻️ Reconquistada</button><button class="opt${T==="nova"?" on":""}" data-t="nova">🆕 Nova</button><button class="opt${T==="divide"?" on":""}" data-t="divide">🔀 Divide material</button></div>
     <div class="m-lbl">Porte <span class="t-mut" style="font-weight:500">— ajuda a saber se manda muito ou pouco</span></div>
     <div class="m-opts" id="caPorte">${[["G","🐘 Grande"],["M","🐎 Médio"],["P","🐇 Pequeno"]].map(([v,l])=>`<button class="opt${P===v?" on":""}" data-p="${v}">${l}</button>`).join("")}</div>
     <div class="m-lbl">📅 Marco zero — data da reconquista/entrada <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— a produção conta a partir daqui</span></div>
@@ -1778,8 +1780,8 @@ function renderTab(){
   if(ACTIVE==="clinicas"){
     // diretoria com o código na sessão: decifra o R$ sozinho e re-renderiza
     if(ehDiretoria() && !CLIN_RS && CLIN_RS_ENV && dirCodeCache()){ decDirRS(dirCodeCache()).then(ok=>{ if(ok&&ACTIVE==="clinicas") renderTab(); }); }
-    const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada");
-    const lista=(clinView==="nova"?nov:rec);
+    const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada"), divm=CARTEIRA.filter(x=>x.tipo==="divide");
+    const lista=(clinView==="nova"?nov:clinView==="divide"?divm:rec);
     const q=search.trim().toLowerCase();
     const arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista;
     const semVinc=CARTEIRA.filter(x=>!x.cod).length;
@@ -1828,7 +1830,7 @@ function renderTab(){
           <div class="ci t-mut" style="font-size:11px;margin-top:4px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
-    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
+    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Triplo A${AAA.length?` (${AAA.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
     if(clinView==="relatorios"){
       const pl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno","":"—"};
       const semLabel=r=>{ if(r.label) return "Sexta "+esc(r.label); const m=String(r.semana||"").match(/(\d{4})-W(\d+)/); return m?`Semana ${m[2]}/${m[1]}`:esc(r.semana||"—"); };
@@ -1955,12 +1957,44 @@ function renderTab(){
       const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>abrirFinanceiro();
       return;
     }
+    if(clinView==="aaa"){
+      const q2=search.trim().toLowerCase();
+      const aarr=q2?AAA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AAA;
+      const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
+      const comMesa=AAA.filter(a=>(a.falta||[]).length).length;
+      const acard=(a,i)=>{ const [pv,pl2]=porteDe(a.qtd||0); const falta=(a.falta||[]).slice(); const cats=(a.cats||[]).slice();
+        const interp = falta.length ? `🧠 Manda ${cats.slice(0,3).map(c=>esc(c.setor)).join(", ")||"pouco"}, mas <b>NÃO te manda ${falta.slice(0,4).map(esc).join(", ")}</b> — vai pro concorrente. Puxa essas.` : `🧠 Manda todas as classes 👍 (share-of-wallet cheio)`;
+        return `<div class="crow" style="cursor:default;align-items:flex-start${falta.length>=3?';border-left:3px solid #FF2D55':''}">
+          <div class="rk" style="color:#ffd166;display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:11px">⭐</span></div>
+          <div style="flex:1"><div class="nm">${esc(a.nome)} <span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl2}</span> <span class="t-mut" style="font-size:11px">🔗 HF</span></div>
+            <div class="ci">${a.cidade?"📍 "+esc(a.cidade)+" · ":""}📊 <b>${a.qtd||0}</b> exames (12m) · 💰 ${rsClin(a.cod)}</div>
+            ${cats.length?`<div class="ci" style="font-size:11.5px;margin-top:2px">✅ manda: ${cats.slice(0,5).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</div>`:""}
+            ${falta.length?`<div class="ci" style="font-size:11.5px;margin-top:2px;color:#ff8fa3">🎯 deixa na mesa: ${falta.slice(0,6).map(esc).join(", ")}${falta.length>6?" +"+(falta.length-6):""}</div>`:""}
+            <div class="ci" style="font-size:11.5px;margin-top:3px;${falta.length>=3?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div></div>
+          <div class="mid"></div></div>`; };
+      c.innerHTML=`${subtabsClin}
+        <div class="proxhint" style="border-color:rgba(255,209,102,.45);color:#ffd166;margin-bottom:10px;line-height:1.55">⭐ <b>Clínicas Triplo A</b> — as que mais faturam em 12 meses (curva A: as ~${AAA_PCT}% do faturamento). Trazidas <b>automaticamente</b> pelo robô, ranqueadas por faturamento. Análise de <b>12 meses</b>: o que cada uma manda × o que está <b>deixando na mesa</b> (indo pro concorrente).</div>
+        <div class="kgrid">
+          ${kpi("g", AAA.length, "Clínicas AAA", "curva A · 12m")}
+          ${kpi(comMesa?"a":"", comMesa, "Com white-space", "deixando classe na mesa")}
+          ${kpi("", AAA_SETORES.length, "Categorias do lab", "universo de exames")}
+          ${kpi("", AAA_TS?"✓":"—", "Sincronizado", AAA_TS?new Date(AAA_TS).toLocaleDateString("pt-BR"):"aguardando robô")}
+        </div>
+        <div class="t-mut" style="font-size:11.5px;margin:2px 0 8px;text-align:center">Numeradas por faturamento (maior → menor). Análise 12m: ✅ o que manda × 🎯 o que deixa na mesa. R$ só diretoria. Pra rastrear exame-a-exame, cadastre na aba 🔀 ou ♻️.</div>
+        <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">⭐ Ranking Triplo A</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
+        ${AAA.length?(aarr.length?aarr.map((a,i)=>acard(a, AAA.indexOf(a))).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">⏳ As clínicas Triplo A chegam quando o robô sincronizar (traz as top por faturamento 12m automaticamente).</div>`}`;
+      document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+      const la=document.getElementById("lupaAAA"); if(la){ la.addEventListener("input", e=>{ search=e.target.value; const p=la.selectionStart; renderTab(); const l2=document.getElementById("lupaAAA"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
+      return;
+    }
+    const VM={nova:{add:"NOVA",kpi:"Novas",sec:"🆕 Clínicas novas",vazio:"nova"},reconquistada:{add:"RECONQUISTADA",kpi:"Reconquistadas",sec:"♻️ Clínicas reconquistadas",vazio:"reconquistada"},divide:{add:"que DIVIDE material",kpi:"Dividem material",sec:"🔀 Clínicas que dividem material",vazio:"que divide material"}}[clinView]||{add:"",kpi:"",sec:"",vazio:""};
     c.innerHTML=`
       ${subtabsClin}
-      <button class="checkinbtn" id="addCart" type="button" style="margin-bottom:6px">➕ Adicionar clínica ${clinView==='nova'?'NOVA':'RECONQUISTADA'}</button>
+      ${clinView==='divide'?`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin-bottom:10px;line-height:1.55">🔀 <b>Clínicas que repartem material com o concorrente</b> — mandam só uma categoria (ex.: só histopatologia) e o resto vai pra outro lab. Cadastre com a <b>data que vamos começar a trabalhar</b> (marco zero); eu rastreio a produção e mostro o que ela <b>NÃO</b> te manda (deixando na mesa). Vira comissão quando abrir as outras categorias.</div>`:""}
+      <button class="checkinbtn" id="addCart" type="button" style="margin-bottom:6px">➕ Adicionar clínica ${VM.add}</button>
       <div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Você digita o nome; eu acho no HF (${CL?CL+" clínicas":"aguardando o robô"}) e vinculo → puxo a produção. O input é seu.</div>
       <div class="kgrid">
-        ${kpi("g", clinView==='nova'?nov.length:rec.length, clinView==='nova'?"Novas":"Reconquistadas", "na carteira")}
+        ${kpi("g", lista.length, VM.kpi, "na carteira")}
         ${kpi("", arr.filter(x=>x.cod).length, "Vinculadas ao HF", "produção correlacionada")}
         ${kpi(semVinc?"a":"", semVinc, "Pendentes", "sem vínculo HF")}
         ${kpi("", CL, "Master HF", CLIN_TS?("sinc. "+new Date(CLIN_TS).toLocaleDateString("pt-BR")):"aguardando robô")}
@@ -1973,8 +2007,8 @@ function renderTab(){
           🚨 <b>Comissão paga mas 0 exames (${z.length})</b> — clínica na carteira mas o HF não registra <b>nenhum exame</b>:<br>
           ${z.map(x=>`• <b>${esc(x.nome)}</b>${x.cidade?" ("+esc(x.cidade)+")":""}${x.reconq_data?" · desde "+esc(fmtDataBR(x.reconq_data)):""}`).join("<br>")}
           <br><span class="t-mut" style="font-size:11.5px">Confira no HF: comissão de reconquista (normal) × exames em OUTRO código × ainda não digitados. Toque a clínica → 🔬 Ver exames.</span></div>`; })()}
-      <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${clinView==='nova'?"🆕 Clínicas novas":"♻️ Clínicas reconquistadas"}</div><input class="wlsearch" id="lupaCart" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
-      ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma clínica ${clinView==='nova'?"nova":"reconquistada"} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
+      <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${VM.sec}</div><input class="wlsearch" id="lupaCart" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
+      ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma clínica ${VM.vazio} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
     document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
     const ac=document.getElementById("addCart"); if(ac) ac.onclick=()=>openCarteira(clinView, null);
     const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>abrirFinanceiro();
@@ -2614,7 +2648,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet(), loadAAA()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;

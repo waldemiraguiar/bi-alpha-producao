@@ -215,6 +215,49 @@ def clinic_fat_mensal(since_map, alias=None):
         out[p] = [{"ym": ym, "n": m[ym][0], "fat": round(m[ym][1], 2)} for ym in sorted(m)]
     return out
 
+def clinics_aaa(full, pct=0.80, cap=60):
+    """Clínicas TRIPLO A = curva A por FATURAMENTO 12m (Pareto: as que somam ~pct do faturamento total),
+    com análise de share-of-wallet 12m (categorias que MANDA + white-space que NÃO manda). Ordena por fat desc.
+    Payload SEM R$ (só qtd de exames) — o R$ 12m já vai no cifrado da diretoria (clinicas_rs). `full`=D['clinicas_full']."""
+    rows = sorted([c for c in (full or []) if (c.get("fat") or 0) > 0 and c.get("cod") is not None], key=lambda c: -(c.get("fat") or 0))
+    if not rows:
+        return {"aaa": [], "setores": [], "pct": int(pct * 100), "n": 0}
+    total = sum((c.get("fat") or 0) for c in rows)
+    sel, acc = [], 0.0
+    for c in rows:
+        sel.append(c); acc += (c.get("fat") or 0)
+        if total and acc / total >= pct:
+            break
+    sel = sel[:cap]
+    cods = [str(c["cod"]) for c in sel]
+    conn = pymysql.connect(**SRC); c = conn.cursor()
+    def q(sql, p=()): c.execute(sql, p); return c.fetchall()
+    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    d365 = (datetime.date.fromisoformat(maxd) - datetime.timedelta(days=365)).isoformat()
+    uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd FROM {EX} s "
+            f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY qtd DESC", (d365, maxd))
+    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and u["qtd"] > 0][:14]
+    ph = ",".join(["%s"] * len(cods))
+    crows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd "
+              f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+              f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+              f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s "
+              f"GROUP BY r.CodCliente, cat.Categoria", (*cods, d365, maxd))
+    conn.close()
+    bycod = {}
+    for x in crows:
+        bycod.setdefault(str(x["cod"]), {})[x["setor"]] = int(x["qtd"] or 0)
+    out = []
+    for cc in sel:
+        cod = str(cc["cod"]); catd = bycod.get(cod, {})
+        cats = sorted([(s, n) for s, n in catd.items() if s != "(sem categoria)"], key=lambda kv: -kv[1])
+        out.append({"cod": cod, "nome": cc.get("nome", ""), "cidade": cc.get("cidade", ""),
+                    "qtd": int(cc.get("qtd") or 0),
+                    "cats": [{"setor": s, "qtd": n} for s, n in cats],
+                    "falta": [s for s in setores if s not in catd]})
+    return {"aaa": out, "setores": setores, "pct": int(pct * 100), "n": len(out)}
+
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()

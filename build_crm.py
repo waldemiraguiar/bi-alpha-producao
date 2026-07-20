@@ -282,6 +282,28 @@ def post_clinicas_det():
     except Exception as e:
         print(f"post_clinicas_det falhou (ok, tenta no próximo ciclo): {e}")
 
+def post_aaa(D):
+    """CLÍNICAS TRIPLO A: top faturamento 12m (curva A) + share-of-wallet 12m → /api/crm-aaa. SEM R$ no payload
+    (só qtd + categorias; o R$ 12m já vai no cifrado da diretoria). Traz sozinho — sem input manual."""
+    import urllib.request
+    pwd = CRM_PWD
+    full = (D or {}).get("clinicas_full") or []
+    if not pwd or not full:
+        print("post_aaa: pulado (falta CRM_PWD/clinicas_full)"); return
+    try:
+        from build_financeiro import clinics_aaa
+        res = clinics_aaa(full, pct=0.80, cap=60)
+    except Exception as e:
+        print(f"post_aaa: cálculo falhou ({e})"); return
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+    try:
+        payload = json.dumps({"acao": "set", "aaa": res["aaa"], "setores": res["setores"], "pct": res["pct"], "senha": pwd}, ensure_ascii=False).encode()
+        r = urllib.request.urlopen(urllib.request.Request(
+            base + "/api/crm-aaa", data=payload, headers={"Content-Type": "application/json"}), timeout=45)
+        print(f"clinicas AAA (triplo A) -> HTTP {r.status} ({res['n']} clínicas · curva A {res['pct']}% · {len(res['setores'])} setores)")
+    except Exception as e:
+        print(f"post_aaa falhou (ok, tenta no próximo ciclo): {e}")
+
 def post_relatorio(D):
     """AUTOMÁTICO: grava a FOTO semanal do relatório de clínicas (SEM R$) a cada ciclo do robô — o histórico
     fica sempre atual sem ninguém pedir. Upsert por semana ISO. O e-mail com R$ continua saindo sexta 9h."""
@@ -351,7 +373,7 @@ if __name__ == "__main__":
     last = None
     for attempt in range(1, 4):
         try:
-            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); post_clinicas_det(); post_relatorio(D0); break
+            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); post_clinicas_det(); post_aaa(D0); post_relatorio(D0); break
         except Exception as e:
             import pymysql
             if isinstance(e, pymysql.err.OperationalError):
