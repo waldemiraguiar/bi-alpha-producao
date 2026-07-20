@@ -1867,8 +1867,8 @@ function renderTab(){
           </div>`;
       } else {
         const dataBadge=x=> x.reconq_data ? `<span style="color:#7effcf;font-weight:600">${x.tipo==="nova"?"🆕 conquistada":"♻️ reconquistada"} ${esc(fmtDataBR(x.reconq_data))}</span>` : `<span style="color:#ffc266;font-weight:600">${x.tipo==="nova"?"🆕 nova":"♻️ reconq."} · <span class="t-mut">sem data</span></span>`;
-        const rows=comRS.map(d=>`<div class="crow" style="cursor:default;align-items:flex-start">
-            <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${d.x.tipo==="nova"?"🆕":"♻️"}</div>
+        const rows=comRS.map((d,i)=>`<div class="crow" style="cursor:default;align-items:flex-start${d.rsv<=0?';opacity:.72':''}">
+            <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"};display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:12px">${d.x.tipo==="nova"?"🆕":"♻️"}</span></div>
             <div style="flex:1"><div class="nm">${esc(d.x.nome)} ${d.x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl[d.x.porte]}</span>`:""} ${c2mini(d.x.cod)}</div>
               <div class="ci" style="font-size:11.5px">${dataBadge(d.x)}</div>
               <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b>${d.desdeMarco?' <span class="t-mut" style="font-size:10px">desde a reconq.</span>':''} · 📊 ${d.prodBase||0} exames${d.desdeMarco?"":"/12m"} · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
@@ -1877,7 +1877,11 @@ function renderTab(){
         // 💰 SAFRA — dinheiro mês a mês por clínica desde o marco zero (matriz consolidada, pedido do Wal)
         let cohortHtml="";
         if(CLIN_FATMES){
-          const fmRows=comRS.map(d=>({nome:d.x.nome,tipo:d.x.tipo,arr:(CLIN_FATMES[String(d.x.cod)]||[])})).filter(r=>r.arr.length);
+          // TODAS as clínicas com marco (dated) — inclui as ZERADAS (0 exames) com R$ 0; ordena por total desc; numera
+          const fmRows=dados.filter(d=>d.x.cod && (d.x.reconq_data || (CLIN_FATMES[String(d.x.cod)]||[]).length))
+            .map(d=>({nome:d.x.nome,tipo:d.x.tipo,arr:(CLIN_FATMES[String(d.x.cod)]||[])}));
+          fmRows.forEach(r=>r.tot=r.arr.reduce((s,a)=>s+a.fat,0));
+          fmRows.sort((a,b)=>b.tot-a.tot);
           const mset={}; fmRows.forEach(r=>r.arr.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort();
           if(fmRows.length&&meses.length){
             const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
@@ -1886,15 +1890,15 @@ function renderTab(){
             const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:5px 8px;border-right:1px solid rgba(0,229,160,.25)";
             const th="padding:5px 8px;text-align:right;color:var(--mut);font-size:10.5px";
             const td="padding:5px 8px;text-align:right";
-            const body=fmRows.map(r=>{const tot=r.arr.reduce((s,a)=>s+a.fat,0);grand+=tot;meses.forEach(ym=>totCol[ym]+=fatOf(r.arr,ym));
-              return `<tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="${sc}">${r.tipo==='nova'?'🆕':'♻️'} ${esc(r.nome)}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:#00E5A0">${fmtBRL(tot)}</td></tr>`;}).join("");
-            const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
+            const body=fmRows.map((r,i)=>{const tot=r.tot,zer=tot<=0;grand+=tot;meses.forEach(ym=>totCol[ym]+=fatOf(r.arr,ym));
+              return `<tr style="border-top:1px solid rgba(255,255,255,.06)${zer?';opacity:.72':''}"><td style="${sc}"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> ${r.tipo==='nova'?'🆕':'♻️'} ${esc(r.nome)}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
+            const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmRows.length})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
             cohortHtml=`<div class="seclabel" style="margin:14px 0 6px">💰 Dinheiro por mês <span class="t-mut" style="font-weight:500;font-size:11px">(safra — desde a entrada de cada clínica)</span></div>
               <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,229,160,.25);border-radius:8px">
                 <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
                   <thead><tr style="background:rgba(0,229,160,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#7effcf">Total</th></tr></thead>
                   <tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
-              <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Cada linha = uma clínica recuperada; cada coluna = o dinheiro que ela trouxe naquele mês desde que voltou. O <b>TOTAL</b> embaixo é o quanto a carteira já recuperou — sua munição pra estimular o time (a equipe não vê R$).</div>`;
+              <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Numeradas por faturamento (maior → menor). As <b style="color:#ffc266">zeradas</b> (0 exames desde a entrada) aparecem no fim, com R$ 0 — pra você ver quem ainda não converteu. O <b>TOTAL</b> é o quanto a carteira já recuperou (munição pra estimular o time; a equipe não vê R$).</div>`;
           }
         }
         painel=`
