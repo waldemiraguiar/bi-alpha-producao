@@ -253,24 +253,25 @@ _MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "n
 def _mlab(ym):
     y, m = ym.split("-"); return _MES[int(m) - 1] + "/" + y[2:]
 fatmes = rsmap.get("fatmes") or {}
-safra_rows = [l for l in linhas if l.get("cod") and (fatmes.get(l["cod"]) or [])]
+# TODAS as clínicas com marco (dated) — inclui ZERADAS (0 exames) com R$ 0; ordena por total desc; numera
+safra_rows = [l for l in linhas if l.get("cod") and (l.get("marco") or fatmes.get(l["cod"]))]
 safra_rows.sort(key=lambda l: -sum(mm["fat"] for mm in fatmes.get(l["cod"], [])))
 meses = sorted({mm["ym"] for l in safra_rows for mm in fatmes.get(l["cod"], [])})
 if safra_rows and meses:
     tot_col = {ym: 0.0 for ym in meses}; grand = 0.0
     trs = []
-    for l in safra_rows:
+    for i, l in enumerate(safra_rows, 1):
         arr = {mm["ym"]: mm["fat"] for mm in fatmes.get(l["cod"], [])}
-        tot = sum(arr.values()); grand += tot
+        tot = sum(arr.values()); grand += tot; zer = tot <= 0
         for ym in meses:
             tot_col[ym] += arr.get(ym, 0)
         cells = "".join(f"<td style='text-align:right;padding:4px 8px;color:{'#0A7A3B' if arr.get(ym) else '#bbb'}'>{brl(arr[ym]) if arr.get(ym) else '–'}</td>" for ym in meses)
         ic = "🆕" if l["tipo"] == "nova" else "♻️"
-        trs.append(f"<tr><td style='padding:4px 8px;border-right:1px solid #eee'>{ic} {l['nome']}</td>{cells}<td style='text-align:right;padding:4px 8px;font-weight:bold;color:#0A7A3B'>{brl(tot)}</td></tr>")
+        trs.append(f"<tr style='{'opacity:.7' if zer else ''}'><td style='padding:4px 8px;border-right:1px solid #eee'><b style='color:#888'>{i}.</b> {ic} {l['nome']}</td>{cells}<td style='text-align:right;padding:4px 8px;font-weight:bold;color:{'#e67e22' if zer else '#0A7A3B'}'>{brl(tot)}</td></tr>")
     head = "".join(f"<th style='text-align:right;padding:4px 8px;color:#555'>{_mlab(ym)}</th>" for ym in meses)
     foot = "".join(f"<td style='text-align:right;padding:4px 8px;font-weight:bold'>{brl(tot_col[ym])}</td>" for ym in meses)
     safra_html = (f"<h3 style='color:#0A1628;margin-top:18px'>💰 Dinheiro por mês (safra) — desde a entrada de cada clínica</h3>"
-                  f"<p style='font-size:12.5px;color:#666;margin:2px 0 6px'>Cada coluna = o que a clínica trouxe naquele mês desde que voltou. O <b>TOTAL</b> embaixo é o quanto a carteira já recuperou — sua munição pra estimular o time.</p>"
+                  f"<p style='font-size:12.5px;color:#666;margin:2px 0 6px'>Numeradas por faturamento (maior → menor). As <b style='color:#e67e22'>zeradas</b> (0 exames desde a entrada) entram no fim com R$ 0. O <b>TOTAL</b> embaixo é o quanto a carteira já recuperou — sua munição pra estimular o time.</p>"
                   f"<table style='border-collapse:collapse;font-size:13px;width:100%'>"
                   f"<thead><tr style='background:#f0f5fa'><th style='text-align:left;padding:4px 8px'>Clínica</th>{head}<th style='text-align:right;padding:4px 8px'>Total</th></tr></thead>"
                   f"<tbody>{''.join(trs)}</tbody>"
