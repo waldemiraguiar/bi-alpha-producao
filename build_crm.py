@@ -292,7 +292,7 @@ def post_aaa(D):
         print("post_aaa: pulado (falta CRM_PWD/clinicas_full)"); return
     try:
         from build_financeiro import clinics_aaa
-        res = clinics_aaa(full, pct=0.80, cap=60)
+        res = clinics_aaa(full, corte_a=0.80, corte_b=0.95, cap=180)   # curva A (80%) + B (80–95%)
     except Exception as e:
         print(f"post_aaa: cálculo falhou ({e})"); return
     base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
@@ -300,7 +300,7 @@ def post_aaa(D):
         payload = json.dumps({"acao": "set", "aaa": res["aaa"], "setores": res["setores"], "pct": res["pct"], "senha": pwd}, ensure_ascii=False).encode()
         r = urllib.request.urlopen(urllib.request.Request(
             base + "/api/crm-aaa", data=payload, headers={"Content-Type": "application/json"}), timeout=45)
-        print(f"clinicas AAA (triplo A) -> HTTP {r.status} ({res['n']} clínicas · curva A {res['pct']}% · {len(res['setores'])} setores)")
+        print(f"clinicas curva ABC -> HTTP {r.status} (A={res.get('nA')} · B={res.get('nB')} · {len(res['setores'])} setores)")
     except Exception as e:
         print(f"post_aaa falhou (ok, tenta no próximo ciclo): {e}")
 

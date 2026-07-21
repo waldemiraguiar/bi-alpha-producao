@@ -22,11 +22,12 @@ export default async (req) => {
     if (body.acao === "set") {
       const arr = Array.isArray(body.aaa) ? body.aaa : [];
       const setores = Array.isArray(body.setores) ? body.setores.slice(0, 20).map((s) => String(s).slice(0, 40)) : [];
-      const out = arr.slice(0, 200).map((a) => ({
+      const out = arr.slice(0, 300).map((a) => ({
         cod: String(a.cod || "").slice(0, 30),
         nome: String(a.nome || "").slice(0, 120),
         cidade: String(a.cidade || "").slice(0, 80),
         qtd: +a.qtd || 0,
+        curva: a.curva === "B" ? "B" : "A",   // curva ABC (Pareto) — só A e B são publicadas
         cats: Array.isArray(a.cats) ? a.cats.slice(0, 20).map((c) => ({ setor: String(c.setor || "").slice(0, 40), qtd: +c.qtd || 0 })) : [],
         falta: Array.isArray(a.falta) ? a.falta.slice(0, 20).map((s) => String(s).slice(0, 40)) : [],
       }));
