@@ -50,7 +50,9 @@ export default async (req) => {
         }
         out[String(k).slice(0, 30)] = o;
       }
-      await store.setJSON("dados", { det: out, setores, ts: Date.now() });
+      const catval = (body.catval && typeof body.catval === "object") ? Object.fromEntries(   // share de R$ por categoria (simulação)
+        Object.entries(body.catval).slice(0, 40).map(([k, v]) => [String(k).slice(0, 40), +v || 0])) : {};
+      await store.setJSON("dados", { det: out, setores, catval, ts: Date.now() });
       return Response.json({ ok: true, n: keys.length }, { headers: cors });
     }
     return new Response(JSON.stringify({ erro: "acao invalida" }), { status: 400, headers: cors });

@@ -61,6 +61,12 @@ def clinic_details(cods, since_map=None, alias=None):
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
             f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
     setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and (u["cli"] / totcli) >= 0.15][:14]
+    # CATVAL: share de R$ de cada categoria no lab (12m) → base da SIMULAÇÃO do "deixando na mesa" (agregado, SEM R$ por clínica)
+    catrows = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COALESCE(SUM(s.ValorExame),0) fat FROM {EX} s "
+                f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+                f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria", (d365, maxd))
+    _totfat = sum(float(x["fat"] or 0) for x in catrows) or 1.0
+    catval = {x["setor"]: round(float(x["fat"] or 0) / _totfat, 4) for x in catrows if x["setor"] and x["setor"] != "(sem categoria)"}
     ph = ",".join(["%s"] * len(cods))
     rows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd, "
              f"SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p30, SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p7 "
@@ -134,7 +140,7 @@ def clinic_details(cods, since_map=None, alias=None):
         if p in mrec:
             row["recent"] = mrec[p]["lst"]; row["recent_desde"] = mrec[p]["desde"]; row["recent_mais"] = mrec[p]["mais"]
         out[p] = row
-    return {"det": out, "setores": setores}
+    return {"det": out, "setores": setores, "catval": catval}
 
 def clinic_fat_12m(cods):
     """R$ 12m (SUM ValorExame) de códigos arbitrários — inclusive ÓRFÃOS que não estão em TabCliente

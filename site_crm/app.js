@@ -414,8 +414,8 @@ function syncCart(a){ CARTEIRA=(a||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0));
 async function loadCart(){ try{ const r=await fetch(CART_API, {cache:"no-store"}); if(r.ok) syncCart((await r.json()).carteira); }catch(e){} }
 const REL_API="/api/crm-relatorios"; let RELATORIOS=[];
 async function loadRel(){ try{ const r=await fetch(REL_API, {cache:"no-store"}); if(r.ok) RELATORIOS=((await r.json()).relatorios||[]).slice().sort((a,b)=>(a.id<b.id?1:-1)); }catch(e){} }
-let CLIN_DET={}, CLIN_SETORES=[];   // share-of-wallet por clínica (setores que manda / não manda + prod 30d/7d) — SEM R$
-async function loadDet(){ try{ const r=await fetch("/api/crm-clinicas-det", {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_DET=(j&&j.det)||{}; CLIN_SETORES=(j&&j.setores)||[]; } }catch(e){} }
+let CLIN_DET={}, CLIN_SETORES=[], CLIN_CATVAL={};   // share-of-wallet por clínica + share de R$ por categoria (simulação da mesa) — SEM R$ por clínica
+async function loadDet(){ try{ const r=await fetch("/api/crm-clinicas-det", {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_DET=(j&&j.det)||{}; CLIN_SETORES=(j&&j.setores)||[]; CLIN_CATVAL=(j&&j.catval)||{}; } }catch(e){} }
 let AAA=[], AAA_TS=0, AAA_SETORES=[], AAA_PCT=80;   // clínicas Triplo A (top faturamento 12m, curva A) + share-of-wallet 12m (ordem = ranking; SEM R$ no payload)
 async function loadAAA(){ try{ const r=await fetch("/api/crm-aaa", {cache:"no-store"}); if(r.ok){ const j=await r.json(); AAA=(j&&j.aaa)||[]; AAA_TS=(j&&j.ts)||0; AAA_SETORES=(j&&j.setores)||[]; AAA_PCT=(j&&j.pct)||80; } }catch(e){} }
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
@@ -1919,12 +1919,23 @@ function renderTab(){
           </div>`;
       } else {
         const dataBadge=x=> x.reconq_data ? `<span style="color:#7effcf;font-weight:600">${x.tipo==="nova"?"🆕 conquistada":"♻️ reconquistada"} ${esc(fmtDataBR(x.reconq_data))}</span>` : `<span style="color:#ffc266;font-weight:600">${x.tipo==="nova"?"🆕 nova":"♻️ reconq."} · <span class="t-mut">sem data</span></span>`;
-        const rows=comRS.map((d,i)=>`<div class="crow" style="cursor:default;align-items:flex-start${d.rsv<=0?';opacity:.72':''}">
-            <div class="rk" style="color:${d.x.tipo==="nova"?"#00E5A0":"#00D4FF"};display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:12px">${d.x.tipo==="nova"?"🆕":"♻️"}</span></div>
+        // 🎯 SIMULAÇÃO "na mesa": potencial R$ das categorias que ela NÃO manda, extrapolando o mix de valor do lab (catval)
+        const naMesa=(cod,rsv)=>{ if(rsv==null||!(rsv>0)) return null; const det=CLIN_DET[String(cod)]; if(!det||!(det.cats||[]).length) return null;
+          const vs=s=>CLIN_CATVAL[s]||0, her=det.cats.reduce((a,c)=>a+vs(c.setor),0), miss=(det.falta||[]).reduce((a,s)=>a+vs(s),0);
+          return (her>0&&miss>0)?rsv*(miss/her):null; };
+        const TG={reconquistada:{ic:"♻️",cor:"#00D4FF",lbl:"Reconquistadas"},nova:{ic:"🆕",cor:"#00E5A0",lbl:"Novas"},divide:{ic:"🔀",cor:"#9fe6ff",lbl:"Dividem material"},particular:{ic:"🐾",cor:"#7effcf",lbl:"Particulares"}};
+        const fatCard=(d,i)=>{ const nm=naMesa(d.x.cod,d.rsv), tg=TG[d.x.tipo]||TG.reconquistada;
+          return `<div class="crow" style="cursor:default;align-items:flex-start${d.rsv<=0?';opacity:.72':''}">
+            <div class="rk" style="color:${tg.cor};display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:12px">${tg.ic}</span></div>
             <div style="flex:1"><div class="nm">${esc(d.x.nome)} ${d.x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl[d.x.porte]}</span>`:""} ${c2mini(d.x.cod)}</div>
               <div class="ci" style="font-size:11.5px">${dataBadge(d.x)}</div>
-              <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b>${d.desdeMarco?' <span class="t-mut" style="font-size:10px">desde a reconq.</span>':''} · 📊 ${d.prodBase||0} exames${d.desdeMarco?"":"/12m"} · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div></div>
-            <div class="mid"></div></div>`).join("");
+              <div class="ci">💰 <b style="color:#7effcf">${fmtBRL(d.rsv)}</b>${d.desdeMarco?' <span class="t-mut" style="font-size:10px">desde a reconq.</span>':''} · 📊 ${d.prodBase||0} exames${d.desdeMarco?"":"/12m"} · 🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame${totRS?` · ${Math.round(d.rsv/totRS*100)}% da carteira`:""}</div>
+              ${nm!=null?`<div class="ci" style="font-size:11.5px;color:#ff8fa3">🎯 na mesa (estimado): <b>${fmtBRL(nm)}</b> <span class="t-mut">— potencial das classes que ela NÃO te manda</span></div>`:""}</div>
+            <div class="mid"></div></div>`; };
+        const rows=["reconquistada","nova","divide","particular"].map(tp=>{ const g=comRS.filter(d=>d.x.tipo===tp); if(!g.length) return "";
+          const tot=g.reduce((a,d)=>a+(d.rsv||0),0), mesa=g.reduce((a,d)=>a+(naMesa(d.x.cod,d.rsv)||0),0), tg=TG[tp];
+          return `<div class="seclabel" style="margin:13px 0 4px;color:${tg.cor}">${tg.ic} ${tg.lbl} <span class="t-mut" style="font-weight:500;font-size:11px">(${g.length}) · fatura ${fmtBRL(tot)}${mesa>0?` · 🎯 na mesa ~${fmtBRL(mesa)}`:""}</span></div>${g.map((d,i)=>fatCard(d,i)).join("")}`;
+        }).join("");
         const zerLinha=dados.filter(d=>d.rsv==null&&d.x.cod).map(d=>`<div class="ci t-mut" style="font-size:11.5px">• ${esc(d.x.nome)} — sem R$ (0 exames / pendente)</div>`).join("");
         // 💰 SAFRA — dinheiro mês a mês por clínica desde o marco zero (matriz consolidada, pedido do Wal)
         let cohortHtml="";
@@ -1961,7 +1972,8 @@ function renderTab(){
             ${kpi("", fmtBRL(tkGeral), "Ticket médio", "R$ por exame")}
             ${kpi("g", comRS.length, "Clínicas com R$", semDataN?`${semDataN} ainda sem data (12m)`:`${dados.length} na carteira`)}
           </div>
-          <div class="seclabel" style="margin:12px 0 6px">💰 Faturamento por clínica <span class="t-mut" style="font-weight:500;font-size:11px">(maior → menor)</span></div>
+          <div class="seclabel" style="margin:12px 0 2px">💰 Faturamento por clínica <span class="t-mut" style="font-weight:500;font-size:11px">— agrupado por tipo, cada um do maior → menor</span></div>
+          <div class="t-mut" style="font-size:11px;margin:0 0 4px;line-height:1.5">♻️ reconquistada · 🆕 nova · 🔀 divide material · 🐾 particular. <b style="color:#ff8fa3">🎯 na mesa (estimado)</b> = quanto ela poderia render nas classes que hoje <b>não</b> te manda (extrapolando o mix de valor do lab a partir do que ela já te dá). É estimativa pra priorizar — não valor fechado.</div>
           ${rows||'<div class="t-mut" style="font-size:12.5px">Sem R$ vinculado ainda.</div>'}
           ${zerLinha?`<div style="margin-top:6px">${zerLinha}</div>`:""}
           ${cohortHtml}
