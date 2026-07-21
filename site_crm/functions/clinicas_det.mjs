@@ -35,6 +35,10 @@ export default async (req) => {
         if (d.prod12 != null) o.prod12 = +d.prod12 || 0;   // produção 12m somando os códigos-extra (sobrepõe o master quando há cadastro duplicado)
         if (d.prod_desde != null) o.prod_desde = +d.prod_desde || 0;   // produção desde o marco zero (data da reconquista)
         if (d.marco) o.marco = String(d.marco).slice(0, 20);
+        if (Array.isArray(d.conq)) o.conq = d.conq.slice(0, 20).map((z) => ({   // 🎉 categorias conquistadas após o marco (SEM R$)
+          setor: String(z.setor || "").slice(0, 40), desde: String(z.desde || "").slice(0, 10), n: +z.n || 0,
+        }));
+        if (Array.isArray(d.base)) o.base = d.base.slice(0, 20).map((s) => String(s).slice(0, 40));
         if (Array.isArray(d.recent)) {   // drill-down exame-a-exame (dia · exame · PET · tutor · registro)
           o.recent = d.recent.slice(0, 300).map((e) => ({
             d: String(e.d || "").slice(0, 10), ex: String(e.ex || "").slice(0, 60),

@@ -264,6 +264,39 @@ def clinics_aaa(full, nA=40, nB=60):
     nAo = sum(1 for o in out if o["curva"] == "A"); nBo = sum(1 for o in out if o["curva"] == "B")
     return {"aaa": out, "setores": setores, "pct": 0, "n": len(out), "nA": nAo, "nB": nBo}
 
+def divide_conversion(since_map, setores=None):
+    """CONQUISTA DE CATEGORIA (aba 'Dividem material'): a partir do MARCO ZERO de cada clínica, detecta as
+    categorias que ela NÃO mandava antes (baseline = 12m antes do marco) e COMEÇOU a mandar depois → prova real
+    do trabalho comercial. Retorna {cod: {base:[setores], conq:[{setor, desde, n, fat}]}}. `setores`=universo
+    relevante (>=15% penetração) p/ não celebrar categoria-ruído. fat é R$ (vai cifrado; público leva só n/desde)."""
+    since_map = {str(k): str(v or "")[:10] for k, v in (since_map or {}).items() if k is not None and str(v or "")}
+    if not since_map:
+        return {}
+    uni = set(setores or [])
+    conn = pymysql.connect(**SRC); c = conn.cursor()
+    def q(sql, p=()): c.execute(sql, p); return c.fetchall()
+    out = {}
+    for cod, marco in since_map.items():
+        try:
+            datetime.date.fromisoformat(marco)
+        except Exception:
+            continue
+        base_ini = (datetime.date.fromisoformat(marco) - datetime.timedelta(days=365)).isoformat()
+        base = {x["setor"] for x in q(
+            f"SELECT COALESCE(cat.Categoria,'?') setor FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+            f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+            f"WHERE r.CodCliente=%s AND s.DataExame>=%s AND s.DataExame<%s GROUP BY cat.Categoria", (cod, base_ini, marco))}
+        depois = q(f"SELECT COALESCE(cat.Categoria,'?') setor, MIN(s.DataExame) desde, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) fat "
+                   f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                   f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+                   f"WHERE r.CodCliente=%s AND s.DataExame>=%s GROUP BY cat.Categoria", (cod, marco))
+        conq = [{"setor": x["setor"], "desde": str(x["desde"])[:10], "n": int(x["n"] or 0), "fat": round(float(x["fat"] or 0), 2)}
+                for x in depois if x["setor"] and x["setor"] != "?" and x["setor"] not in base and (not uni or x["setor"] in uni)]
+        conq.sort(key=lambda z: -z["n"])
+        out[cod] = {"base": sorted(base), "conq": conq}
+    conn.close()
+    return out
+
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()

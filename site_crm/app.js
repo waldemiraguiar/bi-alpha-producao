@@ -335,7 +335,7 @@ async function loadOps(){ try{ const r=await fetch(OPS_API); if(r.ok) syncOps((a
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
-function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; CLIN_CONQFAT=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
 function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -449,7 +449,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde o marco} + {cod:[{ym,n,fat}]} mês a mês (só diretoria)
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas (só diretoria)
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -458,8 +458,8 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; }   // formato novo {fat, desde, fatmes}
-    else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; }   // compat formato antigo (mapa plano)
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; }   // {fat, desde, fatmes, conqfat}
+    else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; CLIN_CONQFAT={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
 /* R$ da clínica: se ela tem marco zero e há R$ desde o marco, usa esse (reconquista conta da volta); senão 12m */
@@ -1840,10 +1840,24 @@ function renderTab(){
           </div>
           <div style="font-size:11.5px;color:#ffb3c0;margin-top:7px;font-weight:600">⚠️ Isso vai pro concorrente. ${rsvDir!=null?`Ela já te rende <b style="color:#7effcf">${fmtBRL(rsvDir)}</b> mandando só <b>${(det.cats||[]).length} de ${nClasses}</b> classes — imagina com o resto. <b style="color:#ff6b81">Puxa.</b>`:`<b style="color:#ff6b81">Puxa essas classes.</b>`}</div>
         </div>` : "";
-      // 🧠 interpretação do agente (só quando NÃO há white-space — senão o bloco acima já manda o recado)
+      // ✅ SHARE-OF-WALLET CHEIO — bloco verde pulsante (igual às A/B), quando ela manda TODAS as classes
+      const cheioBox = (vinc && det && !falta.length && (det.cats||[]).length && !(x.porte==="G"&&prod!=null&&prod<PORTE_PROD_BAIXA)) ? `
+        <div class="swcheio" style="margin-top:7px;border:1px solid rgba(0,229,160,.5);border-left:3px solid #00E5A0;border-radius:9px;padding:9px 11px">
+          <div style="font-size:12px;font-weight:800;color:#00E5A0;letter-spacing:.4px;text-transform:uppercase">✅ Share-of-wallet CHEIO · manda TODAS as classes 👏</div>
+          <div style="font-size:11.5px;color:#7effcf;margin-top:6px;font-weight:600">🛡️ cliente redondo — nada indo pro concorrente. Proteja essa: é o modelo do que as outras deveriam mandar.</div>
+        </div>` : "";
+      // 🎉 CONQUISTA DE CATEGORIA — o que ela NÃO mandava e começou a mandar depois do marco (prova do trabalho)
+      const conq = (det && det.conq) ? det.conq : [];
+      const conqBox = conq.length ? `
+        <div style="margin-top:7px;background:linear-gradient(90deg,rgba(0,229,160,.18),rgba(0,212,255,.07));border:1px solid rgba(0,229,160,.55);border-left:3px solid #00E5A0;border-radius:9px;padding:9px 11px">
+          <div style="font-size:12px;font-weight:800;color:#00E5A0;letter-spacing:.4px;text-transform:uppercase">🎉 Conquistou ${conq.length} categoria${conq.length>1?"s":""} desde o marco</div>
+          ${conq.slice(0,6).map(z=>{ const rs=(ehDiretoria()&&CLIN_CONQFAT&&CLIN_CONQFAT[String(x.cod)])?CLIN_CONQFAT[String(x.cod)][z.setor]:null;
+            return `<div style="font-size:11.5px;color:#7effcf;margin-top:5px">✅ <b>${esc(z.setor)}</b> — desde <b>${esc(fmtDataBR(z.desde))}</b> · ${z.n} exame${z.n>1?"s":""}${rs!=null?` · <b style="color:#7effcf">${fmtBRL(rs)}</b>`:""}</div>`; }).join("")}
+          <div style="font-size:11px;color:#9fe6ff;margin-top:6px">📈 categoria que ela <b>não mandava</b> e você fez começar — receita nova de verdade.</div>
+        </div>` : "";
+      // 🧠 interpretação do agente (só o caso porte-grande-volume-baixo; os demais recados vão nos blocos)
       let interp="";
       if(!falta.length && x.porte==="G" && prod!=null && prod<PORTE_PROD_BAIXA) interp=`🧠 ${det?"Manda todas as classes, MAS ":""}o volume é baixo pra um <b>porte grande</b> — potencial bem maior; provavelmente divide a QUANTIDADE com outro lab. Trabalhar.`;
-      else if(det && !falta.length) interp=`🧠 Manda <b>todas</b> as classes de exame 👍${x.porte==="G"?" (porte grande bem aproveitado)":""}`;
       const detLinha=det?`<div class="ci" style="font-size:11.5px;margin-top:2px">📆 recente: <b>${det.prod30||0}</b> em 30d · ${det.prod7||0} em 7d${det.cats&&det.cats.length?` · <span style="color:#7effcf">✅ manda: ${det.cats.slice(0,4).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</span>`:""}</div>`:"";
       const c2=cerebro2(det);
       const c2Linha=c2?`<div class="ci" style="font-size:11.5px;margin-top:4px;color:${c2.cor};font-weight:${c2.status==="ok"?"500":"700"}">🧠² ${c2.msg}</div>`:"";
@@ -1857,7 +1871,7 @@ function renderTab(){
           <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt}${ehDiretoria()?` · 💰 ${rsClin(x.cod, x.reconq_data)}`:""}</div>
           ${marcoLinha}${perdaLinha}${detLinha}
           ${c2Linha}
-          ${mesaBox}
+          ${conqBox}${mesaBox}${cheioBox}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
           ${interp?`<div class="ci" style="font-size:11.5px;margin-top:3px;${flag?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div>`:""}
           ${x.cod?`<button class="exbtn" data-exames="${esc(x.cod)}" data-exnome="${esc(x.nome)}" type="button" style="margin-top:6px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:#9fe6ff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">🔬 Ver exames (dia · PET · registro)</button>`:""}
@@ -1980,10 +1994,24 @@ function renderTab(){
             ${(r.zerados&&r.zerados.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ff8fa3">🚨 comissão paga mas 0 exames: ${r.zerados.map(f=>esc(f.nome)+(f.cidade?" ("+esc(f.cidade)+")":"")).join(" · ")}</div>`:""}
             ${(r.flags&&r.flags.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ffc266">🚩 ${r.flags.map(f=>esc(f.nome)+(f.prod!=null?" ("+f.prod+")":"")).join(" · ")}</div>`:""}</div>
           <div class="mid"></div></div>`;
+      // 🎉 PLANILHA DE CONQUISTAS (Dividem material): categoria que começou a mandar após o marco + R$ real (diretoria)
+      const divConq=CARTEIRA.filter(x=>x.tipo==="divide"&&x.cod).map(x=>({x,det:CLIN_DET[String(x.cod)]||null})).filter(o=>o.det&&(o.det.conq||[]).length);
+      const conquistaHtml = divConq.length ? `
+        <div class="seclabel" style="margin:14px 0 6px;color:#00E5A0">🎉 Conquistas de categoria <span class="t-mut" style="font-weight:500;font-size:11px">(Dividem material — o que começou a mandar depois do marco zero)</span></div>
+        ${divConq.map(o=>{ const cod=String(o.x.cod), conq=o.det.conq, totFat=(ehDiretoria()&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?conq.reduce((s,z)=>s+(CLIN_CONQFAT[cod][z.setor]||0),0):null;
+          return `<div style="background:rgba(0,229,160,.07);border:1px solid rgba(0,229,160,.3);border-radius:9px;padding:9px 11px;margin-bottom:7px">
+            <div style="font-weight:700;color:#00E5A0;font-size:13px">🔀 ${esc(o.x.nome)}${o.x.reconq_data?` <span class="t-mut" style="font-weight:500;font-size:11px">· marco ${esc(fmtDataBR(o.x.reconq_data))}</span>`:""}${totFat!=null?` · <span style="color:#7effcf">${fmtBRL(totFat)} novos</span>`:""}</div>
+            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;white-space:nowrap">
+              <thead><tr style="color:var(--mut);font-size:10.5px"><th style="text-align:left;padding:2px 6px">Categoria conquistada</th><th style="text-align:right;padding:2px 6px">Desde</th><th style="text-align:right;padding:2px 6px">Exames</th>${ehDiretoria()?'<th style="text-align:right;padding:2px 6px">R$ novo</th>':''}</tr></thead>
+              <tbody>${conq.map(z=>{ const rs=(ehDiretoria()&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?CLIN_CONQFAT[cod][z.setor]:null;
+                return `<tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:3px 6px;color:#7effcf">✅ ${esc(z.setor)}</td><td style="text-align:right;padding:3px 6px">${esc(fmtDataBR(z.desde))}</td><td style="text-align:right;padding:3px 6px">${z.n}</td>${ehDiretoria()?`<td style="text-align:right;padding:3px 6px;color:#7effcf;font-weight:700">${rs!=null?fmtBRL(rs):"—"}</td>`:''}</tr>`; }).join("")}</tbody>
+            </table></div></div>`; }).join("")}
+        <div class="t-mut" style="font-size:11px;margin:2px 0 4px">Categoria que a clínica <b>não mandava</b> antes do marco e começou a mandar depois = receita nova que o trabalho comercial trouxe. R$ só diretoria.</div>` : (CARTEIRA.some(x=>x.tipo==="divide"&&x.cod&&x.reconq_data)?`<div class="seclabel" style="margin:14px 0 6px;color:#00E5A0">🎉 Conquistas de categoria</div><div class="t-mut" style="font-size:12px">Ainda sem conquista — assim que uma clínica de "Dividem material" começar a mandar uma categoria que não mandava, aparece aqui com a data e o R$.</div>`:"");
       c.innerHTML=`${subtabsClin}
         <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">${ehDiretoria()?"📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo — você não precisa pedir). E-mail completo toda <b>sexta 9h</b>.":"📊 <b>Evolução da carteira</b> — produção e ritmo de cada clínica (atualiza sozinho a cada ciclo)."}</div>
         ${c2Html}
         ${painel}
+        ${conquistaHtml}
         ${mesaHtml}
         <div class="seclabel" style="margin:14px 0 6px">🗂️ Histórico semanal <span class="t-mut" style="font-weight:500;font-size:11px">(evolução — sem R$, foto de cada sexta)</span></div>
         ${RELATORIOS.length?RELATORIOS.map(rcard).join(""):`<div class="empty">Ainda sem foto semanal. A 1ª já foi gerada — recarregue em instantes. Depois vai listando a evolução aqui.</div>`}`;

@@ -206,7 +206,7 @@ def post_clinicas_rs(D):
         return
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
     # R$ da carteira: marco zero (desde) + soma dos CÓDIGOS-EXTRA no principal (Faro: 989898 + 5724)
-    desde = {}; fatmes = {}
+    desde = {}; fatmes = {}; conqfat = {}
     try:
         import urllib.request as _u
         base0 = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
@@ -219,10 +219,15 @@ def post_clinicas_rs(D):
             for e in (c.get("cods_extra") or []):
                 e = str(e).strip()
                 if e: alias[e] = str(p); extras.append(e)
-        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal
+        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal, divide_conversion
         if since_map:
             desde = clinic_fat_since(since_map, alias)
             fatmes = clinic_fat_mensal(since_map, alias)   # dinheiro mês a mês desde o marco zero (cifrado, diretoria)
+        # 🎉 R$ das CATEGORIAS CONQUISTADAS (clínicas 'Dividem material') — cifrado, só diretoria
+        div_marco = {str(c.get("cod")): c.get("reconq_data") for c in cart if c.get("tipo") == "divide" and c.get("cod") and c.get("reconq_data")}
+        if div_marco:
+            cv = divide_conversion(div_marco)
+            conqfat = {cod: {z["setor"]: z["fat"] for z in cc.get("conq", [])} for cod, cc in cv.items() if cc.get("conq")}
         # soma o 12m dos códigos-extra (órfãos) no principal, pra o R$ 12m também ficar certo
         if extras:
             ex12 = clinic_fat_12m(extras)
@@ -231,7 +236,7 @@ def post_clinicas_rs(D):
                     rsmap[p] = round(rsmap.get(p, 0) + ex12[e], 2)
     except Exception as e:
         print(f"post_clinicas_rs: R$ desde/extra pulado ({e})")
-    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes}, ensure_ascii=False, separators=(",", ":")).encode()
+    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
     ct = AESGCM(key).encrypt(iv, data, None)
@@ -272,10 +277,21 @@ def post_clinicas_det():
         print("post_clinicas_det: carteira sem clínicas vinculadas — pulado"); return
     # MARCO ZERO por clínica: produção conta a partir da data de reconquista (reconq_data) — não do começo
     since_map = {c.get("cod"): c.get("reconq_data") for c in carteira if c.get("cod") and c.get("reconq_data")}
-    from build_financeiro import clinic_details
+    from build_financeiro import clinic_details, divide_conversion
     res = clinic_details(cods, since_map, alias)
+    # 🎉 CONQUISTA DE CATEGORIA (clínicas 'Dividem material' com marco): injeta o público (setor/desde/n, SEM R$) no det
     try:
-        payload = json.dumps({"acao": "set", "det": res["det"], "setores": res["setores"], "senha": pwd}).encode()
+        div_marco = {str(c.get("cod")): c.get("reconq_data") for c in carteira if c.get("tipo") == "divide" and c.get("cod") and c.get("reconq_data")}
+        if div_marco:
+            conv = divide_conversion(div_marco, res.get("setores"))
+            for cod, cc in conv.items():
+                if cod in res["det"]:
+                    res["det"][cod]["conq"] = [{"setor": z["setor"], "desde": z["desde"], "n": z["n"]} for z in cc.get("conq", [])]
+                    res["det"][cod]["base"] = cc.get("base", [])
+    except Exception as e:
+        print(f"post_clinicas_det: conquista pulada ({e})")
+    try:
+        payload = json.dumps({"acao": "set", "det": res["det"], "setores": res["setores"], "senha": pwd}, ensure_ascii=False).encode()
         r = urllib.request.urlopen(urllib.request.Request(
             base + "/api/crm-clinicas-det", data=payload, headers={"Content-Type": "application/json"}), timeout=45)
         print(f"clinicas detalhe -> HTTP {r.status} ({len(res['det'])} clínicas · {len(res['setores'])} setores)")
