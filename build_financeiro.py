@@ -53,10 +53,14 @@ def clinic_details(cods, since_map=None, alias=None):
     d30 = (tdt - datetime.timedelta(days=30)).isoformat()
     d7 = (tdt - datetime.timedelta(days=7)).isoformat()
     # usa CATEGORIA (granular: Hematologia, Bioquímica, Histopatologia…) — Setor é grosso demais p/ white-space
-    uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd FROM {EX} s "
+    # UNIVERSO de white-space por PENETRAÇÃO (quantas clínicas mandam), NÃO por volume — tira ruído tipo NECRÓPSIA (1%)
+    totcli = int(q(f"SELECT COUNT(DISTINCT r.CodCliente) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                   f"WHERE s.DataExame BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
+    uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(DISTINCT r.CodCliente) cli FROM {EX} s "
+            f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY qtd DESC", (d365, maxd))
-    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and u["qtd"] > 0][:14]
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
+    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and (u["cli"] / totcli) >= 0.15][:14]
     ph = ",".join(["%s"] * len(cods))
     rows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd, "
              f"SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p30, SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p7 "
@@ -231,10 +235,14 @@ def clinics_aaa(full, nA=40, nB=60):
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
     maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
     d365 = (datetime.date.fromisoformat(maxd) - datetime.timedelta(days=365)).isoformat()
-    uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd FROM {EX} s "
+    # UNIVERSO de white-space por PENETRAÇÃO (quantas clínicas mandam), NÃO por volume — tira ruído tipo NECRÓPSIA (1%)
+    totcli = int(q(f"SELECT COUNT(DISTINCT r.CodCliente) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                   f"WHERE s.DataExame BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
+    uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(DISTINCT r.CodCliente) cli FROM {EX} s "
+            f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY qtd DESC", (d365, maxd))
-    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and u["qtd"] > 0][:14]
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
+    setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and (u["cli"] / totcli) >= 0.15][:14]
     ph = ",".join(["%s"] * len(cods))
     crows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd "
               f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
