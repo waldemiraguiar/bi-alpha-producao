@@ -1994,19 +1994,36 @@ function renderTab(){
             ${(r.zerados&&r.zerados.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ff8fa3">🚨 comissão paga mas 0 exames: ${r.zerados.map(f=>esc(f.nome)+(f.cidade?" ("+esc(f.cidade)+")":"")).join(" · ")}</div>`:""}
             ${(r.flags&&r.flags.length)?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#ffc266">🚩 ${r.flags.map(f=>esc(f.nome)+(f.prod!=null?" ("+f.prod+")":"")).join(" · ")}</div>`:""}</div>
           <div class="mid"></div></div>`;
-      // 🎉 PLANILHA DE CONQUISTAS (Dividem material): categoria que começou a mandar após o marco + R$ real (diretoria)
-      const divConq=CARTEIRA.filter(x=>x.tipo==="divide"&&x.cod).map(x=>({x,det:CLIN_DET[String(x.cod)]||null})).filter(o=>o.det&&(o.det.conq||[]).length);
-      const conquistaHtml = divConq.length ? `
-        <div class="seclabel" style="margin:14px 0 6px;color:#00E5A0">🎉 Conquistas de categoria <span class="t-mut" style="font-weight:500;font-size:11px">(Dividem material — o que começou a mandar depois do marco zero)</span></div>
-        ${divConq.map(o=>{ const cod=String(o.x.cod), conq=o.det.conq, totFat=(ehDiretoria()&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?conq.reduce((s,z)=>s+(CLIN_CONQFAT[cod][z.setor]||0),0):null;
+      // 🎉 PLANILHA DE CONQUISTAS (Dividem material): TOTAL desde o marco × CONQUISTA (só o novo), lado a lado
+      const divAll=CARTEIRA.filter(x=>x.tipo==="divide"&&x.cod).map(x=>({x,det:CLIN_DET[String(x.cod)]||null})).filter(o=>o.det);
+      const dir=ehDiretoria();
+      const conquistaHtml = divAll.length ? `
+        <div class="seclabel" style="margin:14px 0 6px;color:#00E5A0">🎉 Dividem material — total × conquista <span class="t-mut" style="font-weight:500;font-size:11px">(o que ela já mandava vs. o que você fez ela começar a mandar)</span></div>
+        ${divAll.map(o=>{ const cod=String(o.x.cod), conq=(o.det.conq||[]);
+          const totEx=(o.det.prod_desde!=null)?o.det.prod_desde:null, totRs=dir?rsVal(cod,o.x.reconq_data):null;   // desde o marco
+          const conqEx=conq.reduce((s,z)=>s+(z.n||0),0), conqRs=(dir&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?conq.reduce((s,z)=>s+(CLIN_CONQFAT[cod][z.setor]||0),0):null;
+          const pctRs=(dir&&totRs)?Math.round((conqRs||0)/totRs*100):null;
           return `<div style="background:rgba(0,229,160,.07);border:1px solid rgba(0,229,160,.3);border-radius:9px;padding:9px 11px;margin-bottom:7px">
-            <div style="font-weight:700;color:#00E5A0;font-size:13px">🔀 ${esc(o.x.nome)}${o.x.reconq_data?` <span class="t-mut" style="font-weight:500;font-size:11px">· marco ${esc(fmtDataBR(o.x.reconq_data))}</span>`:""}${totFat!=null?` · <span style="color:#7effcf">${fmtBRL(totFat)} novos</span>`:""}</div>
-            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;white-space:nowrap">
-              <thead><tr style="color:var(--mut);font-size:10.5px"><th style="text-align:left;padding:2px 6px">Categoria conquistada</th><th style="text-align:right;padding:2px 6px">Desde</th><th style="text-align:right;padding:2px 6px">Exames</th>${ehDiretoria()?'<th style="text-align:right;padding:2px 6px">R$ novo</th>':''}</tr></thead>
-              <tbody>${conq.map(z=>{ const rs=(ehDiretoria()&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?CLIN_CONQFAT[cod][z.setor]:null;
-                return `<tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:3px 6px;color:#7effcf">✅ ${esc(z.setor)}</td><td style="text-align:right;padding:3px 6px">${esc(fmtDataBR(z.desde))}</td><td style="text-align:right;padding:3px 6px">${z.n}</td>${ehDiretoria()?`<td style="text-align:right;padding:3px 6px;color:#7effcf;font-weight:700">${rs!=null?fmtBRL(rs):"—"}</td>`:''}</tr>`; }).join("")}</tbody>
-            </table></div></div>`; }).join("")}
-        <div class="t-mut" style="font-size:11px;margin:2px 0 4px">Categoria que a clínica <b>não mandava</b> antes do marco e começou a mandar depois = receita nova que o trabalho comercial trouxe. R$ só diretoria.</div>` : (CARTEIRA.some(x=>x.tipo==="divide"&&x.cod&&x.reconq_data)?`<div class="seclabel" style="margin:14px 0 6px;color:#00E5A0">🎉 Conquistas de categoria</div><div class="t-mut" style="font-size:12px">Ainda sem conquista — assim que uma clínica de "Dividem material" começar a mandar uma categoria que não mandava, aparece aqui com a data e o R$.</div>`:"");
+            <div style="font-weight:700;color:#00E5A0;font-size:13px">🔀 ${esc(o.x.nome)}${o.x.reconq_data?` <span class="t-mut" style="font-weight:500;font-size:11px">· marco ${esc(fmtDataBR(o.x.reconq_data))}</span>`:""}</div>
+            <div style="display:flex;gap:8px;margin-top:7px;flex-wrap:wrap">
+              <div style="flex:1;min-width:130px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.28);border-radius:8px;padding:7px 9px">
+                <div style="font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.3px">📊 Total desde o marco</div>
+                <div style="font-size:15px;font-weight:800;color:#9fe6ff;margin-top:2px">${dir?(totRs!=null?fmtBRL(totRs):"—"):"🔒"} <span style="font-size:11px;font-weight:500;color:var(--mut)">${totEx!=null?"· "+totEx+" ex":""}</span></div>
+                <div style="font-size:10px;color:var(--mut);margin-top:1px">inclui o que ela já mandava</div>
+              </div>
+              <div style="flex:1;min-width:130px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:7px 9px">
+                <div style="font-size:10.5px;color:#00E5A0;text-transform:uppercase;letter-spacing:.3px">🎉 Conquista (novo)</div>
+                <div style="font-size:15px;font-weight:800;color:#7effcf;margin-top:2px">${dir?(conqRs!=null?fmtBRL(conqRs):fmtBRL(0)):"🔒"} <span style="font-size:11px;font-weight:500;color:var(--mut)">· ${conqEx} ex</span></div>
+                <div style="font-size:10px;color:#7effcf;margin-top:1px">${pctRs!=null?pctRs+"% do total é ganho real":"categoria que não mandava"}</div>
+              </div>
+            </div>
+            ${conq.length?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:7px;white-space:nowrap">
+              <thead><tr style="color:var(--mut);font-size:10.5px"><th style="text-align:left;padding:2px 6px">🎉 Categoria conquistada</th><th style="text-align:right;padding:2px 6px">Desde</th><th style="text-align:right;padding:2px 6px">Exames</th>${dir?'<th style="text-align:right;padding:2px 6px">R$ novo</th>':''}</tr></thead>
+              <tbody>${conq.map(z=>{ const rs=(dir&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?CLIN_CONQFAT[cod][z.setor]:null;
+                return `<tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:3px 6px;color:#7effcf">✅ ${esc(z.setor)}</td><td style="text-align:right;padding:3px 6px">${esc(fmtDataBR(z.desde))}</td><td style="text-align:right;padding:3px 6px">${z.n}</td>${dir?`<td style="text-align:right;padding:3px 6px;color:#7effcf;font-weight:700">${rs!=null?fmtBRL(rs):"—"}</td>`:''}</tr>`; }).join("")}</tbody>
+            </table></div>`:`<div class="t-mut" style="font-size:11.5px;margin-top:7px">⏳ Ainda sem conquista — o alvo é: ${(o.det.falta||[]).slice(0,6).map(esc).join(", ")||"—"}. Quando ela mandar uma dessas, entra aqui com data e R$.</div>`}
+          </div>`; }).join("")}
+        <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 <b>Conquista</b> = categoria que ela <b>não mandava</b> antes do marco e passou a mandar = o ganho real do trabalho (é essa que comissiona). O <b>total</b> inclui o que já entrava. R$ só diretoria.</div>` : "";
       c.innerHTML=`${subtabsClin}
         <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">${ehDiretoria()?"📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo — você não precisa pedir). E-mail completo toda <b>sexta 9h</b>.":"📊 <b>Evolução da carteira</b> — produção e ritmo de cada clínica (atualiza sozinho a cada ciclo)."}</div>
         ${c2Html}
