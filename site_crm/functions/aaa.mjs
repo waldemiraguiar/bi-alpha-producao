@@ -22,7 +22,7 @@ export default async (req) => {
     if (body.acao === "set") {
       const arr = Array.isArray(body.aaa) ? body.aaa : [];
       const setores = Array.isArray(body.setores) ? body.setores.slice(0, 20).map((s) => String(s).slice(0, 40)) : [];
-      const out = arr.slice(0, 300).map((a) => ({
+      const out = arr.slice(0, 400).map((a) => ({
         cod: String(a.cod || "").slice(0, 30),
         nome: String(a.nome || "").slice(0, 120),
         cidade: String(a.cidade || "").slice(0, 80),
