@@ -2729,6 +2729,7 @@ async function initLogin(){
       setOperador(j.nome, j.papel);
       document.getElementById("gate").style.display="none";
       render(D);
+      try{ if(typeof window.__crmMostraBioSetup==="function") window.__crmMostraBioSetup(); }catch(e){}   // oferece "👆 Proteger com digital" já no 1º login
     }catch(ex){ err.textContent="Erro ao entrar (sem internet?)."; btn.disabled=false; btn.textContent="Entrar"; }
   });
   document.getElementById("loginNovo").onclick=async()=>{
