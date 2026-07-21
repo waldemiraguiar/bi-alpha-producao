@@ -564,7 +564,7 @@ function openCarteira(tipo, id){
     <input type="hidden" id="caCod" value="${c?esc(c.cod||""):""}"><input type="hidden" id="caCidade" value="${c?esc(c.cidade||""):""}">
     <div id="caVinc" class="proxhint" style="display:${(c&&c.cod)?"block":"none"}">${(c&&c.cod)?("🔗 vinculada ao HF"+(c.cidade?" · "+esc(c.cidade):"")):""}</div>
     <div class="m-lbl">Tipo</div>
-    <div class="m-opts" id="caTipo"><button class="opt${T==="reconquistada"?" on":""}" data-t="reconquistada">♻️ Reconquistada</button><button class="opt${T==="nova"?" on":""}" data-t="nova">🆕 Nova</button><button class="opt${T==="divide"?" on":""}" data-t="divide">🔀 Divide material</button></div>
+    <div class="m-opts" id="caTipo"><button class="opt${T==="reconquistada"?" on":""}" data-t="reconquistada">♻️ Reconquistada</button><button class="opt${T==="nova"?" on":""}" data-t="nova">🆕 Nova</button><button class="opt${T==="divide"?" on":""}" data-t="divide">🔀 Divide material</button><button class="opt${T==="particular"?" on":""}" data-t="particular">🐾 Particular</button></div>
     <div class="m-lbl">Porte <span class="t-mut" style="font-weight:500">— ajuda a saber se manda muito ou pouco</span></div>
     <div class="m-opts" id="caPorte">${[["G","🐘 Grande"],["M","🐎 Médio"],["P","🐇 Pequeno"]].map(([v,l])=>`<button class="opt${P===v?" on":""}" data-p="${v}">${l}</button>`).join("")}</div>
     <div class="m-lbl">📅 Marco zero — data da reconquista/entrada <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— a produção conta a partir daqui</span></div>
@@ -1813,9 +1813,9 @@ function renderTab(){
   if(ACTIVE==="clinicas"){
     // diretoria com o código na sessão: decifra o R$ sozinho e re-renderiza
     if(ehDiretoria() && !CLIN_RS && CLIN_RS_ENV && dirCodeCache()){ decDirRS(dirCodeCache()).then(ok=>{ if(ok&&ACTIVE==="clinicas") renderTab(); }); }
-    const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada"), divm=CARTEIRA.filter(x=>x.tipo==="divide");
+    const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada"), divm=CARTEIRA.filter(x=>x.tipo==="divide"), part=CARTEIRA.filter(x=>x.tipo==="particular");
     const aaaA=AAA.filter(a=>a.curva==="A"||!a.curva), aaaB=AAA.filter(a=>a.curva==="B"), aaaC=AAA.filter(a=>a.curva==="C"), aaaD=AAA.filter(a=>a.curva==="D");   // curvas por faturamento 12m
-    const lista=(clinView==="nova"?nov:clinView==="divide"?divm:rec);
+    const lista=(clinView==="nova"?nov:clinView==="divide"?divm:clinView==="particular"?part:rec);
     const q=search.trim().toLowerCase();
     const arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista;
     const semVinc=CARTEIRA.filter(x=>!x.cod).length;
@@ -1863,10 +1863,12 @@ function renderTab(){
       const c2Linha=c2?`<div class="ci" style="font-size:11.5px;margin-top:4px;color:${c2.cor};font-weight:${c2.status==="ok"?"500":"700"}">🧠² ${c2.msg}</div>`:"";
       const c2Alerta=!!(c2 && (c2.status==="parou"||c2.status==="caiu"));
       const prodTxt = (prodDesde!=null&&temMarco) ? `📊 desde a reconquista: <b>${prodDesde}</b> exames` : (prod!=null?`📊 produção (12m): <b>${prod}</b> exames`:'<span class="t-mut">produção: — (vincule ao HF)</span>');
-      const marcoLinha = temMarco ? `<div class="ci" style="font-size:11.5px;margin-top:2px;color:#7effcf">${x.tipo==="nova"?"🆕 conquistada":"♻️ reconquistada"} em <b>${esc(fmtDataBR(x.reconq_data))}</b> <span class="t-mut">(${x.tipo==="nova"?"data da conquista":"marco zero"})</span></div>` : `<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">⚠️ sem data — edite e ponha a data da ${x.tipo==="nova"?"conquista":"reconquista"}</div>`;
+      const mLbl={nova:"🆕 conquistada",reconquistada:"♻️ reconquistada",divide:"🔀 trabalhando",particular:"🐾 particular desde"}[x.tipo]||"♻️ reconquistada";
+      const marcoLinha = temMarco ? `<div class="ci" style="font-size:11.5px;margin-top:2px;color:#7effcf">${mLbl} em <b>${esc(fmtDataBR(x.reconq_data))}</b> <span class="t-mut">(${x.tipo==="nova"?"data da conquista":"marco zero"})</span></div>` : `<div class="ci" style="font-size:11px;margin-top:2px;color:#ffc266">⚠️ sem data — edite e ponha a data do marco zero</div>`;
       const perdaLinha = x.motivo_perda ? `<div class="ci" style="font-size:11.5px;margin-top:1px;color:#ffb3c0">💔 perdeu antes: "${esc(x.motivo_perda)}"</div>` : "";
+      const tIco={nova:["🆕","#00E5A0"],reconquistada:["♻️","#00D4FF"],divide:["🔀","#9fe6ff"],particular:["🐾","#7effcf"]}[x.tipo]||["♻️","#00D4FF"];
       return `<div class="crow" data-cart="${esc(x.id)}" style="cursor:pointer;align-items:flex-start${(flag||mesaBox||c2Alerta)?';border-left:3px solid #FF2D55':''}">
-        <div class="rk" style="color:${x.tipo==="nova"?"#00E5A0":"#00D4FF"}">${x.tipo==="nova"?"🆕":"♻️"}</div>
+        <div class="rk" style="color:${tIco[1]}">${tIco[0]}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
           <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt}${ehDiretoria()?` · 💰 ${rsClin(x.cod, x.reconq_data)}`:""}</div>
           ${marcoLinha}${perdaLinha}${detLinha}
@@ -1878,7 +1880,7 @@ function renderTab(){
           <div class="ci t-mut" style="font-size:11px;margin-top:4px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
-    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Clínicas A${aaaA.length?` (${aaaA.length})`:''}</button><button class="subtab ${clinView==='aab'?'on':''}" data-cv="aab">🅱️ Clínicas B${aaaB.length?` (${aaaB.length})`:''}</button><button class="subtab ${clinView==='aac'?'on':''}" data-cv="aac">🇨 Clínicas C${aaaC.length?` (${aaaC.length})`:''}</button><button class="subtab ${clinView==='aad'?'on':''}" data-cv="aad">🇩 Clínicas D${aaaD.length?` (${aaaD.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
+    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='particular'?'on':''}" data-cv="particular">🐾 Particulares${part.length?` (${part.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Clínicas A${aaaA.length?` (${aaaA.length})`:''}</button><button class="subtab ${clinView==='aab'?'on':''}" data-cv="aab">🅱️ Clínicas B${aaaB.length?` (${aaaB.length})`:''}</button><button class="subtab ${clinView==='aac'?'on':''}" data-cv="aac">🇨 Clínicas C${aaaC.length?` (${aaaC.length})`:''}</button><button class="subtab ${clinView==='aad'?'on':''}" data-cv="aad">🇩 Clínicas D${aaaD.length?` (${aaaD.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
     if(clinView==="relatorios"){
       const pl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno","":"—"};
       const semLabel=r=>{ if(r.label) return "Sexta "+esc(r.label); const m=String(r.semana||"").match(/(\d{4})-W(\d+)/); return m?`Semana ${m[2]}/${m[1]}`:esc(r.semana||"—"); };
@@ -2081,10 +2083,11 @@ function renderTab(){
       const la=document.getElementById("lupaAAA"); if(la){ la.addEventListener("input", e=>{ search=e.target.value; const p=la.selectionStart; renderTab(); const l2=document.getElementById("lupaAAA"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
       return;
     }
-    const VM={nova:{add:"NOVA",kpi:"Novas",sec:"🆕 Clínicas novas",vazio:"nova"},reconquistada:{add:"RECONQUISTADA",kpi:"Reconquistadas",sec:"♻️ Clínicas reconquistadas",vazio:"reconquistada"},divide:{add:"que DIVIDE material",kpi:"Dividem material",sec:"🔀 Clínicas que dividem material",vazio:"que divide material"}}[clinView]||{add:"",kpi:"",sec:"",vazio:""};
+    const VM={nova:{add:"NOVA",kpi:"Novas",sec:"🆕 Clínicas novas",vazio:"nova"},reconquistada:{add:"RECONQUISTADA",kpi:"Reconquistadas",sec:"♻️ Clínicas reconquistadas",vazio:"reconquistada"},divide:{add:"que DIVIDE material",kpi:"Dividem material",sec:"🔀 Clínicas que dividem material",vazio:"que divide material"},particular:{add:"PARTICULAR",kpi:"Particulares",sec:"🐾 Clientes particulares",vazio:"particular"}}[clinView]||{add:"",kpi:"",sec:"",vazio:""};
     c.innerHTML=`
       ${subtabsClin}
       ${clinView==='divide'?`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin-bottom:10px;line-height:1.55">🔀 <b>Clínicas que repartem material com o concorrente</b> — mandam só uma categoria (ex.: só histopatologia) e o resto vai pra outro lab. Cadastre com a <b>data que vamos começar a trabalhar</b> (marco zero); eu rastreio a produção e mostro o que ela <b>NÃO</b> te manda (deixando na mesa). Vira comissão quando abrir as outras categorias.</div>`:""}
+      ${clinView==='particular'?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:10px;line-height:1.55">🐾 <b>Clientes particulares</b> — você marca na mão quais são (não tem marca automática confiável no HF). Mesma análise das outras: vínculo ao HF, produção 12m, ✅ o que manda × 🎯 o que deixa na mesa, marco zero e drill-down. Cadastre e trabalhe igual.</div>`:""}
       <button class="checkinbtn" id="addCart" type="button" style="margin-bottom:6px">➕ Adicionar clínica ${VM.add}</button>
       <div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Você digita o nome; eu acho no HF (${CL?CL+" clínicas":"aguardando o robô"}) e vinculo → puxo a produção. O input é seu.</div>
       <div class="kgrid">
