@@ -73,7 +73,7 @@ const RESULT = {
 const CANAIS = ["Ligação","WhatsApp","E-mail","Visita"];
 const MOTIVOS = ["Preço","Concorrente","Qualidade","Fechou","Sem demanda","Outro"];
 function syncInter(arr){ INTER = (arr||[]).slice().sort((a,b)=>b.ts-a.ts); }
-async function loadInter(){ try{ const r=await fetch(INTER_API); if(r.ok) syncInter((await r.json()).interacoes); }catch(e){} }
+async function loadInter(){ try{ const r=await fetch(INTER_API, {cache:"no-store"}); if(r.ok) syncInter((await r.json()).interacoes); }catch(e){} }
 function interOf(cod){ const c=String(cod); return INTER.filter(x=>String(x.cod)===c); }
 function lastInter(cod){ return interOf(cod)[0]||null; }
 function diasAtras(ts){ const d=Math.floor((Date.now()-ts)/864e5); return d<=0?"hoje":d===1?"ontem":`há ${d}d`; }
@@ -83,7 +83,7 @@ const ENCERR_API="/api/crm-encerrados";
 let ENCERR=new Map();   // cod(string) -> {cod,cliente,cidade,motivo,por,nota,ts}
 const MOTIVOS_ENC=["Em débito","Sem interesse","Judicial"];
 function syncEncerr(arr){ ENCERR=new Map((arr||[]).map(e=>[String(e.cod),e])); }
-async function loadEncerr(){ try{ const r=await fetch(ENCERR_API); if(r.ok) syncEncerr((await r.json()).encerrados); }catch(e){} }
+async function loadEncerr(){ try{ const r=await fetch(ENCERR_API, {cache:"no-store"}); if(r.ok) syncEncerr((await r.json()).encerrados); }catch(e){} }
 function motivosEnc(){ return [...new Set([...MOTIVOS_ENC, ...[...ENCERR.values()].map(e=>e.motivo).filter(Boolean)])]; }
 function act(arr){ return (arr||[]).filter(x=>!ENCERR.has(String(x.cod)) && !INAT.has(String(x.cod))); }   // tira encerrados E inativos do fluxo/% geral
 async function encerrar(cod, cliente, cidade, motivo, nota){
@@ -107,7 +107,7 @@ const INAT_API="/api/crm-inativos";
 let INAT=new Map();   // cod(string) -> {cod,cliente,cidade,motivo,por,nota,ts}
 const MOTIVOS_INAT=["Calote","Falta de pagamento","Judicial","Sem contato"];
 function syncInat(arr){ INAT=new Map((arr||[]).map(e=>[String(e.cod),e])); }
-async function loadInat(){ try{ const r=await fetch(INAT_API); if(r.ok) syncInat((await r.json()).inativos); }catch(e){} }
+async function loadInat(){ try{ const r=await fetch(INAT_API, {cache:"no-store"}); if(r.ok) syncInat((await r.json()).inativos); }catch(e){} }
 function motivosInat(){ return [...new Set([...MOTIVOS_INAT, ...[...INAT.values()].map(e=>e.motivo).filter(Boolean)])]; }
 async function inativar(cod, cliente, cidade, motivo, nota){
   const por=quem(); if(por===null) return false;
@@ -127,7 +127,7 @@ async function reativarInat(cod){
 const SENS_API="/api/crm-sensiveis";
 let SENS=[];
 function syncSens(arr){ SENS=(arr||[]).slice().sort((a,b)=>b.ts-a.ts); }
-async function loadSens(){ try{ const r=await fetch(SENS_API); if(r.ok) syncSens((await r.json()).sensiveis); }catch(e){} }
+async function loadSens(){ try{ const r=await fetch(SENS_API, {cache:"no-store"}); if(r.ok) syncSens((await r.json()).sensiveis); }catch(e){} }
 async function addSens(nome,obs){ if(!(nome||"").trim()) return; const por=quem(); if(por===null) return;
   try{ const r=await fetch(SENS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,obs,por,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão."); return; } if(r.ok){ syncSens((await r.json()).sensiveis); renderTab(); } }catch(e){ alert("Falha ao adicionar."); } }
@@ -141,7 +141,7 @@ const PSTATUS={novo:{lbl:"Novo",col:"#8aa2bd"},em_contato:{lbl:"Em contato",col:
   venda_ganha:{lbl:"Venda ganha",col:"#00E5A0"},venda_perdida:{lbl:"Venda perdida",col:"#FF5470"}};
 const PORDER=["novo","em_contato","visita_agendada","grupo_aberto","venda_ganha","venda_perdida"];
 function syncProsp(arr){ PROSP=(arr||[]).slice().sort((a,b)=>(b.ts_upd||b.ts||0)-(a.ts_upd||a.ts||0)); }
-async function loadProsp(){ try{ const r=await fetch(PROSP_API); if(r.ok) syncProsp((await r.json()).prospects); }catch(e){} }
+async function loadProsp(){ try{ const r=await fetch(PROSP_API, {cache:"no-store"}); if(r.ok) syncProsp((await r.json()).prospects); }catch(e){} }
 function prospOf(id){ return PROSP.find(p=>p.id===id); }
 async function saveProsp(p){ const por=quem(); if(por===null) return false; if(!p.por) p.por=por;
   try{ const r=await fetch(PROSP_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",prospect:p,senha:window.__pwd})});
@@ -194,7 +194,7 @@ const PRES={interesse:{lbl:"Interesse",ic:"😍",col:"#00E5A0"},orcamento:{lbl:"
   sem_interesse:{lbl:"Sem interesse",ic:"❌",col:"#FF5470"},visita:{lbl:"Visita registrada",ic:"📍",col:"#8aa2bd"}};
 const PRORDER=["interesse","orcamento","fechou","objecao","sem_interesse","visita"];
 function syncPista(arr){ PISTA=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
-async function loadPista(){ try{ const r=await fetch(PISTA_API); if(r.ok) syncPista((await r.json()).pista); }catch(e){} }
+async function loadPista(){ try{ const r=await fetch(PISTA_API, {cache:"no-store"}); if(r.ok) syncPista((await r.json()).pista); }catch(e){} }
 /* ---- fila OFFLINE (grava sem sinal → sincroniza quando volta a internet) ---- */
 const PQ_KEY="crm_pista_queue";
 function pqLoad(){ try{ return JSON.parse(localStorage.getItem(PQ_KEY)||"[]"); }catch(e){ return []; } }
@@ -255,7 +255,7 @@ function relTitulo(r){ if(r.titulo&&r.titulo.trim()) return r.titulo.trim();
 function syncRelatos(arr){ const base=(arr||[]).slice(), ids=new Set(base.map(x=>x.id));
   try{ (rqLoad()||[]).forEach(it=>{ if(it&&!ids.has(it.id)) base.push(it); }); }catch(e){}   // mantém os que ainda estão na fila offline (não somem num reload)
   RELATOS=base.sort((a,b)=>(b.ts||0)-(a.ts||0)); }
-async function loadRelatos(){ try{ const r=await fetch(RELATOS_API); if(r.ok) syncRelatos((await r.json()).relatos); }catch(e){} }
+async function loadRelatos(){ try{ const r=await fetch(RELATOS_API, {cache:"no-store"}); if(r.ok) syncRelatos((await r.json()).relatos); }catch(e){} }
 function relatosFiltrados(){ return repFilter ? RELATOS.filter(r=>(r.por||"")===repFilter) : RELATOS; }
 /* fila offline dos relatos (mesmo padrão da pista) */
 function rqLoad(){ try{ return JSON.parse(localStorage.getItem("crm_relato_queue")||"[]"); }catch(e){ return []; } }
@@ -280,7 +280,7 @@ async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"P
 const EXCL_API="/api/crm-exclusoes";
 let EXCL=[];
 function syncExcl(arr){ EXCL=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
-async function loadExcl(){ try{ const r=await fetch(EXCL_API); if(r.ok) syncExcl((await r.json()).exclusoes); }catch(e){} }
+async function loadExcl(){ try{ const r=await fetch(EXCL_API, {cache:"no-store"}); if(r.ok) syncExcl((await r.json()).exclusoes); }catch(e){} }
 function quemExcluiu(){ return meuRep() || (localStorage.getItem("crm_quem")||"").trim() || (prompt("Quem está excluindo? (seu nome)")||"").trim(); }
 async function excluirFeedback(id){
   const f=PISTA.find(x=>x.id===id); if(!f) return;
@@ -320,7 +320,7 @@ function pistaMic(btn, ta, onDone){
 const REPS_API="/api/crm-reps";
 let REPS=[], repFilter="";   // repFilter="" = todos
 function syncReps(arr){ REPS=(arr||[]).slice().sort((a,b)=>a.localeCompare(b)); }
-async function loadReps(){ try{ const r=await fetch(REPS_API); if(r.ok) syncReps((await r.json()).reps); }catch(e){} }
+async function loadReps(){ try{ const r=await fetch(REPS_API, {cache:"no-store"}); if(r.ok) syncReps((await r.json()).reps); }catch(e){} }
 async function addRep(nome){ nome=(nome||"").trim(); if(!nome) return; const por=quem(); if(por===null) return;
   try{ const r=await fetch(REPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão."); return; } if(r.ok){ syncReps((await r.json()).reps); renderTab(); } }catch(e){ alert("Falha ao cadastrar."); } }
@@ -331,7 +331,7 @@ function meuRep(){ return operadorAtual() || (localStorage.getItem("crm_rep")||"
 const OPS_API="/api/crm-operadores";
 let OPERADORES=[];
 function syncOps(a){ OPERADORES=(a||[]).slice(); }
-async function loadOps(){ try{ const r=await fetch(OPS_API); if(r.ok) syncOps((await r.json()).operadores); }catch(e){} }
+async function loadOps(){ try{ const r=await fetch(OPS_API, {cache:"no-store"}); if(r.ok) syncOps((await r.json()).operadores); }catch(e){} }
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
@@ -409,15 +409,15 @@ const CLIN_API="/api/crm-clinicas", CART_API="/api/crm-carteira";
 let CLINICAS=[], CLIN_TS=0, CARTEIRA=[], clinView="reconquistada";
 const PORTE_PROD_BAIXA=40;   // porte Grande com produção L12 abaixo disso = 🚩 pode estar dividindo exame (heurística até ter categoria)
 function syncClin(o){ CLINICAS=(o&&o.clinicas)||[]; CLIN_TS=(o&&o.ts)||0; }
-async function loadClin(){ try{ const r=await fetch(CLIN_API); if(r.ok) syncClin(await r.json()); }catch(e){} }
+async function loadClin(){ try{ const r=await fetch(CLIN_API, {cache:"no-store"}); if(r.ok) syncClin(await r.json()); }catch(e){} }
 function syncCart(a){ CARTEIRA=(a||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0)); }
-async function loadCart(){ try{ const r=await fetch(CART_API); if(r.ok) syncCart((await r.json()).carteira); }catch(e){} }
+async function loadCart(){ try{ const r=await fetch(CART_API, {cache:"no-store"}); if(r.ok) syncCart((await r.json()).carteira); }catch(e){} }
 const REL_API="/api/crm-relatorios"; let RELATORIOS=[];
-async function loadRel(){ try{ const r=await fetch(REL_API); if(r.ok) RELATORIOS=((await r.json()).relatorios||[]).slice().sort((a,b)=>(a.id<b.id?1:-1)); }catch(e){} }
+async function loadRel(){ try{ const r=await fetch(REL_API, {cache:"no-store"}); if(r.ok) RELATORIOS=((await r.json()).relatorios||[]).slice().sort((a,b)=>(a.id<b.id?1:-1)); }catch(e){} }
 let CLIN_DET={}, CLIN_SETORES=[];   // share-of-wallet por clínica (setores que manda / não manda + prod 30d/7d) — SEM R$
-async function loadDet(){ try{ const r=await fetch("/api/crm-clinicas-det"); if(r.ok){ const j=await r.json(); CLIN_DET=(j&&j.det)||{}; CLIN_SETORES=(j&&j.setores)||[]; } }catch(e){} }
+async function loadDet(){ try{ const r=await fetch("/api/crm-clinicas-det", {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_DET=(j&&j.det)||{}; CLIN_SETORES=(j&&j.setores)||[]; } }catch(e){} }
 let AAA=[], AAA_TS=0, AAA_SETORES=[], AAA_PCT=80;   // clínicas Triplo A (top faturamento 12m, curva A) + share-of-wallet 12m (ordem = ranking; SEM R$ no payload)
-async function loadAAA(){ try{ const r=await fetch("/api/crm-aaa"); if(r.ok){ const j=await r.json(); AAA=(j&&j.aaa)||[]; AAA_TS=(j&&j.ts)||0; AAA_SETORES=(j&&j.setores)||[]; AAA_PCT=(j&&j.pct)||80; } }catch(e){} }
+async function loadAAA(){ try{ const r=await fetch("/api/crm-aaa", {cache:"no-store"}); if(r.ok){ const j=await r.json(); AAA=(j&&j.aaa)||[]; AAA_TS=(j&&j.ts)||0; AAA_SETORES=(j&&j.setores)||[]; AAA_PCT=(j&&j.pct)||80; } }catch(e){} }
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
@@ -450,7 +450,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
 let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas (só diretoria)
-async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
+async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
   if(!CLIN_RS_ENV||!CLIN_RS_ENV.ct||!code) return false;
@@ -1215,7 +1215,7 @@ const HIST_API = "/api/crm-history";
 let HIST = [];
 const MOTLAB = {parado:"Parado", queda_forte:"Queda forte", queda:"Em queda", novo_esfriando:"Novo esfriando", alta:"Em alta"};
 const MOTCOL = {parado:"#FF5470", queda_forte:"#FF2D55", queda:"#FF8A8A", novo_esfriando:"#FFB020", alta:"#4D9DFF"};
-async function loadHist(){ try{ const r=await fetch(HIST_API); if(r.ok){ const j=await r.json(); HIST=(j.snapshots||[]).slice().sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0)); } }catch(e){} }
+async function loadHist(){ try{ const r=await fetch(HIST_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); HIST=(j.snapshots||[]).slice().sort((a,b)=>a.week<b.week?-1:(a.week>b.week?1:0)); } }catch(e){} }
 function weekDiff(prev, cur){
   const pm=new Map((prev&&prev.flagged?prev.flagged:[]).map(x=>[String(x.cod),x]));
   const cm=new Map((cur.flagged||[]).map(x=>[String(x.cod),x]));
@@ -2724,7 +2724,8 @@ function render(D){
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
-      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart()]);
+      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart(), loadDet(), loadAAA(), loadRel()]);
+      if(ehDiretoria() && dirCodeCache()){ await loadClinRS(); await decDirRS(dirCodeCache()); }   // R$/conquistas frescos p/ diretoria
       if(a!==sig()) renderTab(); }, 45000);
   }
 }
