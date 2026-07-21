@@ -215,20 +215,25 @@ def clinic_fat_mensal(since_map, alias=None):
         out[p] = [{"ym": ym, "n": m[ym][0], "fat": round(m[ym][1], 2)} for ym in sorted(m)]
     return out
 
-def clinics_aaa(full, pct=0.80, cap=60):
-    """Clínicas TRIPLO A = curva A por FATURAMENTO 12m (Pareto: as que somam ~pct do faturamento total),
-    com análise de share-of-wallet 12m (categorias que MANDA + white-space que NÃO manda). Ordena por fat desc.
+def clinics_aaa(full, corte_a=0.80, corte_b=0.95, cap=180):
+    """Clínicas por CURVA ABC (Pareto) sobre o FATURAMENTO 12m: A = as que somam os 1ºs ~80% do faturamento
+    (as vitais), B = de 80% a 95%, C = a cauda (>95%, não entra). Cada clínica leva o campo `curva` (A|B).
+    Análise share-of-wallet 12m (categorias que MANDA + white-space que NÃO manda). Ordena por fat desc.
     Payload SEM R$ (só qtd de exames) — o R$ 12m já vai no cifrado da diretoria (clinicas_rs). `full`=D['clinicas_full']."""
     rows = sorted([c for c in (full or []) if (c.get("fat") or 0) > 0 and c.get("cod") is not None], key=lambda c: -(c.get("fat") or 0))
     if not rows:
-        return {"aaa": [], "setores": [], "pct": int(pct * 100), "n": 0}
+        return {"aaa": [], "setores": [], "pct": int(corte_a * 100), "n": 0, "nA": 0, "nB": 0}
     total = sum((c.get("fat") or 0) for c in rows)
     sel, acc = [], 0.0
     for c in rows:
-        sel.append(c); acc += (c.get("fat") or 0)
-        if total and acc / total >= pct:
+        acc += (c.get("fat") or 0); frac = (acc / total) if total else 1.0
+        curva = "A" if frac <= corte_a else ("B" if frac <= corte_b else "C")
+        if curva == "C":
+            break   # a cauda não entra (nem A nem B)
+        c["_curva"] = curva
+        sel.append(c)
+        if len(sel) >= cap:
             break
-    sel = sel[:cap]
     cods = [str(c["cod"]) for c in sel]
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
@@ -253,10 +258,11 @@ def clinics_aaa(full, pct=0.80, cap=60):
         cod = str(cc["cod"]); catd = bycod.get(cod, {})
         cats = sorted([(s, n) for s, n in catd.items() if s != "(sem categoria)"], key=lambda kv: -kv[1])
         out.append({"cod": cod, "nome": cc.get("nome", ""), "cidade": cc.get("cidade", ""),
-                    "qtd": int(cc.get("qtd") or 0),
+                    "qtd": int(cc.get("qtd") or 0), "curva": cc.get("_curva", "A"),
                     "cats": [{"setor": s, "qtd": n} for s, n in cats],
                     "falta": [s for s in setores if s not in catd]})
-    return {"aaa": out, "setores": setores, "pct": int(pct * 100), "n": len(out)}
+    nA = sum(1 for o in out if o["curva"] == "A"); nB = sum(1 for o in out if o["curva"] == "B")
+    return {"aaa": out, "setores": setores, "pct": int(corte_a * 100), "n": len(out), "nA": nA, "nB": nB}
 
 def build():
     conn = pymysql.connect(**SRC); c = conn.cursor()

@@ -1797,6 +1797,7 @@ function renderTab(){
     // diretoria com o código na sessão: decifra o R$ sozinho e re-renderiza
     if(ehDiretoria() && !CLIN_RS && CLIN_RS_ENV && dirCodeCache()){ decDirRS(dirCodeCache()).then(ok=>{ if(ok&&ACTIVE==="clinicas") renderTab(); }); }
     const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada"), divm=CARTEIRA.filter(x=>x.tipo==="divide");
+    const aaaA=AAA.filter(a=>a.curva!=="B"), aaaB=AAA.filter(a=>a.curva==="B");   // curva A (vitais) × curva B (miolo)
     const lista=(clinView==="nova"?nov:clinView==="divide"?divm:rec);
     const q=search.trim().toLowerCase();
     const arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista;
@@ -1846,7 +1847,7 @@ function renderTab(){
           <div class="ci t-mut" style="font-size:11px;margin-top:4px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
-    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Triplo A${AAA.length?` (${AAA.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
+    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Clínicas A${aaaA.length?` (${aaaA.length})`:''}</button><button class="subtab ${clinView==='aab'?'on':''}" data-cv="aab">🅱️ Clínicas B${aaaB.length?` (${aaaB.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
     if(clinView==="relatorios"){
       const pl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno","":"—"};
       const semLabel=r=>{ if(r.label) return "Sexta "+esc(r.label); const m=String(r.semana||"").match(/(\d{4})-W(\d+)/); return m?`Semana ${m[2]}/${m[1]}`:esc(r.semana||"—"); };
@@ -1973,32 +1974,39 @@ function renderTab(){
       const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>abrirFinanceiro();
       return;
     }
-    if(clinView==="aaa"){
+    if(clinView==="aaa"||clinView==="aab"){
+      const curva=clinView==="aab"?"B":"A";
+      const AA=AAA.filter(a=>curva==="B"?a.curva==="B":a.curva!=="B");
+      const meta=curva==="B"?{ic:"🅱️",cor:"#c9d4e0",bord:"rgba(201,212,224,.4)",nome:"Clínicas B",desc:`o miolo — as que somam de ~${AAA_PCT}% a 95% do faturamento 12m`}:{ic:"⭐",cor:"#ffd166",bord:"rgba(255,209,102,.45)",nome:"Clínicas A",desc:`as vitais — as que somam os 1ºs ~${AAA_PCT}% do faturamento 12m`};
       const q2=search.trim().toLowerCase();
-      const aarr=q2?AAA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AAA;
+      const aarr=q2?AA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AA;
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
-      const comMesa=AAA.filter(a=>(a.falta||[]).length).length;
+      const comMesa=AA.filter(a=>(a.falta||[]).length).length;
       const acard=(a,i)=>{ const [pv,pl2]=porteDe(a.qtd||0); const falta=(a.falta||[]).slice(); const cats=(a.cats||[]).slice();
-        const interp = falta.length ? `🧠 Manda ${cats.slice(0,3).map(c=>esc(c.setor)).join(", ")||"pouco"}, mas <b>NÃO te manda ${falta.slice(0,4).map(esc).join(", ")}</b> — vai pro concorrente. Puxa essas.` : `🧠 Manda todas as classes 👍 (share-of-wallet cheio)`;
-        return `<div class="crow" style="cursor:default;align-items:flex-start${falta.length>=3?';border-left:3px solid #FF2D55':''}">
-          <div class="rk" style="color:#ffd166;display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:11px">⭐</span></div>
-          <div style="flex:1"><div class="nm">${esc(a.nome)} <span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl2}</span> <span class="t-mut" style="font-size:11px">🔗 HF</span></div>
+        // 🎯 O QUE NÃO MANDA = bloco vermelho de MUITO destaque (pedido do Wal)
+        const mesa = falta.length ? `<div style="background:rgba(255,45,85,.13);border:1px solid rgba(255,45,85,.5);border-left:3px solid #FF2D55;border-radius:8px;padding:7px 10px;margin-top:6px">
+            <div style="font-weight:800;color:#ff6b81;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">🎯 Deixando na mesa · ${falta.length} classe(s) indo pro concorrente</div>
+            <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,12).map(f=>`<span style="background:rgba(255,45,85,.22);color:#ffd0d8;border:1px solid rgba(255,45,85,.5);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}${falta.length>12?`<span style="color:#ff8fa3;font-size:11px;font-weight:700;align-self:center">+${falta.length-12}</span>`:""}</div>
+            <div style="font-size:11px;color:#ffb3c0;margin-top:5px">👉 <b>puxa essas</b> — ela já é grande e confia no lab; falta pedir.</div>
+          </div>` : `<div class="ci" style="font-size:11.5px;margin-top:5px;color:#7effcf">✅ manda <b>todas</b> as classes do lab — share-of-wallet cheio 👏</div>`;
+        return `<div class="crow" style="cursor:default;align-items:flex-start${falta.length?';border-left:3px solid #FF2D55':''}">
+          <div class="rk" style="color:${meta.cor};display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:11px">${meta.ic}</span></div>
+          <div style="flex:1"><div class="nm">${esc(a.nome)} <span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl2}</span> <span class="pr" style="background:${curva==='B'?'rgba(201,212,224,.16)':'rgba(255,209,102,.18)'};color:${meta.cor}">curva ${a.curva||curva}</span> <span class="t-mut" style="font-size:11px">🔗 HF</span></div>
             <div class="ci">${a.cidade?"📍 "+esc(a.cidade)+" · ":""}📊 <b>${a.qtd||0}</b> exames (12m) · 💰 ${rsClin(a.cod)}</div>
-            ${cats.length?`<div class="ci" style="font-size:11.5px;margin-top:2px">✅ manda: ${cats.slice(0,5).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</div>`:""}
-            ${falta.length?`<div class="ci" style="font-size:11.5px;margin-top:2px;color:#ff8fa3">🎯 deixa na mesa: ${falta.slice(0,6).map(esc).join(", ")}${falta.length>6?" +"+(falta.length-6):""}</div>`:""}
-            <div class="ci" style="font-size:11.5px;margin-top:3px;${falta.length>=3?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div></div>
+            ${cats.length?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#7effcf">✅ manda: ${cats.slice(0,6).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</div>`:""}
+            ${mesa}</div>
           <div class="mid"></div></div>`; };
       c.innerHTML=`${subtabsClin}
-        <div class="proxhint" style="border-color:rgba(255,209,102,.45);color:#ffd166;margin-bottom:10px;line-height:1.55">⭐ <b>Clínicas Triplo A</b> — as que mais faturam em 12 meses (curva A: as ~${AAA_PCT}% do faturamento). Trazidas <b>automaticamente</b> pelo robô, ranqueadas por faturamento. Análise de <b>12 meses</b>: o que cada uma manda × o que está <b>deixando na mesa</b> (indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> das Triplo A são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
+        <div class="proxhint" style="border-color:${meta.bord};color:${meta.cor};margin-bottom:10px;line-height:1.55">${meta.ic} <b>${meta.nome}</b> — ${meta.desc}. Trazidas <b>automaticamente</b> pelo robô (curva ABC), ranqueadas por faturamento. Mesma inteligência das Reconquistadas/Novas: <b>análise de 12 meses</b> do que manda × <b>o que deixa na mesa</b> (vermelho = indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
         <div class="kgrid">
-          ${kpi("g", AAA.length, "Clínicas AAA", "curva A · 12m")}
-          ${kpi(comMesa?"a":"", comMesa, "Com white-space", "deixando classe na mesa")}
+          ${kpi("g", AA.length, meta.nome, "curva "+curva+" · 12m")}
+          ${kpi(comMesa?"a":"", comMesa, "Deixando na mesa", "classes indo pro concorrente")}
           ${kpi("", AAA_SETORES.length, "Categorias do lab", "universo de exames")}
           ${kpi("", AAA_TS?"✓":"—", "Sincronizado", AAA_TS?new Date(AAA_TS).toLocaleDateString("pt-BR"):"aguardando robô")}
         </div>
-        <div class="t-mut" style="font-size:11.5px;margin:2px 0 8px;text-align:center">Numeradas por faturamento (maior → menor). Análise 12m: ✅ o que manda × 🎯 o que deixa na mesa. R$ só diretoria. Pra rastrear exame-a-exame, cadastre na aba 🔀 ou ♻️.</div>
-        <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">⭐ Ranking Triplo A</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
-        ${AAA.length?(aarr.length?aarr.map((a,i)=>acard(a, AAA.indexOf(a))).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">⏳ As clínicas Triplo A chegam quando o robô sincronizar (traz as top por faturamento 12m automaticamente).</div>`}`;
+        <div class="t-mut" style="font-size:11.5px;margin:2px 0 8px;text-align:center">Numeradas por faturamento (maior → menor). ✅ o que manda × <b style="color:#ff8fa3">🎯 o que deixa na mesa</b>. R$ só diretoria (senha + Face ID).</div>
+        <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${meta.ic} Ranking ${meta.nome}</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
+        ${AA.length?(aarr.length?aarr.map(a=>acard(a, AA.indexOf(a))).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">⏳ As clínicas ${meta.nome} chegam quando o robô sincronizar (traz por faturamento 12m automaticamente).</div>`}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
       const la=document.getElementById("lupaAAA"); if(la){ la.addEventListener("input", e=>{ search=e.target.value; const p=la.selectionStart; renderTab(); const l2=document.getElementById("lupaAAA"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
       return;
