@@ -340,6 +340,21 @@ function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function rs(v){ return ehDiretoria()?fmtBRL(v):`<span class="t-mut" title="valor visível só para a diretoria">🔒</span>`; }
+async function trocarMeuPin(){
+  const nome=operadorAtual(); if(!nome){ alert("Identifique-se primeiro (seu nome + PIN)."); return; }
+  const atual=(prompt(`Seu PIN ATUAL (${esc(nome)}):`)||"").trim(); if(!atual) return;
+  const novo=(prompt("Novo PIN (mínimo 6 dígitos):")||"").trim();
+  if(novo.length<6){ alert("O PIN precisa de pelo menos 6 dígitos."); return; }
+  if(!/^\d+$/.test(novo)){ alert("Use só números no PIN."); return; }
+  if((prompt("Repita o novo PIN pra confirmar:")||"").trim()!==novo){ alert("Os PINs não bateram. Nada foi trocado."); return; }
+  try{
+    const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"setpin",nome,pin:novo,pin_atual:atual,senha:window.__pwd})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok && j.ok!==false){ alert("🔑 PIN trocado com sucesso! Use o novo da próxima vez que entrar."); closeModal(); }
+    else if(j.erro==="pin_atual_invalido"){ alert("PIN atual incorreto — não troquei."); }
+    else alert("Não consegui trocar agora: "+(j.erro||"erro"));
+  }catch(e){ alert("Sem internet pra trocar o PIN agora."); }
+}
 async function verificaPin(nome, pin){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"verify",nome,pin,senha:window.__pwd})});
     if(r.ok){ const j=await r.json(); return j.ok?{ok:true, papel:j.papel||"comercial"}:{ok:false}; } }catch(e){ return null; }   // null = offline/erro
@@ -369,6 +384,7 @@ async function openIdentidade(force){
       ${OPERADORES.length?OPERADORES.map(o=>`<button class="checkinbtn" data-op="${esc(o.nome)}" style="text-align:left">👤 ${esc(o.nome)}${(o.papel==="diretoria"&&ehDiretoria())?' <span class="t-mut">🔓 diretoria</span>':''}</button>`).join(""):`<div class="t-mut" style="text-align:center;padding:10px">Nenhum operador ainda. Crie o primeiro 👇</div>`}
     </div>
     <button class="m-save" id="opNovo">＋ Novo operador</button>
+    ${operadorAtual()?`<button class="checkinbtn" id="opPin" type="button" style="margin-top:8px;border-color:rgba(0,212,255,.4);color:#9fe6ff">🔑 Trocar meu PIN (${esc(operadorAtual())})</button>`:""}
     `;   /* removido o botão público "Sou da diretoria": reps não devem saber que existe R$. Diretoria vem pelo login (papel do operador) ou é promovida via API. */
   document.getElementById("modal").style.display="flex";
   const mc=document.getElementById("mClose"); if(mc) mc.onclick=closeModal;
@@ -385,6 +401,7 @@ async function openIdentidade(force){
     if(confirm(`${nome} é da DIRETORIA (vê valores em R$)?\n\nOK = sim (vai pedir a senha financeira) · Cancelar = comercial`)){ dir_code=(prompt("Senha financeira da diretoria (só R$ — não é o código do desmarcou):")||"").trim(); if(dir_code) papel="diretoria"; }
     const ok=await criarOperador(nome, pin, papel, dir_code); if(ok){ setOperador(nome, papel); closeModal(); renderAll(); } };
   const od=document.getElementById("opDir"); if(od) od.onclick=()=>tornarDiretoria();
+  const op=document.getElementById("opPin"); if(op) op.onclick=()=>trocarMeuPin();
 }
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
 /* ---- 🏥 CLÍNICAS: master do HF (autocomplete) + carteira Novas/Reconquistadas ---- */
@@ -1988,7 +2005,10 @@ function renderTab(){
             <div style="font-weight:800;color:#ff6b81;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">🎯 Deixando na mesa · ${falta.length} classe(s) indo pro concorrente</div>
             <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,12).map(f=>`<span style="background:rgba(255,45,85,.22);color:#ffd0d8;border:1px solid rgba(255,45,85,.5);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}${falta.length>12?`<span style="color:#ff8fa3;font-size:11px;font-weight:700;align-self:center">+${falta.length-12}</span>`:""}</div>
             <div style="font-size:11px;color:#ffb3c0;margin-top:5px">👉 <b>puxa essas</b> — ela já é grande e confia no lab; falta pedir.</div>
-          </div>` : `<div class="ci" style="font-size:11.5px;margin-top:5px;color:#7effcf">✅ manda <b>todas</b> as classes do lab — share-of-wallet cheio 👏</div>`;
+          </div>` : `<div style="background:rgba(0,229,160,.13);border:1px solid rgba(0,229,160,.5);border-left:3px solid #00E5A0;border-radius:8px;padding:7px 10px;margin-top:6px">
+            <div style="font-weight:800;color:#00E5A0;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">✅ Share-of-wallet CHEIO · manda TODAS as classes 👏</div>
+            <div style="font-size:11px;color:#7effcf;margin-top:5px">🛡️ cliente redondo — <b>nada indo pro concorrente</b>. Proteja essa: é o modelo do que as outras deveriam mandar.</div>
+          </div>`;
         return `<div class="crow" style="cursor:default;align-items:flex-start${falta.length?';border-left:3px solid #FF2D55':''}">
           <div class="rk" style="color:${meta.cor};display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:11px">${meta.ic}</span></div>
           <div style="flex:1"><div class="nm">${esc(a.nome)} <span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl2}</span> <span class="pr" style="background:${curva==='B'?'rgba(201,212,224,.16)':'rgba(255,209,102,.18)'};color:${meta.cor}">curva ${a.curva||curva}</span> <span class="t-mut" style="font-size:11px">🔗 HF</span></div>
