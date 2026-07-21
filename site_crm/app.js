@@ -2005,7 +2005,7 @@ function renderTab(){
             <div style="font-weight:800;color:#ff6b81;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">🎯 Deixando na mesa · ${falta.length} classe(s) indo pro concorrente</div>
             <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,12).map(f=>`<span style="background:rgba(255,45,85,.22);color:#ffd0d8;border:1px solid rgba(255,45,85,.5);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}${falta.length>12?`<span style="color:#ff8fa3;font-size:11px;font-weight:700;align-self:center">+${falta.length-12}</span>`:""}</div>
             <div style="font-size:11px;color:#ffb3c0;margin-top:5px">👉 <b>puxa essas</b> — ela já é grande e confia no lab; falta pedir.</div>
-          </div>` : `<div style="background:rgba(0,229,160,.13);border:1px solid rgba(0,229,160,.5);border-left:3px solid #00E5A0;border-radius:8px;padding:7px 10px;margin-top:6px">
+          </div>` : `<div class="swcheio" style="border:1px solid rgba(0,229,160,.5);border-left:3px solid #00E5A0;border-radius:8px;padding:7px 10px;margin-top:6px">
             <div style="font-weight:800;color:#00E5A0;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">✅ Share-of-wallet CHEIO · manda TODAS as classes 👏</div>
             <div style="font-size:11px;color:#7effcf;margin-top:5px">🛡️ cliente redondo — <b>nada indo pro concorrente</b>. Proteja essa: é o modelo do que as outras deveriam mandar.</div>
           </div>`;
