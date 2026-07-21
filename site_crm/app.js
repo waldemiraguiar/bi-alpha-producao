@@ -503,6 +503,22 @@ async function abrirFinanceiro(){
       if(await bioRegistrar()) alert("👆 Pronto! Da próxima é só o dedo/rosto."); } }
   else alert("Código incorreto — não abri o R$. (É a senha financeira, diferente do código do desmarcou.)");
 }
+/* 👆 Controle explícito da trava biométrica (pedido do Wal: só EU vejo o R$ da Triplo A/carteira).
+   Uma vez ativada NESTE aparelho, o R$ só abre com o dedo/rosto e NÃO abre sozinho no boot. */
+function bioAtivo(){ return !!localStorage.getItem("crm_bio_id"); }
+async function ativarBioManual(){
+  if(!ehDiretoria()){ alert("Abra o financeiro primeiro (você precisa ser diretoria)."); return; }
+  if(!localStorage.getItem("crm_fin_code")){ alert("Primeiro abra o R$ uma vez com a senha financeira; aí eu travo com sua digital/Face ID."); return; }
+  if(!(await bioSuportado())){ alert("Este navegador/aparelho não tem Face ID/digital disponível. Tente no Safari do seu iPhone/Mac."); return; }
+  if(await bioRegistrar()){ alert("👆 Pronto! Agora o R$ (inclusive da Triplo A) só abre com o SEU Face ID/digital NESTE aparelho. Nenhum outro aparelho abre sem a senha financeira — e ela é só sua."); renderAll(); }
+  else alert("Não consegui ativar (cancelado ou não suportado). Tente de novo.");
+}
+function removerBioManual(){ if(confirm("Remover a trava de Face ID/digital DESTE aparelho? O R$ volta a abrir com a senha financeira.")){ localStorage.removeItem("crm_bio_id"); renderAll(); } }
+function bioLinha(){ if(!ehDiretoria()) return "";
+  return bioAtivo()
+    ? `<div style="font-size:11px;margin-top:5px;color:#7effcf">👆 <b>Face ID / digital ATIVO</b> neste aparelho — o R$ só abre com você · <a onclick="removerBioManual()" style="color:#ffc266;cursor:pointer">remover</a></div>`
+    : `<div style="font-size:11px;margin-top:5px"><a onclick="ativarBioManual()" style="color:#00D4FF;cursor:pointer;font-weight:700">👆 Travar o R$ com meu Face ID / digital</a> <span class="t-mut">(só você abre, só neste aparelho)</span></div>`;
+}
 function rsClin(cod, marco){
   if(!ehDiretoria()) return "";   // reps não veem NADA de R$ (nem que existe)
   const v=rsVal(cod, marco);
@@ -1904,7 +1920,7 @@ function renderTab(){
           }
         }
         painel=`
-          <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}</div>
+          <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}${bioLinha()}</div>
           <div class="kgrid">
             ${kpi("g", fmtBRL(totRS), "Faturamento total", "desde a data de corte")}
             ${kpi("", totEx, "Exames", "desde a reconq./conquista")}
@@ -1973,7 +1989,7 @@ function renderTab(){
             <div class="ci" style="font-size:11.5px;margin-top:3px;${falta.length>=3?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div></div>
           <div class="mid"></div></div>`; };
       c.innerHTML=`${subtabsClin}
-        <div class="proxhint" style="border-color:rgba(255,209,102,.45);color:#ffd166;margin-bottom:10px;line-height:1.55">⭐ <b>Clínicas Triplo A</b> — as que mais faturam em 12 meses (curva A: as ~${AAA_PCT}% do faturamento). Trazidas <b>automaticamente</b> pelo robô, ranqueadas por faturamento. Análise de <b>12 meses</b>: o que cada uma manda × o que está <b>deixando na mesa</b> (indo pro concorrente).</div>
+        <div class="proxhint" style="border-color:rgba(255,209,102,.45);color:#ffd166;margin-bottom:10px;line-height:1.55">⭐ <b>Clínicas Triplo A</b> — as que mais faturam em 12 meses (curva A: as ~${AAA_PCT}% do faturamento). Trazidas <b>automaticamente</b> pelo robô, ranqueadas por faturamento. Análise de <b>12 meses</b>: o que cada uma manda × o que está <b>deixando na mesa</b> (indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> das Triplo A são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
         <div class="kgrid">
           ${kpi("g", AAA.length, "Clínicas AAA", "curva A · 12m")}
           ${kpi(comMesa?"a":"", comMesa, "Com white-space", "deixando classe na mesa")}
@@ -2000,7 +2016,7 @@ function renderTab(){
         ${kpi("", CL, "Master HF", CLIN_TS?("sinc. "+new Date(CLIN_TS).toLocaleDateString("pt-BR")):"aguardando robô")}
       </div>
       ${!CL?`<div class="proxhint" style="border-color:rgba(255,138,0,.4);color:#ffc266;margin-bottom:12px">⏳ A lista de clínicas do HF ainda não chegou (o robô sincroniza a cada ciclo). O autocomplete liga assim que ela vier.</div>`:""}
-      ${!ehDiretoria()?"":(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto · faturamento desta lista (desde a data de corte): <b>${fmtBRL(rsTotal||0)}</b></div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Abrir faturamento em R$ (senha financeira)</button>`)}
+      ${!ehDiretoria()?"":(CLIN_RS?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:12px">🔓 R$ aberto · faturamento desta lista (desde a data de corte): <b>${fmtBRL(rsTotal||0)}</b>${bioLinha()}</div>`:`<button class="checkinbtn" id="verRSbtn" type="button" style="margin-bottom:12px;border-color:rgba(0,229,160,.4);color:#7effcf">🔓 Abrir faturamento em R$ (senha financeira)</button>`)}
       ${(()=>{ const z=CARTEIRA.filter(x=>{ const d=x.cod?CLIN_DET[String(x.cod)]:null; return x.cod&&d&&Array.isArray(d.recent)&&d.recent.length===0&&!d.prod30; });
         if(!z.length) return "";
         return `<div class="proxhint" style="border-color:rgba(255,45,85,.55);color:#ff8fa3;margin-bottom:12px;line-height:1.55">
