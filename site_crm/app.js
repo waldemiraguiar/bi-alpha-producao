@@ -1814,7 +1814,7 @@ function renderTab(){
     // diretoria com o código na sessão: decifra o R$ sozinho e re-renderiza
     if(ehDiretoria() && !CLIN_RS && CLIN_RS_ENV && dirCodeCache()){ decDirRS(dirCodeCache()).then(ok=>{ if(ok&&ACTIVE==="clinicas") renderTab(); }); }
     const nov=CARTEIRA.filter(x=>x.tipo==="nova"), rec=CARTEIRA.filter(x=>x.tipo==="reconquistada"), divm=CARTEIRA.filter(x=>x.tipo==="divide");
-    const aaaA=AAA.filter(a=>a.curva!=="B"), aaaB=AAA.filter(a=>a.curva==="B");   // curva A (vitais) × curva B (miolo)
+    const aaaA=AAA.filter(a=>a.curva==="A"||!a.curva), aaaB=AAA.filter(a=>a.curva==="B"), aaaC=AAA.filter(a=>a.curva==="C"), aaaD=AAA.filter(a=>a.curva==="D");   // curvas por faturamento 12m
     const lista=(clinView==="nova"?nov:clinView==="divide"?divm:rec);
     const q=search.trim().toLowerCase();
     const arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista;
@@ -1878,7 +1878,7 @@ function renderTab(){
           <div class="ci t-mut" style="font-size:11px;margin-top:4px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
-    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Clínicas A${aaaA.length?` (${aaaA.length})`:''}</button><button class="subtab ${clinView==='aab'?'on':''}" data-cv="aab">🅱️ Clínicas B${aaaB.length?` (${aaaB.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
+    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Clínicas A${aaaA.length?` (${aaaA.length})`:''}</button><button class="subtab ${clinView==='aab'?'on':''}" data-cv="aab">🅱️ Clínicas B${aaaB.length?` (${aaaB.length})`:''}</button><button class="subtab ${clinView==='aac'?'on':''}" data-cv="aac">🇨 Clínicas C${aaaC.length?` (${aaaC.length})`:''}</button><button class="subtab ${clinView==='aad'?'on':''}" data-cv="aad">🇩 Clínicas D${aaaD.length?` (${aaaD.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
     if(clinView==="relatorios"){
       const pl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno","":"—"};
       const semLabel=r=>{ if(r.label) return "Sexta "+esc(r.label); const m=String(r.semana||"").match(/(\d{4})-W(\d+)/); return m?`Semana ${m[2]}/${m[1]}`:esc(r.semana||"—"); };
@@ -2036,10 +2036,15 @@ function renderTab(){
       const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>abrirFinanceiro();
       return;
     }
-    if(clinView==="aaa"||clinView==="aab"){
-      const curva=clinView==="aab"?"B":"A";
-      const AA=AAA.filter(a=>curva==="B"?a.curva==="B":a.curva!=="B");
-      const meta=curva==="B"?{ic:"🅱️",cor:"#c9d4e0",bord:"rgba(201,212,224,.4)",nome:"Clínicas B",desc:`o miolo — as ${aaaB.length||60} seguintes em faturamento 12m (logo depois das Clínicas A)`}:{ic:"⭐",cor:"#ffd166",bord:"rgba(255,209,102,.45)",nome:"Clínicas A",desc:`as maiores — top ${aaaA.length||40} em faturamento 12m`};
+    if(clinView==="aaa"||clinView==="aab"||clinView==="aac"||clinView==="aad"){
+      const curva={aaa:"A",aab:"B",aac:"C",aad:"D"}[clinView];
+      const AA=AAA.filter(a=>(a.curva||"A")===curva);
+      const META={
+        A:{ic:"⭐",cor:"#ffd166",bord:"rgba(255,209,102,.45)",nome:"Clínicas A",desc:`as maiores — top ${aaaA.length||40} em faturamento 12m`},
+        B:{ic:"🅱️",cor:"#c9d4e0",bord:"rgba(201,212,224,.4)",nome:"Clínicas B",desc:`o miolo — as ${aaaB.length||60} seguintes (logo depois das A)`},
+        C:{ic:"🇨",cor:"#9fe6ff",bord:"rgba(0,212,255,.4)",nome:"Clínicas C",desc:`a base larga — as ${aaaC.length||100} seguintes em faturamento 12m`},
+        D:{ic:"🇩",cor:"#c0a8ff",bord:"rgba(150,133,233,.45)",nome:"Clínicas D",desc:`a cauda ativa — as ${aaaD.length||150} seguintes em faturamento 12m`}};
+      const meta=META[curva];
       const q2=search.trim().toLowerCase();
       const aarr=q2?AA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AA;
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
@@ -2056,7 +2061,7 @@ function renderTab(){
           </div>`;
         return `<div class="crow" style="cursor:default;align-items:flex-start${falta.length?';border-left:3px solid #FF2D55':''}">
           <div class="rk" style="color:${meta.cor};display:flex;flex-direction:column;align-items:center;line-height:1.1"><span style="font-weight:800;font-variant-numeric:tabular-nums">${i+1}</span><span style="font-size:11px">${meta.ic}</span></div>
-          <div style="flex:1"><div class="nm">${esc(a.nome)} <span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl2}</span> <span class="pr" style="background:${curva==='B'?'rgba(201,212,224,.16)':'rgba(255,209,102,.18)'};color:${meta.cor}">curva ${a.curva||curva}</span> <span class="t-mut" style="font-size:11px">🔗 HF</span></div>
+          <div style="flex:1"><div class="nm">${esc(a.nome)} <span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl2}</span> <span class="pr" style="background:${meta.cor}22;color:${meta.cor}">curva ${a.curva||curva}</span> <span class="t-mut" style="font-size:11px">🔗 HF</span></div>
             <div class="ci">${a.cidade?"📍 "+esc(a.cidade)+" · ":""}📊 <b>${a.qtd||0}</b> exames (12m) · 💰 ${rsClin(a.cod)}</div>
             ${cats.length?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#7effcf">✅ manda: ${cats.slice(0,6).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</div>`:""}
             ${mesa}</div>
