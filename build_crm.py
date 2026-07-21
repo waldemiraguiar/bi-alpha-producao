@@ -292,7 +292,7 @@ def post_aaa(D):
         print("post_aaa: pulado (falta CRM_PWD/clinicas_full)"); return
     try:
         from build_financeiro import clinics_aaa
-        res = clinics_aaa(full, corte_a=0.80, corte_b=0.95, cap=180)   # curva A (80%) + B (80–95%)
+        res = clinics_aaa(full, nA=40, nB=60)   # A = 40 maiores · B = 60 seguintes (faturamento 12m)
     except Exception as e:
         print(f"post_aaa: cálculo falhou ({e})"); return
     base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")

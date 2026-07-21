@@ -1977,7 +1977,7 @@ function renderTab(){
     if(clinView==="aaa"||clinView==="aab"){
       const curva=clinView==="aab"?"B":"A";
       const AA=AAA.filter(a=>curva==="B"?a.curva==="B":a.curva!=="B");
-      const meta=curva==="B"?{ic:"🅱️",cor:"#c9d4e0",bord:"rgba(201,212,224,.4)",nome:"Clínicas B",desc:`o miolo — as que somam de ~${AAA_PCT}% a 95% do faturamento 12m`}:{ic:"⭐",cor:"#ffd166",bord:"rgba(255,209,102,.45)",nome:"Clínicas A",desc:`as vitais — as que somam os 1ºs ~${AAA_PCT}% do faturamento 12m`};
+      const meta=curva==="B"?{ic:"🅱️",cor:"#c9d4e0",bord:"rgba(201,212,224,.4)",nome:"Clínicas B",desc:`o miolo — as ${aaaB.length||60} seguintes em faturamento 12m (logo depois das Clínicas A)`}:{ic:"⭐",cor:"#ffd166",bord:"rgba(255,209,102,.45)",nome:"Clínicas A",desc:`as maiores — top ${aaaA.length||40} em faturamento 12m`};
       const q2=search.trim().toLowerCase();
       const aarr=q2?AA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AA;
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
