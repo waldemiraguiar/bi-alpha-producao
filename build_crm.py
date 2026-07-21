@@ -291,7 +291,7 @@ def post_clinicas_det():
     except Exception as e:
         print(f"post_clinicas_det: conquista pulada ({e})")
     try:
-        payload = json.dumps({"acao": "set", "det": res["det"], "setores": res["setores"], "senha": pwd}, ensure_ascii=False).encode()
+        payload = json.dumps({"acao": "set", "det": res["det"], "setores": res["setores"], "catval": res.get("catval", {}), "senha": pwd}, ensure_ascii=False).encode()
         r = urllib.request.urlopen(urllib.request.Request(
             base + "/api/crm-clinicas-det", data=payload, headers={"Content-Type": "application/json"}), timeout=45)
         print(f"clinicas detalhe -> HTTP {r.status} ({len(res['det'])} clínicas · {len(res['setores'])} setores)")
