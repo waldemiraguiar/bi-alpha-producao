@@ -27,7 +27,7 @@ export default async (req) => {
         nome: String(a.nome || "").slice(0, 120),
         cidade: String(a.cidade || "").slice(0, 80),
         qtd: +a.qtd || 0,
-        curva: a.curva === "B" ? "B" : "A",   // curva ABC (Pareto) — só A e B são publicadas
+        curva: ["A", "B", "C", "D"].includes(a.curva) ? a.curva : "A",   // curva por ranking de faturamento (A/B/C/D)
         cats: Array.isArray(a.cats) ? a.cats.slice(0, 20).map((c) => ({ setor: String(c.setor || "").slice(0, 40), qtd: +c.qtd || 0 })) : [],
         falta: Array.isArray(a.falta) ? a.falta.slice(0, 20).map((s) => String(s).slice(0, 40)) : [],
       }));

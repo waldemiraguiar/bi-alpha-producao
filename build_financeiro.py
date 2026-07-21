@@ -219,17 +219,21 @@ def clinic_fat_mensal(since_map, alias=None):
         out[p] = [{"ym": ym, "n": m[ym][0], "fat": round(m[ym][1], 2)} for ym in sorted(m)]
     return out
 
-def clinics_aaa(full, nA=40, nB=60):
-    """Clínicas por CURVA (ranking de FATURAMENTO 12m): A = as `nA` MAIORES; B = as `nB` seguintes; C = a cauda (fora).
+def clinics_aaa(full, nA=40, nB=60, nC=100, nD=150):
+    """Clínicas por CURVA (ranking de FATURAMENTO 12m): A = as `nA` MAIORES; B/C/D = as faixas seguintes; cauda = fora.
     Faturamento do lab é cauda-longa (Pareto 80% pegaria ~190 clínicas → inútil), então o corte é por POSIÇÃO no ranking.
-    Cada clínica leva `curva` (A|B) + share-of-wallet 12m (categorias que MANDA + white-space que NÃO manda).
+    Cada clínica leva `curva` (A|B|C|D) + share-of-wallet 12m (categorias que MANDA + white-space que NÃO manda).
     Payload SEM R$ (só qtd) — o R$ 12m já vai no cifrado da diretoria (clinicas_rs). `full`=D['clinicas_full']."""
     rows = sorted([c for c in (full or []) if (c.get("fat") or 0) > 0 and c.get("cod") is not None], key=lambda c: -(c.get("fat") or 0))
     if not rows:
-        return {"aaa": [], "setores": [], "pct": 0, "n": 0, "nA": 0, "nB": 0}
-    sel = rows[:nA + nB]
-    for i, c in enumerate(sel):
-        c["_curva"] = "A" if i < nA else "B"
+        return {"aaa": [], "setores": [], "pct": 0, "n": 0, "nA": 0, "nB": 0, "nC": 0, "nD": 0}
+    bandas = [("A", nA), ("B", nB), ("C", nC), ("D", nD)]
+    sel = rows[:nA + nB + nC + nD]
+    i = 0
+    for cv, qtd in bandas:
+        for c in sel[i:i + qtd]:
+            c["_curva"] = cv
+        i += qtd
     cods = [str(c["cod"]) for c in sel]
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
@@ -261,8 +265,9 @@ def clinics_aaa(full, nA=40, nB=60):
                     "qtd": int(cc.get("qtd") or 0), "curva": cc.get("_curva", "A"),
                     "cats": [{"setor": s, "qtd": n} for s, n in cats],
                     "falta": [s for s in setores if s not in catd]})
-    nAo = sum(1 for o in out if o["curva"] == "A"); nBo = sum(1 for o in out if o["curva"] == "B")
-    return {"aaa": out, "setores": setores, "pct": 0, "n": len(out), "nA": nAo, "nB": nBo}
+    cnt = lambda cv: sum(1 for o in out if o["curva"] == cv)
+    return {"aaa": out, "setores": setores, "pct": 0, "n": len(out),
+            "nA": cnt("A"), "nB": cnt("B"), "nC": cnt("C"), "nD": cnt("D")}
 
 def divide_conversion(since_map, setores=None):
     """CONQUISTA DE CATEGORIA (aba 'Dividem material'): a partir do MARCO ZERO de cada clínica, detecta as
