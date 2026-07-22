@@ -47,7 +47,7 @@ def clinic_details(cods, since_map=None, alias=None):
         return {"det": {}, "setores": []}
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
-    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    maxd = datetime.date.today().isoformat()
     tdt = datetime.date.fromisoformat(maxd)
     d365 = (tdt - datetime.timedelta(days=365)).isoformat()
     d30 = (tdt - datetime.timedelta(days=30)).isoformat()
@@ -55,24 +55,24 @@ def clinic_details(cods, since_map=None, alias=None):
     # usa CATEGORIA (granular: Hematologia, Bioquímica, Histopatologia…) — Setor é grosso demais p/ white-space
     # UNIVERSO de white-space por PENETRAÇÃO (quantas clínicas mandam), NÃO por volume — tira ruído tipo NECRÓPSIA (1%)
     totcli = int(q(f"SELECT COUNT(DISTINCT r.CodCliente) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-                   f"WHERE s.DataExame BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
+                   f"WHERE r.DataEntrada BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
     uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(DISTINCT r.CodCliente) cli FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
+            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
     setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and (u["cli"] / totcli) >= 0.15][:14]
     # CATVAL: share de R$ de cada categoria no lab (12m) → base da SIMULAÇÃO do "deixando na mesa" (agregado, SEM R$ por clínica)
     catrows = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COALESCE(SUM(s.ValorExame),0) fat FROM {EX} s "
                 f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-                f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria", (d365, maxd))
+                f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY cat.Categoria", (d365, maxd))
     _totfat = sum(float(x["fat"] or 0) for x in catrows) or 1.0
     catval = {x["setor"]: round(float(x["fat"] or 0) / _totfat, 4) for x in catrows if x["setor"] and x["setor"] != "(sem categoria)"}
     ph = ",".join(["%s"] * len(cods))
     rows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd, "
-             f"SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p30, SUM(CASE WHEN s.DataExame>=%s THEN 1 ELSE 0 END) p7 "
+             f"SUM(CASE WHEN r.DataEntrada>=%s THEN 1 ELSE 0 END) p30, SUM(CASE WHEN r.DataEntrada>=%s THEN 1 ELSE 0 END) p7 "
              f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
              f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-             f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s "
+             f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s "
              f"GROUP BY r.CodCliente, cat.Categoria", (d30, d7, *cods, d365, maxd))
     det = {}
     for x in rows:
@@ -90,7 +90,7 @@ def clinic_details(cods, since_map=None, alias=None):
         except Exception:
             continue
         r = q(f"SELECT COUNT(*) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-              f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s", (cod, dt, maxd))
+              f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s", (cod, dt, maxd))
         prod_desde[cod] = {"n": int(r[0]["n"] or 0), "desde": dt}
     # DRILL-DOWN exame-a-exame por clínica (dia · exame · categoria · PET · tutor · registro) — desde o marco zero, senão 180d
     d180 = (tdt - datetime.timedelta(days=180)).isoformat()
@@ -102,11 +102,11 @@ def clinic_details(cods, since_map=None, alias=None):
             datetime.date.fromisoformat(desde)
         except Exception:
             desde = d180
-        rows = q(f"SELECT s.DataExame d, s.Exame ex, COALESCE(cat.Categoria,'') cat, r.Animal pet, r.Proprietario tut, "
+        rows = q(f"SELECT r.DataEntrada d, s.Exame ex, COALESCE(cat.Categoria,'') cat, r.Animal pet, r.Proprietario tut, "
                  f"r.NumeroSequencial req FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
                  f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-                 f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s "
-                 f"ORDER BY s.DataExame DESC, r.NumeroSequencial DESC LIMIT %s", (cod, desde, maxd, CAP + 1))
+                 f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s "
+                 f"ORDER BY r.DataEntrada DESC, r.NumeroSequencial DESC LIMIT %s", (cod, desde, maxd, CAP + 1))
         lst = [{"d": str(x["d"])[:10], "ex": (x["ex"] or "")[:60], "cat": (x["cat"] or "")[:40],
                 "pet": (x["pet"] or "")[:40], "tut": (x["tut"] or "")[:40], "req": x["req"]} for x in rows[:CAP]]
         recent[cod] = {"lst": lst, "desde": desde, "mais": len(rows) > CAP}
@@ -150,11 +150,11 @@ def clinic_fat_12m(cods):
         return {}
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
-    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    maxd = datetime.date.today().isoformat()
     d365 = (datetime.date.fromisoformat(maxd) - datetime.timedelta(days=365)).isoformat()
     ph = ",".join(["%s"] * len(cods))
     rows = q(f"SELECT r.CodCliente cod, COALESCE(SUM(s.ValorExame),0) f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-             f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s GROUP BY r.CodCliente", (*cods, d365, maxd))
+             f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente", (*cods, d365, maxd))
     conn.close()
     return {str(x["cod"]): round(float(x["f"] or 0), 2) for x in rows}
 
@@ -175,7 +175,7 @@ def clinic_fat_since(since_map, alias=None):
         return {}
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
-    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    maxd = datetime.date.today().isoformat()
     out = {}
     for cod, dt in todo.items():
         try:
@@ -183,7 +183,7 @@ def clinic_fat_since(since_map, alias=None):
         except Exception:
             continue
         r = q(f"SELECT COALESCE(SUM(s.ValorExame),0) f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-              f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s", (cod, dt, maxd))
+              f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s", (cod, dt, maxd))
         out[prim(cod)] = round(out.get(prim(cod), 0) + float(r[0]["f"] or 0), 2)
     conn.close()
     return out
@@ -204,7 +204,7 @@ def clinic_fat_mensal(since_map, alias=None):
         return {}
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
-    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    maxd = datetime.date.today().isoformat()
     acc = {}   # {prim: {ym: [n, fat]}}
     for cod, dt in todo.items():
         try:
@@ -212,9 +212,9 @@ def clinic_fat_mensal(since_map, alias=None):
         except Exception:
             continue
         dt = dt[:7] + "-01"   # MÊS CHEIO da entrada (escolha do Wal): entrou 26/05 → conta maio inteiro
-        rows = q(f"SELECT DATE_FORMAT(s.DataExame,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
+        rows = q(f"SELECT DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
                  f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-                 f"WHERE r.CodCliente=%s AND s.DataExame BETWEEN %s AND %s GROUP BY ym", (cod, dt, maxd))
+                 f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s GROUP BY ym", (cod, dt, maxd))
         p = prim(cod); m = acc.setdefault(p, {})
         for x in rows:
             ym = x["ym"]; cur = m.setdefault(ym, [0, 0.0])
@@ -243,21 +243,21 @@ def clinics_aaa(full, nA=40, nB=60, nC=100, nD=150):
     cods = [str(c["cod"]) for c in sel]
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
-    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
+    maxd = datetime.date.today().isoformat()
     d365 = (datetime.date.fromisoformat(maxd) - datetime.timedelta(days=365)).isoformat()
     # UNIVERSO de white-space por PENETRAÇÃO (quantas clínicas mandam), NÃO por volume — tira ruído tipo NECRÓPSIA (1%)
     totcli = int(q(f"SELECT COUNT(DISTINCT r.CodCliente) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-                   f"WHERE s.DataExame BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
+                   f"WHERE r.DataEntrada BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
     uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(DISTINCT r.CodCliente) cli FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
+            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
     setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and (u["cli"] / totcli) >= 0.15][:14]
     ph = ",".join(["%s"] * len(cods))
     crows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd "
               f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
               f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-              f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s "
+              f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s "
               f"GROUP BY r.CodCliente, cat.Categoria", (*cods, d365, maxd))
     conn.close()
     bycod = {}
@@ -296,11 +296,11 @@ def divide_conversion(since_map, setores=None):
         base = {x["setor"] for x in q(
             f"SELECT COALESCE(cat.Categoria,'?') setor FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE r.CodCliente=%s AND s.DataExame>=%s AND s.DataExame<%s GROUP BY cat.Categoria", (cod, base_ini, marco))}
-        depois = q(f"SELECT COALESCE(cat.Categoria,'?') setor, MIN(s.DataExame) desde, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) fat "
+            f"WHERE r.CodCliente=%s AND r.DataEntrada>=%s AND r.DataEntrada<%s GROUP BY cat.Categoria", (cod, base_ini, marco))}
+        depois = q(f"SELECT COALESCE(cat.Categoria,'?') setor, MIN(r.DataEntrada) desde, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) fat "
                    f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
                    f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-                   f"WHERE r.CodCliente=%s AND s.DataExame>=%s GROUP BY cat.Categoria", (cod, marco))
+                   f"WHERE r.CodCliente=%s AND r.DataEntrada>=%s GROUP BY cat.Categoria", (cod, marco))
         conq = [{"setor": x["setor"], "desde": str(x["desde"])[:10], "n": int(x["n"] or 0), "fat": round(float(x["fat"] or 0), 2)}
                 for x in depois if x["setor"] and x["setor"] != "?" and x["setor"] not in base and (not uni or x["setor"] in uni)]
         conq.sort(key=lambda z: -z["n"])
@@ -367,7 +367,7 @@ def build():
             f"COUNT(*) qtd, SUM(s.ValorExame) fat FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCliente cl ON r.CodCliente=cl.CodCliente "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY r.CodCliente ORDER BY fat DESC", W12)
+            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente ORDER BY fat DESC", W12)   # DataEntrada = base do HF (faturamento)
     cli_ativos=len(cli)
     tc=[]
     for i,r in enumerate(cli[:30],1):
