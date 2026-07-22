@@ -64,7 +64,7 @@ def clinic_details(cods, since_map=None, alias=None):
     # CATVAL: share de R$ de cada categoria no lab (12m) → base da SIMULAÇÃO do "deixando na mesa" (agregado, SEM R$ por clínica)
     catrows = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COALESCE(SUM(s.ValorExame),0) fat FROM {EX} s "
                 f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-                f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY cat.Categoria", (d365, maxd))
+                f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria", (d365, maxd))   # lab-wide (agregado) — DataExame indexado
     _totfat = sum(float(x["fat"] or 0) for x in catrows) or 1.0
     catval = {x["setor"]: round(float(x["fat"] or 0) / _totfat, 4) for x in catrows if x["setor"] and x["setor"] != "(sem categoria)"}
     ph = ",".join(["%s"] * len(cods))
