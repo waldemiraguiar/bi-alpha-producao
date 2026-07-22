@@ -558,7 +558,7 @@
       const hits = items.filter(matchBusca).sort((a, b) => (b.dias || 0) - (a.dias || 0));
       return search + (hits.length
         ? `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>🔎 Resultados</span><span class="cnt">${hits.length} encontrado(s)</span></div>${hits.map(rowSeparar).join('')}</div>`
-        : `<div class="sepwait">Nada encontrado para "${esc2(busca)}".</div>`);
+        : `<div class="sepwait" style="text-align:left;padding:16px 18px;line-height:1.7;max-width:600px;margin:0 auto">🔎 Nada encontrado para "<b>${esc2(busca)}</b>".<br><br><b>Calma — os exames de hoje ESTÃO na fila.</b> Quase sempre é só o número trocado:<br>• 👉 Busque pelo <b>NOME do paciente</b> (ex.: Chopp, Bela) — é o jeito mais garantido.<br>• O painel usa o <b>nº de REGISTRO</b> (ex.: 623xxx / 624xxx) — <b>não</b> o número da TELA do HF nem o número do plano (Petlove).<br>• Deu entrada agora há pouco? A fila atualiza sozinha em alguns minutos.</div>`);
     }
     if (!items.length) return search + `<div class="${opts.emptyClass || 'sepwait'}">${opts.empty}</div>`;
     const byCat = {}; items.forEach(it => { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
