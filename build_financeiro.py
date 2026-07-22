@@ -55,11 +55,11 @@ def clinic_details(cods, since_map=None, alias=None):
     # usa CATEGORIA (granular: Hematologia, Bioquímica, Histopatologia…) — Setor é grosso demais p/ white-space
     # UNIVERSO de white-space por PENETRAÇÃO (quantas clínicas mandam), NÃO por volume — tira ruído tipo NECRÓPSIA (1%)
     totcli = int(q(f"SELECT COUNT(DISTINCT r.CodCliente) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-                   f"WHERE r.DataEntrada BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
+                   f"WHERE s.DataExame BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
     uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(DISTINCT r.CodCliente) cli FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
     setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and (u["cli"] / totcli) >= 0.15][:14]
     # CATVAL: share de R$ de cada categoria no lab (12m) → base da SIMULAÇÃO do "deixando na mesa" (agregado, SEM R$ por clínica)
     catrows = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COALESCE(SUM(s.ValorExame),0) fat FROM {EX} s "
@@ -243,21 +243,21 @@ def clinics_aaa(full, nA=40, nB=60, nC=100, nD=150):
     cods = [str(c["cod"]) for c in sel]
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
-    maxd = datetime.date.today().isoformat()
+    maxd = str((q(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (datetime.date.today().isoformat(),))[0]["m"]) or datetime.date.today().isoformat())[:10]
     d365 = (datetime.date.fromisoformat(maxd) - datetime.timedelta(days=365)).isoformat()
     # UNIVERSO de white-space por PENETRAÇÃO (quantas clínicas mandam), NÃO por volume — tira ruído tipo NECRÓPSIA (1%)
     totcli = int(q(f"SELECT COUNT(DISTINCT r.CodCliente) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-                   f"WHERE r.DataEntrada BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
+                   f"WHERE s.DataExame BETWEEN %s AND %s", (d365, maxd))[0]["n"] or 1)
     uni = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(DISTINCT r.CodCliente) cli FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cat.Categoria ORDER BY cli DESC", (d365, maxd))
     setores = [u["setor"] for u in uni if u["setor"] and u["setor"] != "(sem categoria)" and (u["cli"] / totcli) >= 0.15][:14]
     ph = ",".join(["%s"] * len(cods))
     crows = q(f"SELECT r.CodCliente cod, COALESCE(cat.Categoria,'(sem categoria)') setor, COUNT(*) qtd "
               f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
               f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-              f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s "
+              f"WHERE r.CodCliente IN ({ph}) AND s.DataExame BETWEEN %s AND %s "
               f"GROUP BY r.CodCliente, cat.Categoria", (*cods, d365, maxd))
     conn.close()
     bycod = {}
@@ -367,7 +367,7 @@ def build():
             f"COUNT(*) qtd, SUM(s.ValorExame) fat FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCliente cl ON r.CodCliente=cl.CodCliente "
-            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente ORDER BY fat DESC", W12)   # DataEntrada = base do HF (faturamento)
+            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY r.CodCliente ORDER BY fat DESC", W12)
     cli_ativos=len(cli)
     tc=[]
     for i,r in enumerate(cli[:30],1):
@@ -467,10 +467,10 @@ def build():
     def yw3(d): iso=d.isocalendar(); return iso[0]*100+iso[1]
     hoje=datetime.date.today()
     semchaves=[yw3(hoje-datetime.timedelta(days=7*(i+1))) for i in range(5)]  # [última completa, -2,-3,-4,-5]
-    sem=q(f"""SELECT r.CodCliente cod, YEARWEEK(r.DataEntrada,3) wk, SUM(s.ValorExame) fat
+    sem=q(f"""SELECT r.CodCliente cod, YEARWEEK(s.DataExame,3) wk, SUM(s.ValorExame) fat
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-        WHERE r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 60 DAY) AND r.DataEntrada<=CURDATE()
-        GROUP BY r.CodCliente, wk""")   # DataEntrada = base do HF (alinha os tiers de queda/alta com o faturamento)
+        WHERE s.DataExame>=DATE_SUB(CURDATE(),INTERVAL 60 DAY) AND s.DataExame<=CURDATE()
+        GROUP BY r.CodCliente, wk""")
     semmap={}
     for r in sem: semmap.setdefault(r["cod"],{})[int(r["wk"])]=float(r["fat"] or 0)
     def tier_of(m): return ("AAA" if m>=10000 else "A" if m>=5000 else "B" if m>=2000 else "C" if m>=800 else "D" if m>=300 else "E")
