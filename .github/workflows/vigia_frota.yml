@@ -7,7 +7,7 @@ name: Vigia da Frota (health check + alerta)
 
 on:
   schedule:
-    - cron: '*/15 9-23 * * *'   # a cada 15 min, ~06h-20h BRT (UTC = BRT+3)
+    - cron: '*/15 0-2,9-23 * * *'   # a cada 15 min, ~06h-23h BRT (UTC=BRT+3; 0-2 cobre a 2ª rotina da noite)
   workflow_dispatch:            # rodar agora p/ testar
 
 concurrency:
@@ -27,7 +27,12 @@ jobs:
           CALLMEBOT_PHONE:    ${{ secrets.CALLMEBOT_PHONE }}
           CALLMEBOT_APIKEY:   ${{ secrets.CALLMEBOT_APIKEY }}
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          MYSQL_HOST:         ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER:         ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:          ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:           ${{ secrets.MYSQL_DB }}
         run: |
+          python3 -m pip install --quiet --disable-pip-version-check pymysql 2>/dev/null || pip3 install --quiet pymysql 2>/dev/null || true
           python3 - <<'PY'
           import os, json, urllib.request, urllib.parse, datetime, time, smtplib, ssl
           from email.mime.text import MIMEText
@@ -183,6 +188,37 @@ jobs:
                   print("caca-runaway: NETLIFY_AUTH_TOKEN ausente")
           except Exception as e:
               print("caca-runaway falhou:",e)
+
+          # ---- FRESCOR DO DADO: a CÓPIA que o painel lê está atualizando? ----
+          # O painel lê a réplica MySQL bi_alpha. Se ela CONGELA (a replicação do HF parou —
+          # aconteceu 21/jul 17:56), o site responde 200 e a paginação passa, MAS o dado está
+          # velho e a equipe NÃO vê o que acabou de entrar. Este é o check que teria gritado.
+          # Alerta só nas horas de MOVIMENTO (evita falso-positivo de madrugada/lab fechado).
+          try:
+              import pymysql
+              MH=os.environ.get("MYSQL_HOST"); MU=os.environ.get("MYSQL_USER")
+              MP=os.environ.get("MYSQL_PWD"); MDB=os.environ.get("MYSQL_DB") or "bi_alpha"
+              if MH and MU and MP:
+                  cnx=pymysql.connect(host=MH,user=MU,password=MP,database=MDB,connect_timeout=20,charset="utf8mb4")
+                  with cnx.cursor() as mc:
+                      mc.execute("SELECT NOW()"); now_db=mc.fetchone()[0]
+                      mc.execute("SELECT MAX(DataModificacao) FROM `TabExameNumeroRequisiçao`"); ult=mc.fetchone()[0]
+                  cnx.close()
+                  if ult:
+                      atraso=(now_db-ult).total_seconds()/60.0
+                      hbrt=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).hour
+                      STALE_MIN=90
+                      if atraso>STALE_MIN and 9<=hbrt<=22:
+                          falhas.append(f"CÓPIA do painel CONGELADA: sem dado novo há {int(atraso)} min (última mudança {ult}). A réplica bi_alpha parou de atualizar — a equipe NÃO vê o que entrou agora. O painel responde mas está velho.")
+                          ctx.append(f"frescor: última {ult}, atraso {int(atraso)}min")
+                      else:
+                          ctx.append(f"frescor OK: última {ult} ({int(atraso)}min atrás)")
+                  else:
+                      ctx.append("frescor: sem DataModificacao (?)")
+              else:
+                  print("frescor: MYSQL_* ausente")
+          except Exception as e:
+              print("frescor check falhou:", e)
 
           # PANE (qualquer check falhou) -> alerta NA HORA
           if falhas:
