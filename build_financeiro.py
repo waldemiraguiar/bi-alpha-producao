@@ -79,38 +79,51 @@ def clinic_details(cods, since_map=None, alias=None):
         cod = str(x["cod"]); d = det.setdefault(cod, {"prod30": 0, "prod7": 0, "cats": {}})
         d["cats"][x["setor"]] = d["cats"].get(x["setor"], 0) + int(x["qtd"] or 0)
         d["prod30"] += int(x["p30"] or 0); d["prod7"] += int(x["p7"] or 0)
-    # MARCO ZERO: produção a partir da data de reconquista (cada cod herda o marco do seu PRINCIPAL)
+    # MARCO ZERO: produção desde a reconquista (mês cheio, consistente com o R$) — 1 query batch p/ todas
     prod_desde = {}
+    dsd = {}   # cod -> (marco_exato, mes_cheio)
     for cod in cods:
         dt = str(since_map.get(prim(cod)) or "")[:10]
-        if not dt:
-            continue
         try:
-            datetime.date.fromisoformat(dt)
+            datetime.date.fromisoformat(dt); dsd[cod] = (dt, dt[:7])
         except Exception:
-            continue
-        r = q(f"SELECT COUNT(*) n FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-              f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s", (cod, dt, maxd))
-        prod_desde[cod] = {"n": int(r[0]["n"] or 0), "desde": dt}
-    # DRILL-DOWN exame-a-exame por clínica (dia · exame · categoria · PET · tutor · registro) — desde o marco zero, senão 180d
+            pass
+    if dsd:
+        mn = min(v[1] for v in dsd.values()) + "-01"; phd = ",".join(["%s"] * len(dsd))
+        pr = q(f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) n FROM {EX} s "
+               f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+               f"WHERE r.CodCliente IN ({phd}) AND r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente, ym", (*dsd.keys(), mn, maxd))
+        cnt = {}
+        for x in pr:
+            cod = str(x["cod"])
+            if x["ym"] >= dsd[cod][1]:
+                cnt[cod] = cnt.get(cod, 0) + int(x["n"] or 0)
+        for cod, (dt, _m) in dsd.items():
+            prod_desde[cod] = {"n": cnt.get(cod, 0), "desde": dt}
+    # DRILL-DOWN exame-a-exame (dia · exame · categoria · PET · tutor · registro) — 1 query batch, split/cap em Python
     d180 = (tdt - datetime.timedelta(days=180)).isoformat()
-    recent = {}
-    CAP = 260   # máx linhas por clínica (as mais recentes)
-    for cod in cods:
-        desde = str(since_map.get(prim(cod)) or "")[:10] or d180
-        try:
-            datetime.date.fromisoformat(desde)
-        except Exception:
-            desde = d180
-        rows = q(f"SELECT r.DataEntrada d, s.Exame ex, COALESCE(cat.Categoria,'') cat, r.Animal pet, r.Proprietario tut, "
-                 f"r.NumeroSequencial req FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-                 f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-                 f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s "
-                 f"ORDER BY r.DataEntrada DESC, r.NumeroSequencial DESC LIMIT %s", (cod, desde, maxd, CAP + 1))
-        lst = [{"d": str(x["d"])[:10], "ex": (x["ex"] or "")[:60], "cat": (x["cat"] or "")[:40],
-                "pet": (x["pet"] or "")[:40], "tut": (x["tut"] or "")[:40], "req": x["req"]} for x in rows[:CAP]]
-        recent[cod] = {"lst": lst, "desde": desde, "mais": len(rows) > CAP}
+    recent = {}; CAP = 260
+    rdesde = {cod: (dsd.get(cod, (None,))[0] or d180) for cod in cods}
+    for cod in rdesde:
+        try: datetime.date.fromisoformat(rdesde[cod])
+        except Exception: rdesde[cod] = d180
+    mnr = min(rdesde.values()); phr = ",".join(["%s"] * len(cods))
+    allrows = q(f"SELECT r.CodCliente cod, r.DataEntrada d, s.Exame ex, COALESCE(cat.Categoria,'') cat, r.Animal pet, "
+                f"r.Proprietario tut, r.NumeroSequencial req FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+                f"WHERE r.CodCliente IN ({phr}) AND r.DataEntrada BETWEEN %s AND %s "
+                f"ORDER BY r.CodCliente, r.DataEntrada DESC, r.NumeroSequencial DESC", (*cods, mnr, maxd))
     conn.close()
+    byc = {}
+    for x in allrows:
+        cod = str(x["cod"]); dd = str(x["d"])[:10]
+        if dd < rdesde.get(cod, "9999"):
+            continue
+        byc.setdefault(cod, []).append({"d": dd, "ex": (x["ex"] or "")[:60], "cat": (x["cat"] or "")[:40],
+                                        "pet": (x["pet"] or "")[:40], "tut": (x["tut"] or "")[:40], "req": x["req"]})
+    for cod in cods:
+        lst = byc.get(cod, [])
+        recent[cod] = {"lst": lst[:CAP], "desde": rdesde.get(cod, d180), "mais": len(lst) > CAP}
     # AGREGA por código PRINCIPAL (soma os códigos-extra na mesma clínica)
     mdet, mpd, mrec = {}, {}, {}
     for cod, d in det.items():
@@ -173,19 +186,29 @@ def clinic_fat_since(since_map, alias=None):
         if dt: todo[str(cod)] = dt
     if not todo:
         return {}
+    mes = {}
+    for cod, dt in todo.items():
+        try:
+            datetime.date.fromisoformat(dt); mes[str(cod)] = dt[:7]   # mês-chave (YYYY-MM); mês cheio (consistente com a safra)
+        except Exception:
+            pass
+    if not mes:
+        return {}
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
     maxd = datetime.date.today().isoformat()
-    out = {}
-    for cod, dt in todo.items():
-        try:
-            datetime.date.fromisoformat(dt)
-        except Exception:
-            continue
-        r = q(f"SELECT COALESCE(SUM(s.ValorExame),0) f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-              f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s", (cod, dt, maxd))
-        out[prim(cod)] = round(out.get(prim(cod), 0) + float(r[0]["f"] or 0), 2)
+    cods = list(mes.keys()); mn = min(mes.values()) + "-01"
+    ph = ",".join(["%s"] * len(cods))
+    rows = q(f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COALESCE(SUM(s.ValorExame),0) f "
+             f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+             f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente, ym", (*cods, mn, maxd))
     conn.close()
+    out = {}
+    for x in rows:
+        cod = str(x["cod"])
+        if x["ym"] < mes.get(cod, "9999"):
+            continue
+        out[prim(cod)] = round(out.get(prim(cod), 0) + float(x["f"] or 0), 2)
     return out
 
 def clinic_fat_mensal(since_map, alias=None):
@@ -202,24 +225,31 @@ def clinic_fat_mensal(since_map, alias=None):
         if dt: todo[str(cod)] = dt
     if not todo:
         return {}
+    # marco de MÊS CHEIO por cod (entrou 26/05 → conta desde maio); só cods com data válida
+    mes = {}
+    for cod, dt in todo.items():
+        try:
+            datetime.date.fromisoformat(dt); mes[str(cod)] = dt[:7]   # mês-chave (YYYY-MM)
+        except Exception:
+            pass
+    if not mes:
+        return {}
     conn = pymysql.connect(**SRC); c = conn.cursor()
     def q(sql, p=()): c.execute(sql, p); return c.fetchall()
     maxd = datetime.date.today().isoformat()
-    acc = {}   # {prim: {ym: [n, fat]}}
-    for cod, dt in todo.items():
-        try:
-            datetime.date.fromisoformat(dt)
-        except Exception:
-            continue
-        dt = dt[:7] + "-01"   # MÊS CHEIO da entrada (escolha do Wal): entrou 26/05 → conta maio inteiro
-        rows = q(f"SELECT DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
-                 f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
-                 f"WHERE r.CodCliente=%s AND r.DataEntrada BETWEEN %s AND %s GROUP BY ym", (cod, dt, maxd))
-        p = prim(cod); m = acc.setdefault(p, {})
-        for x in rows:
-            ym = x["ym"]; cur = m.setdefault(ym, [0, 0.0])
-            cur[0] += int(x["n"] or 0); cur[1] += float(x["f"] or 0)
+    cods = list(mes.keys()); mn = min(mes.values()) + "-01"   # 1 query só (CodCliente IN, indexado) desde o marco mais antigo
+    ph = ",".join(["%s"] * len(cods))
+    rows = q(f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
+             f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+             f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente, ym", (*cods, mn, maxd))
     conn.close()
+    acc = {}   # {prim: {ym: [n, fat]}}
+    for x in rows:
+        cod = str(x["cod"]); ym = x["ym"]
+        if ym < mes.get(cod, "9999"):   # respeita o marco de CADA clínica
+            continue
+        m = acc.setdefault(prim(cod), {}); cur = m.setdefault(ym, [0, 0.0])
+        cur[0] += int(x["n"] or 0); cur[1] += float(x["f"] or 0)
     out = {}
     for p, m in acc.items():
         out[p] = [{"ym": ym, "n": m[ym][0], "fat": round(m[ym][1], 2)} for ym in sorted(m)]
