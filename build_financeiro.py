@@ -467,10 +467,10 @@ def build():
     def yw3(d): iso=d.isocalendar(); return iso[0]*100+iso[1]
     hoje=datetime.date.today()
     semchaves=[yw3(hoje-datetime.timedelta(days=7*(i+1))) for i in range(5)]  # [última completa, -2,-3,-4,-5]
-    sem=q(f"""SELECT r.CodCliente cod, YEARWEEK(s.DataExame,3) wk, SUM(s.ValorExame) fat
+    sem=q(f"""SELECT r.CodCliente cod, YEARWEEK(r.DataEntrada,3) wk, SUM(s.ValorExame) fat
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-        WHERE s.DataExame>=DATE_SUB(CURDATE(),INTERVAL 60 DAY) AND s.DataExame<=CURDATE()
-        GROUP BY r.CodCliente, wk""")
+        WHERE r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 60 DAY) AND r.DataEntrada<=CURDATE()
+        GROUP BY r.CodCliente, wk""")   # DataEntrada = base do HF (alinha os tiers de queda/alta com o faturamento)
     semmap={}
     for r in sem: semmap.setdefault(r["cod"],{})[int(r["wk"])]=float(r["fat"] or 0)
     def tier_of(m): return ("AAA" if m>=10000 else "A" if m>=5000 else "B" if m>=2000 else "C" if m>=800 else "D" if m>=300 else "E")
