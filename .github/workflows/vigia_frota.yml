@@ -194,6 +194,9 @@ jobs:
           # aconteceu 21/jul 17:56), o site responde 200 e a paginação passa, MAS o dado está
           # velho e a equipe NÃO vê o que acabou de entrar. Este é o check que teria gritado.
           # Alerta só nas horas de MOVIMENTO (evita falso-positivo de madrugada/lab fechado).
+          # Checa DOIS sinais: (1) FREEZE TOTAL (nem update flui) e (2) INSERT-STOP (updates fluem
+          # mas NENHUMA requisição NOVA entra — o caso 23/jul: DataModificacao fresca com updates de
+          # registros velhos, mas 0 requisição nova). Só olhar DataModificacao NÃO pega o caso (2).
           try:
               import pymysql
               MH=os.environ.get("MYSQL_HOST"); MU=os.environ.get("MYSQL_USER")
@@ -203,18 +206,19 @@ jobs:
                   with cnx.cursor() as mc:
                       mc.execute("SELECT NOW()"); now_db=mc.fetchone()[0]
                       mc.execute("SELECT MAX(DataModificacao) FROM `TabExameNumeroRequisiçao`"); ult=mc.fetchone()[0]
+                      mc.execute("SELECT MAX(ADDTIME(CAST(DataEntrada AS DATETIME), COALESCE(UsuarioHoraEntrada,'00:00:00'))) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 3 DAY)"); ins=mc.fetchone()[0]
                   cnx.close()
-                  if ult:
+                  hbrt=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).hour
+                  if ult:   # (1) freeze total — nem update flui
                       atraso=(now_db-ult).total_seconds()/60.0
-                      hbrt=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).hour
-                      STALE_MIN=90
-                      if atraso>STALE_MIN and 9<=hbrt<=22:
-                          falhas.append(f"CÓPIA do painel CONGELADA: sem dado novo há {int(atraso)} min (última mudança {ult}). A réplica bi_alpha parou de atualizar — a equipe NÃO vê o que entrou agora. O painel responde mas está velho.")
-                          ctx.append(f"frescor: última {ult}, atraso {int(atraso)}min")
-                      else:
-                          ctx.append(f"frescor OK: última {ult} ({int(atraso)}min atrás)")
-                  else:
-                      ctx.append("frescor: sem DataModificacao (?)")
+                      if atraso>90 and 9<=hbrt<=22:
+                          falhas.append(f"CÓPIA CONGELADA (total): sem NENHUMA atualização há {int(atraso)} min (última {ult}). A réplica bi_alpha parou de replicar.")
+                      ctx.append(f"frescor modif: {ult} ({int(atraso)}min)")
+                  if ins:   # (2) INSERT-stop — updates fluem mas requisição NOVA não entra
+                      atr_ins=(now_db-ins).total_seconds()/60.0
+                      if atr_ins>180 and 10<=hbrt<=21:
+                          falhas.append(f"REQUISIÇÕES NOVAS paradas na cópia há {int(atr_ins)} min (última entrada {ins}). O HF recebe, mas a réplica bi_alpha NÃO traz as novas — a equipe não vê o que cadastrou agora. (updates fluem, só o INSERT parou).")
+                      ctx.append(f"frescor entrada: {ins} ({int(atr_ins)}min)")
               else:
                   print("frescor: MYSQL_* ausente")
           except Exception as e:
