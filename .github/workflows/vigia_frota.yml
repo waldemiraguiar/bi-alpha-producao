@@ -214,6 +214,9 @@ jobs:
                       if atraso>90 and 9<=hbrt<=22:
                           falhas.append(f"CÓPIA CONGELADA (total): sem NENHUMA atualização há {int(atraso)} min (última {ult}). A réplica bi_alpha parou de replicar.")
                       ctx.append(f"frescor modif: {ult} ({int(atraso)}min)")
+                  if ins and not isinstance(ins, datetime.datetime):   # ADDTIME volta STRING neste MySQL
+                      try: ins=datetime.datetime.strptime(str(ins)[:19],"%Y-%m-%d %H:%M:%S")
+                      except Exception: ins=None
                   if ins:   # (2) INSERT-stop — updates fluem mas requisição NOVA não entra
                       atr_ins=(now_db-ins).total_seconds()/60.0
                       if atr_ins>180 and 10<=hbrt<=21:
