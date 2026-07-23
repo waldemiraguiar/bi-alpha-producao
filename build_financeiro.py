@@ -345,8 +345,8 @@ def build():
         c.execute(sql, p); r = c.fetchone(); return list(r.values())[0] if r else None
 
     SYS = datetime.date.today().isoformat()
-    maxd = q1(f"SELECT MAX(DataExame) m FROM {EX} WHERE DataExame<=%s", (SYS,)) or SYS
-    maxd = str(maxd); tdt = datetime.date.fromisoformat(maxd); ref = tdt.replace(day=1)
+    maxd = SYS   # base DataEntrada: janela até hoje (faturamento reconhecido na entrada da requisição)
+    tdt = datetime.date.fromisoformat(maxd); ref = tdt.replace(day=1)
     L12i = (ref-datetime.timedelta(days=365)).isoformat(); L12f = (ref-datetime.timedelta(days=1)).isoformat()
     seis = (ref-datetime.timedelta(days=183)).isoformat()
     d548 = (ref-datetime.timedelta(days=548)).isoformat()
@@ -357,9 +357,9 @@ def build():
         "obs_financeiro":"Recebimento, custo e status de pagamento NÃO disponíveis nesta réplica — valores referem-se a FATURAMENTO (valor cobrado)."}}
 
     # S1: histórico mensal (qtd, faturamento, reqs)
-    hist = q(f"SELECT DATE_FORMAT(DataExame,'%%Y-%%m') ym, COUNT(*) qtd, SUM(ValorExame) fat, "
-             f"COUNT(DISTINCT CodNumeroSequencialTela) reqs FROM {EX} "
-             f"WHERE DataExame>='2014-01-01' AND DataExame<='2026-12-31' GROUP BY ym ORDER BY ym")
+    hist = q(f"SELECT DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) qtd, SUM(s.ValorExame) fat, "
+             f"COUNT(DISTINCT s.CodNumeroSequencialTela) reqs FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+             f"WHERE r.DataEntrada>='2014-01-01' AND r.DataEntrada<='2026-12-31' GROUP BY ym ORDER BY ym")
     D["mensal"] = [{"ym":h["ym"],"qtd":h["qtd"],"fat":round(h["fat"] or 0,2),"reqs":h["reqs"],
                     "petlove":round(PETLOVE.get(h["ym"],0.0),2)} for h in hist if h["ym"]>='2019-01']
     # anual + yoy / sazonalidade / totais a partir do histórico
@@ -385,10 +385,10 @@ def build():
     ex25=sum(h["qtd"] for h in hist if h["ym"] and h["ym"].startswith("2025"))
 
     # S2: KPIs/operacional da janela 12m (uma linha)
-    k = q(f"SELECT COUNT(*) ex, SUM(ValorExame) fat, COUNT(DISTINCT CodNumeroSequencialTela) reqs, "
-          f"SUM(CASE WHEN Desconto>0 THEN 1 ELSE 0 END) ndesc, SUM(Desconto) vdesc, "
-          f"SUM(CASE WHEN Urgencia=1 THEN 1 ELSE 0 END) nurg, SUM(CASE WHEN Terceirizado=1 THEN 1 ELSE 0 END) nterc "
-          f"FROM {EX} WHERE DataExame BETWEEN %s AND %s", W12)[0]
+    k = q(f"SELECT COUNT(*) ex, SUM(s.ValorExame) fat, COUNT(DISTINCT s.CodNumeroSequencialTela) reqs, "
+          f"SUM(CASE WHEN s.Desconto>0 THEN 1 ELSE 0 END) ndesc, SUM(s.Desconto) vdesc, "
+          f"SUM(CASE WHEN s.Urgencia=1 THEN 1 ELSE 0 END) nurg, SUM(CASE WHEN s.Terceirizado=1 THEN 1 ELSE 0 END) nterc "
+          f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela WHERE r.DataEntrada BETWEEN %s AND %s", W12)[0]
     ex_l12=k["ex"]; fat_l12=k["fat"] or 0; req_l12=k["reqs"]
     cli_total = q1("SELECT COUNT(*) n FROM TabCliente")
 
@@ -397,7 +397,7 @@ def build():
             f"COUNT(*) qtd, SUM(s.ValorExame) fat FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCliente cl ON r.CodCliente=cl.CodCliente "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY r.CodCliente ORDER BY fat DESC", W12)
+            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente ORDER BY fat DESC", W12)   # DataEntrada = base do HF
     cli_ativos=len(cli)
     tc=[]
     for i,r in enumerate(cli[:30],1):
@@ -450,8 +450,9 @@ def build():
     D["churn"]={"corte_inatividade":seis,"clientes":churn,"total_sumidos":len(churn)}
 
     # S5: mix de exames (qtd+fat) -> ordena nos dois sentidos em Python
-    mix = q(f"SELECT Exame, COUNT(*) qtd, SUM(ValorExame) fat FROM {EX} "
-            f"WHERE DataExame BETWEEN %s AND %s AND Exame IS NOT NULL AND Exame<>'' GROUP BY Exame", W12)
+    mix = q(f"SELECT s.Exame Exame, COUNT(*) qtd, SUM(s.ValorExame) fat FROM {EX} s "
+            f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+            f"WHERE r.DataEntrada BETWEEN %s AND %s AND s.Exame IS NOT NULL AND s.Exame<>'' GROUP BY s.Exame", W12)
     for m in mix: m["fat"]=round(m["fat"] or 0,2)
     bf=sorted(mix,key=lambda x:-x["fat"])[:25]
     D["mix_exames_fat"]=[{"Exame":m["Exame"],"qtd":m["qtd"],"fat":m["fat"],"ticket":round(m["fat"]/m["qtd"],2) if m["qtd"] else 0} for m in bf]
@@ -459,8 +460,10 @@ def build():
 
     # S6: categorias (join categoria) -> setores derivado em Python
     cat = q(f"SELECT COALESCE(cat.Categoria,'(sem categoria)') categoria, COALESCE(cat.Setor,'-') setor, "
-            f"COUNT(*) qtd, SUM(s.ValorExame) fat FROM {EX} s LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY s.CodCategoria ORDER BY fat DESC", W12)
+            f"COUNT(*) qtd, SUM(s.ValorExame) fat FROM {EX} s "
+            f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+            f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY s.CodCategoria ORDER BY fat DESC", W12)
     D["categorias"]=[{"categoria":x["categoria"],"setor":x["setor"],"qtd":x["qtd"],"fat":round(x["fat"] or 0,2)} for x in cat]
     setd={}
     for x in cat:
@@ -485,7 +488,7 @@ def build():
             f"COUNT(*) qtd, SUM(s.ValorExame) fat, COUNT(DISTINCT r.CodCliente) clientes FROM {EX} s "
             f"JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
             f"LEFT JOIN TabCliente cl ON r.CodCliente=cl.CodCliente "
-            f"WHERE s.DataExame BETWEEN %s AND %s GROUP BY cl.Cidade, cl.Uf ORDER BY fat DESC", W12)
+            f"WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY cl.Cidade, cl.Uf ORDER BY fat DESC", W12)
     D["cidades"]=[{"cidade":x["cidade"],"uf":x["uf"],"qtd":x["qtd"],"fat":round(x["fat"] or 0,2),"clientes":x["clientes"]} for x in cid[:20]]
     ufd={}
     for x in cid:
@@ -497,9 +500,9 @@ def build():
     def yw3(d): iso=d.isocalendar(); return iso[0]*100+iso[1]
     hoje=datetime.date.today()
     semchaves=[yw3(hoje-datetime.timedelta(days=7*(i+1))) for i in range(5)]  # [última completa, -2,-3,-4,-5]
-    sem=q(f"""SELECT r.CodCliente cod, YEARWEEK(s.DataExame,3) wk, SUM(s.ValorExame) fat
+    sem=q(f"""SELECT r.CodCliente cod, YEARWEEK(r.DataEntrada,3) wk, SUM(s.ValorExame) fat
         FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
-        WHERE s.DataExame>=DATE_SUB(CURDATE(),INTERVAL 60 DAY) AND s.DataExame<=CURDATE()
+        WHERE r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 60 DAY) AND r.DataEntrada<=CURDATE()
         GROUP BY r.CodCliente, wk""")
     semmap={}
     for r in sem: semmap.setdefault(r["cod"],{})[int(r["wk"])]=float(r["fat"] or 0)
