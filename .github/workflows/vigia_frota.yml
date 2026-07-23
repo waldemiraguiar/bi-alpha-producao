@@ -206,7 +206,7 @@ jobs:
                   with cnx.cursor() as mc:
                       mc.execute("SELECT NOW()"); now_db=mc.fetchone()[0]
                       mc.execute("SELECT MAX(DataModificacao) FROM `TabExameNumeroRequisiçao`"); ult=mc.fetchone()[0]
-                      mc.execute("SELECT MAX(ADDTIME(CAST(DataEntrada AS DATETIME), COALESCE(UsuarioHoraEntrada,'00:00:00'))) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 3 DAY)"); ins=mc.fetchone()[0]
+                      mc.execute("SELECT MAX(ADDTIME(CAST(DataEntrada AS DATETIME), UsuarioHoraEntrada)) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 3 DAY) AND UsuarioHoraEntrada IS NOT NULL"); ins=mc.fetchone()[0]
                   cnx.close()
                   hbrt=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).hour
                   if ult:   # (1) freeze total — nem update flui
