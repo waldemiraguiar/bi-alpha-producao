@@ -210,8 +210,10 @@ jobs:
                   cnx.close()
                   hbrt=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).hour
                   if ult:   # (1) freeze total — nem update flui
+                      # 240min: o lab tem lulls normais (pausa de update chega perto de ~2h); só um
+                      # travamento REAL (o de 21/jul foi horas) passa disso. Evita falso-positivo nas férias.
                       atraso=(now_db-ult).total_seconds()/60.0
-                      if atraso>90 and 9<=hbrt<=22:
+                      if atraso>240 and 9<=hbrt<=22:
                           falhas.append(f"CÓPIA CONGELADA (total): sem NENHUMA atualização há {int(atraso)} min (última {ult}). A réplica bi_alpha parou de replicar.")
                       ctx.append(f"frescor modif: {ult} ({int(atraso)}min)")
                   if ins and not isinstance(ins, datetime.datetime):   # ADDTIME volta STRING neste MySQL
