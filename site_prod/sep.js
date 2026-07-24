@@ -490,8 +490,10 @@
       <div class="meta">${(tut + vet + entrou).replace(/^\s*·\s*/, '')}</div>${travHistLineSep(it)}${formaChunk(it, k)}${obsChunk(k)}</div>`;
     const separated = !!(m && m.estado);            // separado / enviado / recebido
     const received = !!(m && m.estado === 'recebido');
-    // Histotécnica: exige escolher a FORMA/QTD (grava em obs) antes de separar
-    const faltaForma = ehHistotecnica(it.cat) && !(m && m.obs && String(m.obs).trim());
+    // Histotécnica: exige escolher a FORMA/QTD (grava em obs) antes de separar.
+    // ⚠️ ler a marca DIRETO de marks[k] — o statusOf só devolve m quando tem estado; a marca
+    // "só-nota" (estado='' com a forma em obs) é descartada por ele → antes ficava bloqueado eterno.
+    const faltaForma = ehHistotecnica(it.cat) && !(marks[k] && marks[k].obs && String(marks[k].obs).trim());
     // PASSO 1 — SEPARAR
     let b1;
     if (separated) b1 = `<span class="step done" title="por ${esc2(m.por || '')}">✓ Separado</span>`;
