@@ -437,6 +437,28 @@ body{font-family:'Inter',sans-serif;background:
 .regchip .x:hover{background:var(--red);color:#fff}
 .clicount{font-size:12px;color:var(--mut);font-weight:600}
 </style>
+<script>
+/* === AUTO-ATUALIZACAO ALPHA — todos rodam a build publicada, sem limpar cache ===
+   Bump a CADA publicacao: este BUILD + (se houver) o selo de versao + o /version.json. */
+(function(){
+  var BUILD="24071540";
+  function ver(){
+    try{
+      fetch("version.json?_="+Date.now(),{cache:"no-store"})
+        .then(function(r){return r.ok?r.json():null;})
+        .then(function(j){
+          if(!j||!j.v) return;
+          if(String(j.v)!==BUILD){
+            var k="alpha_build_"+j.v;
+            if(!sessionStorage.getItem(k)){ sessionStorage.setItem(k,"1"); location.reload(); }
+          }
+        }).catch(function(){});
+    }catch(e){}
+  }
+  ver();
+  setInterval(ver,300000);
+})();
+</script>
 </head>
 <body>
 <div id="gate">
