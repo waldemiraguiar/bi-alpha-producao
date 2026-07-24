@@ -138,7 +138,7 @@
   const ehHistotecnica = cat => HISTO_CATS.includes(norm(cat));
   // FORMA/QUANTIDADE do material (só Histotécnica) — poka-yoke: registra em quantas peças veio,
   // pra não perder material (ex.: veio em 2 porta-lâminas e separaram 1). Grava na coluna obs.
-  const HISTO_UNID = { citopatologia: 'PL', histologia: 'pote', necropsia: 'peça' };  // cito=porta-lâmina, histopat=pote, necrópsia=peça (ajustável)
+  const HISTO_UNID = { citopatologia: 'PL', histologia: 'pote', necropsia: 'pote' };  // cito=porta-lâmina, histopat=pote, necrópsia=pote (Wal 24/jul)
   const unidHisto = cat => HISTO_UNID[norm(cat)] || 'peça';
   const rotuloForma = (n, u) => u === 'PL' ? `${n} PL` : `${n} ${u}${n > 1 ? 's' : ''}`;
   function formaChunk(it, k) {
