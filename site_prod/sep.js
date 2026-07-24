@@ -145,9 +145,12 @@
     if (!ehHistotecnica(it.cat)) return '';
     const u = unidHisto(it.cat);
     const cur = (marks[k] && marks[k].obs) ? String(marks[k].obs).trim() : '';
-    const btns = [1, 2, 3].map(n => { const v = rotuloForma(n, u); const on = norm(cur) === norm(v) ? 'on' : ''; return `<button type="button" class="formabtn ${on}" data-forma="${esc2(v)}" data-fk="${esc2(k)}">${esc2(v)}</button>`; }).join('');
-    const falta = cur ? '' : `<span class="formafalta">← escolha a forma antes de separar</span>`;
-    return `<div class="formawrap"><span class="formalbl">📦 Veio em:</span>${btns}${falta}</div>`;
+    const padroes = [1, 2, 3].map(n => rotuloForma(n, u));
+    const btns = padroes.map(v => { const on = norm(cur) === norm(v) ? 'on' : ''; return `<button type="button" class="formabtn ${on}" data-forma="${esc2(v)}" data-fk="${esc2(k)}">${esc2(v)}</button>`; }).join('');
+    const custom = (cur && !padroes.some(v => norm(v) === norm(cur))) ? cur : '';   // valor fora do padrão (digitado)
+    const inp = `<input type="text" class="formainput" data-fk="${esc2(k)}" value="${esc2(custom)}" placeholder="ou digite (ex.: 4 ${u}${u === 'PL' ? '' : 's'})" title="digite se veio fora do padrão (4+, extra…)">`;
+    const falta = cur ? '' : `<span class="formafalta">← escolha ou digite a forma antes de separar</span>`;
+    return `<div class="formawrap"><span class="formalbl">📦 Veio em:</span>${btns}${inp}${falta}</div>`;
   }
   const podeReceberHisto = () => { const n = norm(me()); return HISTO_REC.some(x => n === x || n.split(/[\s.]+/).includes(x)); };
   const travadoHisto = it => ehHistotecnica(it && it.cat) && !podeReceberHisto();   // este item está travado p/ mim?
@@ -483,7 +486,8 @@
     const entrou = it.entrada ? ` · 📅 entrou <b>${ddmm(it.entrada)}${hent ? ' ' + hent : ''}</b>` : '';
     const head = `<div class="req">${esc2(it.req)}<span class="y">/${esc2(it.ano)}</span></div>
       <div><div class="pac">${esc2(it.paciente)}${cl}${urg}</div>
-      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div>${travHistLineSep(it)}${formaChunk(it, k)}${obsChunk(k)}</div>`;
+      <div class="examebig">🔬 ${esc2(it.exame)}</div>
+      <div class="meta">${(tut + vet + entrou).replace(/^\s*·\s*/, '')}</div>${travHistLineSep(it)}${formaChunk(it, k)}${obsChunk(k)}</div>`;
     const separated = !!(m && m.estado);            // separado / enviado / recebido
     const received = !!(m && m.estado === 'recebido');
     // Histotécnica: exige escolher a FORMA/QTD (grava em obs) antes de separar
@@ -920,9 +924,14 @@
     el.querySelectorAll('.formabtn[data-forma]').forEach(b => b.onclick = async () => {
       if (teamMode && !me()) { openLogin(); return; }
       const k = b.dataset.fk, val = b.dataset.forma;
-      const atual = (marks[k] && marks[k].obs) ? String(marks[k].obs).trim() : '';
-      const ok = await saveObs(k, norm(atual) === norm(val) ? '' : val);   // clicar de novo desmarca
+      const ok = await saveObs(k, val);   // clicar SEMPRE seleciona (libera o Separar); pra mudar, clique outro/digite
       if (ok) render();
+    });
+    // campo EDITÁVEL de forma/qtd (fora do padrão): salva o que digitou e re-renderiza (libera o Separar)
+    el.querySelectorAll('.formainput[data-fk]').forEach(inp => {
+      inp.onchange = async () => { if (teamMode && !me()) { openLogin(); return; } const k = inp.dataset.fk; const ok = await saveObs(k, inp.value.trim()); if (ok) render(); };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+      inp.onclick = e => e.stopPropagation();
     });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
@@ -1027,6 +1036,9 @@
 .formabtn:hover{background:#e0f2fe}
 .formabtn.on{background:#0284c7;border-color:#0284c7;color:#fff;box-shadow:0 1px 4px rgba(2,132,199,.4)}
 .formafalta{font-size:11.5px;font-weight:700;color:#c2410c;background:#fff7ed;border:1px solid #fdba74;padding:2px 8px;border-radius:6px}
+.formainput{font-size:12.5px;font-weight:600;padding:5px 9px;border:1.5px solid #7dd3fc;border-radius:8px;background:#fff;color:#0c4a6e;font-family:inherit;width:130px;max-width:100%}
+.formainput:focus{outline:none;border-color:#0284c7;box-shadow:0 0 0 3px rgba(2,132,199,.15)}
+.examebig{font-size:14px;font-weight:800;color:#0369a1;margin-top:2px;line-height:1.25}
 .sepbtn.go.off{background:#eef1f5;color:#9aa6b2;border:1px dashed #fdba74;cursor:not-allowed}
 .obswrap{display:flex;align-items:center;gap:7px;margin-top:6px}
 .obsico{font-size:14px;opacity:.85;flex:none}
