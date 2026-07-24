@@ -136,6 +136,19 @@
   const HISTO_CATS = ['citopatologia', 'histologia', 'necropsia'];   // = setor Histotécnica
   const HISTO_REC = ['david', 'eduardo'];                            // quem pode receber/confirmar aqui
   const ehHistotecnica = cat => HISTO_CATS.includes(norm(cat));
+  // FORMA/QUANTIDADE do material (só Histotécnica) — poka-yoke: registra em quantas peças veio,
+  // pra não perder material (ex.: veio em 2 porta-lâminas e separaram 1). Grava na coluna obs.
+  const HISTO_UNID = { citopatologia: 'PL', histologia: 'pote', necropsia: 'peça' };  // cito=porta-lâmina, histopat=pote, necrópsia=peça (ajustável)
+  const unidHisto = cat => HISTO_UNID[norm(cat)] || 'peça';
+  const rotuloForma = (n, u) => u === 'PL' ? `${n} PL` : `${n} ${u}${n > 1 ? 's' : ''}`;
+  function formaChunk(it, k) {
+    if (!ehHistotecnica(it.cat)) return '';
+    const u = unidHisto(it.cat);
+    const cur = (marks[k] && marks[k].obs) ? String(marks[k].obs).trim() : '';
+    const btns = [1, 2, 3].map(n => { const v = rotuloForma(n, u); const on = norm(cur) === norm(v) ? 'on' : ''; return `<button type="button" class="formabtn ${on}" data-forma="${esc2(v)}" data-fk="${esc2(k)}">${esc2(v)}</button>`; }).join('');
+    const falta = cur ? '' : `<span class="formafalta">← escolha a forma antes de separar</span>`;
+    return `<div class="formawrap"><span class="formalbl">📦 Veio em:</span>${btns}${falta}</div>`;
+  }
   const podeReceberHisto = () => { const n = norm(me()); return HISTO_REC.some(x => n === x || n.split(/[\s.]+/).includes(x)); };
   const travadoHisto = it => ehHistotecnica(it && it.cat) && !podeReceberHisto();   // este item está travado p/ mim?
 
@@ -470,12 +483,15 @@
     const entrou = it.entrada ? ` · 📅 entrou <b>${ddmm(it.entrada)}${hent ? ' ' + hent : ''}</b>` : '';
     const head = `<div class="req">${esc2(it.req)}<span class="y">/${esc2(it.ano)}</span></div>
       <div><div class="pac">${esc2(it.paciente)}${cl}${urg}</div>
-      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div>${travHistLineSep(it)}${obsChunk(k)}</div>`;
+      <div class="meta">${esc2(it.exame)}${tut}${vet}${entrou}</div>${travHistLineSep(it)}${formaChunk(it, k)}${obsChunk(k)}</div>`;
     const separated = !!(m && m.estado);            // separado / enviado / recebido
     const received = !!(m && m.estado === 'recebido');
+    // Histotécnica: exige escolher a FORMA/QTD (grava em obs) antes de separar
+    const faltaForma = ehHistotecnica(it.cat) && !(m && m.obs && String(m.obs).trim());
     // PASSO 1 — SEPARAR
     let b1;
     if (separated) b1 = `<span class="step done" title="por ${esc2(m.por || '')}">✓ Separado</span>`;
+    else if (canSep() && faltaForma) b1 = `<button class="sepbtn go off" data-act="formafalta" data-k="${k}" title="escolha em quantas peças o material veio (📦) antes de separar">1 · Separar</button>`;
     else if (canSep()) b1 = `<button class="sepbtn go" data-act="separar" data-k="${k}">1 · Separar</button>`;
     else b1 = `<span class="step lock" title="entre como time de Separação">🔒 Separar</span>`;
     // PASSO 2 — RECEBER
@@ -900,8 +916,17 @@
         inp.classList.toggle('has', !!inp.value.trim());
       };
     });
+    // botões de FORMA/QTD (Histotécnica): grava a escolha em obs e re-renderiza (libera o Separar)
+    el.querySelectorAll('.formabtn[data-forma]').forEach(b => b.onclick = async () => {
+      if (teamMode && !me()) { openLogin(); return; }
+      const k = b.dataset.fk, val = b.dataset.forma;
+      const atual = (marks[k] && marks[k].obs) ? String(marks[k].obs).trim() : '';
+      const ok = await saveObs(k, norm(atual) === norm(val) ? '' : val);   // clicar de novo desmarca
+      if (ok) render();
+    });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, act = b.dataset.act;
+      if (act === 'formafalta') { alert('📦 Antes de separar, escolha em quantas peças o material veio (ex.: 2 PL, 1 pote) — ou descreva no campo 📝 se veio de outra forma. Isso evita perder material no laboratório.'); return; }
       if (act === 'separar') { const it = itens().find(x => chaveOf(x) === k); if (it) doSeparar(it); }
       else if (act === 'suficiente') { const it = itens().find(x => chaveOf(x) === k); if (it) doSuficiente(it); }
       else if (act === 'insuf') { const it = itens().find(x => chaveOf(x) === k); if (it) doInsuf(it); }
@@ -996,6 +1021,13 @@
 .sepbtn.sufi small{font-size:9px;opacity:.92;font-weight:600;letter-spacing:.2px}
 .seprow.confirmrow{background:rgba(22,163,74,.06);border-left:3px solid #16a34a}
 .dl.conf{background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-weight:600}
+.formawrap{display:flex;align-items:center;gap:6px;margin-top:7px;flex-wrap:wrap}
+.formalbl{font-size:12px;font-weight:700;color:#0369a1;flex:none}
+.formabtn{font-size:12.5px;font-weight:700;padding:5px 11px;border:1.5px solid #7dd3fc;border-radius:8px;background:#f0f9ff;color:#0369a1;cursor:pointer;font-family:inherit;line-height:1}
+.formabtn:hover{background:#e0f2fe}
+.formabtn.on{background:#0284c7;border-color:#0284c7;color:#fff;box-shadow:0 1px 4px rgba(2,132,199,.4)}
+.formafalta{font-size:11.5px;font-weight:700;color:#c2410c;background:#fff7ed;border:1px solid #fdba74;padding:2px 8px;border-radius:6px}
+.sepbtn.go.off{background:#eef1f5;color:#9aa6b2;border:1px dashed #fdba74;cursor:not-allowed}
 .obswrap{display:flex;align-items:center;gap:7px;margin-top:6px}
 .obsico{font-size:14px;opacity:.85;flex:none}
 .obsinput{flex:1;max-width:600px;min-width:180px;padding:6px 10px;font-size:12.5px;border:1px solid #fcd34d;border-radius:8px;background:#fffdf5;color:#7c2d12;font-family:inherit;box-sizing:border-box}
