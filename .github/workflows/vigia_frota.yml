@@ -210,26 +210,27 @@ jobs:
                       mc.execute("SELECT MAX(ADDTIME(CAST(DataEntrada AS DATETIME), UsuarioHoraEntrada)) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 3 DAY) AND UsuarioHoraEntrada IS NOT NULL"); ins=mc.fetchone()[0]
                       mc.execute("SELECT COUNT(*) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=CURDATE()"); req_hoje=mc.fetchone()[0] or 0
                   cnx.close()
-                  # ⚠️ LAB OPERANDO AGORA? — evita FALSO ALARME de lab fechado (incidente 26/jul: DOMINGO
-                  # à noite, o lab fecha cedo no fim de semana → "sem dado" era lab fechado, não freeze).
-                  # (a) janela por DIA DA SEMANA + (b) o lab TEM que ter produzido de verdade hoje (>=40 req);
-                  # senão é dia parado/feriado, NÃO travamento. Só alerta se AMBOS.
+                  # ⚠️ FREEZE = a réplica parou de receber dado DURANTE a janela em que o lab COMPROVADAMENTE opera.
+                  # NÃO gatear por volume (req_hoje): o próprio freeze derruba o volume e silenciaria o alarme
+                  # (ERRO 27/jul: réplica congelou 10:49 numa segunda cheia; req_hoje=10 fez o >=40 achar "lab
+                  # parado" e ficar quieto — o congelamento escondeu o detector). O sinal honesto é o ATRASO
+                  # desde a última escrita, dentro da janela. Domingo fecha mais cedo (evita falso alarme 26/jul).
                   nb=datetime.datetime.utcnow()-datetime.timedelta(hours=3); wd=nb.weekday(); hb=nb.hour
-                  janela = (11<=hb<=21) if wd<=4 else (11<=hb<=20) if wd==5 else (13<=hb<=15)   # seg-sex / sáb / dom
-                  lab_operando = janela and req_hoje>=40
-                  ctx.append(f"lab_operando={lab_operando} (req_hoje={req_hoje}, {['seg','ter','qua','qui','sex','sab','dom'][wd]} {hb}h)")
-                  if ult:   # (1) freeze total — nem update flui (só alerta se o lab está operando)
+                  janela = (12<=hb<=21) if wd<=5 else (12<=hb<=16)   # seg-sáb dia cheio / dom reduzido
+                  lab_operando = janela   # nome mantido pro bloco de recuperação abaixo
+                  ctx.append(f"janela_operacao={janela} (req_hoje={req_hoje}, {['seg','ter','qua','qui','sex','sab','dom'][wd]} {hb}h)")
+                  if ult:   # (1) freeze total — nem update flui; só olha ATRASO, sem gate de volume
                       atraso=(now_db-ult).total_seconds()/60.0
-                      if atraso>240 and lab_operando:
-                          falhas.append(f"CÓPIA CONGELADA (total): sem NENHUMA atualização há {int(atraso)} min (última {ult}). A réplica bi_alpha parou de replicar.")
+                      if atraso>240 and janela:
+                          falhas.append(f"CÓPIA CONGELADA: sem NENHUMA atualização há {int(atraso)} min (última {ult}; só {req_hoje} req hoje). A réplica bi_alpha parou de replicar — o painel de Produção está CEGO. A equipe não sente (trabalha no HF vivo), mas o BI está travado.")
                       ctx.append(f"frescor modif: {ult} ({int(atraso)}min)")
                   if ins and not isinstance(ins, datetime.datetime):   # ADDTIME volta STRING neste MySQL
                       try: ins=datetime.datetime.strptime(str(ins)[:19],"%Y-%m-%d %H:%M:%S")
                       except Exception: ins=None
                   if ins:   # (2) INSERT-stop — updates fluem mas requisição NOVA não entra
                       atr_ins=(now_db-ins).total_seconds()/60.0
-                      if atr_ins>300 and lab_operando:
-                          falhas.append(f"REQUISIÇÕES NOVAS paradas na cópia há {int(atr_ins)} min (última entrada {ins}). O HF recebe, mas a réplica bi_alpha NÃO traz as novas — a equipe não vê o que cadastrou agora. (updates fluem, só o INSERT parou).")
+                      if atr_ins>300 and janela:
+                          falhas.append(f"REQUISIÇÕES NOVAS paradas na cópia há {int(atr_ins)} min (última entrada {ins}). O HF recebe, mas a réplica bi_alpha NÃO traz as novas. (updates fluem, só o INSERT parou).")
                       ctx.append(f"frescor entrada: {ins} ({int(atr_ins)}min)")
               else:
                   print("frescor: MYSQL_* ausente")
