@@ -197,6 +197,7 @@ jobs:
           # Checa DOIS sinais: (1) FREEZE TOTAL (nem update flui) e (2) INSERT-STOP (updates fluem
           # mas NENHUMA requisição NOVA entra — o caso 23/jul: DataModificacao fresca com updates de
           # registros velhos, mas 0 requisição nova). Só olhar DataModificacao NÃO pega o caso (2).
+          lab_operando=False   # visível pro bloco de recuperação abaixo
           try:
               import pymysql
               MH=os.environ.get("MYSQL_HOST"); MU=os.environ.get("MYSQL_USER")
@@ -207,23 +208,27 @@ jobs:
                       mc.execute("SELECT NOW()"); now_db=mc.fetchone()[0]
                       mc.execute("SELECT MAX(DataModificacao) FROM `TabExameNumeroRequisiçao`"); ult=mc.fetchone()[0]
                       mc.execute("SELECT MAX(ADDTIME(CAST(DataEntrada AS DATETIME), UsuarioHoraEntrada)) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 3 DAY) AND UsuarioHoraEntrada IS NOT NULL"); ins=mc.fetchone()[0]
+                      mc.execute("SELECT COUNT(*) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=CURDATE()"); req_hoje=mc.fetchone()[0] or 0
                   cnx.close()
-                  hbrt=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).hour
-                  if ult:   # (1) freeze total — nem update flui
-                      # 240min: o lab tem lulls normais (pausa de update chega perto de ~2h); só um
-                      # travamento REAL (o de 21/jul foi horas) passa disso. Evita falso-positivo nas férias.
+                  # ⚠️ LAB OPERANDO AGORA? — evita FALSO ALARME de lab fechado (incidente 26/jul: DOMINGO
+                  # à noite, o lab fecha cedo no fim de semana → "sem dado" era lab fechado, não freeze).
+                  # (a) janela por DIA DA SEMANA + (b) o lab TEM que ter produzido de verdade hoje (>=40 req);
+                  # senão é dia parado/feriado, NÃO travamento. Só alerta se AMBOS.
+                  nb=datetime.datetime.utcnow()-datetime.timedelta(hours=3); wd=nb.weekday(); hb=nb.hour
+                  janela = (11<=hb<=21) if wd<=4 else (11<=hb<=20) if wd==5 else (13<=hb<=15)   # seg-sex / sáb / dom
+                  lab_operando = janela and req_hoje>=40
+                  ctx.append(f"lab_operando={lab_operando} (req_hoje={req_hoje}, {['seg','ter','qua','qui','sex','sab','dom'][wd]} {hb}h)")
+                  if ult:   # (1) freeze total — nem update flui (só alerta se o lab está operando)
                       atraso=(now_db-ult).total_seconds()/60.0
-                      if atraso>240 and 9<=hbrt<=22:
+                      if atraso>240 and lab_operando:
                           falhas.append(f"CÓPIA CONGELADA (total): sem NENHUMA atualização há {int(atraso)} min (última {ult}). A réplica bi_alpha parou de replicar.")
                       ctx.append(f"frescor modif: {ult} ({int(atraso)}min)")
                   if ins and not isinstance(ins, datetime.datetime):   # ADDTIME volta STRING neste MySQL
                       try: ins=datetime.datetime.strptime(str(ins)[:19],"%Y-%m-%d %H:%M:%S")
                       except Exception: ins=None
                   if ins:   # (2) INSERT-stop — updates fluem mas requisição NOVA não entra
-                      # limite 300min: a pausa NORMAL entre ondas do lab chega a ~150min (medido 21-22/jul);
-                      # 300 fica bem acima disso (sem falso-positivo) e ainda pega o freeze real (foi ~13h).
                       atr_ins=(now_db-ins).total_seconds()/60.0
-                      if atr_ins>300 and 10<=hbrt<=21:
+                      if atr_ins>300 and lab_operando:
                           falhas.append(f"REQUISIÇÕES NOVAS paradas na cópia há {int(atr_ins)} min (última entrada {ins}). O HF recebe, mas a réplica bi_alpha NÃO traz as novas — a equipe não vê o que cadastrou agora. (updates fluem, só o INSERT parou).")
                       ctx.append(f"frescor entrada: {ins} ({int(atr_ins)}min)")
               else:
@@ -234,9 +239,8 @@ jobs:
           # ---- RECUPERAÇÃO: se ESTAVA congelado e AGORA voltou → avisa "✅ voltou" ----
           # Guarda o estado anterior numa linha do sep_marks (chave zzz_vigia_estado, não casa exame).
           # Detecta a TRANSIÇÃO congelado→ok e manda 1 alerta positivo (o Wal não precisa ficar de olho).
-          # só rastreia/decide nas HORAS DE MOVIMENTO (fora disso staleness é ambíguo = lab fechado)
-          _hb=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).hour
-          if 9<=_hb<=22:
+          # só rastreia/decide quando o LAB ESTÁ OPERANDO (senão staleness = lab fechado/dia parado, ambíguo)
+          if lab_operando:
               try:
                   congelado = any(('CONGELADA' in f or 'REQUISIÇÕES NOVAS paradas' in f) for f in falhas)
                   st_prev=None
