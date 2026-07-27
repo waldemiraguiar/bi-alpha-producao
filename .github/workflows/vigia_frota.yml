@@ -231,6 +231,27 @@ jobs:
           except Exception as e:
               print("frescor check falhou:", e)
 
+          # ---- RECUPERAÇÃO: se ESTAVA congelado e AGORA voltou → avisa "✅ voltou" ----
+          # Guarda o estado anterior numa linha do sep_marks (chave zzz_vigia_estado, não casa exame).
+          # Detecta a TRANSIÇÃO congelado→ok e manda 1 alerta positivo (o Wal não precisa ficar de olho).
+          try:
+              congelado = any(('CONGELADA' in f or 'REQUISIÇÕES NOVAS paradas' in f) for f in falhas)
+              st_prev=None
+              try:
+                  _,b,_=supa("/sep_marks?chave=eq.zzz_vigia_estado&select=obs")
+                  arr=json.loads(b) if b else []; st_prev=(arr[0].get("obs") if arr else None)
+              except Exception: pass
+              if st_prev=="congelado" and not congelado:
+                  alerta("✅ Painel VOLTOU a atualizar",
+                         f"Boa notícia Wal ({agora}): a cópia do painel de Produção VOLTOU a receber dado — o feed foi religado. O painel reconstrói sozinho em ~10 min (disparador). A equipe já pode confiar no painel de novo.",
+                         f"✅ Painel de Produção VOLTOU ({agora}) — cópia fresca de novo. Reconstrói sozinho em ~10min.")
+              try:
+                  supa("/sep_marks","POST",{"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+                       json.dumps({"chave":"zzz_vigia_estado","estado":"vigia","por":"vigia","obs":("congelado" if congelado else "ok")}))
+              except Exception: pass
+          except Exception as e:
+              print("recuperacao check falhou:",e)
+
           # PANE (qualquer check falhou) -> alerta NA HORA
           if falhas:
               corpo=(f"ALERTA Wal ({agora}) — o painel está com problema pra a equipe:\n\n"
