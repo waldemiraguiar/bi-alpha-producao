@@ -1,0 +1,49 @@
+name: notify
+# Entrega um recado avulso pro Wal (e-mail + WhatsApp) reusando os segredos do vigia.
+# Disparado por workflow_dispatch com input `msg` (e opcional `titulo`).
+# Usado pelo poller do Mini (mini_verify_poller): o Air faz a parte que só ele alcança
+# (SSH no Mini + ler o HF vivo) e chama este workflow pra ENTREGAR o resultado, porque
+# os segredos de WhatsApp/e-mail moram aqui no GitHub (e roda 24/7, independe do Air).
+on:
+  workflow_dispatch:
+    inputs:
+      msg:
+        description: "Texto do recado (WhatsApp + corpo do e-mail)"
+        required: true
+      titulo:
+        description: "Assunto do e-mail"
+        required: false
+        default: "Aviso do robô (Alpha)"
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: enviar
+        env:
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+          CALLMEBOT_PHONE:    ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY:   ${{ secrets.CALLMEBOT_APIKEY }}
+          MSG:                ${{ github.event.inputs.msg }}
+          TITULO:             ${{ github.event.inputs.titulo }}
+        run: |
+          python3 - <<'PY'
+          import os, ssl, smtplib, urllib.request, urllib.parse
+          from email.mime.text import MIMEText
+          msg=os.environ.get("MSG","(vazio)"); titulo=os.environ.get("TITULO") or "Aviso do robô (Alpha)"
+          try:
+              GU=os.environ["GMAIL_USER"]; GP=os.environ["GMAIL_APP_PASSWORD"]; TO=os.environ.get("EMAIL_TO") or GU
+              m=MIMEText(msg,"plain","utf-8"); m["Subject"]=titulo; m["From"]=GU; m["To"]=TO
+              with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ssl.create_default_context()) as s:
+                  s.login(GU,GP); s.sendmail(GU,[TO],m.as_string())
+              print("email enviado")
+          except Exception as e: print("email falhou:",e)
+          try:
+              ph=os.environ.get("CALLMEBOT_PHONE","").strip(); ak=os.environ.get("CALLMEBOT_APIKEY","").strip()
+              if ph and ak:
+                  u=("https://api.callmebot.com/whatsapp.php?phone="+urllib.parse.quote(ph)+"&text="+urllib.parse.quote(msg)+"&apikey="+urllib.parse.quote(ak))
+                  urllib.request.urlopen(u,timeout=30).read(); print("whatsapp enviado")
+              else: print("callmebot sem phone/apikey")
+          except Exception as e: print("whatsapp falhou:",e)
+          PY
