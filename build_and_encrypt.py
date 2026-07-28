@@ -368,6 +368,16 @@ def _jdef(o):
     raise TypeError(str(type(o)))
 
 def encrypt(D):
+    # ★ FAIL-SAFE (Wal 28/jul): NUNCA sobrescrever o dado bom por VAZIO. Um engasgo do HF (query volta 0
+    #   linhas sem erro) fazia o build "ter sucesso" com tudo zerado e PUBLICAR o painel vazio por cima do
+    #   bom -> a equipe via "não puxou do HF, zerado, geral" (foi o caso 27/jul à noite). Se TUDO veio vazio
+    #   e já existe um enc anterior, MANTÉM o anterior (o painel segue com o último dado bom até o HF voltar).
+    _sig = (D.get("resumo", {}).get("em_processo", 0) or 0) + len(D.get("categorias", [])) \
+           + len(D.get("separacao", {}).get("itens", [])) + len(D.get("separacao", {}).get("historico", []))
+    if _sig == 0 and os.path.exists(OUT_ENC):
+        print("⚠️ BUILD VAZIO (em_processo/cats/separacao/historico todos 0) — o HF não retornou dados. "
+              "MANTENDO o enc anterior; o painel NÃO zera. (não sobrescrevo)")
+        return
     data=json.dumps(D,ensure_ascii=False,separators=(",",":"),default=_jdef).encode()
     salt,iv=os.urandom(16),os.urandom(12)
     key=PBKDF2HMAC(algorithm=hashes.SHA256(),length=32,salt=salt,iterations=ITER).derive(PROD_PWD.encode())
