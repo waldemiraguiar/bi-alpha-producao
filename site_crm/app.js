@@ -26,7 +26,7 @@ const TABS = [
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"pista",           ic:"🏍️", nm:"Pista",           cls:"",         bcls:""},
-  {k:"clinicas",        ic:"🏥", nm:"Clínicas",        cls:"",         bcls:""},
+  {k:"clinicas",        ic:"🌂", nm:"Guarda-Chuva",    cls:"",         bcls:""},
   {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
@@ -132,6 +132,42 @@ async function addSens(nome,obs){ if(!(nome||"").trim()) return; const por=quem(
   try{ const r=await fetch(SENS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,obs,por,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão."); return; } if(r.ok){ syncSens((await r.json()).sensiveis); renderTab(); } }catch(e){ alert("Falha ao adicionar."); } }
 async function removeSens(id){ try{ const r=await fetch(SENS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncSens((await r.json()).sensiveis); renderTab(); } }catch(e){} }
+
+/* ---------- 🌂 GUARDA-CHUVA HISTOPATOLOGIA — ponte com a produção da histotécnica ---------- */
+const GC_API="/api/crm-guardachuva";
+let GC_CLIN=null, GC_EST=null, GC_LOADING=false, GC_ESTADO_ADD="reconquista";
+const GC_STAGES=[{n:1,nome:"Recepção/Triagem"},{n:3,nome:"Clivagem"},{n:4,nome:"Processamento"},{n:5,nome:"Microtomia"},{n:6,nome:"Prep. Lâminas"},{n:7,nome:"Prof. Luís (laudo)",prof:true},{n:8,nome:"Finalização"}];
+const GC_PROF_IDX=GC_STAGES.findIndex(s=>s.prof);   // 5 (0-based) — etapa do Professor
+const GC_SLA_PROF=3;                                 // golden SLA: dias úteis com o Prof p/ virar alerta
+const GC_ESTADOS={reconquista:{ic:"🎯",nm:"Reconquista",cor:"#FF2D55"},novo:{ic:"🆕",nm:"Novo",cor:"#00E5A0"},risco:{ic:"⚠️",nm:"Em risco",cor:"#FF8A00"},chave:{ic:"⭐",nm:"Chave",cor:"#00D4FF"}};
+function gcNorm(et){ et=(et||[]).slice(); if(et.length===8) et.splice(1,1); return et; }  // HF nasce com 8 etapas → migra p/ 7
+function gcSod(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function gcDiasUteis(from,to){ if(!from) return 0; let a=gcSod(from),b=gcSod(to); if(b<a) return 0; let c=0; const d=new Date(a); while(d<=b){ if(d.getDay()!==0)c++; d.setDate(d.getDate()+1);} return c; }
+function gcEtapaAtual(et){ et=gcNorm(et); for(let i=0;i<et.length;i++){ if(!et[i]||!et[i].concluida_em) return i+1; } return et.length+1; }
+function gcFinalizado(et){ return gcEtapaAtual(et) > gcNorm(et).length; }
+function gcComProf(et){ return gcEtapaAtual(et)===GC_PROF_IDX+1; }
+function gcEntrouProf(et){ et=gcNorm(et); return (et[GC_PROF_IDX]&&et[GC_PROF_IDX].coletado_em)||(et[GC_PROF_IDX-1]&&et[GC_PROF_IDX-1].concluida_em)||null; }
+function gcDiasProf(et){ return gcComProf(et)? Math.max(0, gcDiasUteis(gcEntrouProf(et), new Date())-1) : 0; }
+async function loadGC(){ if(GC_LOADING) return; GC_LOADING=true;
+  try{ const [a,b]=await Promise.all([
+      fetch(GC_API+"?acao=list",{cache:"no-store"}).then(r=>r.json()),
+      fetch(GC_API+"?acao=esteira",{cache:"no-store"}).then(r=>r.json()) ]);
+    GC_CLIN=(a&&a.clinicas)||[]; GC_EST=(b&&b.esteira)||[];
+  }catch(e){ GC_CLIN=GC_CLIN||[]; GC_EST=GC_EST||[]; }
+  GC_LOADING=false; if(ACTIVE==="clinicas"&&clinView==="guardachuva") renderTab();
+}
+async function gcSave(o){
+  try{ const r=await fetch(GC_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...o,senha:window.__pwd})});
+    if(r.status===401){ alert("Sessão sem permissão — entre com a senha do time."); return; }
+    const j=await r.json().catch(()=>({})); if(j.erro){ alert("Erro: "+j.erro); return; }
+    if(j.clinicas) GC_CLIN=j.clinicas; loadGC();
+  }catch(e){ alert("Falha ao salvar."); }
+}
+async function gcAdd(){ const nm=document.getElementById("gcNome"); if(!nm||!nm.value.trim()){ alert("Digite/escolha a clínica"); return; }
+  const resp=(typeof quem==="function"?quem():"")||""; await gcSave({acao:"upsert",nome:nm.value.trim(),estado:GC_ESTADO_ADD,responsavel:resp}); }
+async function gcRemove(id){ if(!confirm("Tirar esta clínica de baixo do guarda-chuva?")) return; await gcSave({acao:"remove",id}); }
+async function gcSetEstado(id,estado){ await gcSave({acao:"upsert",id,estado}); }
+async function gcToggle(id,ativo){ await gcSave({acao:"upsert",id,ativo:!ativo}); }
 
 /* ---------- PROSPECÇÃO (novos leads — crescimento) ---------- */
 const PROSP_API="/api/crm-prospeccao";
@@ -1880,7 +1916,58 @@ function renderTab(){
           <div class="ci t-mut" style="font-size:11px;margin-top:4px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
-    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='particular'?'on':''}" data-cv="particular">🐾 Particulares${part.length?` (${part.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Clínicas A${aaaA.length?` (${aaaA.length})`:''}</button><button class="subtab ${clinView==='aab'?'on':''}" data-cv="aab">🅱️ Clínicas B${aaaB.length?` (${aaaB.length})`:''}</button><button class="subtab ${clinView==='aac'?'on':''}" data-cv="aac">🇨 Clínicas C${aaaC.length?` (${aaaC.length})`:''}</button><button class="subtab ${clinView==='aad'?'on':''}" data-cv="aad">🇩 Clínicas D${aaaD.length?` (${aaaD.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
+    const gcAtivos=(GC_CLIN||[]).filter(x=>x.ativo!==false).length;
+    const subtabsClin=`<div class="subtabs"><button class="subtab ${clinView==='guardachuva'?'on':''}" data-cv="guardachuva" style="${clinView==='guardachuva'?'':'border-color:rgba(255,176,32,.5);color:#ffc266'}">🌂 Histopatologia${gcAtivos?` (${gcAtivos})`:''}</button><button class="subtab ${clinView==='reconquistada'?'on':''}" data-cv="reconquistada">♻️ Reconquistadas${rec.length?` (${rec.length})`:''}</button><button class="subtab ${clinView==='nova'?'on':''}" data-cv="nova">🆕 Novas${nov.length?` (${nov.length})`:''}</button><button class="subtab ${clinView==='divide'?'on':''}" data-cv="divide">🔀 Dividem material${divm.length?` (${divm.length})`:''}</button><button class="subtab ${clinView==='particular'?'on':''}" data-cv="particular">🐾 Particulares${part.length?` (${part.length})`:''}</button><button class="subtab ${clinView==='aaa'?'on':''}" data-cv="aaa">⭐ Clínicas A${aaaA.length?` (${aaaA.length})`:''}</button><button class="subtab ${clinView==='aab'?'on':''}" data-cv="aab">🅱️ Clínicas B${aaaB.length?` (${aaaB.length})`:''}</button><button class="subtab ${clinView==='aac'?'on':''}" data-cv="aac">🇨 Clínicas C${aaaC.length?` (${aaaC.length})`:''}</button><button class="subtab ${clinView==='aad'?'on':''}" data-cv="aad">🇩 Clínicas D${aaaD.length?` (${aaaD.length})`:''}</button><button class="subtab ${clinView==='relatorios'?'on':''}" data-cv="relatorios">📈 Relatórios${RELATORIOS.length?` (${RELATORIOS.length})`:''}</button></div>`;
+    if(clinView==="guardachuva"){
+      if(GC_CLIN===null){ loadGC();
+        c.innerHTML=`${subtabsClin}<div class="empty" style="margin-top:18px">🌂 Carregando o guarda-chuva…</div>`;
+        document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+        return; }
+      const cls=(GC_CLIN||[]), ativos=cls.filter(x=>x.ativo!==false), est=(GC_EST||[]);
+      const porCli={}; est.forEach(e=>{ (porCli[e.cliente]=porCli[e.cliente]||[]).push(e); });
+      const comProf=est.filter(e=>gcComProf(e.etapas)).length;
+      const estourou=est.filter(e=>gcComProf(e.etapas)&&gcDiasProf(e.etapas)>=GC_SLA_PROF).length;
+      const dl=`<datalist id="gcHF">${(CLINICAS||[]).slice(0,4000).map(m=>`<option value="${esc(m.nome)}">`).join("")}</datalist>`;
+      const estadoBtns=Object.keys(GC_ESTADOS).map(k=>`<button class="opt ${GC_ESTADO_ADD===k?'on':''}" data-gce="${k}" type="button">${GC_ESTADOS[k].ic} ${GC_ESTADOS[k].nm}</button>`).join("");
+      const exCard=e=>{ const at=gcEtapaAtual(e.etapas), st=GC_STAGES[Math.min(at,GC_STAGES.length)-1], prof=gcComProf(e.etapas), d=gcDiasProf(e.etapas), hot=prof&&d>=GC_SLA_PROF;
+        const etLbl=st?`E${st.n} · ${st.nome}`:'—';
+        return `<div class="crow" style="align-items:flex-start;cursor:default${hot?';border-left:3px solid #FF2D55':(prof?';border-left:3px solid #FF8A00':'')}">
+          <div class="rk">${prof?'🎓':'🔬'}</div>
+          <div style="flex:1"><div class="nm" style="font-size:14px">${esc(e.nome_paciente||'—')} <span class="t-mut" style="font-size:11px">${esc(e.numero_registro||('HF '+(e.numero_hf||'?')))}</span></div>
+            <div class="ci"><b style="color:${hot?'#ff6b81':(prof?'#ffc266':'#9fe6ff')}">${etLbl}</b>${prof?` · com o Prof há <b style="color:${hot?'#ff6b81':'#ffc266'}">${d} dia(s) útil(eis)</b> (limite ${GC_SLA_PROF})${hot?' · 🔴 ESTOUROU — cobrar o laudo':''}`:''}</div>
+          </div><div class="mid"></div></div>`; };
+      const cliBlocos=ativos.map(cl=>{ const g=GC_ESTADOS[cl.estado]||GC_ESTADOS.reconquista, exs=porCli[cl.nome]||[];
+        const estSel=`<select class="repsel" style="max-width:160px;padding:5px 8px;font-size:12px" data-gcest="${cl.id}">${Object.keys(GC_ESTADOS).map(k=>`<option value="${k}" ${cl.estado===k?'selected':''}>${GC_ESTADOS[k].ic} ${GC_ESTADOS[k].nm}</option>`).join("")}</select>`;
+        return `<div style="border:1px solid var(--line);border-left:3px solid ${g.cor};border-radius:12px;padding:12px 14px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div class="nm" style="font-size:15px">${g.ic} ${esc(cl.nome)}</div>${estSel}<span class="t-mut" style="font-size:11px">${exs.length} exame(s) na esteira</span><button class="delfb" data-gcdel="${cl.id}" title="Tirar do guarda-chuva" style="margin-left:auto">✕</button></div>
+          ${cl.motivo?`<div class="ci" style="margin-top:2px">${esc(cl.motivo)}</div>`:''}
+          ${exs.length?exs.map(exCard).join(""):`<div class="t-mut" style="font-size:12px;margin-top:6px">Nenhum exame de histopat em andamento agora. 👍</div>`}
+        </div>`; }).join("");
+      c.innerHTML=`${subtabsClin}
+        <div class="proxhint" style="border-color:rgba(255,176,32,.45);color:#ffe2ab;margin-bottom:12px;line-height:1.55">🌂 <b>Guarda-Chuva Histopatologia</b> — clientes que acompanhamos de perto (o exame de maior retenção). Classifique a clínica (escolha da base do HF) e veja os exames dela na <b>esteira da histotécnica</b>, com a etapa e o <b>gargalo do Prof. Luís</b> (alarme a partir de ${GC_SLA_PROF} dias úteis).</div>
+        <div class="kgrid">
+          ${kpi("g", ativos.length, "Sob o guarda-chuva", "clínicas ativas")}
+          ${kpi("", est.length, "Exames na esteira", "histopat em andamento")}
+          ${kpi("", comProf, "Com o Prof. Luís", "")}
+          ${kpi(estourou?"a":"", estourou, "🔴 Passou do SLA", "com o Prof")}
+        </div>
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+          <div class="m-lbl" style="margin:0 0 8px">➕ Pôr uma clínica sob o guarda-chuva</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input class="wlsearch" id="gcNome" list="gcHF" placeholder="Clínica (digite; puxo do HF)" style="min-width:220px">${dl}
+            <button class="checkinbtn" id="gcAddBtn" type="button" style="max-width:200px;margin:0">➕ Adicionar</button>
+          </div>
+          <div class="t-mut" style="font-size:11.5px;margin:8px 0 4px">Estado do cliente:</div>
+          <div class="m-opts">${estadoBtns}</div>
+        </div>
+        ${ativos.length?cliBlocos:`<div class="empty">Nenhuma clínica sob o guarda-chuva ainda. Adicione uma acima.</div>`}`;
+      document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+      document.querySelectorAll("#content [data-gce]").forEach(el=>el.onclick=()=>{ GC_ESTADO_ADD=el.dataset.gce; renderTab(); });
+      const gab=document.getElementById("gcAddBtn"); if(gab) gab.onclick=gcAdd;
+      document.querySelectorAll("#content [data-gcdel]").forEach(el=>el.onclick=()=>gcRemove(el.dataset.gcdel));
+      document.querySelectorAll("#content [data-gcest]").forEach(el=>el.onchange=()=>gcSetEstado(el.dataset.gcest, el.value));
+      return;
+    }
     if(clinView==="relatorios"){
       const pl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno","":"—"};
       const semLabel=r=>{ if(r.label) return "Sexta "+esc(r.label); const m=String(r.semana||"").match(/(\d{4})-W(\d+)/); return m?`Semana ${m[2]}/${m[1]}`:esc(r.semana||"—"); };
