@@ -1935,9 +1935,10 @@ function renderTab(){
         const etLbl=st?`E${st.n} · ${st.nome}`:'—';
         const total=gcTotalDias(e), atraso=Math.max(0,total-GC_CORTE);
         const totCor = atraso>0 ? '#ff6b81' : (total>=GC_CORTE-2 ? '#ffc266' : '#7effcf');
-        const bl = atraso>0 ? '#FF2D55' : (hot ? '#FF2D55' : (prof ? '#FF8A00' : (total>=GC_CORTE-2 ? '#FFB020' : 'transparent')));
-        return `<div class="crow" style="align-items:flex-start;cursor:default${bl!=='transparent'?';border-left:3px solid '+bl:''}">
-          <div class="rk">${atraso>0?'⚠️':(prof?'🎓':'🔬')}</div>
+        // IDENTIDADE dourada calma (no prazo, o caminho todo) × VERMELHO só quando atrasa de verdade (anti-fadiga)
+        const bl = (atraso>0||hot) ? '#FF2D55' : (total>=GC_CORTE-2 ? '#FFB020' : '#ffc24d');
+        return `<div class="crow" style="align-items:flex-start;cursor:default;border-left:3px solid ${bl}">
+          <div class="rk">${atraso>0?'⚠️':(prof?'🎓':'🌂')}</div>
           <div style="flex:1">
             <div class="nm" style="font-size:14px">${esc(e.nome_paciente||'—')} <span class="t-mut" style="font-size:11px">${esc(e.numero_registro||('HF '+(e.numero_hf||'?')))}</span></div>
             <div class="ci" style="margin-top:2px"><b style="color:#9fe6ff">${etLbl}</b></div>
@@ -1951,13 +1952,26 @@ function renderTab(){
           ${cl.motivo?`<div class="ci" style="margin-top:2px">${esc(cl.motivo)}</div>`:''}
           ${exs.length?exs.map(exCard).join(""):`<div class="t-mut" style="font-size:12px;margin-top:6px">Nenhum exame de histopat em andamento agora. 👍</div>`}
         </div>`; }).join("");
+      // PLACAR — reforço positivo (snapshot da esteira: no prazo × precisa de atenção)
+      const gcExHot=e=>{ const t=gcTotalDias(e); return t>GC_CORTE || (gcComProf(e.etapas)&&gcDiasProf(e.etapas)>=GC_SLA_PROF); };
+      const gcAtraso=est.filter(gcExHot).length, gcOk=est.length-gcAtraso, gcPct=est.length?Math.round(gcOk/est.length*100):0;
+      let gcMsg,gcCor; if(!est.length){ gcMsg='🌂 nada na esteira agora'; gcCor='var(--mut)'; }
+        else if(gcPct>=90){ gcMsg='🎉 quase tudo no prazo!'; gcCor='#7effcf'; }
+        else if(gcPct>=70){ gcMsg='👏 bom ritmo'; gcCor='#ffd27a'; }
+        else { gcMsg='⚠️ dá pra melhorar'; gcCor='#ff8fa3'; }
       c.innerHTML=`${subtabsClin}
-        <div class="proxhint" style="border-color:rgba(255,176,32,.45);color:#ffe2ab;margin-bottom:12px;line-height:1.55">🌂 <b>Guarda-Chuva Histopatologia</b> — clientes que acompanhamos de perto (o exame de maior retenção). Classifique a clínica (escolha da base do HF) e veja os exames dela na <b>esteira da histotécnica</b>, com a etapa e o <b>gargalo do Prof. Luís</b> (alarme a partir de ${GC_SLA_PROF} dias úteis).</div>
+        <div class="proxhint" style="border-color:rgba(255,194,77,.45);color:#ffe2ab;margin-bottom:12px;line-height:1.55">🌂 <b>Guarda-Chuva Histopatologia</b> — clientes que acompanhamos de perto (o exame de maior retenção). Todo exame carrega o <b style="color:#ffc24d">tom dourado o caminho todo</b> (identidade calma) e só vira <b style="color:#ff6b81">vermelho quando atrasa de verdade</b> (passou do corte de ${GC_CORTE} dias úteis ou ${GC_SLA_PROF} dias com o Prof.).</div>
         <div class="kgrid">
           ${kpi("g", ativos.length, "Sob o guarda-chuva", "clínicas ativas")}
           ${kpi("", est.length, "Exames na esteira", "histopat em andamento")}
           ${kpi("", comProf, "Com o Prof. Luís", "")}
-          ${kpi(estourou?"a":"", estourou, "🔴 Passou do SLA", "com o Prof")}
+          ${kpi(gcAtraso?"a":"", gcAtraso, "⚠️ Precisam de atenção", "atraso / SLA")}
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:14px;padding:12px 18px;border-radius:12px;background:linear-gradient(90deg,rgba(0,229,160,.12),rgba(255,194,77,.06));border:1px solid rgba(0,229,160,.35)">
+          <div><div style="font-size:30px;font-weight:900;color:#7effcf;line-height:1">${gcOk}/${est.length}</div><div class="t-mut" style="font-size:12px">🌂 no prazo na esteira</div></div>
+          <div><div style="font-size:30px;font-weight:900;color:#ffd27a;line-height:1">${gcPct}%</div><div class="t-mut" style="font-size:12px">no prazo</div></div>
+          <div><div style="font-size:30px;font-weight:900;color:#ff8fa3;line-height:1">${gcAtraso}</div><div class="t-mut" style="font-size:12px">precisam de atenção</div></div>
+          <div style="margin-left:auto;font-weight:800;color:${gcCor}">${gcMsg}</div>
         </div>
         <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px">
           <div class="m-lbl" style="margin:0 0 8px">➕ Pôr uma clínica sob o guarda-chuva</div>
