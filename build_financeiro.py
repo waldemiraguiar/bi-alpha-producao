@@ -334,7 +334,18 @@ def divide_conversion(since_map, setores=None):
         conq = [{"setor": x["setor"], "desde": str(x["desde"])[:10], "n": int(x["n"] or 0), "fat": round(float(x["fat"] or 0), 2)}
                 for x in depois if x["setor"] and x["setor"] != "?" and x["setor"] not in base and (not uni or x["setor"] in uni)]
         conq.sort(key=lambda z: -z["n"])
-        out[cod] = {"base": sorted(base), "conq": conq}
+        # 💰 DINHEIRO NOVO mês a mês = só as categorias CONQUISTADAS (o baseline/histopato NÃO conta — é dinheiro velho)
+        conqmes = []
+        catsn = [z["setor"] for z in conq]
+        if catsn:
+            phc = ",".join(["%s"] * len(catsn))
+            mrows = q(f"SELECT DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COALESCE(SUM(s.ValorExame),0) fat, COUNT(*) n "
+                      f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                      f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+                      f"WHERE r.CodCliente=%s AND r.DataEntrada>=%s AND cat.Categoria IN ({phc}) GROUP BY ym ORDER BY ym",
+                      (cod, marco[:7] + "-01", *catsn))
+            conqmes = [{"ym": x["ym"], "fat": round(float(x["fat"] or 0), 2), "n": int(x["n"] or 0)} for x in mrows]
+        out[cod] = {"base": sorted(base), "conq": conq, "conqmes": conqmes}
     conn.close()
     return out
 
