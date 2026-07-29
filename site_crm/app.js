@@ -371,7 +371,7 @@ async function loadOps(){ try{ const r=await fetch(OPS_API, {cache:"no-store"});
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
-function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; CLIN_CONQFAT=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; CLIN_CONQFAT=null; CLIN_CONQMES=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
 function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -485,7 +485,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas (só diretoria)
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas (só diretoria)
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -494,7 +494,7 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; }   // {fat, desde, fatmes, conqfat}
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; }   // {fat, desde, fatmes, conqfat}
     else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; CLIN_CONQFAT={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
@@ -2036,8 +2036,12 @@ function renderTab(){
         let cohortHtml="";
         if(CLIN_FATMES){
           // TODAS as clínicas com marco (dated) — inclui as ZERADAS (0 exames) com R$ 0; ordena por total desc; numera
-          const fmRows=dados.filter(d=>d.x.cod && (d.x.reconq_data || (CLIN_FATMES[String(d.x.cod)]||[]).length))
-            .map(d=>({nome:d.x.nome,tipo:d.x.tipo,arr:(CLIN_FATMES[String(d.x.cod)]||[])}));
+          // DINHEIRO NOVO: reconq/nova = tudo (fatmes); DIVIDE = só a CONQUISTA (conqmes) — o baseline/histopato é dinheiro VELHO, não entra; e só aparece quando converter
+          const cqm=c=>(CLIN_CONQMES&&CLIN_CONQMES[String(c)])||[];
+          const fmRows=dados.filter(d=>{ if(!d.x.cod) return false;
+              if(d.x.tipo==="divide") return cqm(d.x.cod).length>0;   // divide só entra na safra depois de converter
+              return d.x.reconq_data || (CLIN_FATMES[String(d.x.cod)]||[]).length; })
+            .map(d=>({nome:d.x.nome,tipo:d.x.tipo,arr:(d.x.tipo==="divide"?cqm(d.x.cod):(CLIN_FATMES[String(d.x.cod)]||[]))}));
           fmRows.forEach(r=>r.tot=r.arr.reduce((s,a)=>s+a.fat,0));
           fmRows.sort((a,b)=>b.tot-a.tot);
           const mset={}; fmRows.forEach(r=>r.arr.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort();
@@ -2056,7 +2060,7 @@ function renderTab(){
                 <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
                   <thead><tr style="background:rgba(0,229,160,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#7effcf">Total</th></tr></thead>
                   <tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
-              <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Numeradas por faturamento (maior → menor). As <b style="color:#ffc266">zeradas</b> (0 exames desde a entrada) aparecem no fim, com R$ 0 — pra você ver quem ainda não converteu. O <b>TOTAL</b> é o quanto a carteira já recuperou (munição pra estimular o time; a equipe não vê R$).</div>`;
+              <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Aqui só entra <b>DINHEIRO NOVO</b>: reconquistadas/novas contam tudo (o cliente voltou/entrou); as <b>🔀 dividem material</b> só entram <b>quando convertem</b> — e só com a <b>conquista</b> (categoria nova), porque o que já mandavam (ex.: histopato) é dinheiro <b>velho</b>, não recuperação. O <b>TOTAL</b> = o quanto a carteira realmente recuperou. Acompanhe velho×novo das que dividem na seção 🎉 Conquistas abaixo.</div>`;
           }
         }
         painel=`
@@ -2107,32 +2111,29 @@ function renderTab(){
       const divAll=CARTEIRA.filter(x=>x.tipo==="divide"&&x.cod).map(x=>({x,det:CLIN_DET[String(x.cod)]||null})).filter(o=>o.det);
       const dir=ehDiretoria();
       const conquistaHtml = divAll.length ? `
-        <div class="seclabel" style="margin:14px 0 6px;color:#00E5A0">🎉 Dividem material — total × conquista <span class="t-mut" style="font-weight:500;font-size:11px">(o que ela já mandava vs. o que você fez ela começar a mandar)</span></div>
-        ${divAll.map(o=>{ const cod=String(o.x.cod), conq=(o.det.conq||[]);
-          const totEx=(o.det.prod_desde!=null)?o.det.prod_desde:null, totRs=dir?rsVal(cod,o.x.reconq_data):null;   // desde o marco
-          const conqEx=conq.reduce((s,z)=>s+(z.n||0),0), conqRs=(dir&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?conq.reduce((s,z)=>s+(CLIN_CONQFAT[cod][z.setor]||0),0):null;
-          const pctRs=(dir&&totRs)?Math.round((conqRs||0)/totRs*100):null;
-          return `<div style="background:rgba(0,229,160,.07);border:1px solid rgba(0,229,160,.3);border-radius:9px;padding:9px 11px;margin-bottom:7px">
-            <div style="font-weight:700;color:#00E5A0;font-size:13px">🔀 ${esc(o.x.nome)}${o.x.reconq_data?` <span class="t-mut" style="font-weight:500;font-size:11px">· marco ${esc(fmtDataBR(o.x.reconq_data))}</span>`:""}</div>
-            <div style="display:flex;gap:8px;margin-top:7px;flex-wrap:wrap">
-              <div style="flex:1;min-width:130px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.28);border-radius:8px;padding:7px 9px">
-                <div style="font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.3px">📊 Total desde o marco</div>
-                <div style="font-size:15px;font-weight:800;color:#9fe6ff;margin-top:2px">${dir?(totRs!=null?fmtBRL(totRs):"—"):"🔒"} <span style="font-size:11px;font-weight:500;color:var(--mut)">${totEx!=null?"· "+totEx+" ex":""}</span></div>
-                <div style="font-size:10px;color:var(--mut);margin-top:1px">inclui o que ela já mandava</div>
-              </div>
-              <div style="flex:1;min-width:130px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:7px 9px">
-                <div style="font-size:10.5px;color:#00E5A0;text-transform:uppercase;letter-spacing:.3px">🎉 Conquista (novo)</div>
-                <div style="font-size:15px;font-weight:800;color:#7effcf;margin-top:2px">${dir?(conqRs!=null?fmtBRL(conqRs):fmtBRL(0)):"🔒"} <span style="font-size:11px;font-weight:500;color:var(--mut)">· ${conqEx} ex</span></div>
-                <div style="font-size:10px;color:#7effcf;margin-top:1px">${pctRs!=null?pctRs+"% do total é ganho real":"categoria que não mandava"}</div>
-              </div>
+        <div class="seclabel" style="margin:16px 0 4px;color:#00E5A0">🔀 Dividem material — dinheiro VELHO × NOVO</div>
+        <div class="t-mut" style="font-size:11.5px;margin:0 0 8px;line-height:1.5">Elas já te mandavam uma parte (💙 <b>velho</b> — ex.: só histopato). O trabalho é fazer abrir as <b>outras categorias</b> (💚 <b>novo</b>). <b>Só o verde conta como recuperação.</b> A barra mostra quanto já virou.</div>
+        ${divAll.map(o=>{ const cod=String(o.x.cod), conq=(o.det.conq||[]), falta=(o.det.falta||[]);
+          const totRs=dir?rsVal(cod,o.x.reconq_data):null;
+          const conqRs=(dir&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?conq.reduce((s,z)=>s+(CLIN_CONQFAT[cod][z.setor]||0),0):0;
+          const velhoRs=(dir&&totRs!=null)?Math.max(0,totRs-conqRs):null;
+          const pctN=(dir&&totRs>0)?Math.round(conqRs/totRs*100):0;
+          const convert=conq.length>0;
+          const status=convert?`<span style="background:rgba(0,229,160,.2);color:#00E5A0;border-radius:12px;padding:1px 9px;font-size:11px;font-weight:700">🟢 convertendo · ${pctN}% novo</span>`:`<span style="background:rgba(255,138,0,.2);color:#ffc266;border-radius:12px;padding:1px 9px;font-size:11px;font-weight:700">🔴 ainda não converteu</span>`;
+          // BARRA visual velho × novo (só diretoria; senão mostra só status/categorias)
+          const bar=(dir&&totRs>0)?`<div style="display:flex;height:26px;border-radius:7px;overflow:hidden;border:1px solid rgba(255,255,255,.12);margin-top:8px;font-size:11px;font-weight:800">
+              <div style="width:${Math.max(pctN<100?100-pctN:0,pctN>=100?0:6)}%;min-width:${velhoRs>0?'34px':'0'};background:linear-gradient(90deg,#2b7fb0,#1d6a92);color:#eaf6ff;display:flex;align-items:center;justify-content:center;white-space:nowrap;padding:0 6px">${velhoRs>0?"💙 "+fmtBRL(velhoRs):""}</div>
+              <div style="width:${Math.max(pctN,pctN>0?8:0)}%;background:linear-gradient(90deg,#00c98a,#00E5A0);color:#062;display:flex;align-items:center;justify-content:center;white-space:nowrap;padding:0 6px">${conqRs>0?"💚 "+fmtBRL(conqRs):(pctN>0?"💚":"")}</div>
             </div>
-            ${conq.length?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:7px;white-space:nowrap">
-              <thead><tr style="color:var(--mut);font-size:10.5px"><th style="text-align:left;padding:2px 6px">🎉 Categoria conquistada</th><th style="text-align:right;padding:2px 6px">Desde</th><th style="text-align:right;padding:2px 6px">Exames</th>${dir?'<th style="text-align:right;padding:2px 6px">R$ novo</th>':''}</tr></thead>
-              <tbody>${conq.map(z=>{ const rs=(dir&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?CLIN_CONQFAT[cod][z.setor]:null;
-                return `<tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:3px 6px;color:#7effcf">✅ ${esc(z.setor)}</td><td style="text-align:right;padding:3px 6px">${esc(fmtDataBR(z.desde))}</td><td style="text-align:right;padding:3px 6px">${z.n}</td>${dir?`<td style="text-align:right;padding:3px 6px;color:#7effcf;font-weight:700">${rs!=null?fmtBRL(rs):"—"}</td>`:''}</tr>`; }).join("")}</tbody>
-            </table></div>`:`<div class="t-mut" style="font-size:11.5px;margin-top:7px">⏳ Ainda sem conquista — o alvo é: ${(o.det.falta||[]).slice(0,6).map(esc).join(", ")||"—"}. Quando ela mandar uma dessas, entra aqui com data e R$.</div>`}
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;margin-top:3px"><span style="color:#9fe6ff">💙 velho (já mandava): <b>${fmtBRL(velhoRs||0)}</b></span><span style="color:#7effcf">💚 novo (conquista): <b>${fmtBRL(conqRs)}</b></span></div>`
+            :(dir?`<div class="t-mut" style="font-size:11px;margin-top:6px">sem produção desde o marco ainda</div>`:`<div style="font-size:11px;margin-top:6px;color:#9fe6ff">🔒 R$ só diretoria — aqui você vê o que ela manda × o alvo</div>`);
+          return `<div style="background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.3);border-left:3px solid ${convert?'#00E5A0':'#ffc266'};border-radius:9px;padding:10px 12px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div style="font-weight:700;color:#e8f8f0;font-size:13px">🔀 ${esc(o.x.nome)}${o.x.reconq_data?` <span class="t-mut" style="font-weight:500;font-size:11px">· desde ${esc(fmtDataBR(o.x.reconq_data))}</span>`:""}</div>${status}</div>
+            ${bar}
+            ${conq.length?`<div style="margin-top:9px"><div style="font-size:11px;color:#00E5A0;font-weight:700;margin-bottom:3px">💚 Já conquistou (dinheiro novo):</div>${conq.map(z=>{ const rs=(dir&&CLIN_CONQFAT&&CLIN_CONQFAT[cod])?CLIN_CONQFAT[cod][z.setor]:null; return `<div style="font-size:11.5px;color:#7effcf;margin-top:2px">✅ <b>${esc(z.setor)}</b> — desde ${esc(fmtDataBR(z.desde))} · ${z.n} ex${rs!=null?` · <b>${fmtBRL(rs)}</b>`:""}</div>`; }).join("")}</div>`:""}
+            ${falta.length?`<div style="margin-top:9px"><div style="font-size:11px;color:#ff8fa3;font-weight:700;margin-bottom:4px">🎯 Falta abrir (o alvo pra virar dinheiro novo):</div><div style="display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,10).map(f=>`<span style="background:rgba(255,45,85,.18);color:#ffc9d2;border:1px solid rgba(255,45,85,.4);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}</div></div>`:(conq.length?`<div style="font-size:11px;color:#7effcf;margin-top:8px">👏 já manda todas as classes — conversão completa!</div>`:"")}
           </div>`; }).join("")}
-        <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 <b>Conquista</b> = categoria que ela <b>não mandava</b> antes do marco e passou a mandar = o ganho real do trabalho (é essa que comissiona). O <b>total</b> inclui o que já entrava. R$ só diretoria.</div>` : "";
+        <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 Enquanto a barra é só <b style="color:#9fe6ff">💙 azul</b>, é dinheiro que já entrava (não é mérito). Cada pedaço <b style="color:#7effcf">💚 verde</b> que você abre = recuperação real, e é o que <b>comissiona</b> o vendedor.</div>` : "";
       c.innerHTML=`${subtabsClin}
         <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">${ehDiretoria()?"📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo — você não precisa pedir). E-mail completo toda <b>sexta 9h</b>.":"📊 <b>Evolução da carteira</b> — produção e ritmo de cada clínica (atualiza sozinho a cada ciclo)."}</div>
         ${c2Html}
