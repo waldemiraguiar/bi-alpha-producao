@@ -1929,14 +1929,22 @@ function renderTab(){
       const estourou=est.filter(e=>gcComProf(e.etapas)&&gcDiasProf(e.etapas)>=GC_SLA_PROF).length;
       const dl=`<datalist id="gcHF">${(CLINICAS||[]).slice(0,4000).map(m=>`<option value="${esc(m.nome)}">`).join("")}</datalist>`;
       const estadoBtns=Object.keys(GC_ESTADOS).map(k=>`<button class="opt ${GC_ESTADO_ADD===k?'on':''}" data-gce="${k}" type="button">${GC_ESTADOS[k].ic} ${GC_ESTADOS[k].nm}</button>`).join("");
+      const GC_CORTE=15;   // 15 dias úteis = corte (meta do laudo); passou disso = atraso
+      const gcTotalDias=e=>gcDiasUteis(e.data_entrada, new Date());   // dias úteis desde a entrada (atualiza dia a dia)
       const exCard=e=>{ const at=gcEtapaAtual(e.etapas), st=GC_STAGES[Math.min(at,GC_STAGES.length)-1], prof=gcComProf(e.etapas), d=gcDiasProf(e.etapas), hot=prof&&d>=GC_SLA_PROF;
         const etLbl=st?`E${st.n} · ${st.nome}`:'—';
-        return `<div class="crow" style="align-items:flex-start;cursor:default${hot?';border-left:3px solid #FF2D55':(prof?';border-left:3px solid #FF8A00':'')}">
-          <div class="rk">${prof?'🎓':'🔬'}</div>
-          <div style="flex:1"><div class="nm" style="font-size:14px">${esc(e.nome_paciente||'—')} <span class="t-mut" style="font-size:11px">${esc(e.numero_registro||('HF '+(e.numero_hf||'?')))}</span></div>
-            <div class="ci"><b style="color:${hot?'#ff6b81':(prof?'#ffc266':'#9fe6ff')}">${etLbl}</b>${prof?` · com o Prof há <b style="color:${hot?'#ff6b81':'#ffc266'}">${d} dia(s) útil(eis)</b> (limite ${GC_SLA_PROF})${hot?' · 🔴 ESTOUROU — cobrar o laudo':''}`:''}</div>
+        const total=gcTotalDias(e), atraso=Math.max(0,total-GC_CORTE);
+        const totCor = atraso>0 ? '#ff6b81' : (total>=GC_CORTE-2 ? '#ffc266' : '#7effcf');
+        const bl = atraso>0 ? '#FF2D55' : (hot ? '#FF2D55' : (prof ? '#FF8A00' : (total>=GC_CORTE-2 ? '#FFB020' : 'transparent')));
+        return `<div class="crow" style="align-items:flex-start;cursor:default${bl!=='transparent'?';border-left:3px solid '+bl:''}">
+          <div class="rk">${atraso>0?'⚠️':(prof?'🎓':'🔬')}</div>
+          <div style="flex:1">
+            <div class="nm" style="font-size:14px">${esc(e.nome_paciente||'—')} <span class="t-mut" style="font-size:11px">${esc(e.numero_registro||('HF '+(e.numero_hf||'?')))}</span></div>
+            <div class="ci" style="margin-top:2px"><b style="color:#9fe6ff">${etLbl}</b></div>
+            <div class="ci" style="margin-top:3px;font-size:13px">⏱️ <b style="color:${totCor}">${total} dia(s) útil(eis)</b> <span class="t-mut">/ corte ${GC_CORTE}</span>${atraso>0?` · <b style="color:#ff6b81">+${atraso} de atraso · ⚠️ ATENÇÃO</b>`:(total>=GC_CORTE-2?' · <b style="color:#ffc266">perto do corte</b>':'')}</div>
+            ${prof?`<div class="ci" style="font-size:12px;margin-top:2px">🎓 com o Prof há <b style="color:${hot?'#ff6b81':'#ffc266'}">${d} dia(s)</b> (limite ${GC_SLA_PROF})${hot?' · estourou':''}</div>`:''}
           </div><div class="mid"></div></div>`; };
-      const cliBlocos=ativos.map(cl=>{ const g=GC_ESTADOS[cl.estado]||GC_ESTADOS.reconquista, exs=porCli[cl.nome]||[];
+      const cliBlocos=ativos.map(cl=>{ const g=GC_ESTADOS[cl.estado]||GC_ESTADOS.reconquista, exs=(porCli[cl.nome]||[]).slice().sort((a,b)=>gcTotalDias(b)-gcTotalDias(a));
         const estSel=`<select class="repsel" style="max-width:160px;padding:5px 8px;font-size:12px" data-gcest="${cl.id}">${Object.keys(GC_ESTADOS).map(k=>`<option value="${k}" ${cl.estado===k?'selected':''}>${GC_ESTADOS[k].ic} ${GC_ESTADOS[k].nm}</option>`).join("")}</select>`;
         return `<div style="border:1px solid var(--line);border-left:3px solid ${g.cor};border-radius:12px;padding:12px 14px;margin-bottom:10px">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div class="nm" style="font-size:15px">${g.ic} ${esc(cl.nome)}</div>${estSel}<span class="t-mut" style="font-size:11px">${exs.length} exame(s) na esteira</span><button class="delfb" data-gcdel="${cl.id}" title="Tirar do guarda-chuva" style="margin-left:auto">✕</button></div>
