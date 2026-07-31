@@ -664,11 +664,17 @@ def build():
     except Exception as e:
         D["estudo"]={"erro":str(e)}
 
-    # ---------- ANÁLISE DE CUSTOS — Agentes de IA (aba admin) ----------
+    # ---------- CUSTOS DE PROJETOS — TODA a frota, medido (Wal 30/jul) ----------
+    # custos_bi lê o custo REAL da API por mesa (Supabase public.custos_api) + Netlify, no padrão FinOps.
+    # DEFENSIVO: se falhar (REST fora, etc.), cai no custos.json estático -> o build NUNCA quebra.
     try:
-        D["custos"]=json.load(open(os.path.join(ROOT,"data_custos","custos.json"),encoding="utf-8"))
+        import custos_bi
+        D["custos"]=custos_bi.montar()
     except Exception as e:
-        D["custos"]={"erro":str(e)}
+        try:
+            D["custos"]=json.load(open(os.path.join(ROOT,"data_custos","custos.json"),encoding="utf-8"))
+        except Exception as e2:
+            D["custos"]={"erro":str(e)+" / "+str(e2)}
 
     # ---------- ANÁLISES PONTUAIS (janelas 5/10/15/20 dias + mês a mês) ----------
     import calendar

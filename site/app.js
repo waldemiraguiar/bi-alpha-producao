@@ -1019,6 +1019,37 @@ function renderCustos(D){
   const wrap=document.getElementById('custos'); if(!wrap) return;
   const C=D.custos||{};
   if(C.erro){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--red)">Falha ao carregar custos: ${esc(C.erro)}</div>`; return; }
+  // ===== estrutura NOVA (FinOps: projetos) — custo de TODA a frota, separado e catalogado =====
+  if(Array.isArray(C.projetos)){
+    const cb=Number(C.cambio_brl)||5.8;
+    const U=v=>'US$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const R=v=>'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    let html=`<div class="card" style="margin-bottom:16px"><h3>💸 ${esc(C.titulo||'Custos de Projetos')} <span class="cap">atualizado ${esc((C.atualizado||'').replace('T',' ').replace('Z',' UTC'))} · câmbio R$ ${cb}</span></h3>
+      <div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:10px">
+        <div><div class="acmp-l">Total do mês (medido)</div><div class="acmp-v">${R(C.total_mes_brl)}</div><div class="acmp-s">${U(C.total_mes_usd)}</div></div>
+        <div><div class="acmp-l">Projeção do mês</div><div class="acmp-v" style="color:var(--amber)">${R(C.projecao_mes_brl)}</div><div class="acmp-s">${U(C.projecao_mes_usd)}</div></div>
+      </div></div>`;
+    (C.projetos||[]).forEach(p=>{
+      if(p.erro){ html+=`<div class="card" style="margin-bottom:14px"><h3>${esc(p.nome||'Projeto')}</h3><div style="color:var(--mut);font-size:13px">⏳ Atualizando (dado propagando na nuvem)…</div></div>`; return; }
+      html+=`<div class="card" style="margin-bottom:14px"><h3>${esc(p.nome)} ${p.pct_mes!=null?`<span class="cap">${p.pct_mes}% do custo total</span>`:''}</h3>
+        <div style="color:var(--mut);font-size:12px;margin-bottom:10px">${esc(p.fonte||'')}</div>
+        <div style="display:flex;gap:28px;flex-wrap:wrap">
+          ${p.hoje_usd!=null?`<div><div class="acmp-l">Hoje</div><div class="acmp-v">${R(p.hoje_brl)}</div><div class="acmp-s">${U(p.hoje_usd)}</div></div>`:''}
+          <div><div class="acmp-l">No mês</div><div class="acmp-v">${R(p.mes_brl)}</div><div class="acmp-s">${U(p.mes_usd)}</div></div>
+          <div><div class="acmp-l">Projeção mês</div><div class="acmp-v" style="color:var(--amber)">${R(p.projecao_mes_brl)}</div><div class="acmp-s">${U(p.projecao_mes_usd)}</div></div>
+        </div>`;
+      if(Array.isArray(p.por_mesa)&&p.por_mesa.length){
+        html+=`<table style="width:100%;margin-top:14px;font-size:13px;border-collapse:collapse">
+          <tr style="color:var(--mut);text-align:left"><th style="padding:6px 4px">Mesa</th><th>Chamadas IA</th><th>Leituras</th><th>R$/leitura</th><th style="text-align:right">Custo hoje</th></tr>
+          ${p.por_mesa.map(m=>`<tr style="border-top:1px solid var(--line)"><td style="padding:6px 4px"><b>${esc(m.mesa)}</b></td><td>${num(m.chamadas)}</td><td>${m.leituras!=null?num(m.leituras):'—'}</td><td>${m.usd_por_leitura!=null?R(m.usd_por_leitura*cb):'—'}</td><td style="text-align:right"><b>${R(m.brl)}</b></td></tr>`).join('')}
+        </table>`;
+      }
+      if(p.detalhe){ html+=`<div style="color:var(--mut);font-size:12px;margin-top:10px;line-height:1.5">${esc(p.detalhe)}</div>`; }
+      html+=`</div>`;
+    });
+    wrap.innerHTML=html; return;
+  }
+  // ===== estrutura ANTIGA (fallback — até o build novo rodar) =====
   if(!C.titulo){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--mut)">Sem dados de custo.</div>`; return; }
   const p=C.plano||{}; const lst=a=>(a||[]).map(x=>`<li style="margin:6px 0">${esc(x)}</li>`).join('');
   let html=`<div class="card" style="margin-bottom:16px"><h3>💸 ${esc(C.titulo)} <span class="cap">atualizado ${esc(C.atualizado||'')}</span></h3>
