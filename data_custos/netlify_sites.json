@@ -1,0 +1,101 @@
+{
+ "gerado_em": "2026-08-01T10:42:31Z",
+ "base_mes_usd": 19,
+ "sites": [
+  {
+   "name": "agente-crm-cabofrio",
+   "ativo": false,
+   "updated": "2026-07-21"
+  },
+  {
+   "name": "agente-crm-matriz",
+   "ativo": true,
+   "updated": "2026-07-31"
+  },
+  {
+   "name": "alpha-cabofrio",
+   "ativo": true,
+   "updated": "2026-07-31"
+  },
+  {
+   "name": "alpha-disparador",
+   "ativo": false,
+   "updated": "2026-07-23"
+  },
+  {
+   "name": "alpha-estoque",
+   "ativo": true,
+   "updated": "2026-07-24"
+  },
+  {
+   "name": "alpha-financeiro",
+   "ativo": false,
+   "updated": "2026-07-24"
+  },
+  {
+   "name": "alpha-matriz-painel",
+   "ativo": false,
+   "updated": "2026-07-23"
+  },
+  {
+   "name": "alpha-precos",
+   "ativo": false,
+   "updated": "2026-07-23"
+  },
+  {
+   "name": "bi-alpha-waldemir",
+   "ativo": true,
+   "updated": "2026-08-01"
+  },
+  {
+   "name": "escola-sophia-alpha",
+   "ativo": false,
+   "updated": "2026-06-24"
+  },
+  {
+   "name": "fenix-evolucao-waldemir",
+   "ativo": true,
+   "updated": "2026-07-30"
+  },
+  {
+   "name": "iridescent-sprinkles-4975c4",
+   "ativo": false,
+   "updated": "2026-07-16"
+  },
+  {
+   "name": "painel-cripto-waldemir",
+   "ativo": false,
+   "updated": "2026-07-24"
+  },
+  {
+   "name": "phenomenal-llama-8b3ac4",
+   "ativo": true,
+   "updated": "2026-07-29"
+  },
+  {
+   "name": "producao-lab-alpha",
+   "ativo": true,
+   "updated": "2026-07-31"
+  },
+  {
+   "name": "provitta-equipe",
+   "ativo": true,
+   "updated": "2026-07-09"
+  },
+  {
+   "name": "provitta-recepcao",
+   "ativo": true,
+   "updated": "2026-07-09"
+  },
+  {
+   "name": "sophia-lab-alpha",
+   "ativo": true,
+   "updated": "2026-06-24"
+  },
+  {
+   "name": "transcendent-tulumba-5cd816",
+   "ativo": true,
+   "updated": "2026-06-24"
+  }
+ ]
+}
