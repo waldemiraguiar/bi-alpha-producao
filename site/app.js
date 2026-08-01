@@ -96,40 +96,55 @@ async function decryptDashboard(pwd){
 (function gate(){
   const form=document.getElementById('gateForm'), pwd=document.getElementById('gatePwd'),
         err=document.getElementById('gateErr'), btn=document.getElementById('gateBtn');
-  const _BIO='bi_fin_bio', _PW='bi_fin_pw';
-  const _be=x=>btoa(String.fromCharCode(...new Uint8Array(x))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  const _bd=x=>{x=x.replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(x),c=>c.charCodeAt(0));};
   const gbio=document.getElementById('gateBio'), bset=document.getElementById('bioSetup');
+  const BIO=window.BI_BIO;
+  // segurança: some com o esquema ANTIGO (senha em texto no localStorage) — agora é PRF cifrado
+  try{ localStorage.removeItem('bi_fin_bio'); localStorage.removeItem('bi_fin_pw'); }catch(_){}
+
+  // ENTRA no painel com a senha decifrada (usado por: senha digitada · Touch ID · boot)
+  async function enter(pwStr){
+    const D = await decryptDashboard(pwStr);   // lança se a senha estiver errada
+    window.__PW = pwStr;                        // só em memória (nunca no disco)
+    document.getElementById('gate').style.display='none';
+    document.getElementById('dash').style.display='';
+    render(D);
+    // oferece ativar a digital (PRF) depois de entrar com a senha, se o Mac suportar e ainda não estiver ativa
+    if(bset && BIO && !BIO.enabled() && await BIO.platformAvailable()) bset.style.display='';
+    return true;
+  }
+
   form.addEventListener('submit', async e=>{
     e.preventDefault(); err.textContent=''; btn.disabled=true; btn.textContent='Verificando…';
-    try{
-      const D = await decryptDashboard(pwd.value);
-      window.__PW = pwd.value; try{localStorage.setItem(_PW,pwd.value);}catch(_){}
-      document.getElementById('gate').style.display='none';
-      document.getElementById('dash').style.display='';
-      render(D);
-      if(window.PublicKeyCredential && bset && !localStorage.getItem(_BIO)) bset.style.display='';
-    }catch(ex){
-      err.textContent = /não encontrado/.test(ex.message) ? 'Dados indisponíveis. Tente recarregar.' : 'Senha incorreta.';
+    try{ await enter(pwd.value); }
+    catch(ex){
+      err.textContent = /não encontrado/.test(ex.message||'') ? 'Dados indisponíveis. Tente recarregar.' : 'Senha incorreta.';
       btn.disabled=false; btn.textContent='Entrar'; pwd.select();
     }
   });
-  /* ---- digital / Touch ID (por aparelho) ---- */
-  if(gbio) gbio.onclick=async()=>{ const id=localStorage.getItem(_BIO), pw=localStorage.getItem(_PW); if(!id||!pw)return;
-    try{gbio.textContent='👆 Toque o leitor…';
-      await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:_bd(id)}],userVerification:'required',timeout:60000,rpId:location.hostname}});
-      pwd.value=pw; (form.requestSubmit?form.requestSubmit():btn.click());
-    }catch(e){console.warn(e);gbio.textContent='👆 Entrar com digital';} };
-  if(bset) bset.onclick=async()=>{ const pw=localStorage.getItem(_PW)||window.__PW; if(!pw)return;
-    try{bset.textContent='👆 Toque p/ ativar…';
-      const c=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'BI Financeiro Alpha — Atlas Digital',id:location.hostname},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'fin',displayName:'BI Financeiro'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000,attestation:'none'}});
-      localStorage.setItem(_BIO,_be(c.rawId)); bset.textContent='✅ Digital ativa neste PC'; setTimeout(()=>{bset.style.display='none';},1800);
-    }catch(e){console.warn(e);bset.textContent='👆 Proteger com digital';} };
-  if(localStorage.getItem(_BIO) && localStorage.getItem(_PW) && gbio){
+
+  /* ---- Touch ID (WebAuthn PRF): a digital DECIFRA a senha; senha nunca fica em texto ---- */
+  async function porDigital(){
+    if(!BIO || !BIO.enabled()) return;
+    try{ gbio.textContent='👆 Toque o Touch ID…';
+      const pw = await BIO.unlock();           // Touch ID → PRF → senha decifrada em memória
+      await enter(pw);
+    }catch(e){ console.warn(e); gbio.textContent='👆 Entrar com digital';
+      if(!/não está ativo/.test(e.message||'')) err.textContent='Touch ID cancelado — toque de novo ou use a senha.'; }
+  }
+  if(gbio) gbio.onclick=porDigital;
+
+  if(bset) bset.onclick=async()=>{
+    const pw = window.__PW; if(!pw){ alert('Entre com a senha primeiro.'); return; }
+    try{ bset.textContent='👆 Toque p/ ativar…';
+      await BIO.register(pw);                   // cria passkey + cifra a senha com a chave do Touch ID
+      bset.textContent='✅ Digital ativa neste Mac'; setTimeout(()=>{ bset.style.display='none'; }, 1800);
+    }catch(e){ console.warn(e); bset.textContent='👆 Proteger com digital'; alert('Touch ID: '+(e.message||e)); }
+  };
+
+  // ABRE DIRETO NA DIGITAL ao carregar (igual aos outros apps), se já estiver ativa neste Mac.
+  if(BIO && BIO.enabled() && gbio){
     gbio.style.display=''; pwd.placeholder='ou use a senha';
-    // ABRE DIRETO NA DIGITAL (igual aos outros apps): tenta destravar sozinho ao carregar.
-    // Se o navegador exigir toque (sem gesto) ou o usuário cancelar, o botão fica ali pra 1 toque.
-    setTimeout(()=>{ try{ gbio.click(); }catch(_){ } }, 300);
+    setTimeout(porDigital, 250);   // se o navegador exigir gesto, o botão fica ali pra 1 toque
   }
 })();
 
