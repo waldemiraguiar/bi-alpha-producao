@@ -32,8 +32,11 @@ def _brl(usd):
 def _projeto_farejador():
     """Custo REAL da API, medido por mesa/dia. Projeção do mês = média/dia × dias do mês."""
     rows = _rest("/custos_api?select=mesa,dia,chamadas,tok_in,tok_out,cache_read,cache_write,usd&order=dia.desc")
-    hoje = datetime.date.today().isoformat()
-    ym = hoje[:7]
+    # ancora no ULTIMO dia COM dado (nao em "hoje"): na virada da meia-noite/mes o "hoje" fica
+    # vazio antes das mesas lerem — mostrar 0 seria mentira. O dia de referencia sempre tem numero real.
+    dias_disp = sorted({str(r.get("dia")) for r in rows if r.get("dia")})
+    dia_ref = dias_disp[-1] if dias_disp else datetime.date.today().isoformat()
+    ym = dia_ref[:7]
     por_mesa_hoje = collections.defaultdict(lambda: {"usd": 0.0, "chamadas": 0})
     serie = collections.defaultdict(float)          # dia -> usd (total frota)
     mes_usd = 0.0
@@ -45,14 +48,14 @@ def _projeto_farejador():
         if dia.startswith(ym):
             mes_usd += usd
             dias_no_mes.add(dia)
-        if dia == hoje:
+        if dia == dia_ref:
             m = por_mesa_hoje[r.get("mesa", "?")]
             m["usd"] += usd
             m["chamadas"] += int(r.get("chamadas") or 0)
     # leituras confirmadas hoje por mesa (p/ custo POR FOLHA) — best-effort
     reads = {}
     try:
-        rq = _rest("/requisicoes?select=estacao&created_at=gte." + hoje)  # pode não existir via REST; ok se falhar
+        rq = _rest("/requisicoes?select=estacao&created_at=gte." + dia_ref)  # pode não existir via REST; ok se falhar
         for x in rq:
             e = (x.get("estacao") or "?").strip() or "?"
             reads[e] = reads.get(e, 0) + 1
@@ -72,18 +75,19 @@ def _projeto_farejador():
         })
     n_dias = max(1, len(dias_no_mes))
     media_dia = mes_usd / n_dias
-    hoje_do_mes = datetime.date.today().day
     dias_mes = 30
     try:
         import calendar
-        dias_mes = calendar.monthrange(datetime.date.today().year, datetime.date.today().month)[1]
+        _y, _m = int(ym[:4]), int(ym[5:7])
+        dias_mes = calendar.monthrange(_y, _m)[1]
     except Exception:
         pass
     projecao_mes = media_dia * dias_mes
     serie_ord = [{"dia": d, "usd": round(serie[d], 4), "brl": _brl(serie[d])} for d in sorted(serie)][-30:]
     return {
         "nome": "Farejador · IA (API Anthropic)",
-        "fonte": "MEDIDO — token real por leitura, por mesa (custo_sync → Supabase)",
+        "fonte": "MEDIDO — token real por leitura, por mesa (ponte → Supabase)",
+        "dia_ref": dia_ref,
         "hoje_usd": round(total_hoje, 2), "hoje_brl": _brl(total_hoje),
         "mes_usd": round(mes_usd, 2), "mes_brl": _brl(mes_usd),
         "projecao_mes_usd": round(projecao_mes, 2), "projecao_mes_brl": _brl(projecao_mes),
