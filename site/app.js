@@ -1032,7 +1032,7 @@ function renderCustos(D){
     (C.projetos||[]).forEach(p=>{
       if(p.erro){ html+=`<div class="card" style="margin-bottom:14px"><h3>${esc(p.nome||'Projeto')}</h3><div style="color:var(--mut);font-size:13px">⏳ Atualizando (dado propagando na nuvem)…</div></div>`; return; }
       html+=`<div class="card" style="margin-bottom:14px"><h3>${esc(p.nome)} ${p.pct_mes!=null?`<span class="cap">${p.pct_mes}% do custo total</span>`:''}</h3>
-        <div style="color:var(--mut);font-size:12px;margin-bottom:10px">${esc(p.fonte||'')}</div>
+        <div style="color:var(--mut);font-size:12px;margin-bottom:10px">${esc(p.fonte||'')}${p.stale_min!=null?` · <span style="color:${p.stale?'var(--amber)':'var(--green)'}">${p.stale?'⚠ dado parado há':'●  atualizado há'} ${p.stale_min<60?p.stale_min+' min':(p.stale_min/60).toFixed(1)+' h'}</span>`:''}</div>
         <div style="display:flex;gap:28px;flex-wrap:wrap">
           ${p.hoje_usd!=null?`<div><div class="acmp-l">Custo do dia${p.dia_ref?' · '+esc(p.dia_ref.slice(8,10)+'/'+p.dia_ref.slice(5,7)):''}</div><div class="acmp-v">${R(p.hoje_brl)}</div><div class="acmp-s">${U(p.hoje_usd)}</div></div>`:''}
           <div><div class="acmp-l">No mês</div><div class="acmp-v">${R(p.mes_brl)}</div><div class="acmp-s">${U(p.mes_usd)}</div></div>
