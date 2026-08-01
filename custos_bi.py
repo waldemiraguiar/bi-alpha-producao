@@ -31,7 +31,7 @@ def _brl(usd):
 
 def _projeto_farejador():
     """Custo REAL da API, medido por mesa/dia. Projeção do mês = média/dia × dias do mês."""
-    rows = _rest("/custos_api?select=mesa,dia,chamadas,tok_in,tok_out,cache_read,cache_write,usd&order=dia.desc")
+    rows = _rest("/custos_api?select=mesa,dia,chamadas,tok_in,tok_out,cache_read,cache_write,usd,atualizado_em&order=dia.desc")
     # ancora no ULTIMO dia COM dado (nao em "hoje"): na virada da meia-noite/mes o "hoje" fica
     # vazio antes das mesas lerem — mostrar 0 seria mentira. O dia de referencia sempre tem numero real.
     dias_disp = sorted({str(r.get("dia")) for r in rows if r.get("dia")})
@@ -84,10 +84,20 @@ def _projeto_farejador():
         pass
     projecao_mes = media_dia * dias_mes
     serie_ord = [{"dia": d, "usd": round(serie[d], 4), "brl": _brl(serie[d])} for d in sorted(serie)][-30:]
+    # FRESCURA (monitorar tudo): quando a ponte gravou por ultimo. Se envelhecer, o painel acende ambar.
+    dado_em = max((str(r.get("atualizado_em") or "") for r in rows), default="")
+    stale_min = None
+    try:
+        t = datetime.datetime.fromisoformat(dado_em.replace("Z", "+00:00"))
+        agora = datetime.datetime.now(datetime.timezone.utc)
+        stale_min = int((agora - t).total_seconds() // 60)
+    except Exception:
+        pass
     return {
         "nome": "Farejador · IA (API Anthropic)",
         "fonte": "MEDIDO — token real por leitura, por mesa (ponte → Supabase)",
         "dia_ref": dia_ref,
+        "dado_em": dado_em, "stale_min": stale_min, "stale": (stale_min is not None and stale_min > 180),
         "hoje_usd": round(total_hoje, 2), "hoje_brl": _brl(total_hoje),
         "mes_usd": round(mes_usd, 2), "mes_brl": _brl(mes_usd),
         "projecao_mes_usd": round(projecao_mes, 2), "projecao_mes_brl": _brl(projecao_mes),
