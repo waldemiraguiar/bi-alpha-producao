@@ -1034,13 +1034,13 @@ function renderCustos(D){
       html+=`<div class="card" style="margin-bottom:14px"><h3>${esc(p.nome)} ${p.pct_mes!=null?`<span class="cap">${p.pct_mes}% do custo total</span>`:''}</h3>
         <div style="color:var(--mut);font-size:12px;margin-bottom:10px">${esc(p.fonte||'')}</div>
         <div style="display:flex;gap:28px;flex-wrap:wrap">
-          ${p.hoje_usd!=null?`<div><div class="acmp-l">Hoje</div><div class="acmp-v">${R(p.hoje_brl)}</div><div class="acmp-s">${U(p.hoje_usd)}</div></div>`:''}
+          ${p.hoje_usd!=null?`<div><div class="acmp-l">Custo do dia${p.dia_ref?' · '+esc(p.dia_ref.slice(8,10)+'/'+p.dia_ref.slice(5,7)):''}</div><div class="acmp-v">${R(p.hoje_brl)}</div><div class="acmp-s">${U(p.hoje_usd)}</div></div>`:''}
           <div><div class="acmp-l">No mês</div><div class="acmp-v">${R(p.mes_brl)}</div><div class="acmp-s">${U(p.mes_usd)}</div></div>
           <div><div class="acmp-l">Projeção mês</div><div class="acmp-v" style="color:var(--amber)">${R(p.projecao_mes_brl)}</div><div class="acmp-s">${U(p.projecao_mes_usd)}</div></div>
         </div>`;
       if(Array.isArray(p.por_mesa)&&p.por_mesa.length){
         html+=`<table style="width:100%;margin-top:14px;font-size:13px;border-collapse:collapse">
-          <tr style="color:var(--mut);text-align:left"><th style="padding:6px 4px">Mesa</th><th>Chamadas IA</th><th>Leituras</th><th>R$/leitura</th><th style="text-align:right">Custo hoje</th></tr>
+          <tr style="color:var(--mut);text-align:left"><th style="padding:6px 4px">Mesa</th><th>Chamadas IA</th><th>Leituras</th><th>R$/leitura</th><th style="text-align:right">Custo do dia</th></tr>
           ${p.por_mesa.map(m=>`<tr style="border-top:1px solid var(--line)"><td style="padding:6px 4px"><b>${esc(m.mesa)}</b></td><td>${num(m.chamadas)}</td><td>${m.leituras!=null?num(m.leituras):'—'}</td><td>${m.usd_por_leitura!=null?R(m.usd_por_leitura*cb):'—'}</td><td style="text-align:right"><b>${R(m.brl)}</b></td></tr>`).join('')}
         </table>`;
       }
