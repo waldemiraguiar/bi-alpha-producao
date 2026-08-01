@@ -1019,32 +1019,63 @@ function renderCustos(D){
   const wrap=document.getElementById('custos'); if(!wrap) return;
   const C=D.custos||{};
   if(C.erro){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--red)">Falha ao carregar custos: ${esc(C.erro)}</div>`; return; }
-  // ===== estrutura NOVA (FinOps: projetos) — custo de TODA a frota, separado e catalogado =====
-  if(Array.isArray(C.projetos)){
+  // ===== estrutura NOVA (FinOps por SETOR) — custo do ECOSSISTEMA inteiro, separado e catalogado =====
+  if(Array.isArray(C.setores)){
     const cb=Number(C.cambio_brl)||5.8;
     const U=v=>'US$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
     const R=v=>'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-    let html=`<div class="card" style="margin-bottom:16px"><h3>💸 ${esc(C.titulo||'Custos de Projetos')} <span class="cap">atualizado ${esc((C.atualizado||'').replace('T',' ').replace('Z',' UTC'))} · câmbio R$ ${cb}</span></h3>
+    const g=C.governanca||{};
+    const hh=m=>m==null?'':(m<60?m+' min':(m/60).toFixed(1)+' h');
+    const fresh=g.stale_min!=null?`<span style="color:${g.stale?'var(--amber)':'var(--green)'}">${g.stale?'⚠ dado parado há '+hh(g.stale_min):'● atualizado há '+hh(g.stale_min)}</span>`:'';
+    const dref=g.dia_ref?g.dia_ref.slice(8,10)+'/'+g.dia_ref.slice(5,7):'';
+    // cor da etiqueta da BASE (governança da qualidade do número)
+    const BCOL={'MEDIDO':'var(--green)','INSTRUMENTADO':'var(--amber)','CATÁLOGO+rateio':'var(--blue,#6ab0ff)','FREE TIER':'var(--mut)','TERCEIRO':'var(--mut)'};
+    const bdg=b=>`<span style="font-size:10px;font-weight:700;letter-spacing:.4px;padding:1px 6px;border-radius:4px;border:1px solid ${BCOL[b]||'var(--mut)'};color:${BCOL[b]||'var(--mut)'}">${esc(b)}</span>`;
+    const SCOL={'ATIVO':'var(--green)','INSTRUMENTADO':'var(--amber)','CONGELADO':'var(--mut)','FORA DA OPERAÇÃO':'var(--mut)'};
+    // ---- cabeçalho: total + projeção + frescura ----
+    let html=`<div class="card" style="margin-bottom:14px"><h3>💸 ${esc(C.titulo||'Custos por Setor')} <span class="cap">atualizado ${esc((C.atualizado||'').replace('T',' ').replace('Z',' UTC'))} · câmbio R$ ${cb}</span></h3>
       <div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:10px">
-        <div><div class="acmp-l">Total do mês (medido)</div><div class="acmp-v">${R(C.total_mes_brl)}</div><div class="acmp-s">${U(C.total_mes_usd)}</div></div>
+        <div><div class="acmp-l">Total do mês</div><div class="acmp-v">${R(C.total_mes_brl)}</div><div class="acmp-s">${U(C.total_mes_usd)}</div></div>
         <div><div class="acmp-l">Projeção do mês</div><div class="acmp-v" style="color:var(--amber)">${R(C.projecao_mes_brl)}</div><div class="acmp-s">${U(C.projecao_mes_usd)}</div></div>
+        <div><div class="acmp-l">Dia de referência</div><div class="acmp-v" style="font-size:18px">${esc(dref)}</div><div class="acmp-s">${fresh}</div></div>
       </div></div>`;
-    (C.projetos||[]).forEach(p=>{
-      if(p.erro){ html+=`<div class="card" style="margin-bottom:14px"><h3>${esc(p.nome||'Projeto')}</h3><div style="color:var(--mut);font-size:13px">⏳ Atualizando (dado propagando na nuvem)…</div></div>`; return; }
-      html+=`<div class="card" style="margin-bottom:14px"><h3>${esc(p.nome)} ${p.pct_mes!=null?`<span class="cap">${p.pct_mes}% do custo total</span>`:''}</h3>
-        <div style="color:var(--mut);font-size:12px;margin-bottom:10px">${esc(p.fonte||'')}${p.stale_min!=null?` · <span style="color:${p.stale?'var(--amber)':'var(--green)'}">${p.stale?'⚠ dado parado há':'●  atualizado há'} ${p.stale_min<60?p.stale_min+' min':(p.stale_min/60).toFixed(1)+' h'}</span>`:''}</div>
-        <div style="display:flex;gap:28px;flex-wrap:wrap">
-          ${p.hoje_usd!=null?`<div><div class="acmp-l">Custo do dia${p.dia_ref?' · '+esc(p.dia_ref.slice(8,10)+'/'+p.dia_ref.slice(5,7)):''}</div><div class="acmp-v">${R(p.hoje_brl)}</div><div class="acmp-s">${U(p.hoje_usd)}</div></div>`:''}
-          <div><div class="acmp-l">No mês</div><div class="acmp-v">${R(p.mes_brl)}</div><div class="acmp-s">${U(p.mes_usd)}</div></div>
-          <div><div class="acmp-l">Projeção mês</div><div class="acmp-v" style="color:var(--amber)">${R(p.projecao_mes_brl)}</div><div class="acmp-s">${U(p.projecao_mes_usd)}</div></div>
-        </div>`;
-      if(Array.isArray(p.por_mesa)&&p.por_mesa.length){
-        html+=`<table style="width:100%;margin-top:14px;font-size:13px;border-collapse:collapse">
-          <tr style="color:var(--mut);text-align:left"><th style="padding:6px 4px">Mesa</th><th>Chamadas IA</th><th>Leituras</th><th>R$/leitura</th><th style="text-align:right">Custo do dia</th></tr>
-          ${p.por_mesa.map(m=>`<tr style="border-top:1px solid var(--line)"><td style="padding:6px 4px"><b>${esc(m.mesa)}</b></td><td>${num(m.chamadas)}</td><td>${m.leituras!=null?num(m.leituras):'—'}</td><td>${m.usd_por_leitura!=null?R(m.usd_por_leitura*cb):'—'}</td><td style="text-align:right"><b>${R(m.brl)}</b></td></tr>`).join('')}
+    // ---- faixa de GOVERNANÇA ----
+    html+=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--green)">
+      <div style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Governança do medidor</div>
+      <div style="font-size:13px;line-height:1.7">
+        <b>${g.setores_medidos||0}/${g.setores_total||0}</b> setores com custo de IA MEDIDO · Netlify catalogado (<b>${g.netlify_ativos||0}</b> sites ativos de ${g.netlify_sites||0}, snapshot ${esc((g.netlify_snapshot||'').slice(0,10))})${Array.isArray(g.instrumentados)&&g.instrumentados.length?` · instrumentado aguardando produção: <b>${g.instrumentados.map(esc).join(', ')}</b>`:''}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${(g.fontes||[]).map(f=>`<span title="${esc(f.detalhe||'')}" style="font-size:11px;padding:3px 8px;border-radius:6px;background:var(--bg2,#1a1f2b)">${bdg(f.base)} ${esc(f.fonte)}</span>`).join('')}</div>
+      <div style="font-size:11px;color:var(--mut);margin-top:8px">Netlify é <b>plano fixo (US$ 19/mês)</b>: o valor por setor é <i>rateio de footprint</i> (showback por site ativo), não custo marginal. Claude é o único custo que cresce com uso.</div>
+    </div>`;
+    // ---- cards por setor (ordenados por custo) ----
+    (C.setores||[]).forEach(s=>{
+      const scol=SCOL[s.status]||'var(--mut)';
+      html+=`<div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+          <h3 style="margin:0">${s.emoji||''} ${esc(s.nome)} <span style="font-size:10px;font-weight:700;color:${scol};border:1px solid ${scol};border-radius:4px;padding:1px 6px;margin-left:4px">${esc(s.status)}</span></h3>
+          <div style="text-align:right"><div class="acmp-v" style="font-size:20px">${R(s.mes_brl)}</div><div class="acmp-s">${U(s.mes_usd)} · <b style="color:var(--txt)">${s.pct_mes}%</b> do total</div></div>
+        </div>
+        ${s.nota?`<div style="color:var(--mut);font-size:12px;margin-top:4px">${esc(s.nota)}</div>`:''}`;
+      // fontes do setor
+      if(Array.isArray(s.fontes)&&s.fontes.length){
+        html+=`<table style="width:100%;margin-top:10px;font-size:12.5px;border-collapse:collapse">
+          <tr style="color:var(--mut);text-align:left"><th style="padding:5px 4px">Fonte</th><th>Base</th><th style="text-align:right">Mês</th><th style="padding-left:12px">Detalhe</th></tr>
+          ${s.fontes.map(f=>`<tr style="border-top:1px solid var(--line)">
+            <td style="padding:5px 4px"><b>${esc(f.tipo)}</b></td>
+            <td>${bdg(f.base)}</td>
+            <td style="text-align:right"><b>${R(f.mes_brl)}</b></td>
+            <td style="padding-left:12px;color:var(--mut)">${esc(f.obs||'')}${Array.isArray(f.sites)&&f.sites.length?`<div style="font-size:11px;margin-top:2px">${f.sites.map(x=>esc(x)).join(' · ')}</div>`:''}</td>
+          </tr>`).join('')}
         </table>`;
       }
-      if(p.detalhe){ html+=`<div style="color:var(--mut);font-size:12px;margin-top:10px;line-height:1.5">${esc(p.detalhe)}</div>`; }
+      // detalhe por mesa (Claude medido)
+      if(Array.isArray(s.por_mesa)&&s.por_mesa.length){
+        html+=`<table style="width:100%;margin-top:10px;font-size:12.5px;border-collapse:collapse">
+          <tr style="color:var(--mut);text-align:left"><th style="padding:5px 4px">Agente</th><th>Chamadas IA (dia ${esc(dref)})</th><th style="text-align:right">Custo do dia</th><th style="text-align:right">No mês</th></tr>
+          ${s.por_mesa.map(m=>`<tr style="border-top:1px solid var(--line)"><td style="padding:5px 4px"><b>${esc(m.agente)}</b></td><td>${num(m.chamadas)}</td><td style="text-align:right">${R(m.dia_brl)}</td><td style="text-align:right"><b>${R(m.mes_brl)}</b></td></tr>`).join('')}
+        </table>`;
+      }
       html+=`</div>`;
     });
     wrap.innerHTML=html; return;
