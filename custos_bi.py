@@ -20,6 +20,9 @@ import os, json, urllib.request, datetime, collections
 SUPA = "https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1"
 SUPA_KEY = os.environ.get("SUPA_ANON_KEY", "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8")
 CAMBIO_BRL = float(os.environ.get("CAMBIO_BRL", "5.80"))   # US$→R$ (ajustável por env; rótulo no painel)
+# --- parâmetros de FinOps (ajustáveis por env) ---
+BASELINE_DIA_USD = float(os.environ.get("BASELINE_DIA_USD", "28"))   # custo/dia PRÉ-otimização (recarga US$100→77 em 1 dia)
+TETO_DIA_USD = float(os.environ.get("TETO_DIA_USD", "34.5"))         # budget/dia (~R$200 — limite que o Wal marcou como inviável)
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # id do agente no medidor (coluna 'mesa' do custos_api) -> nome amigável
@@ -80,6 +83,7 @@ def _medidor():
     por_ag_mes = collections.defaultdict(float)                                  # agente -> mês
     serie = collections.defaultdict(float)                                       # dia -> usd total
     mes_usd = 0.0
+    chamadas_mes = 0
     dias_no_mes = set()
     for r in rows:
         usd = float(r.get("usd") or 0)
@@ -88,13 +92,12 @@ def _medidor():
         serie[dia] += usd
         if dia.startswith(ym):
             mes_usd += usd
+            chamadas_mes += int(r.get("chamadas") or 0)
             dias_no_mes.add(dia)
             por_ag_mes[ag] += usd
         if dia == dia_ref:
             por_ag_dia[ag]["usd"] += usd
             por_ag_dia[ag]["chamadas"] += int(r.get("chamadas") or 0)
-    n_dias = max(1, len(dias_no_mes))
-    media_dia = mes_usd / n_dias
     dias_mes = 30
     try:
         import calendar
@@ -102,6 +105,20 @@ def _medidor():
     except Exception:
         pass
     serie_ord = [{"dia": d, "usd": round(serie[d], 4), "brl": _brl(serie[d])} for d in sorted(serie)][-30:]
+    # RUN-RATE (padrão FinOps): média dos dias na JANELA MÓVEL de 7 dias-calendário terminando no dia_ref,
+    # descartando dias parciais/atípicos (< 15% do pico da janela — ex.: dia de estreia do medidor,
+    # testes antigos esparsos de outro agente). Evita contaminar a média com maçã×laranja.
+    media_dia = mes_usd / max(1, len(dias_no_mes))     # fallback: média simples do mês
+    try:
+        dref = datetime.date.fromisoformat(dia_ref)
+        janela = [float(serie[d]) for d in serie
+                  if 0 <= (dref - datetime.date.fromisoformat(d)).days <= 6]
+        if janela:
+            piso = 0.15 * max(janela)
+            repres = [x for x in janela if x >= piso] or janela
+            media_dia = sum(repres) / len(repres)
+    except Exception:
+        pass
     dado_em = max((str(r.get("atualizado_em") or "") for r in rows), default="")
     stale_min = None
     try:
@@ -112,7 +129,8 @@ def _medidor():
     return {
         "dia_ref": dia_ref, "ym": ym,
         "por_ag_dia": por_ag_dia, "por_ag_mes": por_ag_mes,
-        "mes_usd": mes_usd, "media_dia": media_dia, "projecao_mes": media_dia * dias_mes,
+        "mes_usd": mes_usd, "chamadas_mes": chamadas_mes, "n_dias": len(dias_no_mes),
+        "media_dia": media_dia, "projecao_mes": media_dia * dias_mes,
         "serie": serie_ord, "dado_em": dado_em, "stale_min": stale_min,
         "stale": (stale_min is not None and stale_min > 180),
     }
@@ -130,6 +148,63 @@ def _netlify_catalogo():
     rateio = base / len(ativos) if ativos else 0.0     # US$/site ativo/mês (ESTIMADO)
     return {"gerado_em": j.get("gerado_em", ""), "base_mes_usd": base, "sites": sites,
             "ativos": ativos, "rateio_site_usd": rateio}
+
+
+def _executivo(med, tot_mes_usd, proj_mes_usd, setores):
+    """Camada FinOps (linguagem de mercado/executiva): run-rate, unit economics,
+    savings realizado, budget×actual (variance), cobertura de alocação, tendência.
+    Metodologia FinOps Foundation: Inform → Optimize → Operate."""
+    med = med or {}
+    media_dia = float(med.get("media_dia") or 0)          # US$/dia de IA (medido)
+    ch_mes = int(med.get("chamadas_mes") or 0)
+    mes_ia = float(med.get("mes_usd") or 0)
+    # unit economics — custo por chamada de IA (cost-to-serve; denominador preciso do medidor)
+    custo_chamada = (mes_ia / ch_mes) if ch_mes else None
+    # savings realizado (baseline pré-otimização × atual medido)
+    economia_pct = round(100 * (1 - media_dia / BASELINE_DIA_USD), 1) if (BASELINE_DIA_USD and media_dia) else None
+    # budget × actual (variance) — atual/dia vs teto/dia
+    consumo_teto_pct = round(100 * media_dia / TETO_DIA_USD, 1) if TETO_DIA_USD else None
+    status_budget = "ok" if (consumo_teto_pct is not None and consumo_teto_pct < 75) else ("alerta" if (consumo_teto_pct is not None and consumo_teto_pct < 100) else "estouro")
+    # cobertura de alocação (allocation coverage): % do custo atribuído a um centro de custo/setor
+    alocado = sum(float(s.get("mes_usd") or 0) for s in setores)
+    cobertura_pct = round(100 * alocado / tot_mes_usd, 1) if tot_mes_usd else 100.0
+    medidos = sum(1 for s in setores if s.get("medido"))
+    # tendência (trend): último dia vs anterior (MoM entra quando houver 2 meses)
+    serie = med.get("serie") or []
+    var_dia_pct = None
+    if len(serie) >= 2 and float(serie[-2].get("usd") or 0) > 0:
+        var_dia_pct = round(100 * (float(serie[-1]["usd"]) / float(serie[-2]["usd"]) - 1), 1)
+    # manchete executiva (a narrativa de uma linha)
+    manchete = ("Run-rate de R$ %s/mês · custo unitário R$ %s/chamada de IA · %s%% de economia já capturada vs baseline · %s%% do custo alocado a centro de custo · %d/%d setores medidos." % (
+        _fmt(_brl(proj_mes_usd)), _fmt(_brl(custo_chamada)) if custo_chamada else "—",
+        economia_pct if economia_pct is not None else "—", cobertura_pct, medidos, len(setores)))
+    return {
+        "manchete": manchete,
+        "run_rate_mes_usd": round(proj_mes_usd, 2), "run_rate_mes_brl": _brl(proj_mes_usd),
+        "run_rate_ano_usd": round(proj_mes_usd * 12, 2), "run_rate_ano_brl": _brl(proj_mes_usd * 12),
+        "custo_chamada_usd": round(custo_chamada, 5) if custo_chamada else None,
+        "custo_chamada_brl": _brl(custo_chamada) if custo_chamada else None,
+        "chamadas_mes": ch_mes,
+        "media_dia_usd": round(media_dia, 2), "media_dia_brl": _brl(media_dia),
+        "baseline_dia_usd": BASELINE_DIA_USD, "baseline_dia_brl": _brl(BASELINE_DIA_USD),
+        "economia_pct": economia_pct,
+        "teto_dia_usd": TETO_DIA_USD, "teto_dia_brl": _brl(TETO_DIA_USD),
+        "consumo_teto_pct": consumo_teto_pct, "status_budget": status_budget,
+        "cobertura_pct": cobertura_pct, "setores_medidos": medidos, "setores_total": len(setores),
+        "var_dia_pct": var_dia_pct,
+        "metodologia": [
+            {"fase": "Inform", "pt": "Enxergar", "feito": "custo medido por setor/agente/dia; showback; cobertura de alocação"},
+            {"fase": "Optimize", "pt": "Otimizar", "feito": "cache 1h + leitura simples (Mesa 2) → %s%% de corte, sem tocar precisão" % (economia_pct if economia_pct is not None else "—")},
+            {"fase": "Operate", "pt": "Governar", "feito": "ponte 30min + selo de frescura + alerta de teto + manifesto de lacunas"},
+        ],
+    }
+
+
+def _fmt(v):
+    try:
+        return ("%0.2f" % float(v)).replace(".", ",")
+    except Exception:
+        return "—"
 
 
 def montar():
@@ -210,13 +285,14 @@ def montar():
         ],
     }
 
+    proj = (med["projecao_mes"] if med else 0.0) + (net["base_mes_usd"])
     out["setores"] = setores
     out["governanca"] = gov
     out["serie"] = med["serie"] if med else []
     out["total_mes_usd"] = round(tot_mes, 2); out["total_mes_brl"] = _brl(tot_mes)
-    proj = (med["projecao_mes"] if med else 0.0) + (net["base_mes_usd"])
     out["projecao_mes_usd"] = round(proj, 2); out["projecao_mes_brl"] = _brl(proj)
     out["dia_ref"] = med["dia_ref"] if med else None
+    out["executivo"] = _executivo(med, tot_mes, proj, setores)
     return out
 
 

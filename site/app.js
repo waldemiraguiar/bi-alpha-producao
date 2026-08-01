@@ -125,7 +125,12 @@ async function decryptDashboard(pwd){
       const c=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'BI Financeiro Alpha — Atlas Digital',id:location.hostname},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'fin',displayName:'BI Financeiro'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000,attestation:'none'}});
       localStorage.setItem(_BIO,_be(c.rawId)); bset.textContent='✅ Digital ativa neste PC'; setTimeout(()=>{bset.style.display='none';},1800);
     }catch(e){console.warn(e);bset.textContent='👆 Proteger com digital';} };
-  if(localStorage.getItem(_BIO) && localStorage.getItem(_PW) && gbio){ gbio.style.display=''; pwd.placeholder='ou use a senha'; }
+  if(localStorage.getItem(_BIO) && localStorage.getItem(_PW) && gbio){
+    gbio.style.display=''; pwd.placeholder='ou use a senha';
+    // ABRE DIRETO NA DIGITAL (igual aos outros apps): tenta destravar sozinho ao carregar.
+    // Se o navegador exigir toque (sem gesto) ou o usuário cancelar, o botão fica ali pra 1 toque.
+    setTimeout(()=>{ try{ gbio.click(); }catch(_){ } }, 300);
+  }
 })();
 
 function render(D){
@@ -1032,13 +1037,37 @@ function renderCustos(D){
     const BCOL={'MEDIDO':'var(--green)','INSTRUMENTADO':'var(--amber)','CATÁLOGO+rateio':'var(--blue,#6ab0ff)','FREE TIER':'var(--mut)','TERCEIRO':'var(--mut)'};
     const bdg=b=>`<span style="font-size:10px;font-weight:700;letter-spacing:.4px;padding:1px 6px;border-radius:4px;border:1px solid ${BCOL[b]||'var(--mut)'};color:${BCOL[b]||'var(--mut)'}">${esc(b)}</span>`;
     const SCOL={'ATIVO':'var(--green)','INSTRUMENTADO':'var(--amber)','CONGELADO':'var(--mut)','FORA DA OPERAÇÃO':'var(--mut)'};
-    // ---- cabeçalho: total + projeção + frescura ----
-    let html=`<div class="card" style="margin-bottom:14px"><h3>💸 ${esc(C.titulo||'Custos por Setor')} <span class="cap">atualizado ${esc((C.atualizado||'').replace('T',' ').replace('Z',' UTC'))} · câmbio R$ ${cb}</span></h3>
-      <div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:10px">
-        <div><div class="acmp-l">Total do mês</div><div class="acmp-v">${R(C.total_mes_brl)}</div><div class="acmp-s">${U(C.total_mes_usd)}</div></div>
-        <div><div class="acmp-l">Projeção do mês</div><div class="acmp-v" style="color:var(--amber)">${R(C.projecao_mes_brl)}</div><div class="acmp-s">${U(C.projecao_mes_usd)}</div></div>
-        <div><div class="acmp-l">Dia de referência</div><div class="acmp-v" style="font-size:18px">${esc(dref)}</div><div class="acmp-s">${fresh}</div></div>
-      </div></div>`;
+    // ---- PAINEL EXECUTIVO (FinOps: manchete + KPIs de mercado + budget×actual + tendência) ----
+    const E=C.executivo||{};
+    const chip=(v,inv)=>v==null?'':`<span class="chip ${(inv? -v: v)>=0?'up':'down'}">${v>=0?'▲':'▼'} ${Math.abs(v).toFixed(1)}%</span>`;
+    const kpi=(rot,val,sub,cor)=>`<div style="min-width:150px"><div class="acmp-l">${rot}</div><div class="acmp-v"${cor?` style="color:${cor}"`:''}>${val}</div><div class="acmp-s">${sub}</div></div>`;
+    const bstat={ok:'var(--green)',alerta:'var(--amber)',estouro:'var(--red)'}[E.status_budget]||'var(--mut)';
+    const spark=(typeof kspark==='function'&&Array.isArray(C.serie))?kspark(C.serie.map(x=>Number(x.usd)||0),'var(--blue,#6ab0ff)'):'';
+    let html=`<div class="card" style="margin-bottom:14px">
+      <h3>💸 ${esc(C.titulo||'Custos por Setor')} <span class="cap">FinOps · atualizado ${esc((C.atualizado||'').replace('T',' ').replace('Z',' UTC'))} · câmbio R$ ${cb} · ${fresh}</span></h3>
+      ${E.manchete?`<div style="font-size:13.5px;line-height:1.5;color:var(--txt);background:linear-gradient(90deg,rgba(106,176,255,.10),transparent);border-left:3px solid var(--blue,#6ab0ff);padding:8px 12px;border-radius:6px;margin:10px 0 4px">${esc(E.manchete)}</div>`:''}
+      <div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:14px;align-items:flex-start">
+        ${kpi('Run-rate mensal',R(E.run_rate_mes_brl||C.projecao_mes_brl),'≈ '+R(E.run_rate_ano_brl)+'/ano · regime',null)}
+        ${kpi('Custo unitário',E.custo_chamada_brl!=null?R(E.custo_chamada_brl):'—','por chamada de IA · '+num(E.chamadas_mes||0)+'/mês',null)}
+        ${kpi('Economia capturada',E.economia_pct!=null?E.economia_pct+'%':'—','vs baseline '+R(E.baseline_dia_brl)+'/dia','var(--green)')}
+        ${kpi('Cobertura de alocação',(E.cobertura_pct!=null?E.cobertura_pct:100)+'%','custo atribuído a centro de custo',null)}
+        ${kpi('Setores medidos',(E.setores_medidos||0)+'/'+(E.setores_total||0),'IA medida ponta-a-ponta',null)}
+        ${kpi('Realizado no mês',R(C.total_mes_brl),'gasto acumulado ('+esc(dref)+')',null)}
+      </div>
+      <div style="margin-top:16px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:260px">
+          <div class="acmp-l" style="margin-bottom:5px">Consumo do budget · <b style="color:${bstat}">${E.consumo_teto_pct!=null?E.consumo_teto_pct+'%':'—'}</b> do teto (${R(E.teto_dia_brl)}/dia)</div>
+          <div style="height:12px;border-radius:7px;background:var(--bg2,#1a1f2b);overflow:hidden;border:1px solid var(--line)">
+            <div style="height:100%;width:${Math.min(100,E.consumo_teto_pct||0)}%;background:${bstat};border-radius:7px"></div></div>
+          <div class="acmp-s" style="margin-top:4px">Atual ${R(E.media_dia_brl)}/dia · baseline pré-otimização ${R(E.baseline_dia_brl)}/dia ${chip(E.var_dia_pct,true)} <span class="cap">dia vs dia</span></div>
+        </div>
+        ${spark?`<div style="min-width:150px"><div class="acmp-l" style="margin-bottom:2px">Custo/dia (série)</div>${spark}</div>`:''}
+      </div>
+      ${Array.isArray(E.metodologia)?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--line);padding-top:11px">
+        <span class="cap" style="align-self:center">Metodologia FinOps Foundation:</span>
+        ${E.metodologia.map((m,i)=>`<span title="${esc(m.feito)}" style="font-size:11px;padding:3px 9px;border-radius:6px;background:var(--bg2,#1a1f2b);border:1px solid var(--line)"><b style="color:var(--blue,#6ab0ff)">${i+1}. ${esc(m.fase)}</b> · ${esc(m.pt)}</span>`).join('')}
+      </div>`:''}
+    </div>`;
     // ---- faixa de GOVERNANÇA ----
     html+=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--green)">
       <div style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Governança do medidor</div>
@@ -1049,6 +1078,7 @@ function renderCustos(D){
       <div style="font-size:11px;color:var(--mut);margin-top:8px">Netlify é <b>plano fixo (US$ 19/mês)</b>: o valor por setor é <i>rateio de footprint</i> (showback por site ativo), não custo marginal. Claude é o único custo que cresce com uso.</div>
     </div>`;
     // ---- cards por setor (ordenados por custo) ----
+    html+=`<div style="margin:16px 4px 8px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px">Centros de custo · Showback <span style="text-transform:none;letter-spacing:0">(alocação por setor, ordenado por custo)</span></div>`;
     (C.setores||[]).forEach(s=>{
       const scol=SCOL[s.status]||'var(--mut)';
       html+=`<div class="card" style="margin-bottom:12px">
