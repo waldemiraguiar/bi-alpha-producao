@@ -2,7 +2,7 @@ name: Intake Histotecnica (HF)
 
 on:
   schedule:
-    - cron: '*/10 * * * *'   # a cada 10 minutos
+    - cron: '*/5 * * * *'   # a cada 5 minutos (nuvem cobrindo o robo local instavel)
   workflow_dispatch:
 
 concurrency:
