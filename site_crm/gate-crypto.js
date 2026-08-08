@@ -37,7 +37,8 @@ function initGate(opts){
   async function unlock(pw, fromLS){
     try{
       const D = await decryptEnc(encUrl, pw);
-      localStorage.setItem(lsKey, pw); window.__pwd = pw;
+      if(!localStorage.getItem(_BIO)) localStorage.setItem(lsKey, pw);  // aparelho com digital PRF não guarda senha em texto puro
+      window.__pwd = pw;
       document.getElementById('gate').style.display='none';
       onData(D);
       if(window.PublicKeyCredential && bset && !localStorage.getItem(_BIO)) bset.style.display='';
@@ -50,26 +51,42 @@ function initGate(opts){
     }
   }
   f.addEventListener('submit', e=>{ e.preventDefault(); er.textContent=''; b.disabled=true; b.textContent='Verificando…'; unlock(p.value,false); });
-  /* ---- digital / Touch ID / Face ID (por aparelho; preserva auto-login da TV) ---- */
-  async function entrarComDigital(btn, label){ const id=localStorage.getItem(_BIO), pw=localStorage.getItem(lsKey); if(!id||!pw)return;
+  /* ---- digital / Touch ID (PRF): a senha vira BLOB CIFRADO; sem texto puro no aparelho do dono; equipe intacta ---- */
+  const _enc=s=>new TextEncoder().encode(s), _dec=b=>new TextDecoder().decode(b), _rnd=n=>crypto.getRandomValues(new Uint8Array(n));
+  const _aes=k=>crypto.subtle.importKey('raw',k,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  const _prf=r=>{try{return r.getClientExtensionResults().prf.results.first;}catch(e){return null;}};
+  const _bioMeta=()=>{try{const j=JSON.parse(localStorage.getItem(_BIO));return (j&&j.c&&j.s&&j.i&&j.t)?j:null;}catch(e){return null;}};
+  const _bioOn=()=>!!_bioMeta();
+  async function entrarComDigital(btn,label){ const m=_bioMeta(); if(!m)return;
     try{ if(btn) btn.textContent='👆 Toque o leitor…';
-      await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:_bd(id)}],userVerification:'required',timeout:60000,rpId:location.hostname}});
+      const a=await navigator.credentials.get({publicKey:{challenge:_rnd(32),allowCredentials:[{type:'public-key',id:_bd(m.c)}],userVerification:'required',timeout:60000,rpId:location.hostname,extensions:{prf:{eval:{first:_bd(m.s)}}}}});
+      const prf=_prf(a); if(!prf)throw new Error('sem PRF');
+      const key=await _aes(prf);
+      const pw=_dec(await crypto.subtle.decrypt({name:'AES-GCM',iv:_bd(m.i)},key,_bd(m.t)));
       unlock(pw,true);
     }catch(e){console.warn(e); if(btn) btn.textContent=label;} }
   if(gbio) gbio.onclick=()=>entrarComDigital(gbio,'👆 Entrar com digital');
   if(lbio) lbio.onclick=()=>entrarComDigital(lbio,'👆 Entrar com a digital / Face ID');
-  if(bset) bset.onclick=async()=>{ const pw=localStorage.getItem(lsKey); if(!pw)return;
+  if(bset) bset.onclick=async()=>{ const pw=window.__pwd||localStorage.getItem(lsKey); if(!pw){bset.textContent='entre com a senha primeiro';return;}
     try{bset.textContent='👆 Toque p/ ativar…';
-      const c=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'Alpha — Atlas Digital',id:location.hostname},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'alpha',displayName:'Alpha'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000,attestation:'none'}});
-      localStorage.setItem(_BIO,_be(c.rawId)); bset.textContent='✅ Digital ativa neste aparelho'; setTimeout(()=>{bset.style.display='none';},1800);
+      const salt=_rnd(32);
+      const c=await navigator.credentials.create({publicKey:{challenge:_rnd(32),rp:{name:'Alpha — CRM',id:location.hostname},user:{id:_rnd(16),name:'wal@crm-alpha',displayName:'Wal'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'required'},timeout:60000,attestation:'none',extensions:{prf:{eval:{first:salt}}}}});
+      let prf=_prf(c);
+      if(!prf){const a=await navigator.credentials.get({publicKey:{challenge:_rnd(32),allowCredentials:[{type:'public-key',id:c.rawId}],userVerification:'required',timeout:60000,rpId:location.hostname,extensions:{prf:{eval:{first:salt}}}}});prf=_prf(a);}
+      if(!prf)throw new Error('PRF indisponível — use Chrome/Safari do Mac');
+      const key=await _aes(prf), iv=_rnd(12);
+      const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,_enc(pw));
+      localStorage.setItem(_BIO,JSON.stringify({c:_be(c.rawId),s:_be(salt),i:_be(iv),t:_be(ct)}));
+      localStorage.removeItem(lsKey);  // tira a senha em TEXTO PURO deste aparelho — agora só a digital abre
+      bset.textContent='✅ Digital ativa (senha protegida)'; setTimeout(()=>{bset.style.display='none';},1800);
     }catch(e){console.warn(e);bset.textContent='👆 Proteger com digital';} };
-  window.__crmMostraBioSetup=()=>{ if(window.PublicKeyCredential && bset && !localStorage.getItem(_BIO)) bset.style.display=''; };
+  window.__crmMostraBioSetup=()=>{ if(window.PublicKeyCredential && bset && !_bioOn()) bset.style.display=''; };
   const saved = localStorage.getItem(lsKey);
-  if(saved && localStorage.getItem(_BIO)){
-    // digital cadastrada → oferece entrar com o dedo NO LOGIN INDIVIDUAL (não auto-loga sozinho)
+  if(_bioOn()){
+    // aparelho do dono: sem texto puro → pede a digital (login individual ou gate)
     const lf=document.getElementById('loginForm');
     if(lbio && lf && lf.style.display!=='none'){ lbio.style.display=''; entrarComDigital(lbio,'👆 Entrar com a digital / Face ID'); }
-    else if(gbio){ gbio.style.display=''; p.placeholder='ou use a senha'; }
+    else if(gbio){ gbio.style.display=''; p.placeholder='ou use a senha'; entrarComDigital(gbio,'👆 Entrar com digital'); }
   }
   else if(saved){ unlock(saved, true); }
 }
