@@ -23,7 +23,7 @@ jobs:
 
       - name: Marca "Cabo Frio" (isola visualmente da Matriz)
         run: |
-          sed -i 's/Agente CRM — Matriz/Agente CRM — Cabo Frio/g; s/Agente CRM · Matriz/Agente CRM · Cabo Frio/g' site_crm/index.html
+          sed -i 's/Matriz/Cabo Frio/g' site_crm/index.html   # troca TODA marca (título, header e h1 do login)
           V=$(date +%s)
           sed -i "s#\(src=\"app\.js\)\"#\1?v=$V\"#g; s#\(src=\"gate-crypto\.js\)\"#\1?v=$V\"#g" site_crm/index.html
 
