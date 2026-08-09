@@ -41,12 +41,12 @@ def lab_fat_since(marco, tries=5):
     for i in range(tries):
         conn = None
         try:
-            conn = pymysql.connect(**SRC); c = conn.cursor()
-            c.execute(f"SELECT MAX(r.DataEntrada) FROM {RQ} r"); mx = c.fetchone()[0]
-            c.execute(f"SELECT COALESCE(SUM(s.ValorExame),0) FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela WHERE r.DataEntrada BETWEEN %s AND %s", (marco, mx))
-            v = float(c.fetchone()[0] or 0); conn.close(); return round(v, 2)
+            conn = pymysql.connect(**SRC); c = conn.cursor()   # DictCursor → acessa por nome de coluna (alias)
+            c.execute(f"SELECT MAX(r.DataEntrada) AS mx FROM {RQ} r"); mx = c.fetchone()["mx"]
+            c.execute(f"SELECT COALESCE(SUM(s.ValorExame),0) AS f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela WHERE r.DataEntrada BETWEEN %s AND %s", (marco, mx))
+            v = float(c.fetchone()["f"] or 0); conn.close(); return round(v, 2)
         except Exception as e:
-            print(f"lab_fat_since tentativa {i+1}/{tries} falhou: {type(e).__name__}")
+            print(f"lab_fat_since tentativa {i+1}/{tries} falhou: {type(e).__name__}: {e}")
             try:
                 if conn: conn.close()
             except Exception:
