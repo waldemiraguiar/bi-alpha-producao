@@ -393,7 +393,7 @@ async function trocarMeuPin(){
 }
 async function verificaPin(nome, pin){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"verify",nome,pin,senha:window.__pwd})});
-    if(r.ok){ const j=await r.json(); return j.ok?{ok:true, papel:j.papel||"comercial"}:{ok:false}; } }catch(e){ return null; }   // null = offline/erro
+    if(r.ok){ const j=await r.json(); return j.ok?{ok:true, papel:j.papel||"comercial", finkey:j.finkey}:{ok:false}; } }catch(e){ return null; }   // null = offline/erro
   return {ok:false}; }
 async function criarOperador(nome, pin, papel, dir_code){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,papel,dir_code,senha:window.__pwd})});
@@ -428,7 +428,7 @@ async function openIdentidade(force){
     const nome=el.dataset.op, pin=(prompt(`PIN de ${nome}:`)||"").trim(); if(!pin) return;
     const res=await verificaPin(nome, pin);
     if(res===null){ if(confirm("Sem internet pra validar o PIN agora. Entrar como "+nome+" mesmo assim?")){ setOperador(nome, "comercial"); closeModal(); renderAll(); } }   // offline não libera R$ (segurança)
-    else if(res.ok){ setOperador(nome, res.papel); closeModal(); renderAll(); }
+    else if(res.ok){ setOperador(nome, res.papel); if(res.papel==="diretoria" && res.finkey) await autoRSdir(res.finkey); closeModal(); renderAll(); }
     else alert("PIN incorreto."); });
   document.getElementById("opNovo").onclick=async()=>{
     const nome=(prompt("Nome do novo operador (ex.: Heitor, Luciane, Wal):")||"").trim(); if(!nome) return;
@@ -503,6 +503,14 @@ function rsVal(cod, marco){ if(!CLIN_RS||cod==null) return null; const k=String(
   if(marco && CLIN_RS_DESDE && CLIN_RS_DESDE[k]!=null) return CLIN_RS_DESDE[k];
   return CLIN_RS[k]!=null?CLIN_RS[k]:null; }
 function dirCodeCache(){ return localStorage.getItem("crm_fin_code")||sessionStorage.getItem("crm_dir_code")||""; }   // localStorage = gruda no aparelho da diretoria
+/* 🔓 AUTO-R$ p/ DIRETORIA: quando o operador diretoria (Wal/Fábio) loga, o servidor manda a finkey → abre o R$ SOZINHO (inclusive por biometria). Reps não recebem finkey → nada muda pra eles. */
+async function autoRSdir(finkey){
+  if(!finkey) return false;
+  try{ if(!CLIN_RS_ENV) await loadClinRS();
+    if(await decDirRS(finkey)){ try{ localStorage.setItem("crm_fin_code",finkey); sessionStorage.setItem("crm_dir_code",finkey); }catch(e){} return true; }
+  }catch(e){}
+  return false;
+}
 async function verRS(){
   if(!ehDiretoria()){ alert("Só a diretoria vê R$. Identifique-se como diretoria primeiro (🔓)."); return; }
   if(!CLIN_RS_ENV) await loadClinRS();
@@ -2933,6 +2941,7 @@ async function initLogin(){
       const D=await decryptEnc("data/crm.enc", j.key);
       localStorage.setItem("agente_crm_matriz", j.key); window.__pwd=j.key;
       setOperador(j.nome, j.papel);
+      if(j.papel==="diretoria" && j.finkey) await autoRSdir(j.finkey);   // diretoria: R$ abre sozinho ao logar
       document.getElementById("gate").style.display="none";
       render(D);
       try{ if(typeof window.__crmMostraBioSetup==="function") window.__crmMostraBioSetup(); }catch(e){}   // oferece "👆 Proteger com digital" já no 1º login

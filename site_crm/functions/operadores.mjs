@@ -32,7 +32,8 @@ export default async (req) => {
       if (o.ativo === false) return Response.json({ ok: false, motivo: "inativo" }, { headers: cors });
       const ok = o.pin === hashPin(o.nome, String(body.pin || "").trim());
       if (!ok) return Response.json({ ok: false }, { headers: cors });
-      return Response.json({ ok: true, nome: o.nome, papel: o.papel || "comercial", key: SECRET }, { headers: cors });
+      // DIRETORIA (ex.: Wal, Fábio no CF) recebe a CHAVE FINANCEIRA no login → R$ abre sozinho ao entrar (inclusive por biometria). Reps (comercial) NUNCA recebem.
+      return Response.json({ ok: true, nome: o.nome, papel: o.papel || "comercial", key: SECRET, finkey: (o.papel === "diretoria" ? (SEC.FIN_KEY || "") : undefined) }, { headers: cors });
     }
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
@@ -44,7 +45,7 @@ export default async (req) => {
       const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
       if (!o) return Response.json({ ok: false, motivo: "nao_existe" }, { headers: cors });
       const ok = o.pin === hashPin(o.nome, pin);
-      return Response.json({ ok, nome: o.nome, papel: o.papel || "comercial" }, { headers: cors });
+      return Response.json({ ok, nome: o.nome, papel: o.papel || "comercial", finkey: (ok && o.papel === "diretoria" ? (SEC.FIN_KEY || "") : undefined) }, { headers: cors });
     }
     if (body.acao === "remove") {
       lista = lista.filter((x) => x.nome.toLowerCase() !== nome.toLowerCase());
