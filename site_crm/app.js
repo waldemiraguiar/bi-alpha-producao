@@ -485,7 +485,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento TOTAL do lab desde o marco (denominador do BI) — só diretoria
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null, LAB_MES=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento do lab TOTAL(lab_desde) e MÊS A MÊS(lab_mes={ym:fat}) desde o marco (denominador do BI) — só diretoria
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -494,7 +494,7 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; }   // {fat, desde, fatmes, conqfat, lab_desde, marco}
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; LAB_MES=obj.lab_mes||null; }   // {fat, desde, fatmes, conqfat, lab_desde, marco, lab_mes}
     else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; CLIN_CONQFAT={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
@@ -2093,6 +2093,27 @@ function renderTab(){
           else if(t==="divide"){ const cf=cqmSum(d.x.cod); if(cf>0){CB.divide.n++;CB.divide.rs+=cf;} } });
         const conqTot=CB.nova.rs+CB.reconquistada.rs+CB.divide.rs, conqN=CB.nova.n+CB.reconquistada.n+CB.divide.n;
         const labFat=LAB_FAT_DESDE||null, pctTot=labFat?conqTot/labFat*100:null;
+        // 📅 CONQUISTA MÊS A MÊS — dinheiro novo por mês + % do faturamento DAQUELE mês (pedido do Wal: "ver o mensal, depois o total")
+        const MES={};
+        dados.forEach(d=>{ const t=d.x.tipo, cod=String(d.x.cod);
+          if(t==="nova"||t==="reconquistada"){ ((CLIN_FATMES&&CLIN_FATMES[cod])||[]).forEach(m=>{ MES[m.ym]=(MES[m.ym]||0)+(m.fat||0); }); }
+          else if(t==="divide"){ ((CLIN_CONQMES&&CLIN_CONQMES[cod])||[]).forEach(m=>{ MES[m.ym]=(MES[m.ym]||0)+(m.fat||0); }); } });
+        const labMes=LAB_MES||{};
+        const mesesBI=Array.from(new Set([...Object.keys(MES),...Object.keys(labMes)])).sort();
+        const mlab2=ym=>{const p=ym.split("-");return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
+        const mesAtual=mesesBI[mesesBI.length-1];
+        const cqAtual=MES[mesAtual]||0, lfAtual=labMes[mesAtual]||0, pctAtual=lfAtual?cqAtual/lfAtual*100:null;
+        const insightMes=(mesAtual&&cqAtual>0)?`<div style="margin-top:10px;background:rgba(0,229,160,.09);border-left:3px solid #00E5A0;border-radius:8px;padding:9px 12px;font-size:12.5px;color:#c9f5e6;line-height:1.55">🏆 <b>Este mês (${mlab2(mesAtual)})</b>: já entraram <b style="color:#00E5A0">${fmtBRL(cqAtual)}</b> de dinheiro novo${pctAtual!=null?` = <b>${pctAtual.toFixed(1)}%</b> do faturamento do mês`:''} — <span class="t-mut">dinheiro que estava parado na mesa.</span></div>`:"";
+        const mesRows=mesesBI.map(ym=>{ const cq=MES[ym]||0, lf=labMes[ym]||0, pct=lf?cq/lf*100:null, cur=ym===mesAtual;
+          return `<tr style="border-top:1px solid rgba(255,255,255,.05)${cur?';background:rgba(0,229,160,.10)':''}">
+             <td style="padding:5px 10px;text-align:left;font-weight:${cur?'800':'600'};color:${cur?'#00E5A0':'#c9d4e0'};white-space:nowrap">${mlab2(ym)}${cur?' <span style="font-size:9.5px;background:#00E5A0;color:#052b20;border-radius:4px;padding:1px 5px;font-weight:800">ESTE MÊS</span>':''}</td>
+             <td style="padding:5px 10px;text-align:right;font-weight:700;color:#7effcf">${fmtBRL(cq)}</td>
+             <td style="padding:5px 10px;text-align:right;font-weight:${cur?'800':'600'};color:${cur?'#00E5A0':'#9fe6ff'}">${pct!=null?pct.toFixed(1)+'%':'—'}</td></tr>`; }).join("");
+        const mesTabela=mesesBI.length?`<div style="margin-top:11px;border:1px solid rgba(0,229,160,.22);border-radius:10px;overflow:hidden">
+             <div style="background:rgba(0,229,160,.08);padding:6px 10px;font-size:11px;font-weight:800;color:#7effcf;text-transform:uppercase;letter-spacing:.3px">📅 Mês a mês — conquista × % do faturamento do mês</div>
+             <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:280px">
+               <thead><tr style="color:var(--mut);font-size:10.5px"><th style="padding:5px 10px;text-align:left">Mês</th><th style="padding:5px 10px;text-align:right">💰 Conquista</th><th style="padding:5px 10px;text-align:right">📊 % do mês</th></tr></thead>
+               <tbody>${mesRows}</tbody></table></div></div>`:"";
         const frenteCard=(ic,lbl,cor,o)=>`<div style="flex:1;min-width:118px;border:1px solid ${cor}55;border-left:3px solid ${cor};border-radius:10px;padding:9px 11px">
             <div style="font-size:11px;color:${cor};font-weight:700">${ic} ${lbl}</div>
             <div style="font-size:17px;font-weight:800;color:#eaf3ff;margin-top:2px">${fmtBRL(o.rs)}</div>
@@ -2112,7 +2133,9 @@ function renderTab(){
               ${frenteCard("♻️","Reconquista","#00D4FF",CB.reconquistada)}
               ${frenteCard("🆕","Novos","#00E5A0",CB.nova)}
             </div>
-            <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5">📊 <b>De-para</b> — quanto do faturamento veio das frentes de conquista (dinheiro NOVO) desde o marco. A <b>conversão</b> conta só a <b>categoria nova</b> (o que já mandavam é dinheiro velho, não entra).</div>
+            ${insightMes}
+            ${mesTabela}
+            <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5">📊 <b>De-para</b> — quanto do faturamento veio das frentes de conquista (dinheiro NOVO) desde o marco. A <b>conversão</b> conta só a <b>categoria nova</b> (o que já mandavam é dinheiro velho, não entra). O <b>mês a mês</b> mostra o que entrou em cada mês e quanto representa do faturamento daquele mês (o mês atual é parcial).</div>
           </div>`:"";
         painel=`
           ${biConq}

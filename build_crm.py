@@ -206,7 +206,7 @@ def post_clinicas_rs(D):
         return
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
     # R$ da carteira: marco zero (desde) + soma dos CÓDIGOS-EXTRA no principal (Faro: 989898 + 5724)
-    desde = {}; fatmes = {}; conqfat = {}; conqmes = {}; lab_desde = 0; lab_marco = ""
+    desde = {}; fatmes = {}; conqfat = {}; conqmes = {}; lab_desde = 0; lab_marco = ""; lab_mes = {}
     try:
         import urllib.request as _u
         base0 = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
@@ -219,15 +219,16 @@ def post_clinicas_rs(D):
             for e in (c.get("cods_extra") or []):
                 e = str(e).strip()
                 if e: alias[e] = str(p); extras.append(e)
-        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal, divide_conversion, lab_fat_since
+        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal, divide_conversion, lab_fat_since, lab_fat_mensal
         if since_map:
             desde = clinic_fat_since(since_map, alias)
             fatmes = clinic_fat_mensal(since_map, alias)   # dinheiro mês a mês desde o marco zero (cifrado, diretoria)
             try:
                 lab_marco = min(since_map.values())              # marco mais antigo da carteira = janela do BI
-                lab_desde = lab_fat_since(lab_marco)             # faturamento TOTAL do lab desde o marco (denominador do %)
+                lab_desde = lab_fat_since(lab_marco)             # faturamento TOTAL do lab desde o marco (denominador do % total)
+                lab_mes = lab_fat_mensal(lab_marco)             # faturamento do lab MÊS A MÊS (denominador do % de cada mês)
             except Exception as e:
-                print(f"lab_fat_since pulado ({e})")
+                print(f"lab_fat pulado ({e})")
         # 🎉 R$ das CATEGORIAS CONQUISTADAS (clínicas 'Dividem material') — cifrado, só diretoria
         div_marco = {str(c.get("cod")): c.get("reconq_data") for c in cart if c.get("tipo") == "divide" and c.get("cod") and c.get("reconq_data")}
         if div_marco:
@@ -242,7 +243,7 @@ def post_clinicas_rs(D):
                     rsmap[p] = round(rsmap.get(p, 0) + ex12[e], 2)
     except Exception as e:
         print(f"post_clinicas_rs: R$ desde/extra pulado ({e})")
-    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat, "conqmes": conqmes, "lab_desde": lab_desde, "marco": lab_marco}, ensure_ascii=False, separators=(",", ":")).encode()
+    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat, "conqmes": conqmes, "lab_desde": lab_desde, "marco": lab_marco, "lab_mes": lab_mes}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
     ct = AESGCM(key).encrypt(iv, data, None)

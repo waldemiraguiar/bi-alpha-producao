@@ -54,6 +54,25 @@ def lab_fat_since(marco, tries=5):
             _t.sleep(4)
     return 0
 
+def lab_fat_mensal(marco, tries=5):
+    """Faturamento TOTAL do lab MÊS A MÊS desde o marco — denominador do % de conquista POR MÊS do BI. Retry (query pesada)."""
+    import time as _t
+    for i in range(tries):
+        conn = None
+        try:
+            conn = pymysql.connect(**SRC); c = conn.cursor()
+            c.execute(f"SELECT MAX(r.DataEntrada) AS mx FROM {RQ} r"); mx = c.fetchone()["mx"]
+            c.execute(f"SELECT DATE_FORMAT(r.DataEntrada,'%%Y-%%m') AS ym, COALESCE(SUM(s.ValorExame),0) AS f FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela WHERE r.DataEntrada BETWEEN %s AND %s GROUP BY ym", (marco, mx))
+            out = {row["ym"]: round(float(row["f"] or 0), 2) for row in c.fetchall()}; conn.close(); return out
+        except Exception as e:
+            print(f"lab_fat_mensal tentativa {i+1}/{tries} falhou: {type(e).__name__}: {e}")
+            try:
+                if conn: conn.close()
+            except Exception:
+                pass
+            _t.sleep(3)
+    return {}
+
 def clinic_details(cods, since_map=None, alias=None):
     """Detalhe por clínica p/ o share-of-wallet do CRM: setores que ela MANDA (L12) + o que NÃO manda
     (white-space) + produção recente (30d/7d) + produção DESDE O MARCO ZERO (since_map). SEM R$.
