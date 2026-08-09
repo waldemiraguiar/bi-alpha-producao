@@ -485,7 +485,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas (só diretoria)
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento TOTAL do lab desde o marco (denominador do BI) — só diretoria
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -494,7 +494,7 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; }   // {fat, desde, fatmes, conqfat}
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; }   // {fat, desde, fatmes, conqfat, lab_desde, marco}
     else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; CLIN_CONQFAT={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
@@ -2077,7 +2077,37 @@ function renderTab(){
               <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Aqui só entra <b>DINHEIRO NOVO</b>: reconquistadas/novas contam tudo (o cliente voltou/entrou); as <b>🔀 dividem material</b> só entram <b>quando convertem</b> — e só com a <b>conquista</b> (categoria nova), porque o que já mandavam (ex.: histopato) é dinheiro <b>velho</b>, não recuperação. O <b>TOTAL</b> = o quanto a carteira realmente recuperou. Acompanhe velho×novo das que dividem na seção 🎉 Conquistas abaixo.</div>`;
           }
         }
+        // 🎯 BI DA CONQUISTA — dinheiro NOVO (novos+reconquista+conversão de categoria) e % do faturamento TOTAL do lab
+        const cqmSum=cod=>((CLIN_CONQMES&&CLIN_CONQMES[String(cod)])||[]).reduce((s,a)=>s+(a.fat||0),0);
+        const CB={nova:{n:0,rs:0},reconquistada:{n:0,rs:0},divide:{n:0,rs:0}};
+        dados.forEach(d=>{ const t=d.x.tipo;
+          if(t==="nova"||t==="reconquistada"){ if(d.rsv>0){CB[t].n++;CB[t].rs+=d.rsv;} }
+          else if(t==="divide"){ const cf=cqmSum(d.x.cod); if(cf>0){CB.divide.n++;CB.divide.rs+=cf;} } });
+        const conqTot=CB.nova.rs+CB.reconquistada.rs+CB.divide.rs, conqN=CB.nova.n+CB.reconquistada.n+CB.divide.n;
+        const labFat=LAB_FAT_DESDE||null, pctTot=labFat?conqTot/labFat*100:null;
+        const frenteCard=(ic,lbl,cor,o)=>`<div style="flex:1;min-width:118px;border:1px solid ${cor}55;border-left:3px solid ${cor};border-radius:10px;padding:9px 11px">
+            <div style="font-size:11px;color:${cor};font-weight:700">${ic} ${lbl}</div>
+            <div style="font-size:17px;font-weight:800;color:#eaf3ff;margin-top:2px">${fmtBRL(o.rs)}</div>
+            <div class="t-mut" style="font-size:10.5px">${o.n} cliente(s)${labFat?` · <b style="color:${cor}">${(o.rs/labFat*100).toFixed(1)}%</b> da fatura`:""}</div></div>`;
+        const biConq=conqN?`<div style="border:1px solid rgba(0,229,160,.4);border-radius:14px;padding:14px 16px;margin:8px 0 12px;background:linear-gradient(180deg,rgba(0,229,160,.10),rgba(0,229,160,.02))">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px">
+              <div style="font-size:12px;font-weight:800;color:#7effcf;text-transform:uppercase;letter-spacing:.4px">🎯 BI da Conquista${LAB_MARCO?` · desde ${esc(fmtDataBR(LAB_MARCO))}`:""}</div>
+              <div class="t-mut" style="font-size:11px">${conqN} clientes · novos + reconquista + conversão de categoria</div>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:14px;margin:9px 0 3px;flex-wrap:wrap">
+              <div style="font-size:30px;font-weight:900;color:#00E5A0;line-height:1">${fmtBRL(conqTot)}</div>
+              ${pctTot!=null?`<div style="font-size:20px;font-weight:800;color:#7effcf">= ${pctTot.toFixed(1)}% do faturamento</div>`:`<div class="t-mut" style="font-size:11.5px">(faturamento total do lab chega no próximo ciclo do robô)</div>`}
+              ${labFat?`<div class="t-mut" style="font-size:11px">fatura total do lab: <b>${fmtBRL(labFat)}</b></div>`:""}
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">
+              ${frenteCard("🔀","Conversão de categoria","#9fe6ff",CB.divide)}
+              ${frenteCard("♻️","Reconquista","#00D4FF",CB.reconquistada)}
+              ${frenteCard("🆕","Novos","#00E5A0",CB.nova)}
+            </div>
+            <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5">📊 <b>De-para</b> — quanto do faturamento veio das frentes de conquista (dinheiro NOVO) desde o marco. A <b>conversão</b> conta só a <b>categoria nova</b> (o que já mandavam é dinheiro velho, não entra).</div>
+          </div>`:"";
         painel=`
+          ${biConq}
           <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}${bioLinha()}</div>
           <div class="kgrid">
             ${kpi("g", fmtBRL(totRS), "Faturamento total", "desde a data de corte")}
