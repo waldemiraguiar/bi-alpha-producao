@@ -2140,10 +2140,11 @@ function renderTab(){
         painel=`
           ${biConq}
           <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}${bioLinha()}</div>
+          <div class="seclabel" style="margin:12px 0 4px">💼 Carteira trabalhada <span class="t-mut" style="font-weight:500;font-size:11px">— só as clínicas que você reconquistou/trouxe (reconquista · novas · divide) desde o marco. <b style="color:#ffc266">NÃO é o faturamento do lab inteiro</b>${labFat?` (esse é ${fmtBRL(labFat)})`:''}.</span></div>
           <div class="kgrid">
-            ${kpi("g", fmtBRL(totRS), "Faturamento total", "desde a data de corte")}
-            ${kpi("", totEx, "Exames", "desde a reconq./conquista")}
-            ${kpi("", fmtBRL(tkGeral), "Ticket médio", "R$ por exame")}
+            ${kpi("g", fmtBRL(totRS), "R$ da carteira", "reconquista/novos · desde o marco")}
+            ${kpi("", totEx, "Exames da carteira", "desde a reconq./conquista")}
+            ${kpi("", fmtBRL(tkGeral), "Ticket médio", "R$/exame · da carteira")}
             ${kpi("g", comRS.length, "Clínicas com R$", semDataN?`${semDataN} ainda sem data (12m)`:`${dados.length} na carteira`)}
           </div>
           <div class="seclabel" style="margin:12px 0 2px">💰 Faturamento por clínica <span class="t-mut" style="font-weight:500;font-size:11px">— agrupado por tipo, cada um do maior → menor</span></div>
