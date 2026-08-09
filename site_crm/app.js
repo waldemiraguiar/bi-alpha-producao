@@ -2087,17 +2087,17 @@ function renderTab(){
         }
         // 🎯 BI DA CONQUISTA — dinheiro NOVO (novos+reconquista+conversão de categoria) e % do faturamento TOTAL do lab
         const cqmSum=cod=>((CLIN_CONQMES&&CLIN_CONQMES[String(cod)])||[]).reduce((s,a)=>s+(a.fat||0),0);
-        const CB={nova:{n:0,rs:0},reconquistada:{n:0,rs:0},divide:{n:0,rs:0}};
+        const CB={nova:{n:0,rs:0},reconquistada:{n:0,rs:0},divide:{n:0,rs:0},particular:{n:0,rs:0}};
         dados.forEach(d=>{ const t=d.x.tipo;
-          if(t==="nova"||t==="reconquistada"){ if(d.rsv>0){CB[t].n++;CB[t].rs+=d.rsv;} }
-          else if(t==="divide"){ const cf=cqmSum(d.x.cod); if(cf>0){CB.divide.n++;CB.divide.rs+=cf;} } });
-        const conqTot=CB.nova.rs+CB.reconquistada.rs+CB.divide.rs, conqN=CB.nova.n+CB.reconquistada.n+CB.divide.n;
+          if(t==="divide"){ const cf=cqmSum(d.x.cod); if(cf>0){CB.divide.n++;CB.divide.rs+=cf;} }
+          else if(CB[t]){ if(d.rsv>0){CB[t].n++;CB[t].rs+=d.rsv;} } });   // nova / reconquistada / particular = tudo é dinheiro novo (rsv desde o marco)
+        const conqTot=CB.nova.rs+CB.reconquistada.rs+CB.divide.rs+CB.particular.rs, conqN=CB.nova.n+CB.reconquistada.n+CB.divide.n+CB.particular.n;
         const labFat=LAB_FAT_DESDE||null, pctTot=labFat?conqTot/labFat*100:null;
-        // 📅 CONQUISTA MÊS A MÊS — dinheiro novo por mês + % do faturamento DAQUELE mês (pedido do Wal: "ver o mensal, depois o total")
+        // 📅 CONQUISTA MÊS A MÊS — bate EXATO com a safra "Dinheiro por mês": divide=conqmes (só categoria nova), o resto=fatmes
         const MES={};
-        dados.forEach(d=>{ const t=d.x.tipo, cod=String(d.x.cod);
-          if(t==="nova"||t==="reconquistada"){ ((CLIN_FATMES&&CLIN_FATMES[cod])||[]).forEach(m=>{ MES[m.ym]=(MES[m.ym]||0)+(m.fat||0); }); }
-          else if(t==="divide"){ ((CLIN_CONQMES&&CLIN_CONQMES[cod])||[]).forEach(m=>{ MES[m.ym]=(MES[m.ym]||0)+(m.fat||0); }); } });
+        dados.forEach(d=>{ const cod=String(d.x.cod);
+          const arr=(d.x.tipo==="divide")?((CLIN_CONQMES&&CLIN_CONQMES[cod])||[]):((CLIN_FATMES&&CLIN_FATMES[cod])||[]);
+          arr.forEach(m=>{ MES[m.ym]=(MES[m.ym]||0)+(m.fat||0); }); });
         const labMes=LAB_MES||{};
         const mesesBI=Array.from(new Set([...Object.keys(MES),...Object.keys(labMes)])).sort();
         const mlab2=ym=>{const p=ym.split("-");return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
@@ -2132,6 +2132,7 @@ function renderTab(){
               ${frenteCard("🔀","Conversão de categoria","#9fe6ff",CB.divide)}
               ${frenteCard("♻️","Reconquista","#00D4FF",CB.reconquistada)}
               ${frenteCard("🆕","Novos","#00E5A0",CB.nova)}
+              ${CB.particular.n?frenteCard("🐾","Particulares","#7effcf",CB.particular):""}
             </div>
             ${insightMes}
             ${mesTabela}
