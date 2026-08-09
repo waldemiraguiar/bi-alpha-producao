@@ -24,6 +24,9 @@ jobs:
       - name: Marca "Cabo Frio" (isola visualmente da Matriz)
         run: |
           sed -i 's/Matriz/Cabo Frio/g' site_crm/index.html   # troca TODA marca (título, header e h1 do login)
+          STAMP="v $(TZ='America/Sao_Paulo' date +'%d/%m %Hh%M') · CF · $(git rev-parse --short HEAD)"
+          sed -i "s#__BUILD_VER__#$STAMP#g" site_crm/index.html   # SELO DE VERSÃO (de-para Você×Fábio)
+          echo "selo -> $STAMP"
           V=$(date +%s)
           sed -i "s#\(src=\"app\.js\)\"#\1?v=$V\"#g; s#\(src=\"gate-crypto\.js\)\"#\1?v=$V\"#g" site_crm/index.html
 

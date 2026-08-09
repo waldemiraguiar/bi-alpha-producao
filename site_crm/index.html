@@ -263,6 +263,16 @@
 </head>
 <body>
 
+<!-- ===== SELO DE VERSÃO (governança: bate o de-para Você×Fábio×Matriz num olhar) ===== -->
+<div id="verbadge" title="Versão publicada — compare com a do Fábio/Matriz. Mesmo código = mesma versão.">__BUILD_VER__</div>
+<style>
+#verbadge{position:fixed;left:10px;bottom:10px;z-index:99999;font:600 11px/1.2 ui-monospace,Menlo,monospace;
+  color:#7fd8f0;background:rgba(10,22,40,.82);border:1px solid rgba(0,212,255,.28);border-radius:6px;
+  padding:4px 8px;letter-spacing:.02em;opacity:.82;cursor:default;user-select:all}
+@media (max-width:600px){#verbadge{font-size:10px;padding:3px 6px}}
+</style>
+<script>window.addEventListener('DOMContentLoaded',function(){var e=document.getElementById('verbadge');if(e&&/BUILD_VER/.test(e.textContent))e.textContent='dev · local';});</script>
+
 <!-- ===== GATE (senha do time CRM) ===== -->
 <div id="gate">
   <!-- LOGIN INDIVIDUAL (principal) -->
