@@ -1,0 +1,73 @@
+name: Cabo Frio — dados do CRM (bi_delta → agente-crm-cabofrio)
+
+# Roda o MESMO build do Matriz, mas contra o banco bi_delta (Cabo Frio) e publicando
+# no site da EQUIPE (agente-crm-cabofrio). ISOLAMENTO: MYSQL_DB é fixo 'bi_delta' e há
+# uma TRAVA que aborta se conectar em qualquer outro banco (nunca toca a Matriz/bi_alpha).
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'     # a cada 6h: build + POST do .enc (barato, sem deploy)
+  workflow_dispatch:
+
+concurrency:
+  group: cabofrio-dados
+  cancel-in-progress: false
+
+jobs:
+  dados:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: pip install --quiet pymysql cryptography
+
+      # ⛔ TRAVA Matriz×Cabo Frio: conecta e ABORTA se o banco não for bi_delta.
+      - name: Trava de isolamento (só bi_delta)
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST_CF }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER_CF }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD_CF }}
+        run: |
+          python - <<'PY'
+          import os, pymysql, sys
+          conn = pymysql.connect(host=os.environ["MYSQL_HOST"], user=os.environ["MYSQL_USER"],
+                                 password=os.environ["MYSQL_PWD"], connect_timeout=20)
+          cur = conn.cursor(); cur.execute("SELECT DATABASE()"); _cur = cur.fetchone()[0]
+          cur.execute("SHOW DATABASES"); dbs = [r[0] for r in cur.fetchall()]
+          print("bancos visíveis a este usuário:", dbs)
+          if "bi_alpha" in dbs:
+              sys.exit("ABORTADO: este usuário enxerga bi_alpha (Matriz). Use credenciais EXCLUSIVAS do bi_delta (Cabo Frio).")
+          if "bi_delta" not in dbs:
+              sys.exit("ABORTADO: bi_delta não encontrado neste servidor. Credenciais erradas.")
+          print("OK — usuário isolado no bi_delta (Cabo Frio).")
+          PY
+
+      - name: Gerar e cifrar dados do CRM de Cabo Frio (bi_delta)
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST_CF }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER_CF }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD_CF }}
+          MYSQL_DB:   bi_delta                       # FIXO — nunca bi_alpha
+          BI_PWD:     ${{ secrets.CRM_PWD_CF }}
+          CRM_PWD:    ${{ secrets.CRM_PWD_CF }}
+          DIR_CODE:   ${{ secrets.DIR_CODE_CF }}
+          FIN_KEY:    ${{ secrets.FIN_KEY_CF }}
+          CRM_BASE:   https://agente-crm-cabofrio.netlify.app
+        run: python build_crm.py
+
+      # PUBLICA o .enc por função (barato, sem deploy) — igual ao Matriz.
+      - name: Publicar dados (.enc) via função
+        continue-on-error: true
+        env:
+          CRM_PWD: ${{ secrets.CRM_PWD_CF }}
+        run: |
+          code=$(curl -sS -o /tmp/r.txt -w "%{http_code}" -X POST \
+            "https://agente-crm-cabofrio.netlify.app/api/enc?f=crm" \
+            -H "x-pwd: $CRM_PWD" -H "content-type: application/json" \
+            --data-binary @site_crm/data/crm.enc) || code=000
+          echo "POST /api/enc?f=crm -> HTTP $code ; $(cat /tmp/r.txt)"
+          [ "$code" = "200" ] || echo "::warning::POST do .enc falhou (HTTP $code) — fallback estático cobre no próximo deploy"
