@@ -34,6 +34,12 @@ PETLOVE = {
     # Produção parcial de jun (atend.) está em data_petlove/petlove_mensal.json p/ a coluna do quadro.
 }
 
+def lab_fat_since(marco):
+    """Faturamento TOTAL do lab (todas as clínicas) desde uma data (marco) — denominador do % de conquista do BI."""
+    conn = pymysql.connect(**SRC); c = conn.cursor()
+    c.execute(f"SELECT COALESCE(SUM(s.ValorExame),0) FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela WHERE r.DataEntrada >= %s", (marco,))
+    v = float(c.fetchone()[0] or 0); conn.close(); return round(v, 2)
+
 def clinic_details(cods, since_map=None, alias=None):
     """Detalhe por clínica p/ o share-of-wallet do CRM: setores que ela MANDA (L12) + o que NÃO manda
     (white-space) + produção recente (30d/7d) + produção DESDE O MARCO ZERO (since_map). SEM R$.
