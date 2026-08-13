@@ -1,0 +1,34 @@
+name: Produção — exames por categoria/exame (HF → Supabase, custo por exame)
+
+# Alimenta o CUSTO POR EXAME do estoque: nº de exames por mês×categoria (e por exame)
+# do HF/MySQL bi_alpha (Matriz) → Supabase producao_exames / producao_exames_det.
+# 24/7 (independe do Air). Idempotente (upsert). Só leitura no MySQL.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'     # a cada 6h
+  workflow_dispatch:
+
+concurrency:
+  group: producao-exames
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: pip install --quiet pymysql
+      - name: Sync exames (HF → Supabase)
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python producao_exames_cloud.py
