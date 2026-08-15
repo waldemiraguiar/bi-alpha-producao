@@ -205,11 +205,12 @@ def post_clinicas_rs(D):
         print("post_clinicas_rs: pulado (falta CRM_PWD/FIN_KEY/dados)")
         return
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
     # R$ da carteira: marco zero (desde) + soma dos CÓDIGOS-EXTRA no principal (Faro: 989898 + 5724)
-    desde = {}; fatmes = {}; conqfat = {}; conqmes = {}; lab_desde = 0; lab_marco = ""; lab_mes = {}
+    since_map = {}; desde = {}; fatmes = {}; conqfat = {}; conqmes = {}; lab_desde = 0; lab_marco = ""; lab_mes = {}
     try:
         import urllib.request as _u
-        base0 = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+        base0 = base
         cart = json.loads(_u.urlopen(_u.Request(base0 + "/api/crm-carteira?_=" + str(int(time.time())), headers={"User-Agent": "robo"}), timeout=30).read().decode()).get("carteira", [])
         since_map, alias, extras = {}, {}, []
         for c in cart:
@@ -243,6 +244,26 @@ def post_clinicas_rs(D):
                     rsmap[p] = round(rsmap.get(p, 0) + ex12[e], 2)
     except Exception as e:
         print(f"post_clinicas_rs: R$ desde/extra pulado ({e})")
+    # 🛡️ BLINDAGEM: NUNCA sobrescreve os campos financeiros com VAZIO. Se HÁ marcos na carteira mas o
+    # cálculo mensal falhou (timeout/erro do exterior), recupera do cifrado ANTERIOR — a tabela
+    # "💰 Dinheiro por mês" e o BI da Conquista nunca somem por causa de um ciclo que falhou no meio.
+    if since_map and (not fatmes or not desde or not lab_desde or not lab_mes):
+        try:
+            _pe = json.loads(urllib.request.urlopen(base + "/api/crm-clinicas-rs?_=" + str(int(time.time())), timeout=30).read().decode())
+            if _pe.get("ct"):
+                _pk = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=base64.b64decode(_pe["salt"]), iterations=int(_pe.get("iter") or ITER)).derive(dir_code.encode())
+                prev = json.loads(AESGCM(_pk).decrypt(base64.b64decode(_pe["iv"]), base64.b64decode(_pe["ct"]), None).decode())
+                recuperou = []
+                if not desde and prev.get("desde"): desde = prev["desde"]; recuperou.append("desde")
+                if not fatmes and prev.get("fatmes"): fatmes = prev["fatmes"]; recuperou.append("fatmes")
+                if not conqmes and prev.get("conqmes"): conqmes = prev["conqmes"]; recuperou.append("conqmes")
+                if not conqfat and prev.get("conqfat"): conqfat = prev["conqfat"]; recuperou.append("conqfat")
+                if not lab_desde and prev.get("lab_desde"): lab_desde = prev["lab_desde"]; recuperou.append("lab_desde")
+                if not lab_mes and prev.get("lab_mes"): lab_mes = prev["lab_mes"]; recuperou.append("lab_mes")
+                if not lab_marco and prev.get("marco"): lab_marco = prev["marco"]; recuperou.append("marco")
+                if recuperou: print(f"🛡️ blindagem: recuperado do cifrado anterior (não zerou): {', '.join(recuperou)}")
+        except Exception as e:
+            print(f"blindagem: não consegui recuperar o cifrado anterior ({e}) — segue com o que tem")
     data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat, "conqmes": conqmes, "lab_desde": lab_desde, "marco": lab_marco, "lab_mes": lab_mes}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
