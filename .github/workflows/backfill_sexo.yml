@@ -1,0 +1,30 @@
+name: Backfill sexo/idade (HF -> hf_paciente)
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # a cada 2 horas — mantem sexo/idade da esteira/fila do JARVAS em 100%
+  workflow_dispatch:
+
+concurrency:
+  group: backfill-sexo
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependencias
+        run: pip install --quiet pymysql
+      - name: Puxar sexo/idade do HF vivo e gravar na cache
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          BACKFILL_N: '400'
+        run: python backfill_sexo_idade.py
