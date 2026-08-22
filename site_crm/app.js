@@ -1652,6 +1652,26 @@ async function rolarPauta(pautaId){
   const okP=await savePautaDoc(prox); const okA=await savePautaDoc(p);
   if(okP&&okA){ alert(`📋 ${n} tópico(s) em aberto carregados pra ${fmtDataBR(prox.data)}. Os resolvidos ficaram em ${fmtDataBR(p.data)}.`); pautaHistId=prox.id; pautaView="atual"; renderTab(); }
 }
+/* abre (ou cria) a pauta da PRÓXIMA semana, pra o Wal já ir montando/trabalhando nela */
+async function abrirProxima(){
+  const base=pautaAtual(); const baseData=base?base.data:hojeISO();
+  let prox=PAUTAS.filter(x=>x.data>baseData).sort((a,b)=>a.data<b.data?-1:1)[0];
+  if(!prox){ const data=proxSexta(baseData);
+    prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
+    if(!await savePautaDoc(prox)) return; }
+  pautaView="atual"; pautaHistId=prox.id; PAUTA_SEL.clear(); renderTab();
+}
+/* manda UM tópico pra próxima semana E já leva o Wal pra lá (pedido: "clicar próxima já ir pra próxima") */
+async function mandarProxima(pautaId, tid){
+  const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return;
+  let prox=PAUTAS.filter(x=>x.data>p.data).sort((a,b)=>a.data<b.data?-1:1)[0];
+  if(!prox){ const data=proxSexta(p.data); prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()}; }
+  const jaLa=(prox.topicos||[]).some(x=>(x.titulo||"").toLowerCase()===(t.titulo||"").toLowerCase());
+  if(!jaLa) prox.topicos.push({...t, id:"t"+Date.now()+Math.random().toString(36).slice(2,6), fwd:false, de:fmtDataBR(p.data), arq:false, arq_ts:0, arq_por:"", ts:Date.now()});
+  t.fwd=true;
+  const okP=await savePautaDoc(prox); const okA=await savePautaDoc(p);
+  if(okP&&okA){ pautaView="atual"; pautaHistId=prox.id; renderTab(); }   // já vai pra próxima
+}
 async function submitReg(){
   const por=quem(); if(por===null) return;
   const nota=document.getElementById("mNota").value.trim(), next=document.getElementById("mNext").value;
@@ -2003,7 +2023,11 @@ function renderTab(){
     const mesAnoISO=iso=>{ const p=(iso||"").split("-"); return p.length>=2?`${MESN[(+p[1])-1]||"?"}/${p[0]}`:"—"; };
     const mesAnoTs=ts=>{ const d=new Date(ts||Date.now()); return `${MESN[d.getMonth()]}/${d.getFullYear()}`; };
     const doc=pautaAtual();
-    const subtabs=`<div class="subtabs"><button class="subtab ${pautaView==='atual'?'on':''}" data-pav="atual">🗓️ Pauta atual</button><button class="subtab ${pautaView==='arquivados'?'on':''}" data-pav="arquivados">🗄️ Arquivo</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">📅 Calendário${PAUTAS.length?` (${PAUTAS.length})`:''}</button></div>`;
+    const _prox0=doc?PAUTAS.filter(x=>x.data>doc.data).sort((a,b)=>a.data<b.data?-1:1)[0]:null;
+    const _proxN=_prox0?(_prox0.topicos||[]).filter(t=>!t.arq).length:0;
+    const _curIdSub=pautaHistId||(doc?doc.id:null); const _curPSub=PAUTAS.find(p=>p.id===_curIdSub);
+    const _verProx=!!(_curPSub && doc && _curPSub.data>doc.data);
+    const subtabs=`<div class="subtabs"><button class="subtab ${pautaView==='atual'&&!_verProx?'on':''}" data-pav="atual">🗓️ Esta semana</button><button class="subtab ${_verProx?'on':''}" data-pav="proxima">➡️ Próxima${_proxN?` (${_proxN})`:''}</button><button class="subtab ${pautaView==='arquivados'?'on':''}" data-pav="arquivados">🗄️ Arquivo</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">📅 Calendário${PAUTAS.length?` (${PAUTAS.length})`:''}</button></div>`;
 
     // ===== CALENDÁRIO / HISTÓRICO (por mês/ano, cada pauta = 1 dia) =====
     if(pautaView==="historico"){
@@ -2022,7 +2046,7 @@ function renderTab(){
               <div style="text-align:center;min-width:44px"><div style="font-size:20px;font-weight:900;color:#00D4FF;line-height:1">${(p.data||"").slice(8,10)}</div><div class="t-mut" style="font-size:9.5px">${esc(fmtDataBR(p.data).split(" ")[0])}</div></div>
               <div style="flex:1;min-width:0"><div class="nm">${esc(p.titulo||"Pauta")}</div><div class="ci">${ativos.length} tópico(s) ${chips}${(p.topicos||[]).filter(t=>t.arq).length?` · 🗄️ ${(p.topicos||[]).filter(t=>t.arq).length}`:""}</div></div>
               <div style="color:var(--mut)">›</div></div>`; }).join("")}`).join(""):`<div class="empty">Ainda sem pautas. Crie a primeira acima.</div>`}`;
-      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
       const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
       document.querySelectorAll("#content [data-abrepauta]").forEach(el=>el.onclick=()=>{ pautaHistId=el.dataset.abrepauta; pautaView="atual"; renderTab(); });
       return;
@@ -2044,7 +2068,7 @@ function renderTab(){
         <div class="seclabel" style="margin:16px 0 6px;color:#ff8fa3">🗑️ Excluídos ${(PAUTA_EXCL||[]).length?`(${PAUTA_EXCL.length})`:""} <span class="t-mut" style="font-weight:500;font-size:11px">— auditoria permanente</span></div>
         ${(PAUTA_EXCL||[]).length?Object.keys(gExc).map(mk=>`<div class="t-mut" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px">${mk}</div>
           ${gExc[mk].map(e=>`<div style="font-size:12px;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.05)"><b>${esc(e.titulo)}</b> <span class="t-mut" style="font-size:10.5px">· ${esc(e.sec||"")} · pauta ${esc(fmtDataBR(e.pauta))} · excluído ${esc(fmtDataHora(e.ts))} por ${esc(e.por||"—")}${e.motivo?` — "${esc(e.motivo)}"`:""}</span></div>`).join("")}`).join(""):`<div class="t-mut" style="font-size:12.5px;padding:4px 0">Nada excluído.</div>`}`;
-      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
       document.querySelectorAll("#content [data-desarq]").forEach(el=>el.onclick=async()=>{ const [pid,tid]=el.dataset.desarq.split("|"); await arquivarTopico(pid,tid,false); });
       return;
     }
@@ -2056,7 +2080,7 @@ function renderTab(){
         <button class="checkinbtn" id="novaPautaBtn" type="button" style="margin:10px 0">🗓️ Criar a 1ª pauta (escolher o dia)</button>
         <div class="empty">Nenhuma pauta ainda. Toque acima pra criar a pauta do dia — depois adicione os tópicos (cada um com sua cor).</div>`;
       const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
-      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
       return;
     }
     const tops=(cur.topicos||[]).filter(t=>!t.arq), arqN=(cur.topicos||[]).filter(t=>t.arq).length;
@@ -2066,7 +2090,7 @@ function renderTab(){
     const secs=[]; const bySec={}; tops.forEach(t=>{ const s=t.sec||"Geral"; if(!bySec[s]){bySec[s]=[];secs.push(s);} bySec[s].push(t); });
     const selHas=id=>PAUTA_SEL.has(id);
     const topCard=t=>{ const col=(PAUTA_CORES[t.cor]||PAUTA_CORES.cinza), st=STA[t.status]||STA.aberto;
-      return `<div data-toped="${esc(t.id)}" style="cursor:pointer;border-left:4px solid ${col.h};background:${col.h}14;border-radius:9px;margin-bottom:9px;padding:11px 13px">
+      return `<div data-toped="${esc(t.id)}" style="cursor:pointer;border-left:6px solid ${col.h};background:linear-gradient(90deg, ${col.h}38, ${col.h}0f);box-shadow:inset 0 0 0 1px ${col.h}55;border-radius:9px;margin-bottom:9px;padding:11px 13px">
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima reunião">➡️</span>':''}<span style="flex:1;min-width:0;font-weight:800;color:#eaf3ff;font-size:14px;line-height:1.3">${esc(t.titulo||"(sem título)")}</span><span class="pr" style="background:${st.c}22;color:${st.c};font-size:10.5px;white-space:nowrap">${st.lbl}</span></div>
         ${t.de?`<div class="t-mut" style="font-size:10.5px;margin-top:2px">↩ veio da pauta de ${esc(t.de)}</div>`:""}
         ${t.texto?`<div style="font-size:13px;white-space:pre-wrap;margin-top:6px;line-height:1.6;color:#cdd9e6">${linkify(esc(t.texto))}</div>`:""}
@@ -2075,15 +2099,29 @@ function renderTab(){
         ${t.enr?`<div style="margin-top:8px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.6;color:#cfe8ff">💡 <b style="color:#9fe6ff">Melhor de mercado:</b> ${linkify(esc(t.enr))}</div>`:""}
         <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap" onclick="event.stopPropagation()">
           <button class="minibtn" data-corpick="${esc(t.id)}" title="Mudar cor">🎨 cor</button>
-          <button class="minibtn ${t.fwd?'on':''}" data-fwd="${esc(t.id)}" title="Encaminhar p/ próxima">➡️ ${t.fwd?'na próxima':'próxima'}</button>
+          <button class="minibtn ${t.fwd?'on':''}" data-mandaprox="${esc(t.id)}" title="Mandar p/ a próxima semana e ir pra lá">➡️ ${t.fwd?'na próxima ✓':'próxima →'}</button>
           <button class="minibtn ${selHas(t.id)?'on':''}" data-topsel="${esc(t.id)}">${selHas(t.id)?'✓ selecionado':'selecionar'}</button>
           <button class="minibtn" data-arq="${esc(t.id)}" title="Arquivar (tira da pauta, guarda no arquivo)">🗄️ arquivar</button>
           <button class="minibtn" data-exc="${esc(t.id)}" title="Excluir (com registro)" style="border-color:rgba(255,45,85,.4);color:#ff8fa3">🗑️</button>
         </div>
         <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:6px;margin-top:7px;flex-wrap:wrap" onclick="event.stopPropagation()">
-          ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:26px;height:26px;border-radius:7px;border:2px solid ${t.cor===k?'#fff':'transparent'};background:${PAUTA_CORES[k].h};cursor:pointer"></button>`).join("")}
+          ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:${t.cor===k?'32':'26'}px;height:${t.cor===k?'32':'26'}px;border-radius:8px;border:${t.cor===k?'3px solid #fff':'2px solid rgba(255,255,255,.15)'};box-shadow:${t.cor===k?'0 0 0 2px '+PAUTA_CORES[k].h+', 0 0 10px '+PAUTA_CORES[k].h:'none'};background:${PAUTA_CORES[k].h};cursor:pointer;transition:all .12s"></button>`).join("")}
         </div></div>`; };
-    const secBlocks=secs.map(s=>`<div class="seclabel" style="margin:16px 0 8px;color:#eaf3ff;font-size:13.5px">📌 ${esc(s)} <span class="t-mut" style="font-weight:500;font-size:11px">(${bySec[s].length})</span></div>${bySec[s].map(topCard).join("")}`).join("");
+    const secBlocks=secs.map((s,i)=>`<div id="sec-${i}" class="seclabel" style="margin:18px 0 8px;color:#eaf3ff;font-size:13.5px;scroll-margin-top:80px;border-top:1px solid rgba(255,255,255,.07);padding-top:12px">📌 ${esc(s)} <span class="t-mut" style="font-weight:500;font-size:11px">(${bySec[s].length})</span></div>${bySec[s].map(topCard).join("")}`).join("");
+    // BI: barra empilhada por cor + progresso resolvidos + índice (hipertexto)
+    const _tb=tops.length||1;
+    const stacked=Object.keys(PAUTA_CORES).filter(k=>porCor[k]).map(k=>`<span style="width:${(porCor[k]/_tb*100).toFixed(1)}%;background:${PAUTA_CORES[k].h}" title="${PAUTA_CORES[k].lbl}: ${porCor[k]}"></span>`).join("");
+    const pctRes=tops.length?Math.round(resN/tops.length*100):0;
+    const toc=secs.length>1?secs.map((s,i)=>`<button class="minibtn" data-goto="sec-${i}">📌 ${esc(s)} <span class="t-mut">${bySec[s].length}</span></button>`).join(""):"";
+    const biBlock=tops.length?`
+      <div style="margin:8px 0 6px">
+        <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:rgba(255,255,255,.06)">${stacked}</div>
+        ${corBar?`<div style="margin-top:6px;line-height:1.8">🎨 ${corBar}</div>`:""}
+      </div>
+      <div style="margin:8px 0 12px">
+        <div class="t-mut" style="font-size:11px;margin-bottom:4px">✅ Progresso — <b style="color:#7effcf">${resN}/${tops.length}</b> resolvidos (${pctRes}%)</div>
+        <div style="height:9px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden"><div style="height:100%;width:${pctRes}%;background:linear-gradient(90deg,#00D4FF,#00E5A0)"></div></div>
+      </div>`:"";
     const ehAtual = cur.id===(doc?doc.id:null);
     c.innerHTML=`${subtabs}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0 6px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:11px;padding:11px 14px">
@@ -2099,23 +2137,25 @@ function renderTab(){
         ${kpi("g", resN, "Resolvidos", "fechados")}
         ${kpi(fwdN?"a":"", fwdN, "Próxima", "encaminhados")}
       </div>
-      ${corBar?`<div class="proxhint" style="margin:6px 0 10px;line-height:1.7">🎨 ${corBar}</div>`:""}
+      ${biBlock}
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:150px;margin:0">➕ Novo tópico</button>
         <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:150px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">📋 Carregar p/ próxima semana</button>
       </div>
+      ${toc?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${toc}</div>`:""}
       ${arqN?`<div class="t-mut" style="font-size:11px;margin-bottom:8px">🗄️ ${arqN} tópico(s) arquivado(s) — veja na aba <b>Arquivo</b>.</div>`:""}
       ${PAUTA_SEL.size?`<div class="proxhint" style="border-color:rgba(0,229,160,.45);color:#7effcf;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span><b>${PAUTA_SEL.size}</b> selecionado(s)</span><span style="display:flex;gap:6px"><button class="minibtn on" id="encSel">➡️ Encaminhar p/ próxima</button><button class="minibtn" id="limpaSel">limpar</button></span></div>`:""}
       ${tops.length?secBlocks:`<div class="empty">${arqN?"Todos os tópicos estão arquivados.":"Pauta criada."} Toque <b>➕ Novo tópico</b> pra montar.</div>`}
       <div class="proxhint" style="font-size:11.5px;margin-top:16px;line-height:1.6;border-color:rgba(0,229,160,.3);color:#c9f5e6">📋 <b>Rolar a pauta</b> (regra de mercado — agenda rolante do sales huddle / EOS): "📋 Carregar p/ próxima semana" leva os tópicos <b>em aberto</b> pra semana seguinte automaticamente; os <b>resolvidos</b> ficam pra trás. Assim os temas quentes nunca caem no esquecimento — voltam toda semana até fechar.</div>`;
-    document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+    document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
     const at=document.getElementById("addTopico"); if(at) at.onclick=()=>openTopico(cur.id, null);
     const rb=document.getElementById("rolarBtn"); if(rb) rb.onclick=()=>rolarPauta(cur.id);
     document.querySelectorAll("#content [data-editpauta]").forEach(el=>el.onclick=()=>openPautaHead(el.dataset.editpauta));
     document.querySelectorAll("#content [data-toped]").forEach(el=>el.onclick=()=>openTopico(cur.id, el.dataset.toped));
     document.querySelectorAll("#content [data-corpick]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const box=document.querySelector(`[data-corpickfor="${el.dataset.corpick}"]`); if(box) box.style.display=box.style.display==="none"?"flex":"none"; });
     document.querySelectorAll("#content [data-setcor]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); const [tid,cor]=el.dataset.setcor.split("|"); await setCorTopico(cur.id,tid,cor); });
-    document.querySelectorAll("#content [data-fwd]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await toggleFwdTopico(cur.id,el.dataset.fwd); });
+    document.querySelectorAll("#content [data-mandaprox]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await mandarProxima(cur.id,el.dataset.mandaprox); });
+    document.querySelectorAll("#content [data-goto]").forEach(el=>el.onclick=()=>{ const g=document.getElementById(el.dataset.goto); if(g) g.scrollIntoView({behavior:"smooth",block:"start"}); });
     document.querySelectorAll("#content [data-topsel]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const id=el.dataset.topsel; PAUTA_SEL.has(id)?PAUTA_SEL.delete(id):PAUTA_SEL.add(id); renderTab(); });
     document.querySelectorAll("#content [data-arq]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await arquivarTopico(cur.id, el.dataset.arq, true); });
     document.querySelectorAll("#content [data-exc]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await excluirTopico(cur.id, el.dataset.exc); });
