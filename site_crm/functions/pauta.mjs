@@ -15,14 +15,25 @@ export default async (req) => {
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   };
+  const loadExcl = async () => (await store.get("excluidos", { type: "json", consistency: "strong" })) || [];
   if (req.method === "OPTIONS") return new Response("", { headers: cors });
-  if (req.method === "GET") return Response.json({ pautas: await load() }, { headers: cors });
+  if (req.method === "GET") return Response.json({ pautas: await load(), excluidos: await loadExcl() }, { headers: cors });
 
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
     let lista = await load();
+
+    // LOG de EXCLUSÃO de tópico (governança dia/mês/ano — nada some sem rastro)
+    if (body.acao === "logexcl") {
+      const log = await loadExcl();
+      const e = body.item || {};
+      log.unshift({ id: "x" + Date.now(), titulo: String(e.titulo || "").slice(0, 200), sec: String(e.sec || "").slice(0, 80),
+        pauta: String(e.pauta || "").slice(0, 10), por: String(e.por || "equipe").slice(0, 40), motivo: String(e.motivo || "").slice(0, 300), ts: Date.now() });
+      await store.setJSON("excluidos", log.slice(0, 2000));
+      return Response.json({ ok: true, excluidos: await loadExcl() }, { headers: cors });
+    }
 
     if (body.acao === "remove") {
       lista = lista.filter((x) => x.id !== body.id);
@@ -43,6 +54,9 @@ export default async (req) => {
       decisao: String(t.decisao || "").slice(0, 1000),
       fwd: !!t.fwd,                                    // marcado p/ encaminhar à próxima
       de: String(t.de || "").slice(0, 20),            // "encaminhado da pauta DD/MM"
+      arq: !!t.arq,                                    // ARQUIVADO (sai da pauta ativa, fica no acervo, reversível)
+      arq_ts: +t.arq_ts || 0,
+      arq_por: String(t.arq_por || "").slice(0, 40),
       ts: +t.ts || Date.now(),
     });
     const clean = {

@@ -315,13 +315,14 @@ async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"P
 
 /* ---- PAUTA de reunião semanal (Netlify Function + Blobs) ---- */
 const PAUTA_API="/api/crm-pauta";
-let PAUTAS=[];
+let PAUTAS=[], PAUTA_EXCL=[];
 const PAUTA_CORES={vermelho:{h:"#FF2D55",lbl:"Urgente"},laranja:{h:"#FF8A00",lbl:"Atenção"},amarelo:{h:"#FFD000",lbl:"Acompanhar"},verde:{h:"#00E5A0",lbl:"Ganho/OK"},azul:{h:"#00D4FF",lbl:"Estratégia"},roxo:{h:"#8A7DFF",lbl:"Ideia"},rosa:{h:"#FF6FB5",lbl:"Cliente"},cinza:{h:"#8aa2bd",lbl:"Info"}};
-function syncPautas(l){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } }
-async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok) syncPautas((await r.json()).pautas); }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
+function syncPautas(l, ex){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } if(Array.isArray(ex)) PAUTA_EXCL=ex; }
+async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
 async function savePautaDoc(doc){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:doc,senha:window.__pwd})});
-  if(r.ok){ syncPautas((await r.json()).pautas); return true; } if(r.status===401) alert("Sessão sem permissão."); }catch(e){ alert("Falha ao salvar a pauta (sem internet?)."); } return false; }
-async function removePautaDoc(id){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPautas((await r.json()).pautas); return true; } }catch(e){} return false; }
+  if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); return true; } if(r.status===401) alert("Sessão sem permissão."); }catch(e){ alert("Falha ao salvar a pauta (sem internet?)."); } return false; }
+async function removePautaDoc(id){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); return true; } }catch(e){} return false; }
+async function logExclTopico(item){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"logexcl",item,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); if(Array.isArray(j.excluidos)) PAUTA_EXCL=j.excluidos; return true; } }catch(e){} return false; }
 function pautaAtual(){ return PAUTAS.length?PAUTAS[0]:null; }   // mais recente (lista já vem ordenada por data desc)
 
 /* ---- histórico de EXCLUSÕES (auditoria — nada some sem rastro) ---- */
@@ -1526,15 +1527,33 @@ function openExames(cod, nome){
 }
 function closeModal(){ document.getElementById("modal").style.display="none"; }
 
+/* 🔄 ATUALIZAR: limpa cache/service worker e recarrega buscando a versão nova (resolve "não apareceu a atualização") */
+async function forceRefresh(){
+  try{ const b=document.getElementById("refreshBtn"); if(b) b.textContent="🔄 atualizando…"; }catch(e){}
+  try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+  try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } }catch(e){}
+  location.replace(location.origin + location.pathname + "?r=" + Date.now() + location.hash);
+}
+
 /* ===== PAUTA de reunião semanal ===== */
 function _pautaById(id){ return PAUTAS.find(p=>p.id===id); }
 function proxSexta(base){ const d=base?new Date(base+"T00:00:00"):new Date(); const add=((5-d.getDay())+7)%7||7; d.setDate(d.getDate()+add); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
-async function novaPauta(){
+function novaPauta(){
   const atual=pautaAtual();
   const sug = atual? proxSexta(atual.data) : hojeISO();
-  const data=(prompt("Data da nova pauta (AAAA-MM-DD):", sug)||"").trim(); if(!data) return;
-  const doc={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
-  if(await savePautaDoc(doc)){ pautaView="atual"; pautaHistId=null; PAUTA_SEL.clear(); renderTab(); }
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div class="m-cli">🗓️ Nova pauta</div><button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">📅 Dia da reunião</div><input id="npData" type="date" class="m-date" style="width:100%" value="${sug}">
+    <div class="m-lbl">Título</div><input id="npTit" class="m-date" style="width:100%" value="Pauta Reunião Semanal">
+    <button class="m-save" id="npSave">Criar pauta</button>`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("npSave").onclick=async()=>{
+    const data=document.getElementById("npData").value; if(!data){ alert("Escolha o dia."); return; }
+    if(PAUTAS.find(p=>p.data===data)){ if(!confirm("Já existe uma pauta nesse dia. Criar outra assim mesmo?")) return; }
+    const doc={id:"p"+Date.now(), data, titulo:(document.getElementById("npTit").value||"Pauta Reunião Semanal").trim(), status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
+    if(await savePautaDoc(doc)){ closeModal(); pautaView="atual"; pautaHistId=doc.id; PAUTA_SEL.clear(); renderTab(); }
+  };
 }
 function openPautaHead(id){
   const p=_pautaById(id); if(!p) return;
@@ -1603,6 +1622,35 @@ async function encaminharSelecionados(pautaId){
   sel.forEach(t=>{ prox.topicos.push({...t, id:"t"+Date.now()+Math.random().toString(36).slice(2,6), status:"aberto", fwd:false, de:deLbl, ts:Date.now()}); t.fwd=true; });
   const okP=await savePautaDoc(prox); const okA=await savePautaDoc(p);
   if(okP&&okA){ PAUTA_SEL.clear(); alert(`✅ ${sel.length} tópico(s) encaminhado(s) pra ${fmtDataBR(prox.data)}.`); renderTab(); }
+}
+function fmtDataHora(ts){ try{ const d=new Date(ts); const p=n=>String(n).padStart(2,"0"); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }catch(e){ return "—"; } }
+async function arquivarTopico(pautaId, tid, arq){
+  const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return;
+  if(arq && !confirm(`Arquivar "${t.titulo}"? (sai da pauta ativa, fica no Arquivo — dá pra restaurar)`)) return;
+  t.arq=!!arq; t.arq_ts=arq?Date.now():0; t.arq_por=arq?(meuRep()||"equipe"):"";
+  if(await savePautaDoc(p)) renderTab();
+}
+async function excluirTopico(pautaId, tid){
+  const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return;
+  if(!confirm(`Excluir de vez "${t.titulo}"? (fica registrado no histórico de exclusões — governança)`)) return;
+  const motivo=(prompt("Motivo da exclusão (fica no registro):","")||"").trim();
+  await logExclTopico({titulo:t.titulo, sec:t.sec, pauta:p.data, por:meuRep()||"equipe", motivo});
+  p.topicos=(p.topicos||[]).filter(x=>x.id!==tid); PAUTA_SEL.delete(tid);
+  if(await savePautaDoc(p)) renderTab();
+}
+async function rolarPauta(pautaId){
+  const p=_pautaById(pautaId); if(!p) return;
+  const abertos=(p.topicos||[]).filter(t=>!t.arq && t.status!=="resolvido");
+  if(!abertos.length){ alert("Não há tópicos em aberto pra rolar (os resolvidos ficam pra trás)."); return; }
+  let prox=PAUTAS.filter(x=>x.data>p.data).sort((a,b)=>a.data<b.data?-1:1)[0];
+  const data=prox?prox.data:proxSexta(p.data);
+  if(!confirm(`Carregar ${abertos.length} tópico(s) EM ABERTO pra a pauta de ${fmtDataBR(data)}? (os resolvidos ficam nesta semana)`)) return;
+  if(!prox) prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
+  const deLbl=fmtDataBR(p.data);
+  const jaLa=new Set((prox.topicos||[]).map(t=>(t.titulo||"").toLowerCase()));
+  let n=0; abertos.forEach(t=>{ if(jaLa.has((t.titulo||"").toLowerCase())) return; prox.topicos.push({...t, id:"t"+Date.now()+Math.random().toString(36).slice(2,6), fwd:false, de:deLbl, arq:false, arq_ts:0, arq_por:"", ts:Date.now()}); n++; });
+  const okP=await savePautaDoc(prox); const okA=await savePautaDoc(p);
+  if(okP&&okA){ alert(`📋 ${n} tópico(s) em aberto carregados pra ${fmtDataBR(prox.data)}. Os resolvidos ficaram em ${fmtDataBR(p.data)}.`); pautaHistId=prox.id; pautaView="atual"; renderTab(); }
 }
 async function submitReg(){
   const por=quem(); if(por===null) return;
@@ -1950,89 +1998,128 @@ function renderTab(){
   }
 
   if(ACTIVE==="pauta"){
-    const hist=PAUTAS.slice();
-    const doc = pautaView==="historico" ? (PAUTAS.find(p=>p.id===pautaHistId)||pautaAtual()) : pautaAtual();
     const STA={aberto:{lbl:"Aberto",c:"#9fe6ff"},andamento:{lbl:"Em andamento",c:"#FFD000"},resolvido:{lbl:"Resolvido",c:"#00E5A0"},decisao:{lbl:"Decisão",c:"#8A7DFF"}};
-    const subtabs=`<div class="subtabs"><button class="subtab ${pautaView==='atual'?'on':''}" data-pav="atual">🗓️ Pauta atual</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">🗂️ Histórico${hist.length?` (${hist.length})`:''}</button></div>`;
-    if(pautaView==="historico" && !pautaHistId){
+    const MESN=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+    const mesAnoISO=iso=>{ const p=(iso||"").split("-"); return p.length>=2?`${MESN[(+p[1])-1]||"?"}/${p[0]}`:"—"; };
+    const mesAnoTs=ts=>{ const d=new Date(ts||Date.now()); return `${MESN[d.getMonth()]}/${d.getFullYear()}`; };
+    const doc=pautaAtual();
+    const subtabs=`<div class="subtabs"><button class="subtab ${pautaView==='atual'?'on':''}" data-pav="atual">🗓️ Pauta atual</button><button class="subtab ${pautaView==='arquivados'?'on':''}" data-pav="arquivados">🗄️ Arquivo</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">📅 Calendário${PAUTAS.length?` (${PAUTAS.length})`:''}</button></div>`;
+
+    // ===== CALENDÁRIO / HISTÓRICO (por mês/ano, cada pauta = 1 dia) =====
+    if(pautaView==="historico"){
+      if(pautaHistId){ /* abre uma pauta antiga em modo leitura → cai no render normal abaixo trocando doc */ }
+      const grupos={}; PAUTAS.forEach(p=>{ const k=mesAnoISO(p.data); (grupos[k]=grupos[k]||[]).push(p); });
+      const chavesMes=Object.keys(grupos);
       c.innerHTML=`${subtabs}
-        <div class="t-mut" style="font-size:12.5px;margin:8px 0 12px;text-align:center;line-height:1.5">Toda pauta fica registrada aqui pra sempre. Toque numa semana pra abrir.</div>
-        ${hist.length?hist.map(p=>{ const nc={}; (p.topicos||[]).forEach(t=>nc[t.cor]=(nc[t.cor]||0)+1);
-          const chips=Object.entries(nc).map(([k,n])=>`<span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${(PAUTA_CORES[k]||PAUTA_CORES.cinza).h};margin-right:2px" title="${(PAUTA_CORES[k]||{}).lbl||''}"></span>`).join("");
-          return `<div class="crow" data-histpauta="${esc(p.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">🗓️</div>
-            <div style="flex:1"><div class="nm">${esc(p.titulo||"Pauta")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${esc(fmtDataBR(p.data))}</span></div>
-              <div class="ci">${(p.topicos||[]).length} tópico(s) ${chips} ${(p.topicos||[]).filter(t=>t.fwd).length?`· ➡️ ${(p.topicos||[]).filter(t=>t.fwd).length} encaminhado(s)`:""}</div></div>
-            <div class="mid"></div></div>`; }).join(""):`<div class="empty">Ainda sem pautas. Volte na aba atual e crie a primeira.</div>`}`;
+        <div style="display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap">
+          <button class="checkinbtn" id="novaPautaBtn" type="button" style="flex:1;min-width:150px;margin:0">🗓️ Nova pauta (escolher dia)</button>
+        </div>
+        <div class="t-mut" style="font-size:12px;margin-bottom:10px;text-align:center">📅 Toda pauta é de um <b>dia</b>. Organizadas por mês/ano — toque numa data pra abrir.</div>
+        ${PAUTAS.length?chavesMes.map(mk=>`<div class="seclabel" style="margin:12px 0 6px;text-transform:uppercase;letter-spacing:.4px">${mk}</div>
+          ${grupos[mk].map(p=>{ const ativos=(p.topicos||[]).filter(t=>!t.arq); const nc={}; ativos.forEach(t=>nc[t.cor]=(nc[t.cor]||0)+1);
+            const chips=Object.entries(nc).map(([k,n])=>`<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${(PAUTA_CORES[k]||PAUTA_CORES.cinza).h};margin-right:2px" title="${(PAUTA_CORES[k]||{}).lbl||''} ${n}"></span>`).join("");
+            return `<div data-abrepauta="${esc(p.id)}" style="cursor:pointer;display:flex;align-items:center;gap:11px;background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.18);border-radius:9px;padding:10px 12px;margin-bottom:7px">
+              <div style="text-align:center;min-width:44px"><div style="font-size:20px;font-weight:900;color:#00D4FF;line-height:1">${(p.data||"").slice(8,10)}</div><div class="t-mut" style="font-size:9.5px">${esc(fmtDataBR(p.data).split(" ")[0])}</div></div>
+              <div style="flex:1;min-width:0"><div class="nm">${esc(p.titulo||"Pauta")}</div><div class="ci">${ativos.length} tópico(s) ${chips}${(p.topicos||[]).filter(t=>t.arq).length?` · 🗄️ ${(p.topicos||[]).filter(t=>t.arq).length}`:""}</div></div>
+              <div style="color:var(--mut)">›</div></div>`; }).join("")}`).join(""):`<div class="empty">Ainda sem pautas. Crie a primeira acima.</div>`}`;
       document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
-      document.querySelectorAll("#content [data-histpauta]").forEach(el=>el.onclick=()=>{ pautaHistId=el.dataset.histpauta; renderTab(); });
+      const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
+      document.querySelectorAll("#content [data-abrepauta]").forEach(el=>el.onclick=()=>{ pautaHistId=el.dataset.abrepauta; pautaView="atual"; renderTab(); });
       return;
     }
-    if(!doc){
+
+    // ===== ARQUIVO (tópicos arquivados + excluídos, com governança dia/mês/ano) =====
+    if(pautaView==="arquivados"){
+      const arqs=[]; PAUTAS.forEach(p=>(p.topicos||[]).filter(t=>t.arq).forEach(t=>arqs.push({t,p})));
+      arqs.sort((a,b)=>(b.t.arq_ts||0)-(a.t.arq_ts||0));
+      const gArq={}; arqs.forEach(o=>{ const k=mesAnoTs(o.t.arq_ts); (gArq[k]=gArq[k]||[]).push(o); });
+      const gExc={}; (PAUTA_EXCL||[]).forEach(e=>{ const k=mesAnoTs(e.ts); (gExc[k]=gExc[k]||[]).push(e); });
       c.innerHTML=`${subtabs}
-        <button class="checkinbtn" id="novaPautaBtn" type="button" style="margin:10px 0">🗓️ Criar a 1ª pauta</button>
-        <div class="empty">Nenhuma pauta ainda. Toque acima pra criar a pauta da semana — depois é só adicionar os tópicos (cada um com sua cor).</div>`;
+        <div class="t-mut" style="font-size:12px;margin:8px 0 10px;text-align:center;line-height:1.5">🗄️ <b>Arquivo</b> — tópicos que você tirou da pauta ativa (reversível) e o <b>histórico de exclusões</b> (governança por dia/mês/ano). Nada some sem rastro.</div>
+        <div class="seclabel" style="margin:10px 0 6px">🗄️ Arquivados ${arqs.length?`(${arqs.length})`:""}</div>
+        ${arqs.length?Object.keys(gArq).map(mk=>`<div class="t-mut" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px">${mk}</div>
+          ${gArq[mk].map(o=>`<div style="display:flex;align-items:center;gap:9px;border-left:3px solid ${(PAUTA_CORES[o.t.cor]||PAUTA_CORES.cinza).h};background:rgba(255,255,255,.03);border-radius:7px;padding:8px 10px;margin-bottom:6px">
+            <div style="flex:1;min-width:0"><div class="nm" style="font-size:13px">${esc(o.t.titulo)}</div><div class="ci t-mut" style="font-size:10.5px">${esc(o.t.sec||"")} · da pauta ${esc(fmtDataBR(o.p.data))} · arquivado ${o.t.arq_ts?esc(fmtDataHora(o.t.arq_ts)):"—"}${o.t.arq_por?` por ${esc(o.t.arq_por)}`:""}</div></div>
+            <button class="minibtn" data-desarq="${esc(o.p.id)}|${esc(o.t.id)}">↩ restaurar</button></div>`).join("")}`).join(""):`<div class="t-mut" style="font-size:12.5px;padding:4px 0 10px">Nada arquivado ainda.</div>`}
+        <div class="seclabel" style="margin:16px 0 6px;color:#ff8fa3">🗑️ Excluídos ${(PAUTA_EXCL||[]).length?`(${PAUTA_EXCL.length})`:""} <span class="t-mut" style="font-weight:500;font-size:11px">— auditoria permanente</span></div>
+        ${(PAUTA_EXCL||[]).length?Object.keys(gExc).map(mk=>`<div class="t-mut" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px">${mk}</div>
+          ${gExc[mk].map(e=>`<div style="font-size:12px;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.05)"><b>${esc(e.titulo)}</b> <span class="t-mut" style="font-size:10.5px">· ${esc(e.sec||"")} · pauta ${esc(fmtDataBR(e.pauta))} · excluído ${esc(fmtDataHora(e.ts))} por ${esc(e.por||"—")}${e.motivo?` — "${esc(e.motivo)}"`:""}</span></div>`).join("")}`).join(""):`<div class="t-mut" style="font-size:12.5px;padding:4px 0">Nada excluído.</div>`}`;
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-desarq]").forEach(el=>el.onclick=async()=>{ const [pid,tid]=el.dataset.desarq.split("|"); await arquivarTopico(pid,tid,false); });
+      return;
+    }
+
+    // ===== PAUTA ATUAL (ou uma aberta do calendário) =====
+    const cur = pautaHistId ? (PAUTAS.find(p=>p.id===pautaHistId)||doc) : doc;
+    if(!cur){
+      c.innerHTML=`${subtabs}
+        <button class="checkinbtn" id="novaPautaBtn" type="button" style="margin:10px 0">🗓️ Criar a 1ª pauta (escolher o dia)</button>
+        <div class="empty">Nenhuma pauta ainda. Toque acima pra criar a pauta do dia — depois adicione os tópicos (cada um com sua cor).</div>`;
       const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
       document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
       return;
     }
-    const tops=doc.topicos||[];
-    // BI: contagem por cor + por status + encaminhados
+    const tops=(cur.topicos||[]).filter(t=>!t.arq), arqN=(cur.topicos||[]).filter(t=>t.arq).length;
     const porCor={}; tops.forEach(t=>porCor[t.cor]=(porCor[t.cor]||0)+1);
-    const fwdN=tops.filter(t=>t.fwd).length, resN=tops.filter(t=>t.status==="resolvido").length;
+    const fwdN=tops.filter(t=>t.fwd).length, resN=tops.filter(t=>t.status==="resolvido").length, abertoN=tops.filter(t=>t.status!=="resolvido").length;
     const corBar=Object.keys(PAUTA_CORES).filter(k=>porCor[k]).map(k=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:${PAUTA_CORES[k].h};font-weight:700"><span style="width:11px;height:11px;border-radius:3px;background:${PAUTA_CORES[k].h}"></span>${PAUTA_CORES[k].lbl} ${porCor[k]}</span>`).join(" · ");
-    // agrupa por seção (mantém ordem de inserção)
     const secs=[]; const bySec={}; tops.forEach(t=>{ const s=t.sec||"Geral"; if(!bySec[s]){bySec[s]=[];secs.push(s);} bySec[s].push(t); });
     const selHas=id=>PAUTA_SEL.has(id);
     const topCard=t=>{ const col=(PAUTA_CORES[t.cor]||PAUTA_CORES.cinza), st=STA[t.status]||STA.aberto;
-      return `<div class="crow" data-toped="${esc(t.id)}" style="cursor:pointer;align-items:flex-start;border-left:4px solid ${col.h};background:${col.h}0f;border-radius:8px;margin-bottom:8px;padding:9px 11px">
-        <div style="flex:1;min-width:0">
-          <div class="nm" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima reunião">➡️</span>':''}${esc(t.titulo||"(sem título)")}
-            <span class="pr" style="background:${st.c}22;color:${st.c};font-size:10.5px">${st.lbl}</span>${t.de?`<span class="t-mut" style="font-size:10px">↩ de ${esc(t.de)}</span>`:""}</div>
-          ${t.texto?`<div class="ci" style="font-size:12.5px;white-space:pre-wrap;margin-top:3px;line-height:1.5">${linkify(esc(t.texto))}</div>`:""}
-          ${t.resp?`<div class="ci t-mut" style="font-size:11px;margin-top:3px">👤 ${esc(t.resp)}</div>`:""}
-          ${t.decisao?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#7effcf">✅ decisão: ${esc(t.decisao)}</div>`:""}
-          ${t.enr?`<div style="margin-top:6px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);border-radius:7px;padding:7px 9px;font-size:11.5px;line-height:1.55;color:#cfe8ff">💡 <b style="color:#9fe6ff">Melhor de mercado:</b> ${linkify(esc(t.enr))}</div>`:""}
-          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap" onclick="event.stopPropagation()">
-            <button class="minibtn" data-corpick="${esc(t.id)}" title="Mudar cor">🎨 cor</button>
-            <button class="minibtn ${t.fwd?'on':''}" data-fwd="${esc(t.id)}" title="Encaminhar p/ próxima reunião">➡️ ${t.fwd?'na próxima':'encaminhar'}</button>
-            <label class="minibtn ${selHas(t.id)?'on':''}" style="cursor:pointer"><input type="checkbox" data-topsel="${esc(t.id)}" ${selHas(t.id)?'checked':''} style="margin-right:4px;vertical-align:-1px">selecionar</label>
-          </div>
-          <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:6px;margin-top:6px;flex-wrap:wrap" onclick="event.stopPropagation()">
-            ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:24px;height:24px;border-radius:6px;border:2px solid ${t.cor===k?'#fff':'transparent'};background:${PAUTA_CORES[k].h};cursor:pointer"></button>`).join("")}
-          </div>
-        </div><div class="mid"></div></div>`; };
-    const secBlocks=secs.map(s=>`<div class="seclabel" style="margin:14px 0 7px;color:#eaf3ff">📌 ${esc(s)} <span class="t-mut" style="font-weight:500;font-size:11px">(${bySec[s].length})</span></div>${bySec[s].map(topCard).join("")}`).join("");
+      return `<div data-toped="${esc(t.id)}" style="cursor:pointer;border-left:4px solid ${col.h};background:${col.h}14;border-radius:9px;margin-bottom:9px;padding:11px 13px">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima reunião">➡️</span>':''}<span style="flex:1;min-width:0;font-weight:800;color:#eaf3ff;font-size:14px;line-height:1.3">${esc(t.titulo||"(sem título)")}</span><span class="pr" style="background:${st.c}22;color:${st.c};font-size:10.5px;white-space:nowrap">${st.lbl}</span></div>
+        ${t.de?`<div class="t-mut" style="font-size:10.5px;margin-top:2px">↩ veio da pauta de ${esc(t.de)}</div>`:""}
+        ${t.texto?`<div style="font-size:13px;white-space:pre-wrap;margin-top:6px;line-height:1.6;color:#cdd9e6">${linkify(esc(t.texto))}</div>`:""}
+        ${t.resp?`<div class="t-mut" style="font-size:11.5px;margin-top:5px">👤 ${esc(t.resp)}</div>`:""}
+        ${t.decisao?`<div style="font-size:12px;margin-top:5px;color:#7effcf">✅ decisão: ${esc(t.decisao)}</div>`:""}
+        ${t.enr?`<div style="margin-top:8px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.6;color:#cfe8ff">💡 <b style="color:#9fe6ff">Melhor de mercado:</b> ${linkify(esc(t.enr))}</div>`:""}
+        <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap" onclick="event.stopPropagation()">
+          <button class="minibtn" data-corpick="${esc(t.id)}" title="Mudar cor">🎨 cor</button>
+          <button class="minibtn ${t.fwd?'on':''}" data-fwd="${esc(t.id)}" title="Encaminhar p/ próxima">➡️ ${t.fwd?'na próxima':'próxima'}</button>
+          <button class="minibtn ${selHas(t.id)?'on':''}" data-topsel="${esc(t.id)}">${selHas(t.id)?'✓ selecionado':'selecionar'}</button>
+          <button class="minibtn" data-arq="${esc(t.id)}" title="Arquivar (tira da pauta, guarda no arquivo)">🗄️ arquivar</button>
+          <button class="minibtn" data-exc="${esc(t.id)}" title="Excluir (com registro)" style="border-color:rgba(255,45,85,.4);color:#ff8fa3">🗑️</button>
+        </div>
+        <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:6px;margin-top:7px;flex-wrap:wrap" onclick="event.stopPropagation()">
+          ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:26px;height:26px;border-radius:7px;border:2px solid ${t.cor===k?'#fff':'transparent'};background:${PAUTA_CORES[k].h};cursor:pointer"></button>`).join("")}
+        </div></div>`; };
+    const secBlocks=secs.map(s=>`<div class="seclabel" style="margin:16px 0 8px;color:#eaf3ff;font-size:13.5px">📌 ${esc(s)} <span class="t-mut" style="font-weight:500;font-size:11px">(${bySec[s].length})</span></div>${bySec[s].map(topCard).join("")}`).join("");
+    const ehAtual = cur.id===(doc?doc.id:null);
     c.innerHTML=`${subtabs}
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:6px 0 4px">
-        <div><div class="nm" style="font-size:17px">🗓️ ${esc(doc.titulo||"Pauta")}</div><div class="t-mut" style="font-size:12.5px">${esc(fmtDataBR(doc.data))} · ${tops.length} tópico(s)</div></div>
-        <button class="minibtn" data-editpauta="${esc(doc.id)}" title="Editar data/título">✏️ editar cabeçalho</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0 6px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:11px;padding:11px 14px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="text-align:center"><div style="font-size:26px;font-weight:900;color:#00D4FF;line-height:1">${(cur.data||"").slice(8,10)}</div><div class="t-mut" style="font-size:10px">${esc(fmtDataBR(cur.data).split(" ")[0])}</div></div>
+          <div><div class="nm" style="font-size:16px">${esc(cur.titulo||"Pauta")}</div><div class="t-mut" style="font-size:12px">${esc(fmtDataBR(cur.data))}${ehAtual?' · <span style="color:#00E5A0;font-weight:700">atual</span>':""}</div></div>
+        </div>
+        <button class="minibtn" data-editpauta="${esc(cur.id)}" title="Editar data/título">✏️ editar</button>
       </div>
       <div class="kgrid">
-        ${kpi("", tops.length, "Tópicos", "na pauta")}
-        ${kpi(fwdN?"a":"", fwdN, "Próxima reunião", "encaminhados")}
+        ${kpi("", tops.length, "Tópicos", "ativos")}
+        ${kpi(abertoN?"a":"", abertoN, "Em aberto", "pra fechar")}
         ${kpi("g", resN, "Resolvidos", "fechados")}
-        ${kpi("", secs.length, "Blocos", "seções da pauta")}
+        ${kpi(fwdN?"a":"", fwdN, "Próxima", "encaminhados")}
       </div>
       ${corBar?`<div class="proxhint" style="margin:6px 0 10px;line-height:1.7">🎨 ${corBar}</div>`:""}
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:150px;margin:0">➕ Novo tópico</button>
-        <button class="checkinbtn" id="novaPautaBtn" type="button" style="flex:1;min-width:150px;margin:0">🗓️ Nova pauta (semana)</button>
+        <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:150px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">📋 Carregar p/ próxima semana</button>
       </div>
-      ${PAUTA_SEL.size?`<div class="proxhint" style="border-color:rgba(0,229,160,.45);color:#7effcf;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span><b>${PAUTA_SEL.size}</b> tópico(s) selecionado(s)</span><span style="display:flex;gap:6px"><button class="minibtn on" id="encSel">➡️ Encaminhar p/ próxima</button><button class="minibtn" id="limpaSel">limpar</button></span></div>`:""}
-      ${tops.length?secBlocks:`<div class="empty">Pauta criada. Toque <b>➕ Novo tópico</b> e comece a montar (cada tópico com sua cor).</div>`}
-      <div class="t-mut" style="font-size:11px;margin-top:14px;line-height:1.5">💡 Toque num tópico pra editar tudo (texto, cor, status, decisão, responsável, "melhor de mercado"). Marque a cor pelo 🎨. Selecione e <b>Encaminhe</b> pra levar o tópico pra próxima reunião — o histórico guarda cada semana.</div>`;
-    // handlers
+      ${arqN?`<div class="t-mut" style="font-size:11px;margin-bottom:8px">🗄️ ${arqN} tópico(s) arquivado(s) — veja na aba <b>Arquivo</b>.</div>`:""}
+      ${PAUTA_SEL.size?`<div class="proxhint" style="border-color:rgba(0,229,160,.45);color:#7effcf;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span><b>${PAUTA_SEL.size}</b> selecionado(s)</span><span style="display:flex;gap:6px"><button class="minibtn on" id="encSel">➡️ Encaminhar p/ próxima</button><button class="minibtn" id="limpaSel">limpar</button></span></div>`:""}
+      ${tops.length?secBlocks:`<div class="empty">${arqN?"Todos os tópicos estão arquivados.":"Pauta criada."} Toque <b>➕ Novo tópico</b> pra montar.</div>`}
+      <div class="proxhint" style="font-size:11.5px;margin-top:16px;line-height:1.6;border-color:rgba(0,229,160,.3);color:#c9f5e6">📋 <b>Rolar a pauta</b> (regra de mercado — agenda rolante do sales huddle / EOS): "📋 Carregar p/ próxima semana" leva os tópicos <b>em aberto</b> pra semana seguinte automaticamente; os <b>resolvidos</b> ficam pra trás. Assim os temas quentes nunca caem no esquecimento — voltam toda semana até fechar.</div>`;
     document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
-    const at=document.getElementById("addTopico"); if(at) at.onclick=()=>openTopico(doc.id, null);
-    const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
-    const ep=document.getElementById("editpauta");
+    const at=document.getElementById("addTopico"); if(at) at.onclick=()=>openTopico(cur.id, null);
+    const rb=document.getElementById("rolarBtn"); if(rb) rb.onclick=()=>rolarPauta(cur.id);
     document.querySelectorAll("#content [data-editpauta]").forEach(el=>el.onclick=()=>openPautaHead(el.dataset.editpauta));
-    document.querySelectorAll("#content [data-toped]").forEach(el=>el.onclick=()=>openTopico(doc.id, el.dataset.toped));
+    document.querySelectorAll("#content [data-toped]").forEach(el=>el.onclick=()=>openTopico(cur.id, el.dataset.toped));
     document.querySelectorAll("#content [data-corpick]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const box=document.querySelector(`[data-corpickfor="${el.dataset.corpick}"]`); if(box) box.style.display=box.style.display==="none"?"flex":"none"; });
-    document.querySelectorAll("#content [data-setcor]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); const [tid,cor]=el.dataset.setcor.split("|"); await setCorTopico(doc.id,tid,cor); });
-    document.querySelectorAll("#content [data-fwd]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await toggleFwdTopico(doc.id,el.dataset.fwd); });
+    document.querySelectorAll("#content [data-setcor]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); const [tid,cor]=el.dataset.setcor.split("|"); await setCorTopico(cur.id,tid,cor); });
+    document.querySelectorAll("#content [data-fwd]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await toggleFwdTopico(cur.id,el.dataset.fwd); });
     document.querySelectorAll("#content [data-topsel]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const id=el.dataset.topsel; PAUTA_SEL.has(id)?PAUTA_SEL.delete(id):PAUTA_SEL.add(id); renderTab(); });
-    const es=document.getElementById("encSel"); if(es) es.onclick=()=>encaminharSelecionados(doc.id);
+    document.querySelectorAll("#content [data-arq]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await arquivarTopico(cur.id, el.dataset.arq, true); });
+    document.querySelectorAll("#content [data-exc]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await excluirTopico(cur.id, el.dataset.exc); });
+    const es=document.getElementById("encSel"); if(es) es.onclick=()=>encaminharSelecionados(cur.id);
     const ls=document.getElementById("limpaSel"); if(ls) ls.onclick=()=>{ PAUTA_SEL.clear(); renderTab(); };
     return;
   }
@@ -3108,6 +3195,7 @@ function render(D){
   footer(); renderAll();
   renderOpBtn();
   const _ob=document.getElementById("opBtn"); if(_ob) _ob.onclick=()=>openIdentidade(false);
+  const _rb=document.getElementById("refreshBtn"); if(_rb) _rb.onclick=()=>forceRefresh();
   loadOps().then(()=>{ if(!operadorAtual()) openIdentidade(true); });   // pede identidade 1x por aparelho
   if(!window.__fuwired){
     window.__fuwired = true;
