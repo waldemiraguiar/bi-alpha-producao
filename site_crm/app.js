@@ -26,6 +26,7 @@ const TABS = [
   {k:"em_alta",         ic:"▲",  nm:"Em Alta",         cls:"",         bcls:""},
   {k:"carteira",        ic:"👥", nm:"Carteira",        cls:"",         bcls:""},
   {k:"pista",           ic:"🏍️", nm:"Pista",           cls:"",         bcls:""},
+  {k:"pauta",           ic:"🗓️", nm:"Pauta",           cls:"",         bcls:""},
   {k:"clinicas",        ic:"🌂", nm:"Guarda-Chuva",    cls:"",         bcls:""},
   {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
@@ -311,6 +312,17 @@ async function saveRelato(item){
   return true;
 }
 async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncRelatos((await r.json()).relatos); } }catch(e){} }
+
+/* ---- PAUTA de reunião semanal (Netlify Function + Blobs) ---- */
+const PAUTA_API="/api/crm-pauta";
+let PAUTAS=[];
+const PAUTA_CORES={vermelho:{h:"#FF2D55",lbl:"Urgente"},laranja:{h:"#FF8A00",lbl:"Atenção"},amarelo:{h:"#FFD000",lbl:"Acompanhar"},verde:{h:"#00E5A0",lbl:"Ganho/OK"},azul:{h:"#00D4FF",lbl:"Estratégia"},roxo:{h:"#8A7DFF",lbl:"Ideia"},rosa:{h:"#FF6FB5",lbl:"Cliente"},cinza:{h:"#8aa2bd",lbl:"Info"}};
+function syncPautas(l){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } }
+async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok) syncPautas((await r.json()).pautas); }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
+async function savePautaDoc(doc){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:doc,senha:window.__pwd})});
+  if(r.ok){ syncPautas((await r.json()).pautas); return true; } if(r.status===401) alert("Sessão sem permissão."); }catch(e){ alert("Falha ao salvar a pauta (sem internet?)."); } return false; }
+async function removePautaDoc(id){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPautas((await r.json()).pautas); return true; } }catch(e){} return false; }
+function pautaAtual(){ return PAUTAS.length?PAUTAS[0]:null; }   // mais recente (lista já vem ordenada por data desc)
 
 /* ---- histórico de EXCLUSÕES (auditoria — nada some sem rastro) ---- */
 const EXCL_API="/api/crm-exclusoes";
@@ -669,6 +681,9 @@ function cancelVisita(){
 }
 
 let pistaView="feed";   // "feed" | "retornos"
+let pautaView="atual";  // "atual" | "historico"
+let pautaHistId=null;   // pauta aberta no histórico
+let PAUTA_SEL=new Set(); // tópicos marcados p/ encaminhar à próxima
 let retHoje=false;   // Retornos/rotas: ver "atividade de hoje" (o que o rep fez hoje) em vez da agenda futura
 /* ---- ☑️ SELEÇÃO EM LOTE (marcar isolado/todos + mover entre abas) ---- */
 let selMode=false; const SEL=new Set();
@@ -1510,6 +1525,85 @@ function openExames(cod, nome){
   document.getElementById("modal").style.display="flex";
 }
 function closeModal(){ document.getElementById("modal").style.display="none"; }
+
+/* ===== PAUTA de reunião semanal ===== */
+function _pautaById(id){ return PAUTAS.find(p=>p.id===id); }
+function proxSexta(base){ const d=base?new Date(base+"T00:00:00"):new Date(); const add=((5-d.getDay())+7)%7||7; d.setDate(d.getDate()+add); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+async function novaPauta(){
+  const atual=pautaAtual();
+  const sug = atual? proxSexta(atual.data) : hojeISO();
+  const data=(prompt("Data da nova pauta (AAAA-MM-DD):", sug)||"").trim(); if(!data) return;
+  const doc={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
+  if(await savePautaDoc(doc)){ pautaView="atual"; pautaHistId=null; PAUTA_SEL.clear(); renderTab(); }
+}
+function openPautaHead(id){
+  const p=_pautaById(id); if(!p) return;
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div class="m-cli">✏️ Editar cabeçalho</div><button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">Título</div><input id="phTit" class="m-date" style="width:100%" value="${esc(p.titulo||"")}">
+    <div class="m-lbl">Data</div><input id="phData" type="date" class="m-date" style="width:100%" value="${esc(p.data||"")}">
+    <button class="m-save" id="phSave">Salvar</button>
+    <button class="m-enc" id="phDel" style="border-color:var(--red);color:#ff8fa3">🗑️ Excluir esta pauta</button>`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  document.getElementById("phSave").onclick=async()=>{ p.titulo=(document.getElementById("phTit").value||"Pauta Reunião Semanal").trim(); p.data=document.getElementById("phData").value||p.data; if(await savePautaDoc(p)){ closeModal(); renderTab(); } };
+  document.getElementById("phDel").onclick=async()=>{ if(confirm("Excluir a pauta de "+fmtDataBR(p.data)+"? (fica no histórico até aqui)")){ if(await removePautaDoc(p.id)){ closeModal(); pautaHistId=null; renderTab(); } } };
+}
+function openTopico(pautaId, topId){
+  const p=_pautaById(pautaId); if(!p) return;
+  const t = topId ? (p.topicos||[]).find(x=>x.id===topId) : null;
+  const secsUsadas=[...new Set((p.topicos||[]).map(x=>x.sec).filter(Boolean))];
+  const corBtns=Object.keys(PAUTA_CORES).map(k=>`<button type="button" data-tcor="${k}" class="tcorbtn" style="width:30px;height:30px;border-radius:7px;border:2px solid ${(t?t.cor:'cinza')===k?'#fff':'transparent'};background:${PAUTA_CORES[k].h};cursor:pointer" title="${PAUTA_CORES[k].lbl}"></button>`).join("");
+  const stBtns=[["aberto","Aberto"],["andamento","Em andamento"],["resolvido","Resolvido"],["decisao","Decisão"]].map(([k,l])=>`<button type="button" class="opt ${(t?t.status:'aberto')===k?'on':''}" data-tst="${k}">${l}</button>`).join("");
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div class="m-cli">${t?"✏️ Editar tópico":"➕ Novo tópico"}</div><button class="m-x" id="mClose">✕</button></div>
+    <div class="m-lbl">Bloco / seção <span class="t-mut" style="font-weight:500">— agrupa (ex.: Estratégia comercial, Reconquistadas, Clientes)</span></div>
+    <input id="tSec" class="m-date" style="width:100%" list="secList" value="${t?esc(t.sec):''}" placeholder="Ex.: Estratégia comercial">
+    <datalist id="secList">${secsUsadas.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
+    <div class="m-lbl">Título <span style="color:var(--red)">*</span></div>
+    <input id="tTit" class="m-date" style="width:100%" value="${t?esc(t.titulo):''}" placeholder="Ex.: Mania de Bichos — atraso na liberação">
+    <div class="m-lbl" style="display:flex;align-items:center;justify-content:space-between">Texto / detalhes <button type="button" id="tMic" class="minibtn">🎤 falar</button></div>
+    <textarea id="tTxt" class="m-ta" style="min-height:80px">${t?esc(t.texto):''}</textarea>
+    <div class="m-lbl">🎨 Cor (marcação visual)</div>
+    <div id="tCorRow" style="display:flex;gap:7px;flex-wrap:wrap">${corBtns}</div>
+    <div class="m-lbl">Status</div><div class="m-opts" id="tStRow">${stBtns}</div>
+    <div class="m-lbl">Responsável</div><input id="tResp" class="m-date" style="width:100%" value="${t?esc(t.resp):''}" placeholder="Quem toca isso">
+    <div class="m-lbl">✅ Decisão / encaminhamento</div><textarea id="tDec" class="m-ta" style="min-height:44px">${t?esc(t.decisao):''}</textarea>
+    <div class="m-lbl">💡 Melhor de mercado <span class="t-mut" style="font-weight:500">— referência/benchmark pra enriquecer</span></div>
+    <textarea id="tEnr" class="m-ta" style="min-height:56px">${t?esc(t.enr):''}</textarea>
+    <button class="m-save" id="tSave">${t?"Salvar alterações":"Adicionar tópico"}</button>
+    ${t?`<button class="m-enc" id="tDel" style="border-color:var(--red);color:#ff8fa3">🗑️ Remover tópico</button>`:""}`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
+  let cor = t?t.cor:"cinza", st = t?t.status:"aberto";
+  document.querySelectorAll("#tCorRow [data-tcor]").forEach(b=>b.onclick=()=>{ cor=b.dataset.tcor; document.querySelectorAll("#tCorRow .tcorbtn").forEach(x=>x.style.border="2px solid transparent"); b.style.border="2px solid #fff"; });
+  document.querySelectorAll("#tStRow [data-tst]").forEach(b=>b.onclick=()=>{ st=b.dataset.tst; document.querySelectorAll("#tStRow .opt").forEach(x=>x.classList.remove("on")); b.classList.add("on"); });
+  // 🎤 voz no texto
+  { const mb=document.getElementById("tMic"), tta=document.getElementById("tTxt"); if(mb&&tta) mb.onclick=function(){ pistaMic(this, tta); }; }
+  document.getElementById("tSave").onclick=async()=>{
+    const tit=(document.getElementById("tTit").value||"").trim(); if(!tit){ alert("Põe um título no tópico."); return; }
+    const novo={ id:t?t.id:("t"+Date.now()+Math.random().toString(36).slice(2,6)), sec:(document.getElementById("tSec").value||"Geral").trim(), titulo:tit,
+      texto:(document.getElementById("tTxt").value||"").trim(), cor, status:st, resp:(document.getElementById("tResp").value||"").trim(),
+      decisao:(document.getElementById("tDec").value||"").trim(), enr:(document.getElementById("tEnr").value||"").trim(), fwd:t?t.fwd:false, de:t?t.de:"", ts:t?t.ts:Date.now() };
+    p.topicos = t ? (p.topicos||[]).map(x=>x.id===t.id?novo:x) : [...(p.topicos||[]), novo];
+    if(await savePautaDoc(p)){ closeModal(); renderTab(); }
+  };
+  const td=document.getElementById("tDel"); if(td) td.onclick=async()=>{ if(confirm("Remover este tópico?")){ p.topicos=(p.topicos||[]).filter(x=>x.id!==t.id); PAUTA_SEL.delete(t.id); if(await savePautaDoc(p)){ closeModal(); renderTab(); } } };
+}
+async function setCorTopico(pautaId, tid, cor){ const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return; t.cor=cor; if(await savePautaDoc(p)) renderTab(); }
+async function toggleFwdTopico(pautaId, tid){ const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return; t.fwd=!t.fwd; if(await savePautaDoc(p)) renderTab(); }
+async function encaminharSelecionados(pautaId){
+  const p=_pautaById(pautaId); if(!p) return;
+  const sel=(p.topicos||[]).filter(t=>PAUTA_SEL.has(t.id)); if(!sel.length){ alert("Selecione tópicos primeiro."); return; }
+  // acha a PRÓXIMA pauta (data > atual); se não tiver, cria
+  let prox=PAUTAS.filter(x=>x.data>p.data).sort((a,b)=>a.data<b.data?-1:1)[0];
+  if(!prox){ const data=proxSexta(p.data); if(!confirm(`Criar a pauta de ${fmtDataBR(data)} e levar ${sel.length} tópico(s) pra lá?`)) return;
+    prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()}; }
+  const deLbl=fmtDataBR(p.data);
+  sel.forEach(t=>{ prox.topicos.push({...t, id:"t"+Date.now()+Math.random().toString(36).slice(2,6), status:"aberto", fwd:false, de:deLbl, ts:Date.now()}); t.fwd=true; });
+  const okP=await savePautaDoc(prox); const okA=await savePautaDoc(p);
+  if(okP&&okA){ PAUTA_SEL.clear(); alert(`✅ ${sel.length} tópico(s) encaminhado(s) pra ${fmtDataBR(prox.data)}.`); renderTab(); }
+}
 async function submitReg(){
   const por=quem(); if(por===null) return;
   const nota=document.getElementById("mNota").value.trim(), next=document.getElementById("mNext").value;
@@ -1604,6 +1698,7 @@ function drawCharts(s){
 
 /* ---------- helpers ---------- */
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function linkify(txt){ return String(txt||"").replace(/(https?:\/\/[^\s<]+)/g, u=>`<a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#9fe6ff">${u.length>42?u.slice(0,42)+"…":u}</a>`); }
 
 function spark(arr, color){
   if(!arr || !arr.length) return "";
@@ -1851,6 +1946,94 @@ function renderTab(){
       ${body}`;
     const ec=document.getElementById("histCSV"); if(ec) ec.onclick=exportHistCSV;
     const ep=document.getElementById("histPDF"); if(ep) ep.onclick=()=>window.print();
+    return;
+  }
+
+  if(ACTIVE==="pauta"){
+    const hist=PAUTAS.slice();
+    const doc = pautaView==="historico" ? (PAUTAS.find(p=>p.id===pautaHistId)||pautaAtual()) : pautaAtual();
+    const STA={aberto:{lbl:"Aberto",c:"#9fe6ff"},andamento:{lbl:"Em andamento",c:"#FFD000"},resolvido:{lbl:"Resolvido",c:"#00E5A0"},decisao:{lbl:"Decisão",c:"#8A7DFF"}};
+    const subtabs=`<div class="subtabs"><button class="subtab ${pautaView==='atual'?'on':''}" data-pav="atual">🗓️ Pauta atual</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">🗂️ Histórico${hist.length?` (${hist.length})`:''}</button></div>`;
+    if(pautaView==="historico" && !pautaHistId){
+      c.innerHTML=`${subtabs}
+        <div class="t-mut" style="font-size:12.5px;margin:8px 0 12px;text-align:center;line-height:1.5">Toda pauta fica registrada aqui pra sempre. Toque numa semana pra abrir.</div>
+        ${hist.length?hist.map(p=>{ const nc={}; (p.topicos||[]).forEach(t=>nc[t.cor]=(nc[t.cor]||0)+1);
+          const chips=Object.entries(nc).map(([k,n])=>`<span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${(PAUTA_CORES[k]||PAUTA_CORES.cinza).h};margin-right:2px" title="${(PAUTA_CORES[k]||{}).lbl||''}"></span>`).join("");
+          return `<div class="crow" data-histpauta="${esc(p.id)}" style="cursor:pointer"><div class="rk" style="color:#00D4FF">🗓️</div>
+            <div style="flex:1"><div class="nm">${esc(p.titulo||"Pauta")} <span class="t-mut" style="font-weight:500;font-size:12px">· ${esc(fmtDataBR(p.data))}</span></div>
+              <div class="ci">${(p.topicos||[]).length} tópico(s) ${chips} ${(p.topicos||[]).filter(t=>t.fwd).length?`· ➡️ ${(p.topicos||[]).filter(t=>t.fwd).length} encaminhado(s)`:""}</div></div>
+            <div class="mid"></div></div>`; }).join(""):`<div class="empty">Ainda sem pautas. Volte na aba atual e crie a primeira.</div>`}`;
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-histpauta]").forEach(el=>el.onclick=()=>{ pautaHistId=el.dataset.histpauta; renderTab(); });
+      return;
+    }
+    if(!doc){
+      c.innerHTML=`${subtabs}
+        <button class="checkinbtn" id="novaPautaBtn" type="button" style="margin:10px 0">🗓️ Criar a 1ª pauta</button>
+        <div class="empty">Nenhuma pauta ainda. Toque acima pra criar a pauta da semana — depois é só adicionar os tópicos (cada um com sua cor).</div>`;
+      const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      return;
+    }
+    const tops=doc.topicos||[];
+    // BI: contagem por cor + por status + encaminhados
+    const porCor={}; tops.forEach(t=>porCor[t.cor]=(porCor[t.cor]||0)+1);
+    const fwdN=tops.filter(t=>t.fwd).length, resN=tops.filter(t=>t.status==="resolvido").length;
+    const corBar=Object.keys(PAUTA_CORES).filter(k=>porCor[k]).map(k=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:${PAUTA_CORES[k].h};font-weight:700"><span style="width:11px;height:11px;border-radius:3px;background:${PAUTA_CORES[k].h}"></span>${PAUTA_CORES[k].lbl} ${porCor[k]}</span>`).join(" · ");
+    // agrupa por seção (mantém ordem de inserção)
+    const secs=[]; const bySec={}; tops.forEach(t=>{ const s=t.sec||"Geral"; if(!bySec[s]){bySec[s]=[];secs.push(s);} bySec[s].push(t); });
+    const selHas=id=>PAUTA_SEL.has(id);
+    const topCard=t=>{ const col=(PAUTA_CORES[t.cor]||PAUTA_CORES.cinza), st=STA[t.status]||STA.aberto;
+      return `<div class="crow" data-toped="${esc(t.id)}" style="cursor:pointer;align-items:flex-start;border-left:4px solid ${col.h};background:${col.h}0f;border-radius:8px;margin-bottom:8px;padding:9px 11px">
+        <div style="flex:1;min-width:0">
+          <div class="nm" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima reunião">➡️</span>':''}${esc(t.titulo||"(sem título)")}
+            <span class="pr" style="background:${st.c}22;color:${st.c};font-size:10.5px">${st.lbl}</span>${t.de?`<span class="t-mut" style="font-size:10px">↩ de ${esc(t.de)}</span>`:""}</div>
+          ${t.texto?`<div class="ci" style="font-size:12.5px;white-space:pre-wrap;margin-top:3px;line-height:1.5">${linkify(esc(t.texto))}</div>`:""}
+          ${t.resp?`<div class="ci t-mut" style="font-size:11px;margin-top:3px">👤 ${esc(t.resp)}</div>`:""}
+          ${t.decisao?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#7effcf">✅ decisão: ${esc(t.decisao)}</div>`:""}
+          ${t.enr?`<div style="margin-top:6px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);border-radius:7px;padding:7px 9px;font-size:11.5px;line-height:1.55;color:#cfe8ff">💡 <b style="color:#9fe6ff">Melhor de mercado:</b> ${linkify(esc(t.enr))}</div>`:""}
+          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap" onclick="event.stopPropagation()">
+            <button class="minibtn" data-corpick="${esc(t.id)}" title="Mudar cor">🎨 cor</button>
+            <button class="minibtn ${t.fwd?'on':''}" data-fwd="${esc(t.id)}" title="Encaminhar p/ próxima reunião">➡️ ${t.fwd?'na próxima':'encaminhar'}</button>
+            <label class="minibtn ${selHas(t.id)?'on':''}" style="cursor:pointer"><input type="checkbox" data-topsel="${esc(t.id)}" ${selHas(t.id)?'checked':''} style="margin-right:4px;vertical-align:-1px">selecionar</label>
+          </div>
+          <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:6px;margin-top:6px;flex-wrap:wrap" onclick="event.stopPropagation()">
+            ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:24px;height:24px;border-radius:6px;border:2px solid ${t.cor===k?'#fff':'transparent'};background:${PAUTA_CORES[k].h};cursor:pointer"></button>`).join("")}
+          </div>
+        </div><div class="mid"></div></div>`; };
+    const secBlocks=secs.map(s=>`<div class="seclabel" style="margin:14px 0 7px;color:#eaf3ff">📌 ${esc(s)} <span class="t-mut" style="font-weight:500;font-size:11px">(${bySec[s].length})</span></div>${bySec[s].map(topCard).join("")}`).join("");
+    c.innerHTML=`${subtabs}
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:6px 0 4px">
+        <div><div class="nm" style="font-size:17px">🗓️ ${esc(doc.titulo||"Pauta")}</div><div class="t-mut" style="font-size:12.5px">${esc(fmtDataBR(doc.data))} · ${tops.length} tópico(s)</div></div>
+        <button class="minibtn" data-editpauta="${esc(doc.id)}" title="Editar data/título">✏️ editar cabeçalho</button>
+      </div>
+      <div class="kgrid">
+        ${kpi("", tops.length, "Tópicos", "na pauta")}
+        ${kpi(fwdN?"a":"", fwdN, "Próxima reunião", "encaminhados")}
+        ${kpi("g", resN, "Resolvidos", "fechados")}
+        ${kpi("", secs.length, "Blocos", "seções da pauta")}
+      </div>
+      ${corBar?`<div class="proxhint" style="margin:6px 0 10px;line-height:1.7">🎨 ${corBar}</div>`:""}
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:150px;margin:0">➕ Novo tópico</button>
+        <button class="checkinbtn" id="novaPautaBtn" type="button" style="flex:1;min-width:150px;margin:0">🗓️ Nova pauta (semana)</button>
+      </div>
+      ${PAUTA_SEL.size?`<div class="proxhint" style="border-color:rgba(0,229,160,.45);color:#7effcf;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span><b>${PAUTA_SEL.size}</b> tópico(s) selecionado(s)</span><span style="display:flex;gap:6px"><button class="minibtn on" id="encSel">➡️ Encaminhar p/ próxima</button><button class="minibtn" id="limpaSel">limpar</button></span></div>`:""}
+      ${tops.length?secBlocks:`<div class="empty">Pauta criada. Toque <b>➕ Novo tópico</b> e comece a montar (cada tópico com sua cor).</div>`}
+      <div class="t-mut" style="font-size:11px;margin-top:14px;line-height:1.5">💡 Toque num tópico pra editar tudo (texto, cor, status, decisão, responsável, "melhor de mercado"). Marque a cor pelo 🎨. Selecione e <b>Encaminhe</b> pra levar o tópico pra próxima reunião — o histórico guarda cada semana.</div>`;
+    // handlers
+    document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+    const at=document.getElementById("addTopico"); if(at) at.onclick=()=>openTopico(doc.id, null);
+    const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
+    const ep=document.getElementById("editpauta");
+    document.querySelectorAll("#content [data-editpauta]").forEach(el=>el.onclick=()=>openPautaHead(el.dataset.editpauta));
+    document.querySelectorAll("#content [data-toped]").forEach(el=>el.onclick=()=>openTopico(doc.id, el.dataset.toped));
+    document.querySelectorAll("#content [data-corpick]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const box=document.querySelector(`[data-corpickfor="${el.dataset.corpick}"]`); if(box) box.style.display=box.style.display==="none"?"flex":"none"; });
+    document.querySelectorAll("#content [data-setcor]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); const [tid,cor]=el.dataset.setcor.split("|"); await setCorTopico(doc.id,tid,cor); });
+    document.querySelectorAll("#content [data-fwd]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await toggleFwdTopico(doc.id,el.dataset.fwd); });
+    document.querySelectorAll("#content [data-topsel]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const id=el.dataset.topsel; PAUTA_SEL.has(id)?PAUTA_SEL.delete(id):PAUTA_SEL.add(id); renderTab(); });
+    const es=document.getElementById("encSel"); if(es) es.onclick=()=>encaminharSelecionados(doc.id);
+    const ls=document.getElementById("limpaSel"); if(ls) ls.onclick=()=>{ PAUTA_SEL.clear(); renderTab(); };
     return;
   }
 
@@ -2935,11 +3118,11 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet(), loadAAA()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
-      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart(), loadDet(), loadAAA(), loadRel()]);
+      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart(), loadDet(), loadAAA(), loadRel(), loadPautas()]);
       if(ehDiretoria() && dirCodeCache()){ await loadClinRS(); await decDirRS(dirCodeCache()); }   // R$/conquistas frescos p/ diretoria
       if(a!==sig()) renderTab(); }, 45000);
   }
