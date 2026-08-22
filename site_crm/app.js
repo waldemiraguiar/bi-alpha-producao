@@ -316,7 +316,7 @@ async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"P
 /* ---- PAUTA de reunião semanal (Netlify Function + Blobs) ---- */
 const PAUTA_API="/api/crm-pauta";
 let PAUTAS=[], PAUTA_EXCL=[];
-const PAUTA_CORES={vermelho:{h:"#FF2D55",lbl:"Urgente"},laranja:{h:"#FF8A00",lbl:"Atenção"},amarelo:{h:"#FFD000",lbl:"Acompanhar"},verde:{h:"#00E5A0",lbl:"Ganho/OK"},azul:{h:"#00D4FF",lbl:"Estratégia"},roxo:{h:"#9333FF",lbl:"Pet Love"},rosa:{h:"#FF1E93",lbl:"Pink"},cinza:{h:"#8aa2bd",lbl:"Info"}};
+const PAUTA_CORES={vermelho:{h:"#FF0033",lbl:"Urgente"},laranja:{h:"#FF7A00",lbl:"Atenção"},amarelo:{h:"#FFC400",lbl:"Acompanhar"},verde:{h:"#00FF9C",lbl:"Ganho/OK"},azul:{h:"#00CCFF",lbl:"Estratégia"},roxo:{h:"#A100FF",lbl:"Pet Love"},rosa:{h:"#FF0080",lbl:"Pink"},cinza:{h:"#9fb2cc",lbl:"Info"}};
 function syncPautas(l, ex){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } if(Array.isArray(ex)) PAUTA_EXCL=ex; }
 async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
 async function savePautaDoc(doc){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:doc,senha:window.__pwd})});
@@ -2137,11 +2137,11 @@ function renderTab(){
     const secs=[]; const bySec={}; tops.forEach(t=>{ const s=t.sec||"Geral"; if(!bySec[s]){bySec[s]=[];secs.push(s);} bySec[s].push(t); });
     const selHas=id=>PAUTA_SEL.has(id);
     const topCard=t=>{ const col=(PAUTA_CORES[t.cor]||PAUTA_CORES.cinza), st=STA[t.status]||STA.aberto;
-      return `<div class="topcard" data-toped="${esc(t.id)}" style="cursor:pointer;position:relative;border-radius:12px;margin-bottom:11px;padding:13px 15px 12px;background:linear-gradient(120deg, ${col.h}4a, ${col.h}17 46%, rgba(11,20,38,.5));box-shadow:inset 6px 0 0 ${col.h}, inset 0 0 0 1px ${col.h}55, 0 3px 12px -6px ${col.h};transition:transform .13s ease">
+      return `<div class="topcard" data-toped="${esc(t.id)}" style="cursor:pointer;position:relative;border-radius:12px;margin-bottom:11px;padding:13px 15px 12px;background:linear-gradient(110deg, ${col.h}cc 0%, ${col.h}70 40%, rgba(9,16,30,.92) 100%);box-shadow:inset 9px 0 0 ${col.h}, inset 0 0 0 1px ${col.h}99, 0 4px 18px -6px ${col.h};transition:transform .13s ease">
         <div style="display:flex;align-items:flex-start;gap:10px">
           <span style="width:12px;height:12px;border-radius:50%;background:${col.h};box-shadow:0 0 9px ${col.h};margin-top:4px;flex-shrink:0"></span>
           <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima">➡️</span>':''}<span style="flex:1;min-width:0;font-weight:800;color:#f4f8ff;font-size:14.5px;line-height:1.3;letter-spacing:.1px">${esc(t.titulo||"(sem título)")}</span><span style="background:${st.c}26;color:${st.c};font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;border-radius:20px;padding:3px 9px">${st.lbl}</span></div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima">➡️</span>':''}<span style="flex:1;min-width:0;font-weight:800;color:#ffffff;font-size:14.5px;line-height:1.3;letter-spacing:.1px;text-shadow:0 1px 4px rgba(0,0,0,.75)">${esc(t.titulo||"(sem título)")}</span><span style="background:${st.c}26;color:${st.c};font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;border-radius:20px;padding:3px 9px">${st.lbl}</span></div>
             ${t.de?`<div class="t-mut" style="font-size:10.5px;margin-top:3px">↩ da pauta de ${esc(t.de)}</div>`:""}
             ${t.texto?`<div style="font-size:13px;white-space:pre-wrap;margin-top:7px;line-height:1.62;color:#d6e1ef">${linkify(esc(t.texto))}</div>`:""}
             ${t.resp?`<div style="margin-top:7px"><span style="font-size:11px;color:#9fe6ff;background:rgba(0,212,255,.14);border-radius:20px;padding:2px 10px;font-weight:600">👤 ${esc(t.resp)}</span></div>`:""}
@@ -2161,9 +2161,9 @@ function renderTab(){
         </div></div>`; };
     const secColor=s=>{ const cnt={}; bySec[s].forEach(t=>cnt[t.cor]=(cnt[t.cor]||0)+1); const k=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||"cinza"; return (PAUTA_CORES[k]||PAUTA_CORES.cinza).h; };
     const secBlocks=secs.map((s,i)=>{ const sh=secColor(s), emo=(s.match(/^\S+/)||["📌"])[0], nome=s.replace(/^\S+\s/,"")||s, rs=bySec[s].filter(t=>t.status==="resolvido").length;
-      return `<div id="sec-${i}" style="scroll-margin-top:80px;margin:24px 0 11px;display:flex;align-items:center;gap:11px;background:linear-gradient(90deg, ${sh}40, ${sh}0a);border:1px solid ${sh}59;border-radius:12px;padding:11px 15px;box-shadow:0 3px 14px -8px ${sh}">
-        <span style="font-size:18px">${emo}</span>
-        <span style="font-weight:800;color:#f4f9ff;font-size:15px;flex:1;letter-spacing:.2px">${esc(nome)}</span>
+      return `<div id="sec-${i}" style="scroll-margin-top:80px;margin:24px 0 11px;display:flex;align-items:center;gap:11px;background:linear-gradient(90deg, ${sh}c4, ${sh}30);border:1px solid ${sh};border-radius:12px;padding:12px 15px;box-shadow:0 4px 18px -7px ${sh}">
+        <span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">${emo}</span>
+        <span style="font-weight:900;color:#fff;font-size:15px;flex:1;letter-spacing:.3px;text-shadow:0 1px 4px rgba(0,0,0,.7)">${esc(nome)}</span>
         ${rs?`<span style="color:${sh};font-size:10.5px;font-weight:800">${rs}/${bySec[s].length} ✓</span>`:""}
         <span style="background:${sh};color:#04121f;font-weight:900;font-size:11.5px;border-radius:20px;padding:2px 11px">${bySec[s].length}</span></div>${bySec[s].map(topCard).join("")}`; }).join("");
     // BI: barra empilhada por cor + progresso resolvidos + índice (hipertexto)
