@@ -316,7 +316,7 @@ async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"P
 /* ---- PAUTA de reunião semanal (Netlify Function + Blobs) ---- */
 const PAUTA_API="/api/crm-pauta";
 let PAUTAS=[], PAUTA_EXCL=[];
-const PAUTA_CORES={vermelho:{h:"#FF2D55",lbl:"Urgente"},laranja:{h:"#FF8A00",lbl:"Atenção"},amarelo:{h:"#FFD000",lbl:"Acompanhar"},verde:{h:"#00E5A0",lbl:"Ganho/OK"},azul:{h:"#00D4FF",lbl:"Estratégia"},roxo:{h:"#8A7DFF",lbl:"Ideia"},rosa:{h:"#FF6FB5",lbl:"Cliente"},cinza:{h:"#8aa2bd",lbl:"Info"}};
+const PAUTA_CORES={vermelho:{h:"#FF2D55",lbl:"Urgente"},laranja:{h:"#FF8A00",lbl:"Atenção"},amarelo:{h:"#FFD000",lbl:"Acompanhar"},verde:{h:"#00E5A0",lbl:"Ganho/OK"},azul:{h:"#00D4FF",lbl:"Estratégia"},roxo:{h:"#9333FF",lbl:"Pet Love"},rosa:{h:"#FF1E93",lbl:"Pink"},cinza:{h:"#8aa2bd",lbl:"Info"}};
 function syncPautas(l, ex){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } if(Array.isArray(ex)) PAUTA_EXCL=ex; }
 async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
 async function savePautaDoc(doc){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:doc,senha:window.__pwd})});
