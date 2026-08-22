@@ -1672,6 +1672,53 @@ async function mandarProxima(pautaId, tid){
   const okP=await savePautaDoc(prox); const okA=await savePautaDoc(p);
   if(okP&&okA){ pautaView="atual"; pautaHistId=prox.id; renderTab(); }   // já vai pra próxima
 }
+/* 🎙️ GRAVAR REUNIÃO (sem Plaud): grava no navegador → transcreve (ElevenLabs) → soma na pauta do dia */
+let _recMR=null,_recChunks=[],_recTimer=null;
+function blobB64(blob){ return new Promise(res=>{ const r=new FileReader(); r.onloadend=()=>res(String(r.result).split(",")[1]||""); r.readAsDataURL(blob); }); }
+async function addGravacao(pautaId, texto){
+  const p=_pautaById(pautaId); if(!p) return;
+  const now=new Date(), hh=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  p.topicos=[...(p.topicos||[]), {id:"t"+Date.now()+Math.random().toString(36).slice(2,6), sec:"🎙️ Gravações da reunião", titulo:"Gravação "+hh, texto:String(texto||"").trim(), cor:"azul", status:"aberto", resp:meuRep()||"", decisao:"", enr:"", fwd:false, de:"", arq:false, arq_ts:0, arq_por:"", ts:Date.now()}];
+  await savePautaDoc(p);
+}
+function gravarReuniao(pautaId){
+  const p=_pautaById(pautaId); if(!p) return;
+  if(!navigator.mediaDevices||!window.MediaRecorder){ alert("Este navegador não grava áudio — use Chrome/Safari atualizado."); return; }
+  document.getElementById("modalBody").innerHTML=`
+    <div class="m-head"><div class="m-cli">🎙️ Gravar reunião</div><button class="m-x" id="mClose">✕</button></div>
+    <div style="text-align:center;padding:12px 0">
+      <div id="recDot" style="width:78px;height:78px;border-radius:50%;background:#FF2D55;margin:6px auto;display:flex;align-items:center;justify-content:center;font-size:34px;box-shadow:0 0 0 0 rgba(255,45,85,.6);animation:recpulse 1.2s infinite">🎙️</div>
+      <div id="recTime" style="font-size:28px;font-weight:900;color:#eaf3ff;font-variant-numeric:tabular-nums;margin-top:6px">00:00</div>
+      <div class="t-mut" style="font-size:12px;margin-top:4px;line-height:1.5">Fale a reunião. Ao parar, eu transcrevo e somo na pauta de <b>${esc(fmtDataBR(p.data))}</b> (seção 🎙️ Gravações).</div>
+      <div id="recStatus" style="font-size:12.5px;margin-top:10px;color:#9fe6ff;min-height:16px"></div>
+    </div>
+    <button class="m-save" id="recStop" style="background:rgba(255,45,85,.16);border-color:#FF2D55;color:#ff8fa3">⏹ Parar e transcrever</button>
+    <div class="t-mut" style="font-size:10.5px;margin-top:8px;line-height:1.5">💡 Grave em blocos por assunto (até ~4-5 min por bloco). Cada gravação vira um item e <b>soma</b> na pauta — dá pra editar/organizar depois.</div>`;
+  document.getElementById("modal").style.display="flex";
+  const stopBtn=document.getElementById("recStop"), tEl=document.getElementById("recTime"), stEl=document.getElementById("recStatus");
+  let stopped=false;
+  const cleanup=()=>{ try{clearInterval(_recTimer);}catch(e){} try{ if(_recMR&&_recMR.stream) _recMR.stream.getTracks().forEach(t=>t.stop()); }catch(e){} };
+  document.getElementById("mClose").onclick=()=>{ stopped=true; try{ if(_recMR&&_recMR.state!=="inactive")_recMR.stop(); }catch(e){} cleanup(); closeModal(); };
+  navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+    let mime="audio/webm;codecs=opus"; if(!MediaRecorder.isTypeSupported(mime)) mime=MediaRecorder.isTypeSupported("audio/mp4")?"audio/mp4":"";
+    _recChunks=[]; _recMR=new MediaRecorder(stream, mime?{mimeType:mime}:undefined);
+    _recMR.ondataavailable=e=>{ if(e.data&&e.data.size) _recChunks.push(e.data); };
+    _recMR.onstop=async()=>{ cleanup(); if(stopped) return;
+      stEl.textContent="⏳ transcrevendo…"; stopBtn.disabled=true;
+      const blob=new Blob(_recChunks,{type:(_recMR&&_recMR.mimeType)||"audio/webm"});
+      if(blob.size>5.2*1024*1024){ stEl.textContent="⚠️ gravação muito longa — grave em blocos menores (até ~5 min)."; stopBtn.disabled=false; return; }
+      const b64=await blobB64(blob);
+      try{ const r=await fetch("/api/crm-transcrever",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({audio:b64,mime:(_recMR&&_recMR.mimeType)||"audio/webm",senha:window.__pwd})});
+        const j=await r.json();
+        if(j.text&&j.text.trim()){ await addGravacao(p.id, j.text); closeModal(); renderTab(); alert("✅ Transcrição somada na pauta (seção 🎙️ Gravações). Edite/organize à vontade."); }
+        else { stEl.textContent="❌ "+(j.erro||"não consegui transcrever (fala baixa?)"); stopBtn.disabled=false; }
+      }catch(e){ stEl.textContent="❌ falha de rede na transcrição"; stopBtn.disabled=false; }
+    };
+    const t0=Date.now(); _recMR.start();
+    _recTimer=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); tEl.textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); if(s>=300){ stEl.textContent="⏱️ 5 min — recomendo parar e gravar outro bloco."; } }, 500);
+    stopBtn.onclick=()=>{ if(_recMR&&_recMR.state!=="inactive") _recMR.stop(); };
+  }).catch(e=>{ stEl.textContent="❌ preciso da permissão do microfone (toque em Permitir)."; });
+}
 async function submitReg(){
   const por=quem(); if(por===null) return;
   const nota=document.getElementById("mNota").value.trim(), next=document.getElementById("mNext").value;
@@ -2090,7 +2137,7 @@ function renderTab(){
     const secs=[]; const bySec={}; tops.forEach(t=>{ const s=t.sec||"Geral"; if(!bySec[s]){bySec[s]=[];secs.push(s);} bySec[s].push(t); });
     const selHas=id=>PAUTA_SEL.has(id);
     const topCard=t=>{ const col=(PAUTA_CORES[t.cor]||PAUTA_CORES.cinza), st=STA[t.status]||STA.aberto;
-      return `<div data-toped="${esc(t.id)}" style="cursor:pointer;border-left:6px solid ${col.h};background:linear-gradient(90deg, ${col.h}38, ${col.h}0f);box-shadow:inset 0 0 0 1px ${col.h}55;border-radius:9px;margin-bottom:9px;padding:11px 13px">
+      return `<div data-toped="${esc(t.id)}" style="cursor:pointer;border-left:7px solid ${col.h};background:linear-gradient(100deg, ${col.h}59, ${col.h}1a 55%, ${col.h}0d);box-shadow:-5px 0 14px -6px ${col.h}, inset 0 0 0 1px ${col.h}77;border-radius:10px;margin-bottom:10px;padding:12px 14px">
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima reunião">➡️</span>':''}<span style="flex:1;min-width:0;font-weight:800;color:#eaf3ff;font-size:14px;line-height:1.3">${esc(t.titulo||"(sem título)")}</span><span class="pr" style="background:${st.c}22;color:${st.c};font-size:10.5px;white-space:nowrap">${st.lbl}</span></div>
         ${t.de?`<div class="t-mut" style="font-size:10.5px;margin-top:2px">↩ veio da pauta de ${esc(t.de)}</div>`:""}
         ${t.texto?`<div style="font-size:13px;white-space:pre-wrap;margin-top:6px;line-height:1.6;color:#cdd9e6">${linkify(esc(t.texto))}</div>`:""}
@@ -2107,12 +2154,17 @@ function renderTab(){
         <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:6px;margin-top:7px;flex-wrap:wrap" onclick="event.stopPropagation()">
           ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:${t.cor===k?'32':'26'}px;height:${t.cor===k?'32':'26'}px;border-radius:8px;border:${t.cor===k?'3px solid #fff':'2px solid rgba(255,255,255,.15)'};box-shadow:${t.cor===k?'0 0 0 2px '+PAUTA_CORES[k].h+', 0 0 10px '+PAUTA_CORES[k].h:'none'};background:${PAUTA_CORES[k].h};cursor:pointer;transition:all .12s"></button>`).join("")}
         </div></div>`; };
-    const secBlocks=secs.map((s,i)=>`<div id="sec-${i}" class="seclabel" style="margin:18px 0 8px;color:#eaf3ff;font-size:13.5px;scroll-margin-top:80px;border-top:1px solid rgba(255,255,255,.07);padding-top:12px">📌 ${esc(s)} <span class="t-mut" style="font-weight:500;font-size:11px">(${bySec[s].length})</span></div>${bySec[s].map(topCard).join("")}`).join("");
+    const secColor=s=>{ const cnt={}; bySec[s].forEach(t=>cnt[t.cor]=(cnt[t.cor]||0)+1); const k=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||"cinza"; return (PAUTA_CORES[k]||PAUTA_CORES.cinza).h; };
+    const secBlocks=secs.map((s,i)=>{ const sh=secColor(s), emo=(s.match(/^\S+/)||["📌"])[0], nome=s.replace(/^\S+\s/,"")||s;
+      return `<div id="sec-${i}" style="scroll-margin-top:80px;margin:22px 0 10px;display:flex;align-items:center;gap:10px;background:linear-gradient(90deg, ${sh}3d, ${sh}0a);border:1px solid ${sh}66;border-left:6px solid ${sh};border-radius:11px;padding:10px 14px">
+        <span style="font-size:17px">${emo}</span>
+        <span style="font-weight:800;color:#f2f7ff;font-size:15px;flex:1;letter-spacing:.2px">${esc(nome)}</span>
+        <span style="background:${sh};color:#04121f;font-weight:900;font-size:11.5px;border-radius:20px;padding:2px 10px">${bySec[s].length}</span></div>${bySec[s].map(topCard).join("")}`; }).join("");
     // BI: barra empilhada por cor + progresso resolvidos + índice (hipertexto)
     const _tb=tops.length||1;
     const stacked=Object.keys(PAUTA_CORES).filter(k=>porCor[k]).map(k=>`<span style="width:${(porCor[k]/_tb*100).toFixed(1)}%;background:${PAUTA_CORES[k].h}" title="${PAUTA_CORES[k].lbl}: ${porCor[k]}"></span>`).join("");
     const pctRes=tops.length?Math.round(resN/tops.length*100):0;
-    const toc=secs.length>1?secs.map((s,i)=>`<button class="minibtn" data-goto="sec-${i}">📌 ${esc(s)} <span class="t-mut">${bySec[s].length}</span></button>`).join(""):"";
+    const toc=secs.length>1?secs.map((s,i)=>{ const sh=secColor(s); return `<button class="minibtn" data-goto="sec-${i}" style="border-color:${sh}88;border-left:4px solid ${sh}">${(s.match(/^\S+/)||["📌"])[0]} ${esc(s.replace(/^\S+\s/,"")||s)} <span style="color:${sh};font-weight:800">${bySec[s].length}</span></button>`; }).join(""):"";
     const biBlock=tops.length?`
       <div style="margin:8px 0 6px">
         <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:rgba(255,255,255,.06)">${stacked}</div>
@@ -2139,8 +2191,9 @@ function renderTab(){
       </div>
       ${biBlock}
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-        <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:150px;margin:0">➕ Novo tópico</button>
-        <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:150px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">📋 Carregar p/ próxima semana</button>
+        <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:140px;margin:0">➕ Novo tópico</button>
+        <button class="checkinbtn" id="gravarBtn" type="button" style="flex:1;min-width:140px;margin:0;background:rgba(255,45,85,.14);border-color:#FF2D55;color:#ff8fa3">🎙️ Gravar reunião</button>
+        <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:140px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">📋 Carregar p/ próxima</button>
       </div>
       ${toc?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${toc}</div>`:""}
       ${arqN?`<div class="t-mut" style="font-size:11px;margin-bottom:8px">🗄️ ${arqN} tópico(s) arquivado(s) — veja na aba <b>Arquivo</b>.</div>`:""}
@@ -2150,6 +2203,7 @@ function renderTab(){
     document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
     const at=document.getElementById("addTopico"); if(at) at.onclick=()=>openTopico(cur.id, null);
     const rb=document.getElementById("rolarBtn"); if(rb) rb.onclick=()=>rolarPauta(cur.id);
+    const gb=document.getElementById("gravarBtn"); if(gb) gb.onclick=()=>gravarReuniao(cur.id);
     document.querySelectorAll("#content [data-editpauta]").forEach(el=>el.onclick=()=>openPautaHead(el.dataset.editpauta));
     document.querySelectorAll("#content [data-toped]").forEach(el=>el.onclick=()=>openTopico(cur.id, el.dataset.toped));
     document.querySelectorAll("#content [data-corpick]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const box=document.querySelector(`[data-corpickfor="${el.dataset.corpick}"]`); if(box) box.style.display=box.style.display==="none"?"flex":"none"; });
@@ -3236,6 +3290,7 @@ function render(D){
   renderOpBtn();
   const _ob=document.getElementById("opBtn"); if(_ob) _ob.onclick=()=>openIdentidade(false);
   const _rb=document.getElementById("refreshBtn"); if(_rb) _rb.onclick=()=>forceRefresh();
+  const _fab=document.getElementById("fabRefresh"); if(_fab) _fab.onclick=()=>forceRefresh();
   loadOps().then(()=>{ if(!operadorAtual()) openIdentidade(true); });   // pede identidade 1x por aparelho
   if(!window.__fuwired){
     window.__fuwired = true;

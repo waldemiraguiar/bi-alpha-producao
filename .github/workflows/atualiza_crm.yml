@@ -64,8 +64,9 @@ jobs:
           CRM_PWD: ${{ secrets.CRM_PWD }}
           DIR_CODE: ${{ secrets.DIR_CODE }}
           FIN_KEY: ${{ secrets.FIN_KEY }}
+          ELEVEN_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: |
-          node -e "const fs=require('fs');fs.writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\nexport const DIR_CODE='+JSON.stringify(process.env.DIR_CODE||'')+';\nexport const FIN_KEY='+JSON.stringify(process.env.FIN_KEY||'')+';\n')"
+          node -e "const fs=require('fs');fs.writeFileSync('site_crm/functions/secret.mjs','export const SECRET='+JSON.stringify(process.env.CRM_PWD||'')+';\nexport const DIR_CODE='+JSON.stringify(process.env.DIR_CODE||'')+';\nexport const FIN_KEY='+JSON.stringify(process.env.FIN_KEY||'')+';\nexport const ELEVEN_KEY='+JSON.stringify(process.env.ELEVEN_KEY||'')+';\n')"
           cd site_crm/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
       - name: Cache-bust dos assets (versão por deploy)
         if: env.DEPLOY_FULL == 'true'

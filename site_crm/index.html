@@ -221,6 +221,8 @@
   .minibtn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);color:#c9d4e0;font-size:11.5px;font-weight:700;border-radius:7px;padding:4px 9px;cursor:pointer;font-family:inherit}
   .minibtn.on{background:rgba(0,229,160,.16);border-color:#00E5A0;color:#7effcf}
   .minibtn:hover{border-color:rgba(255,255,255,.35)}
+  @keyframes recpulse{0%{box-shadow:0 0 0 0 rgba(255,45,85,.55)}70%{box-shadow:0 0 0 18px rgba(255,45,85,0)}100%{box-shadow:0 0 0 0 rgba(255,45,85,0)}}
+  #fabRefresh:active{transform:scale(.96)}
   .checkinbtn:disabled{opacity:.6}
   .semret{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--ink);cursor:pointer;background:rgba(255,138,0,.08);border:1px solid rgba(255,138,0,.3);border-radius:9px;padding:9px 11px}
   .semret input{width:18px;height:18px;accent-color:#FF8A00}
@@ -336,6 +338,7 @@
   </div>
 
   <div class="tabs" id="tabs"></div>
+  <button id="fabRefresh" title="Atualizar (buscar versão nova / limpar cache)" style="position:fixed;right:16px;bottom:18px;z-index:50;background:#00D4FF;color:#042235;border:none;border-radius:999px;padding:11px 16px;font-weight:800;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.4);cursor:pointer">🔄 Atualizar</button>
   <div class="wrap">
     <div id="content"></div>
     <div style="color:var(--mut);font-size:11.5px;margin-top:30px;text-align:center" id="foot"></div>
