@@ -317,6 +317,9 @@ async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"P
 const PAUTA_API="/api/crm-pauta";
 let PAUTAS=[], PAUTA_EXCL=[];
 const PAUTA_CORES={vermelho:{h:"#FF0033",lbl:"Urgente"},laranja:{h:"#FF7A00",lbl:"Atenção"},amarelo:{h:"#FFC400",lbl:"Acompanhar"},verde:{h:"#00FF9C",lbl:"Ganho/OK"},azul:{h:"#00CCFF",lbl:"Estratégia"},roxo:{h:"#A100FF",lbl:"Pet Love"},rosa:{h:"#FF0080",lbl:"Pink"},cinza:{h:"#9fb2cc",lbl:"Info"}};
+function _lum(hex){ hex=String(hex||"").replace("#",""); if(hex.length<6) return 0; const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16); return (0.299*r+0.587*g+0.114*b)/255; }
+function _txtOn(hex){ return _lum(hex)>0.55?"#0b0f18":"#ffffff"; }   // texto escuro em cor clara, branco em cor escura
+function _panelOn(hex){ return _txtOn(hex)==="#ffffff"?"rgba(0,0,0,.26)":"rgba(255,255,255,.30)"; }
 function syncPautas(l, ex){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } if(Array.isArray(ex)) PAUTA_EXCL=ex; }
 async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
 async function savePautaDoc(doc){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:doc,senha:window.__pwd})});
@@ -1568,7 +1571,7 @@ function openPautaHead(id){
   document.getElementById("phSave").onclick=async()=>{ p.titulo=(document.getElementById("phTit").value||"Pauta Reunião Semanal").trim(); p.data=document.getElementById("phData").value||p.data; if(await savePautaDoc(p)){ closeModal(); renderTab(); } };
   document.getElementById("phDel").onclick=async()=>{ if(confirm("Excluir a pauta de "+fmtDataBR(p.data)+"? (fica no histórico até aqui)")){ if(await removePautaDoc(p.id)){ closeModal(); pautaHistId=null; renderTab(); } } };
 }
-function openTopico(pautaId, topId){
+function openTopico(pautaId, topId, secPre){
   const p=_pautaById(pautaId); if(!p) return;
   const t = topId ? (p.topicos||[]).find(x=>x.id===topId) : null;
   const secsUsadas=[...new Set((p.topicos||[]).map(x=>x.sec).filter(Boolean))];
@@ -1577,7 +1580,7 @@ function openTopico(pautaId, topId){
   document.getElementById("modalBody").innerHTML=`
     <div class="m-head"><div class="m-cli">${t?"✏️ Editar tópico":"➕ Novo tópico"}</div><button class="m-x" id="mClose">✕</button></div>
     <div class="m-lbl">Bloco / seção <span class="t-mut" style="font-weight:500">— agrupa (ex.: Estratégia comercial, Reconquistadas, Clientes)</span></div>
-    <input id="tSec" class="m-date" style="width:100%" list="secList" value="${t?esc(t.sec):''}" placeholder="Ex.: Estratégia comercial">
+    <input id="tSec" class="m-date" style="width:100%" list="secList" value="${t?esc(t.sec):(secPre?esc(secPre):'')}" placeholder="Ex.: Estratégia comercial">
     <datalist id="secList">${secsUsadas.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
     <div class="m-lbl">Título <span style="color:var(--red)">*</span></div>
     <input id="tTit" class="m-date" style="width:100%" value="${t?esc(t.titulo):''}" placeholder="Ex.: Mania de Bichos — atraso na liberação">
@@ -2136,36 +2139,28 @@ function renderTab(){
     const corBar=Object.keys(PAUTA_CORES).filter(k=>porCor[k]).map(k=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:${PAUTA_CORES[k].h};font-weight:700"><span style="width:11px;height:11px;border-radius:3px;background:${PAUTA_CORES[k].h}"></span>${PAUTA_CORES[k].lbl} ${porCor[k]}</span>`).join(" · ");
     const secs=[]; const bySec={}; tops.forEach(t=>{ const s=t.sec||"Geral"; if(!bySec[s]){bySec[s]=[];secs.push(s);} bySec[s].push(t); });
     const selHas=id=>PAUTA_SEL.has(id);
-    const topCard=t=>{ const col=(PAUTA_CORES[t.cor]||PAUTA_CORES.cinza), st=STA[t.status]||STA.aberto;
-      return `<div class="topcard" data-toped="${esc(t.id)}" style="cursor:pointer;position:relative;border-radius:12px;margin-bottom:11px;padding:13px 15px 12px;background:linear-gradient(110deg, ${col.h}cc 0%, ${col.h}70 40%, rgba(9,16,30,.92) 100%);box-shadow:inset 9px 0 0 ${col.h}, inset 0 0 0 1px ${col.h}99, 0 4px 18px -6px ${col.h};transition:transform .13s ease">
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          <span style="width:12px;height:12px;border-radius:50%;background:${col.h};box-shadow:0 0 9px ${col.h};margin-top:4px;flex-shrink:0"></span>
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima">➡️</span>':''}<span style="flex:1;min-width:0;font-weight:800;color:#ffffff;font-size:14.5px;line-height:1.3;letter-spacing:.1px;text-shadow:0 1px 4px rgba(0,0,0,.75)">${esc(t.titulo||"(sem título)")}</span><span style="background:${st.c}26;color:${st.c};font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;border-radius:20px;padding:3px 9px">${st.lbl}</span></div>
-            ${t.de?`<div class="t-mut" style="font-size:10.5px;margin-top:3px">↩ da pauta de ${esc(t.de)}</div>`:""}
-            ${t.texto?`<div style="font-size:13px;white-space:pre-wrap;margin-top:7px;line-height:1.62;color:#d6e1ef">${linkify(esc(t.texto))}</div>`:""}
-            ${t.resp?`<div style="margin-top:7px"><span style="font-size:11px;color:#9fe6ff;background:rgba(0,212,255,.14);border-radius:20px;padding:2px 10px;font-weight:600">👤 ${esc(t.resp)}</span></div>`:""}
-            ${t.decisao?`<div style="font-size:12px;margin-top:7px;color:#7effcf;background:rgba(0,229,160,.1);border-radius:8px;padding:7px 10px;line-height:1.5">✅ <b>Decisão:</b> ${esc(t.decisao)}</div>`:""}
-            ${t.enr?`<div style="margin-top:9px;background:rgba(0,212,255,.07);border-left:3px solid #00D4FF;border-radius:0 9px 9px 0;padding:9px 12px;font-size:12px;line-height:1.62;color:#cfe8ff">💡 <b style="color:#9fe6ff;font-size:11px;text-transform:uppercase;letter-spacing:.4px">Melhor de mercado</b><div style="margin-top:3px">${linkify(esc(t.enr))}</div></div>`:""}
-            <div style="display:flex;gap:5px;margin-top:11px;flex-wrap:wrap" onclick="event.stopPropagation()">
-              <button class="minibtn" data-corpick="${esc(t.id)}" title="Mudar cor">🎨</button>
-              <button class="minibtn ${t.fwd?'on':''}" data-mandaprox="${esc(t.id)}" title="Mandar p/ próxima semana">➡️ próxima</button>
-              <button class="minibtn ${selHas(t.id)?'on':''}" data-topsel="${esc(t.id)}" title="Selecionar">${selHas(t.id)?'✓ sel':'☐ sel'}</button>
-              <button class="minibtn" data-arq="${esc(t.id)}" title="Arquivar">🗄️</button>
-              <button class="minibtn" data-exc="${esc(t.id)}" title="Excluir (com registro)" style="border-color:rgba(255,45,85,.35);color:#ff8fa3">🗑️</button>
-            </div>
-            <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:7px;margin-top:9px;flex-wrap:wrap" onclick="event.stopPropagation()">
-              ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:${t.cor===k?'34':'27'}px;height:${t.cor===k?'34':'27'}px;border-radius:9px;border:${t.cor===k?'3px solid #fff':'2px solid rgba(255,255,255,.15)'};box-shadow:${t.cor===k?'0 0 0 2px '+PAUTA_CORES[k].h+', 0 0 12px '+PAUTA_CORES[k].h:'none'};background:${PAUTA_CORES[k].h};cursor:pointer;transition:all .12s"></button>`).join("")}
-            </div>
-          </div>
+    const topCard=t=>{ const col=(PAUTA_CORES[t.cor]||PAUTA_CORES.cinza), st=STA[t.status]||STA.aberto, tc=_txtOn(col.h), panel=_panelOn(col.h), sub=(tc==="#ffffff"?"rgba(255,255,255,.82)":"rgba(0,0,0,.66)"), shadow=(tc==="#ffffff"?"0 1px 3px rgba(0,0,0,.55)":"none");
+      return `<div class="topcard" data-toped="${esc(t.id)}" style="cursor:pointer;position:relative;border-radius:13px;margin-bottom:11px;padding:13px 15px 12px;background:${col.h};box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.16), 0 5px 20px -6px ${col.h};transition:transform .13s ease">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${t.fwd?'<span title="vai pra próxima">➡️</span>':''}<span style="flex:1;min-width:0;font-weight:900;color:${tc};font-size:15px;line-height:1.3;letter-spacing:.15px;text-shadow:${shadow}">${esc(t.titulo||"(sem título)")}</span><span style="background:${panel};color:${tc};font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;border-radius:20px;padding:3px 10px">${st.lbl}</span></div>
+        ${t.de?`<div style="font-size:10.5px;margin-top:3px;color:${sub}">↩ da pauta de ${esc(t.de)}</div>`:""}
+        ${t.texto?`<div style="font-size:13px;white-space:pre-wrap;margin-top:7px;line-height:1.6;color:${tc};font-weight:500;text-shadow:${shadow}">${linkify(esc(t.texto))}</div>`:""}
+        ${t.resp?`<div style="margin-top:8px"><span style="font-size:11px;color:${tc};background:${panel};border-radius:20px;padding:2px 10px;font-weight:700">👤 ${esc(t.resp)}</span></div>`:""}
+        ${t.decisao?`<div style="font-size:12px;margin-top:8px;color:${tc};background:${panel};border-radius:8px;padding:7px 10px;line-height:1.5;font-weight:600">✅ <b>Decisão:</b> ${esc(t.decisao)}</div>`:""}
+        ${t.enr?`<div style="margin-top:9px;background:${panel};border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.6;color:${tc}">💡 <b style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Melhor de mercado</b><div style="margin-top:3px;font-weight:500">${linkify(esc(t.enr))}</div></div>`:""}
+        <div style="display:flex;gap:5px;margin-top:11px;flex-wrap:wrap" onclick="event.stopPropagation()">
+          ${[["🎨","corpick","Cor"],["➡️ próxima","mandaprox","Próxima"],[(selHas(t.id)?"✓ sel":"☐ sel"),"topsel","Selecionar"],["🗄️","arq","Arquivar"],["🗑️","exc","Excluir"]].map(([lbl,act,ti])=>`<button data-${act}="${esc(t.id)}" title="${ti}" style="background:${panel};border:none;color:${tc};font-size:11.5px;font-weight:700;border-radius:7px;padding:4px 9px;cursor:pointer">${lbl}</button>`).join("")}
+        </div>
+        <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:7px;margin-top:9px;flex-wrap:wrap" onclick="event.stopPropagation()">
+          ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:${t.cor===k?'34':'27'}px;height:${t.cor===k?'34':'27'}px;border-radius:9px;border:${t.cor===k?'3px solid #fff':'2px solid rgba(255,255,255,.35)'};box-shadow:${t.cor===k?'0 0 0 2px '+PAUTA_CORES[k].h+', 0 0 12px '+PAUTA_CORES[k].h:'none'};background:${PAUTA_CORES[k].h};cursor:pointer;transition:all .12s"></button>`).join("")}
         </div></div>`; };
     const secColor=s=>{ const cnt={}; bySec[s].forEach(t=>cnt[t.cor]=(cnt[t.cor]||0)+1); const k=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||"cinza"; return (PAUTA_CORES[k]||PAUTA_CORES.cinza).h; };
-    const secBlocks=secs.map((s,i)=>{ const sh=secColor(s), emo=(s.match(/^\S+/)||["📌"])[0], nome=s.replace(/^\S+\s/,"")||s, rs=bySec[s].filter(t=>t.status==="resolvido").length;
-      return `<div id="sec-${i}" style="scroll-margin-top:80px;margin:24px 0 11px;display:flex;align-items:center;gap:11px;background:linear-gradient(90deg, ${sh}c4, ${sh}30);border:1px solid ${sh};border-radius:12px;padding:12px 15px;box-shadow:0 4px 18px -7px ${sh}">
-        <span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">${emo}</span>
-        <span style="font-weight:900;color:#fff;font-size:15px;flex:1;letter-spacing:.3px;text-shadow:0 1px 4px rgba(0,0,0,.7)">${esc(nome)}</span>
-        ${rs?`<span style="color:${sh};font-size:10.5px;font-weight:800">${rs}/${bySec[s].length} ✓</span>`:""}
-        <span style="background:${sh};color:#04121f;font-weight:900;font-size:11.5px;border-radius:20px;padding:2px 11px">${bySec[s].length}</span></div>${bySec[s].map(topCard).join("")}`; }).join("");
+    const secBlocks=secs.map((s,i)=>{ const sh=secColor(s), emo=(s.match(/^\S+/)||["📌"])[0], nome=s.replace(/^\S+\s/,"")||s, rs=bySec[s].filter(t=>t.status==="resolvido").length, stc=_txtOn(sh), spanel=_panelOn(sh);
+      return `<div id="sec-${i}" style="scroll-margin-top:80px;margin:24px 0 11px;display:flex;align-items:center;gap:10px;background:${sh};border-radius:12px;padding:11px 14px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.18), 0 5px 20px -7px ${sh}">
+        <span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">${emo}</span>
+        <span style="font-weight:900;color:${stc};font-size:15.5px;flex:1;letter-spacing:.3px;text-shadow:${stc==='#ffffff'?'0 1px 3px rgba(0,0,0,.5)':'none'}">${esc(nome)}</span>
+        ${rs?`<span style="color:${stc};font-size:10.5px;font-weight:800;opacity:.85">${rs}/${bySec[s].length} ✓</span>`:""}
+        <span style="background:${spanel};color:${stc};font-weight:900;font-size:11.5px;border-radius:20px;padding:2px 11px">${bySec[s].length}</span>
+        <button data-addsec="${esc(s)}" title="Adicionar item nesta seção" onclick="event.stopPropagation()" style="background:${spanel};border:none;color:${stc};font-weight:900;font-size:15px;line-height:1;border-radius:8px;width:28px;height:28px;cursor:pointer">＋</button></div>${bySec[s].map(topCard).join("")}`; }).join("");
     // BI: barra empilhada por cor + progresso resolvidos + índice (hipertexto)
     const _tb=tops.length||1;
     const stacked=Object.keys(PAUTA_CORES).filter(k=>porCor[k]).map(k=>`<span style="width:${(porCor[k]/_tb*100).toFixed(1)}%;background:${PAUTA_CORES[k].h}" title="${PAUTA_CORES[k].lbl}: ${porCor[k]}"></span>`).join("");
@@ -2216,6 +2211,7 @@ function renderTab(){
     document.querySelectorAll("#content [data-setcor]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); const [tid,cor]=el.dataset.setcor.split("|"); await setCorTopico(cur.id,tid,cor); });
     document.querySelectorAll("#content [data-mandaprox]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await mandarProxima(cur.id,el.dataset.mandaprox); });
     document.querySelectorAll("#content [data-goto]").forEach(el=>el.onclick=()=>{ const g=document.getElementById(el.dataset.goto); if(g) g.scrollIntoView({behavior:"smooth",block:"start"}); });
+    document.querySelectorAll("#content [data-addsec]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openTopico(cur.id, null, el.dataset.addsec); });
     document.querySelectorAll("#content [data-topsel]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const id=el.dataset.topsel; PAUTA_SEL.has(id)?PAUTA_SEL.delete(id):PAUTA_SEL.add(id); renderTab(); });
     document.querySelectorAll("#content [data-arq]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await arquivarTopico(cur.id, el.dataset.arq, true); });
     document.querySelectorAll("#content [data-exc]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await excluirTopico(cur.id, el.dataset.exc); });
