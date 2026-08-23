@@ -1659,6 +1659,14 @@ async function encaminharSelecionados(pautaId){
   if(okP&&okA){ PAUTA_SEL.clear(); alert(`✅ ${sel.length} tópico(s) encaminhado(s) pra ${fmtDataBR(prox.data)}.`); renderTab(); }
 }
 function fmtDataHora(ts){ try{ const d=new Date(ts); const p=n=>String(n).padStart(2,"0"); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }catch(e){ return "—"; } }
+async function moverTopico(pautaId, tid, dir){   // sobe/desce o tópico dentro da MESMA seção
+  const p=_pautaById(pautaId); if(!p) return; const tops=p.topicos||[];
+  const idx=tops.findIndex(t=>t.id===tid); if(idx<0) return; const sec=tops[idx].sec;
+  let j=idx+dir; while(j>=0 && j<tops.length && tops[j].sec!==sec) j+=dir;
+  if(j<0||j>=tops.length) return;   // já é o 1º/último da seção
+  const tmp=tops[idx]; tops[idx]=tops[j]; tops[j]=tmp;
+  if(await savePautaDoc(p)) renderTab();
+}
 async function arquivarTopico(pautaId, tid, arq){
   const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return;
   if(arq && !confirm(`Arquivar "${t.titulo}"? (sai da pauta ativa, fica no Arquivo — dá pra restaurar)`)) return;
@@ -2187,7 +2195,7 @@ function renderTab(){
         ${t.decisao?`<div style="font-size:12px;margin-top:8px;color:${tc};background:${panel};border-radius:8px;padding:7px 10px;line-height:1.5;font-weight:600">✅ <b>Decisão:</b> ${esc(t.decisao)}</div>`:""}
         ${t.enr?`<div style="margin-top:9px;background:${panel};border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.6;color:${tc}">💡 <b style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Melhor de mercado</b><div style="margin-top:3px;font-weight:500">${linkify(esc(t.enr))}</div></div>`:""}
         <div style="display:flex;gap:5px;margin-top:11px;flex-wrap:wrap" onclick="event.stopPropagation()">
-          ${[["🎨","corpick","Cor"],["➡️ próxima","mandaprox","Próxima"],[(selHas(t.id)?"✓ sel":"☐ sel"),"topsel","Selecionar"],["🗄️","arq","Arquivar"],["🗑️","exc","Excluir"]].map(([lbl,act,ti])=>`<button data-${act}="${esc(t.id)}" title="${ti}" style="background:${panel};border:none;color:${tc};font-size:11.5px;font-weight:700;border-radius:7px;padding:4px 9px;cursor:pointer">${lbl}</button>`).join("")}
+          ${[["▲","moveup","Subir"],["▼","movedown","Descer"],["🎨","corpick","Cor"],["➡️ próxima","mandaprox","Próxima"],[(selHas(t.id)?"✓ sel":"☐ sel"),"topsel","Selecionar"],["🗄️","arq","Arquivar"],["🗑️","exc","Excluir"]].map(([lbl,act,ti])=>`<button data-${act}="${esc(t.id)}" title="${ti}" style="background:${panel};border:none;color:${tc};font-size:11.5px;font-weight:700;border-radius:7px;padding:4px 9px;cursor:pointer">${lbl}</button>`).join("")}
         </div>
         <div class="corpick" data-corpickfor="${esc(t.id)}" style="display:none;gap:7px;margin-top:9px;flex-wrap:wrap" onclick="event.stopPropagation()">
           ${Object.keys(PAUTA_CORES).map(k=>`<button data-setcor="${esc(t.id)}|${k}" title="${PAUTA_CORES[k].lbl}" style="width:${t.cor===k?'34':'27'}px;height:${t.cor===k?'34':'27'}px;border-radius:9px;border:${t.cor===k?'3px solid #fff':'2px solid rgba(255,255,255,.35)'};box-shadow:${t.cor===k?'0 0 0 2px '+PAUTA_CORES[k].h+', 0 0 12px '+PAUTA_CORES[k].h:'none'};background:${PAUTA_CORES[k].h};cursor:pointer;transition:all .12s"></button>`).join("")}
@@ -2255,6 +2263,8 @@ function renderTab(){
     document.querySelectorAll("#content [data-goto]").forEach(el=>el.onclick=()=>{ const g=document.getElementById(el.dataset.goto); if(g) g.scrollIntoView({behavior:"smooth",block:"start"}); });
     document.querySelectorAll("#content [data-addsec]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openTopico(cur.id, null, el.dataset.addsec); });
     document.querySelectorAll("#content [data-topsel]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const id=el.dataset.topsel; PAUTA_SEL.has(id)?PAUTA_SEL.delete(id):PAUTA_SEL.add(id); renderTab(); });
+    document.querySelectorAll("#content [data-moveup]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await moverTopico(cur.id, el.dataset.moveup, -1); });
+    document.querySelectorAll("#content [data-movedown]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await moverTopico(cur.id, el.dataset.movedown, 1); });
     document.querySelectorAll("#content [data-arq]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await arquivarTopico(cur.id, el.dataset.arq, true); });
     document.querySelectorAll("#content [data-exc]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await excluirTopico(cur.id, el.dataset.exc); });
     const es=document.getElementById("encSel"); if(es) es.onclick=()=>encaminharSelecionados(cur.id);
