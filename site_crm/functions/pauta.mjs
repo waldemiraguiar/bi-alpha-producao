@@ -16,14 +16,22 @@ export default async (req) => {
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   };
   const loadExcl = async () => (await store.get("excluidos", { type: "json", consistency: "strong" })) || [];
+  const loadSquads = async () => (await store.get("squads", { type: "json", consistency: "strong" })) || [];
   if (req.method === "OPTIONS") return new Response("", { headers: cors });
-  if (req.method === "GET") return Response.json({ pautas: await load(), excluidos: await loadExcl() }, { headers: cors });
+  if (req.method === "GET") return Response.json({ pautas: await load(), excluidos: await loadExcl(), squads: await loadSquads() }, { headers: cors });
 
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
     let lista = await load();
+
+    // SQUADS — lista gerenciável (Diretoria, Gerência Técnica, Microbiologia, PCR/ELISA, Histopato/IHQ, Qualidade…)
+    if (body.acao === "squads_set") {
+      const arr = Array.isArray(body.squads) ? [...new Set(body.squads.map((s) => String(s || "").trim()).filter(Boolean))].slice(0, 60) : [];
+      await store.setJSON("squads", arr);
+      return Response.json({ ok: true, squads: await loadSquads() }, { headers: cors });
+    }
 
     // LOG de EXCLUSÃO de tópico (governança dia/mês/ano — nada some sem rastro)
     if (body.acao === "logexcl") {
@@ -62,6 +70,7 @@ export default async (req) => {
     const clean = {
       id: String(it.id || ("p" + Date.now())),
       data: String(it.data || "").slice(0, 10),
+      squad: String(it.squad || "").slice(0, 60),   // squad dono da pauta (app Reuniões de Squad)
       titulo: String(it.titulo || "Pauta Reunião Semanal").slice(0, 120),
       status: it.status === "fechada" ? "fechada" : "aberta",
       topicos: Array.isArray(it.topicos) ? it.topicos.slice(0, 200).map(cleanTopico) : [],
