@@ -329,18 +329,24 @@ async function removeRelato(id){ try{ const r=await fetch(RELATOS_API,{method:"P
 
 /* ---- PAUTA de reunião semanal (Netlify Function + Blobs) ---- */
 const PAUTA_API="/api/crm-pauta";
-let PAUTAS=[], PAUTA_EXCL=[];
+let PAUTAS=[], PAUTA_EXCL=[], SQUADS=[], squadAtual=(()=>{try{return localStorage.getItem("crm_squad_atual")||"";}catch(e){return "";}})();
 const PAUTA_CORES={vermelho:{h:"#FF0033",lbl:"Urgente"},laranja:{h:"#FF7A00",lbl:"Atenção"},amarelo:{h:"#FFC400",lbl:"Acompanhar"},verde:{h:"#00FF9C",lbl:"Ganho/OK"},azul:{h:"#00CCFF",lbl:"Estratégia"},roxo:{h:"#A100FF",lbl:"Pet Love"},rosa:{h:"#FF0080",lbl:"Pink"},cinza:{h:"#9fb2cc",lbl:"Info"}};
 function _lum(hex){ hex=String(hex||"").replace("#",""); if(hex.length<6) return 0; const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16); return (0.299*r+0.587*g+0.114*b)/255; }
 function _txtOn(hex){ return _lum(hex)>0.55?"#0b0f18":"#ffffff"; }   // texto escuro em cor clara, branco em cor escura
 function _panelOn(hex){ return _txtOn(hex)==="#ffffff"?"rgba(0,0,0,.26)":"rgba(255,255,255,.30)"; }
-function syncPautas(l, ex){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } if(Array.isArray(ex)) PAUTA_EXCL=ex; }
-async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
+function syncPautas(l, ex, sq){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage.setItem("crm_pautas_cache",JSON.stringify(l));}catch(e){} } if(Array.isArray(ex)) PAUTA_EXCL=ex; if(Array.isArray(sq)){ SQUADS=sq; if(sq.length && !squadAtual) squadAtual=sq[0]; } }
+async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos, j.squads); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
+async function saveSquads(){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"squads_set",squads:SQUADS,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); if(Array.isArray(j.squads)) SQUADS=j.squads; return true; } }catch(e){} return false; }
+function setSquadAtual(s){ squadAtual=s; try{localStorage.setItem("crm_squad_atual",s);}catch(e){} }
+async function addSquad(){ const n=(prompt("Nome do novo squad (ex.: Microbiologia, PCR e ELISA, Qualidade):","")||"").trim(); if(!n) return; if(SQUADS.some(x=>x.toLowerCase()===n.toLowerCase())){ alert("Esse squad já existe."); setSquadAtual(SQUADS.find(x=>x.toLowerCase()===n.toLowerCase())); renderTab(); return; } SQUADS=[...SQUADS,n]; if(await saveSquads()){ setSquadAtual(n); pautaHistId=null; renderTab(); } }
+async function renomearSquad(s){ const n=(prompt("Renomear squad:",s)||"").trim(); if(!n||n===s) return; SQUADS=SQUADS.map(x=>x===s?n:x); PAUTAS.forEach(p=>{ if(p.squad===s){ p.squad=n; } }); if(await saveSquads()){ for(const p of PAUTAS.filter(p=>p.squad===n)) await savePautaDoc(p); setSquadAtual(n); renderTab(); } }
+async function removerSquad(s){ const n=PAUTAS.filter(p=>p.squad===s).length; if(!confirm(`Remover o squad "${s}"?${n?` (as ${n} pauta(s) dele continuam salvas, mas somem da lista)`:""}`)) return; SQUADS=SQUADS.filter(x=>x!==s); if(await saveSquads()){ if(squadAtual===s) setSquadAtual(SQUADS[0]||""); renderTab(); } }
+function pautasDoSquad(){ return SQUAD_MODE ? PAUTAS.filter(p=>(p.squad||"")===squadAtual) : PAUTAS; }
 async function savePautaDoc(doc){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:doc,senha:window.__pwd})});
-  if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); return true; } if(r.status===401) alert("Sessão sem permissão."); }catch(e){ alert("Falha ao salvar a pauta (sem internet?)."); } return false; }
-async function removePautaDoc(id){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos); return true; } }catch(e){} return false; }
+  if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos, j.squads); return true; } if(r.status===401) alert("Sessão sem permissão."); }catch(e){ alert("Falha ao salvar a pauta (sem internet?)."); } return false; }
+async function removePautaDoc(id){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos, j.squads); return true; } }catch(e){} return false; }
 async function logExclTopico(item){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"logexcl",item,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); if(Array.isArray(j.excluidos)) PAUTA_EXCL=j.excluidos; return true; } }catch(e){} return false; }
-function pautaAtual(){ return PAUTAS.length?PAUTAS[0]:null; }   // mais recente (lista já vem ordenada por data desc)
+function pautaAtual(){ const l=pautasDoSquad(); return l.length?l[0]:null; }   // mais recente do squad ativo (lista ordenada por data desc)
 
 /* ---- histórico de EXCLUSÕES (auditoria — nada some sem rastro) ---- */
 const EXCL_API="/api/crm-exclusoes";
@@ -1555,6 +1561,17 @@ async function forceRefresh(){
 /* ===== PAUTA de reunião semanal ===== */
 function _pautaById(id){ return PAUTAS.find(p=>p.id===id); }
 function proxSexta(base){ const d=base?new Date(base+"T00:00:00"):new Date(); const add=((5-d.getDay())+7)%7||7; d.setDate(d.getDate()+add); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+function _wireSquad(){
+  document.querySelectorAll("#content [data-squad]").forEach(el=>el.onclick=()=>{ setSquadAtual(el.dataset.squad); pautaHistId=null; pautaView="atual"; PAUTA_SEL.clear(); renderTab(); });
+  const asb=document.getElementById("addSquadBtn"); if(asb) asb.onclick=()=>addSquad();
+  const esb=document.getElementById("editSquadBtn"); if(esb) esb.onclick=()=>{ const o=(prompt(`Squad "${squadAtual}":\n1 = renomear\n2 = remover\n\n(digite 1 ou 2)`,"1")||"").trim(); if(o==="1") renomearSquad(squadAtual); else if(o==="2") removerSquad(squadAtual); };
+}
+/* ➕ novo BLOCO/seção (Decisões, Metas, Ações…) — abre o tópico já com a seção */
+function novoBloco(pautaId){
+  const sug=["Decisões","Metas","Ações / próximos passos","Riscos / alertas","Ideias","Indicadores"];
+  const s=(prompt("Nome do bloco/seção (ex.: "+sug.join(", ")+"):","Decisões")||"").trim(); if(!s) return;
+  openTopico(pautaId, null, s);
+}
 function novaPauta(){
   const atual=pautaAtual();
   const sug = atual? proxSexta(atual.data) : hojeISO();
@@ -1567,8 +1584,9 @@ function novaPauta(){
   document.getElementById("mClose").onclick=closeModal;
   document.getElementById("npSave").onclick=async()=>{
     const data=document.getElementById("npData").value; if(!data){ alert("Escolha o dia."); return; }
-    if(PAUTAS.find(p=>p.data===data)){ if(!confirm("Já existe uma pauta nesse dia. Criar outra assim mesmo?")) return; }
-    const doc={id:"p"+Date.now(), data, titulo:(document.getElementById("npTit").value||"Pauta Reunião Semanal").trim(), status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
+    if(SQUAD_MODE && !squadAtual){ alert("Crie/escolha um squad primeiro (＋ Squad)."); return; }
+    if(pautasDoSquad().find(p=>p.data===data)){ if(!confirm("Já existe uma pauta nesse dia neste squad. Criar outra assim mesmo?")) return; }
+    const doc={id:"p"+Date.now(), data, squad:SQUAD_MODE?squadAtual:"", titulo:(document.getElementById("npTit").value||"Pauta Reunião Semanal").trim(), status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
     if(await savePautaDoc(doc)){ closeModal(); pautaView="atual"; pautaHistId=doc.id; PAUTA_SEL.clear(); renderTab(); }
   };
 }
@@ -1632,9 +1650,9 @@ async function encaminharSelecionados(pautaId){
   const p=_pautaById(pautaId); if(!p) return;
   const sel=(p.topicos||[]).filter(t=>PAUTA_SEL.has(t.id)); if(!sel.length){ alert("Selecione tópicos primeiro."); return; }
   // acha a PRÓXIMA pauta (data > atual); se não tiver, cria
-  let prox=PAUTAS.filter(x=>x.data>p.data).sort((a,b)=>a.data<b.data?-1:1)[0];
+  let prox=PAUTAS.filter(x=>x.data>p.data && (x.squad||"")===(p.squad||"")).sort((a,b)=>a.data<b.data?-1:1)[0];
   if(!prox){ const data=proxSexta(p.data); if(!confirm(`Criar a pauta de ${fmtDataBR(data)} e levar ${sel.length} tópico(s) pra lá?`)) return;
-    prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()}; }
+    prox={id:"p"+Date.now(), data, squad:(p?(p.squad||""):(SQUAD_MODE?squadAtual:"")), titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()}; }
   const deLbl=fmtDataBR(p.data);
   sel.forEach(t=>{ prox.topicos.push({...t, id:"t"+Date.now()+Math.random().toString(36).slice(2,6), status:"aberto", fwd:false, de:deLbl, ts:Date.now()}); t.fwd=true; });
   const okP=await savePautaDoc(prox); const okA=await savePautaDoc(p);
@@ -1659,10 +1677,10 @@ async function rolarPauta(pautaId){
   const p=_pautaById(pautaId); if(!p) return;
   const abertos=(p.topicos||[]).filter(t=>!t.arq && t.status!=="resolvido");
   if(!abertos.length){ alert("Não há tópicos em aberto pra rolar (os resolvidos ficam pra trás)."); return; }
-  let prox=PAUTAS.filter(x=>x.data>p.data).sort((a,b)=>a.data<b.data?-1:1)[0];
+  let prox=PAUTAS.filter(x=>x.data>p.data && (x.squad||"")===(p.squad||"")).sort((a,b)=>a.data<b.data?-1:1)[0];
   const data=prox?prox.data:proxSexta(p.data);
   if(!confirm(`Carregar ${abertos.length} tópico(s) EM ABERTO pra a pauta de ${fmtDataBR(data)}? (os resolvidos ficam nesta semana)`)) return;
-  if(!prox) prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
+  if(!prox) prox={id:"p"+Date.now(), data, squad:(p?(p.squad||""):(SQUAD_MODE?squadAtual:"")), titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
   const deLbl=fmtDataBR(p.data);
   const jaLa=new Set((prox.topicos||[]).map(t=>(t.titulo||"").toLowerCase()));
   let n=0; abertos.forEach(t=>{ if(jaLa.has((t.titulo||"").toLowerCase())) return; prox.topicos.push({...t, id:"t"+Date.now()+Math.random().toString(36).slice(2,6), fwd:false, de:deLbl, arq:false, arq_ts:0, arq_por:"", ts:Date.now()}); n++; });
@@ -1672,17 +1690,18 @@ async function rolarPauta(pautaId){
 /* abre (ou cria) a pauta da PRÓXIMA semana, pra o Wal já ir montando/trabalhando nela */
 async function abrirProxima(){
   const base=pautaAtual(); const baseData=base?base.data:hojeISO();
-  let prox=PAUTAS.filter(x=>x.data>baseData).sort((a,b)=>a.data<b.data?-1:1)[0];
+  let prox=PAUTAS.filter(x=>x.data>baseData && (x.squad||"")===(SQUAD_MODE?squadAtual:"")).sort((a,b)=>a.data<b.data?-1:1)[0];
+  if(SQUAD_MODE && !squadAtual){ alert("Crie/escolha um squad primeiro (＋ Squad)."); return; }
   if(!prox){ const data=proxSexta(baseData);
-    prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
+    prox={id:"p"+Date.now(), data, squad:(SQUAD_MODE?squadAtual:(base?base.squad||"":"")), titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()};
     if(!await savePautaDoc(prox)) return; }
   pautaView="atual"; pautaHistId=prox.id; PAUTA_SEL.clear(); renderTab();
 }
 /* manda UM tópico pra próxima semana E já leva o Wal pra lá (pedido: "clicar próxima já ir pra próxima") */
 async function mandarProxima(pautaId, tid){
   const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return;
-  let prox=PAUTAS.filter(x=>x.data>p.data).sort((a,b)=>a.data<b.data?-1:1)[0];
-  if(!prox){ const data=proxSexta(p.data); prox={id:"p"+Date.now(), data, titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()}; }
+  let prox=PAUTAS.filter(x=>x.data>p.data && (x.squad||"")===(p.squad||"")).sort((a,b)=>a.data<b.data?-1:1)[0];
+  if(!prox){ const data=proxSexta(p.data); prox={id:"p"+Date.now(), data, squad:(p?(p.squad||""):(SQUAD_MODE?squadAtual:"")), titulo:"Pauta Reunião Semanal", status:"aberta", topicos:[], por:meuRep()||"equipe", ts:Date.now()}; }
   const jaLa=(prox.topicos||[]).some(x=>(x.titulo||"").toLowerCase()===(t.titulo||"").toLowerCase());
   if(!jaLa) prox.topicos.push({...t, id:"t"+Date.now()+Math.random().toString(36).slice(2,6), fwd:false, de:fmtDataBR(p.data), arq:false, arq_ts:0, arq_por:"", ts:Date.now()});
   t.fwd=true;
@@ -2087,16 +2106,22 @@ function renderTab(){
     const mesAnoISO=iso=>{ const p=(iso||"").split("-"); return p.length>=2?`${MESN[(+p[1])-1]||"?"}/${p[0]}`:"—"; };
     const mesAnoTs=ts=>{ const d=new Date(ts||Date.now()); return `${MESN[d.getMonth()]}/${d.getFullYear()}`; };
     const doc=pautaAtual();
-    const _prox0=doc?PAUTAS.filter(x=>x.data>doc.data).sort((a,b)=>a.data<b.data?-1:1)[0]:null;
+    const _prox0=doc?pautasDoSquad().filter(x=>x.data>doc.data).sort((a,b)=>a.data<b.data?-1:1)[0]:null;
+    const squadBar = SQUAD_MODE ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:2px 0 10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.08)">
+        <span class="t-mut" style="font-size:11px;font-weight:700">SQUAD:</span>
+        ${SQUADS.length?SQUADS.map(s=>`<button class="minibtn ${s===squadAtual?'on':''}" data-squad="${esc(s)}" style="${s===squadAtual?'font-weight:800':''}">${esc(s)}</button>`).join(""):'<span class="t-mut" style="font-size:11.5px">nenhum squad ainda</span>'}
+        <button class="minibtn" id="addSquadBtn" style="border-color:rgba(0,229,160,.55);color:#7effcf;font-weight:800">＋ Squad</button>
+        ${squadAtual?`<button class="minibtn" id="editSquadBtn" title="Renomear/remover squad">✏️</button>`:""}
+      </div>` : "";
     const _proxN=_prox0?(_prox0.topicos||[]).filter(t=>!t.arq).length:0;
     const _curIdSub=pautaHistId||(doc?doc.id:null); const _curPSub=PAUTAS.find(p=>p.id===_curIdSub);
     const _verProx=!!(_curPSub && doc && _curPSub.data>doc.data);
-    const subtabs=`<div class="subtabs"><button class="subtab ${pautaView==='atual'&&!_verProx?'on':''}" data-pav="atual">🗓️ Esta semana</button><button class="subtab ${_verProx?'on':''}" data-pav="proxima">➡️ Próxima${_proxN?` (${_proxN})`:''}</button><button class="subtab ${pautaView==='arquivados'?'on':''}" data-pav="arquivados">🗄️ Arquivo</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">📅 Calendário${PAUTAS.length?` (${PAUTAS.length})`:''}</button></div>`;
+    const subtabs=squadBar+`<div class="subtabs"><button class="subtab ${pautaView==='atual'&&!_verProx?'on':''}" data-pav="atual">🗓️ Esta semana</button><button class="subtab ${_verProx?'on':''}" data-pav="proxima">➡️ Próxima${_proxN?` (${_proxN})`:''}</button><button class="subtab ${pautaView==='arquivados'?'on':''}" data-pav="arquivados">🗄️ Arquivo</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">📅 Calendário${pautasDoSquad().length?` (${pautasDoSquad().length})`:''}</button></div>`;
 
     // ===== CALENDÁRIO / HISTÓRICO (por mês/ano, cada pauta = 1 dia) =====
     if(pautaView==="historico"){
       if(pautaHistId){ /* abre uma pauta antiga em modo leitura → cai no render normal abaixo trocando doc */ }
-      const grupos={}; PAUTAS.forEach(p=>{ const k=mesAnoISO(p.data); (grupos[k]=grupos[k]||[]).push(p); });
+      const grupos={}; pautasDoSquad().forEach(p=>{ const k=mesAnoISO(p.data); (grupos[k]=grupos[k]||[]).push(p); });
       const chavesMes=Object.keys(grupos);
       c.innerHTML=`${subtabs}
         <div style="display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap">
@@ -2110,7 +2135,7 @@ function renderTab(){
               <div style="text-align:center;min-width:44px"><div style="font-size:20px;font-weight:900;color:#00D4FF;line-height:1">${(p.data||"").slice(8,10)}</div><div class="t-mut" style="font-size:9.5px">${esc(fmtDataBR(p.data).split(" ")[0])}</div></div>
               <div style="flex:1;min-width:0"><div class="nm">${esc(p.titulo||"Pauta")}</div><div class="ci">${ativos.length} tópico(s) ${chips}${(p.topicos||[]).filter(t=>t.arq).length?` · 🗄️ ${(p.topicos||[]).filter(t=>t.arq).length}`:""}</div></div>
               <div style="color:var(--mut)">›</div></div>`; }).join("")}`).join(""):`<div class="empty">Ainda sem pautas. Crie a primeira acima.</div>`}`;
-      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); }); _wireSquad();
       const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
       document.querySelectorAll("#content [data-abrepauta]").forEach(el=>el.onclick=()=>{ pautaHistId=el.dataset.abrepauta; pautaView="atual"; renderTab(); });
       return;
@@ -2118,7 +2143,7 @@ function renderTab(){
 
     // ===== ARQUIVO (tópicos arquivados + excluídos, com governança dia/mês/ano) =====
     if(pautaView==="arquivados"){
-      const arqs=[]; PAUTAS.forEach(p=>(p.topicos||[]).filter(t=>t.arq).forEach(t=>arqs.push({t,p})));
+      const arqs=[]; pautasDoSquad().forEach(p=>(p.topicos||[]).filter(t=>t.arq).forEach(t=>arqs.push({t,p})));
       arqs.sort((a,b)=>(b.t.arq_ts||0)-(a.t.arq_ts||0));
       const gArq={}; arqs.forEach(o=>{ const k=mesAnoTs(o.t.arq_ts); (gArq[k]=gArq[k]||[]).push(o); });
       const gExc={}; (PAUTA_EXCL||[]).forEach(e=>{ const k=mesAnoTs(e.ts); (gExc[k]=gExc[k]||[]).push(e); });
@@ -2132,7 +2157,7 @@ function renderTab(){
         <div class="seclabel" style="margin:16px 0 6px;color:#ff8fa3">🗑️ Excluídos ${(PAUTA_EXCL||[]).length?`(${PAUTA_EXCL.length})`:""} <span class="t-mut" style="font-weight:500;font-size:11px">— auditoria permanente</span></div>
         ${(PAUTA_EXCL||[]).length?Object.keys(gExc).map(mk=>`<div class="t-mut" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px">${mk}</div>
           ${gExc[mk].map(e=>`<div style="font-size:12px;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.05)"><b>${esc(e.titulo)}</b> <span class="t-mut" style="font-size:10.5px">· ${esc(e.sec||"")} · pauta ${esc(fmtDataBR(e.pauta))} · excluído ${esc(fmtDataHora(e.ts))} por ${esc(e.por||"—")}${e.motivo?` — "${esc(e.motivo)}"`:""}</span></div>`).join("")}`).join(""):`<div class="t-mut" style="font-size:12.5px;padding:4px 0">Nada excluído.</div>`}`;
-      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); }); _wireSquad();
       document.querySelectorAll("#content [data-desarq]").forEach(el=>el.onclick=async()=>{ const [pid,tid]=el.dataset.desarq.split("|"); await arquivarTopico(pid,tid,false); });
       return;
     }
@@ -2144,7 +2169,7 @@ function renderTab(){
         <button class="checkinbtn" id="novaPautaBtn" type="button" style="margin:10px 0">🗓️ Criar a 1ª pauta (escolher o dia)</button>
         <div class="empty">Nenhuma pauta ainda. Toque acima pra criar a pauta do dia — depois adicione os tópicos (cada um com sua cor).</div>`;
       const nb=document.getElementById("novaPautaBtn"); if(nb) nb.onclick=()=>novaPauta();
-      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+      document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); }); _wireSquad();
       return;
     }
     const tops=(cur.topicos||[]).filter(t=>!t.arq), arqN=(cur.topicos||[]).filter(t=>t.arq).length;
@@ -2206,19 +2231,22 @@ function renderTab(){
       </div>
       ${biBlock}
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-        <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:140px;margin:0">➕ Novo tópico</button>
-        <button class="checkinbtn" id="gravarBtn" type="button" style="flex:1;min-width:140px;margin:0;background:rgba(255,45,85,.14);border-color:#FF2D55;color:#ff8fa3">🎙️ Gravar reunião</button>
-        <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:140px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">📋 Carregar p/ próxima</button>
+        <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:130px;margin:0">➕ Novo tópico</button>
+        <button class="checkinbtn" id="novoBlocoBtn" type="button" style="flex:1;min-width:130px;margin:0">🧩 Novo bloco</button>
+        <button class="checkinbtn" id="gravarBtn" type="button" style="flex:1;min-width:130px;margin:0;background:rgba(255,45,85,.14);border-color:#FF2D55;color:#ff8fa3">🎙️ Gravar reunião</button>
+        <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:130px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">📋 Carregar p/ próxima</button>
       </div>
       ${toc?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${toc}</div>`:""}
       ${arqN?`<div class="t-mut" style="font-size:11px;margin-bottom:8px">🗄️ ${arqN} tópico(s) arquivado(s) — veja na aba <b>Arquivo</b>.</div>`:""}
       ${PAUTA_SEL.size?`<div class="proxhint" style="border-color:rgba(0,229,160,.45);color:#7effcf;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span><b>${PAUTA_SEL.size}</b> selecionado(s)</span><span style="display:flex;gap:6px"><button class="minibtn on" id="encSel">➡️ Encaminhar p/ próxima</button><button class="minibtn" id="limpaSel">limpar</button></span></div>`:""}
       ${tops.length?secBlocks:`<div class="empty">${arqN?"Todos os tópicos estão arquivados.":"Pauta criada."} Toque <b>➕ Novo tópico</b> pra montar.</div>`}
       <div class="proxhint" style="font-size:11.5px;margin-top:16px;line-height:1.6;border-color:rgba(0,229,160,.3);color:#c9f5e6">📋 <b>Rolar a pauta</b> (regra de mercado — agenda rolante do sales huddle / EOS): "📋 Carregar p/ próxima semana" leva os tópicos <b>em aberto</b> pra semana seguinte automaticamente; os <b>resolvidos</b> ficam pra trás. Assim os temas quentes nunca caem no esquecimento — voltam toda semana até fechar.</div>`;
-    document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); });
+    document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); }); _wireSquad();
     const at=document.getElementById("addTopico"); if(at) at.onclick=()=>openTopico(cur.id, null);
+    const nbl=document.getElementById("novoBlocoBtn"); if(nbl) nbl.onclick=()=>novoBloco(cur.id);
     const rb=document.getElementById("rolarBtn"); if(rb) rb.onclick=()=>rolarPauta(cur.id);
     const gb=document.getElementById("gravarBtn"); if(gb) gb.onclick=()=>gravarReuniao(cur.id);
+    _wireSquad();
     document.querySelectorAll("#content [data-editpauta]").forEach(el=>el.onclick=()=>openPautaHead(el.dataset.editpauta));
     document.querySelectorAll("#content [data-toped]").forEach(el=>el.onclick=()=>openTopico(cur.id, el.dataset.toped));
     document.querySelectorAll("#content [data-corpick]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const box=document.querySelector(`[data-corpickfor="${el.dataset.corpick}"]`); if(box) box.style.display=box.style.display==="none"?"flex":"none"; });
