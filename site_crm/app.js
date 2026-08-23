@@ -341,6 +341,7 @@ function setSquadAtual(s){ squadAtual=s; try{localStorage.setItem("crm_squad_atu
 async function addSquad(){ const n=(prompt("Nome do novo squad (ex.: Microbiologia, PCR e ELISA, Qualidade):","")||"").trim(); if(!n) return; if(SQUADS.some(x=>x.toLowerCase()===n.toLowerCase())){ alert("Esse squad já existe."); setSquadAtual(SQUADS.find(x=>x.toLowerCase()===n.toLowerCase())); renderTab(); return; } SQUADS=[...SQUADS,n]; if(await saveSquads()){ setSquadAtual(n); pautaHistId=null; renderTab(); } }
 async function renomearSquad(s){ const n=(prompt("Renomear squad:",s)||"").trim(); if(!n||n===s) return; SQUADS=SQUADS.map(x=>x===s?n:x); PAUTAS.forEach(p=>{ if(p.squad===s){ p.squad=n; } }); if(await saveSquads()){ for(const p of PAUTAS.filter(p=>p.squad===n)) await savePautaDoc(p); setSquadAtual(n); renderTab(); } }
 async function removerSquad(s){ const n=PAUTAS.filter(p=>p.squad===s).length; if(!confirm(`Remover o squad "${s}"?${n?` (as ${n} pauta(s) dele continuam salvas, mas somem da lista)`:""}`)) return; SQUADS=SQUADS.filter(x=>x!==s); if(await saveSquads()){ if(squadAtual===s) setSquadAtual(SQUADS[0]||""); renderTab(); } }
+async function moverSquad(dir){ const i=SQUADS.indexOf(squadAtual), j=i+dir; if(i<0||j<0||j>=SQUADS.length) return; const a=SQUADS.slice(); const t=a[i]; a[i]=a[j]; a[j]=t; SQUADS=a; if(await saveSquads()) renderTab(); }
 function pautasDoSquad(){ return SQUAD_MODE ? PAUTAS.filter(p=>(p.squad||"")===squadAtual) : PAUTAS; }
 async function savePautaDoc(doc){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:doc,senha:window.__pwd})});
   if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos, j.squads); return true; } if(r.status===401) alert("Sessão sem permissão."); }catch(e){ alert("Falha ao salvar a pauta (sem internet?)."); } return false; }
@@ -1565,6 +1566,8 @@ function _wireSquad(){
   document.querySelectorAll("#content [data-squad]").forEach(el=>el.onclick=()=>{ setSquadAtual(el.dataset.squad); pautaHistId=null; pautaView="atual"; PAUTA_SEL.clear(); renderTab(); });
   const asb=document.getElementById("addSquadBtn"); if(asb) asb.onclick=()=>addSquad();
   const esb=document.getElementById("editSquadBtn"); if(esb) esb.onclick=()=>{ const o=(prompt(`Squad "${squadAtual}":\n1 = renomear\n2 = remover\n\n(digite 1 ou 2)`,"1")||"").trim(); if(o==="1") renomearSquad(squadAtual); else if(o==="2") removerSquad(squadAtual); };
+  const sl=document.getElementById("sqLeft"); if(sl) sl.onclick=()=>moverSquad(-1);
+  const sr=document.getElementById("sqRight"); if(sr) sr.onclick=()=>moverSquad(1);
 }
 /* ➕ novo BLOCO/seção (Decisões, Metas, Ações…) — abre o tópico já com a seção */
 function novoBloco(pautaId){
@@ -2126,6 +2129,7 @@ function renderTab(){
         ${SQUADS.length?SQUADS.map(s=>`<button class="minibtn ${s===squadAtual?'on':''}" data-squad="${esc(s)}" style="${s===squadAtual?'font-weight:800':''}">${esc(s)}</button>`).join(""):'<span class="t-mut" style="font-size:11.5px">nenhum squad ainda</span>'}
         <button class="minibtn" id="addSquadBtn" style="border-color:rgba(0,229,160,.55);color:#7effcf;font-weight:800">＋ Squad</button>
         ${squadAtual?`<button class="minibtn" id="editSquadBtn" title="Renomear/remover squad">✏️</button>`:""}
+        ${squadAtual&&SQUADS.length>1?`<button class="minibtn" id="sqLeft" title="Mover este squad p/ a esquerda">◄</button><button class="minibtn" id="sqRight" title="Mover este squad p/ a direita">►</button>`:""}
       </div>` : "";
     const _proxN=_prox0?(_prox0.topicos||[]).filter(t=>!t.arq).length:0;
     const _curIdSub=pautaHistId||(doc?doc.id:null); const _curPSub=PAUTAS.find(p=>p.id===_curIdSub);
