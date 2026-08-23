@@ -1659,12 +1659,18 @@ async function encaminharSelecionados(pautaId){
   if(okP&&okA){ PAUTA_SEL.clear(); alert(`✅ ${sel.length} tópico(s) encaminhado(s) pra ${fmtDataBR(prox.data)}.`); renderTab(); }
 }
 function fmtDataHora(ts){ try{ const d=new Date(ts); const p=n=>String(n).padStart(2,"0"); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }catch(e){ return "—"; } }
-async function moverTopico(pautaId, tid, dir){   // sobe/desce o tópico dentro da MESMA seção
+async function moverTopico(pautaId, tid, dir){   // ▲▼: move dentro da seção; se estiver sozinho/no limite, move o BLOCO inteiro
   const p=_pautaById(pautaId); if(!p) return; const tops=p.topicos||[];
   const idx=tops.findIndex(t=>t.id===tid); if(idx<0) return; const sec=tops[idx].sec;
+  // 1) tenta reordenar DENTRO da mesma seção
   let j=idx+dir; while(j>=0 && j<tops.length && tops[j].sec!==sec) j+=dir;
-  if(j<0||j>=tops.length) return;   // já é o 1º/último da seção
-  const tmp=tops[idx]; tops[idx]=tops[j]; tops[j]=tmp;
+  if(j>=0 && j<tops.length){ const tmp=tops[idx]; tops[idx]=tops[j]; tops[j]=tmp; if(await savePautaDoc(p)) renderTab(); return; }
+  // 2) no limite da seção → move o BLOCO/seção inteiro pra cima/baixo (reordena os banners)
+  const order=[]; tops.forEach(t=>{ if(!order.includes(t.sec)) order.push(t.sec); });
+  const si=order.indexOf(sec), sj=si+dir; if(sj<0||sj>=order.length) return;   // já é o 1º/último bloco
+  const blocks={}; order.forEach(s=>blocks[s]=[]); tops.forEach(t=>blocks[t.sec].push(t));
+  const no=order.slice(); no[si]=order[sj]; no[sj]=sec;
+  p.topicos=no.flatMap(s=>blocks[s]);
   if(await savePautaDoc(p)) renderTab();
 }
 async function arquivarTopico(pautaId, tid, arq){
