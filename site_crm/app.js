@@ -17,7 +17,7 @@ function resolveLock(){
   return TABS.some(t=>t.k===k) ? k : null;
 }
 
-const TABS = [
+let TABS = [
   {k:"reativar",        ic:"🎯", nm:"Reativar",        cls:"urgtab",   bcls:"urgb"},
   {k:"em_queda",        ic:"▼",  nm:"Em Queda",        cls:"atrastab", bcls:"atrasb"},
   {k:"parados",         ic:"⛔", nm:"Parados",         cls:"atrastab", bcls:"atrasb"},
@@ -35,6 +35,19 @@ const TABS = [
   {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
   {k:"encerrados",      ic:"🔒", nm:"Encerrados",      cls:"",         bcls:""},
 ];
+/* MODO REUNIÕES DE SQUAD (site pessoal do Wal, só a aba Pauta) — detecta por hostname */
+const SQUAD_MODE = /squad/i.test(location.hostname);
+if(SQUAD_MODE){
+  TABS = [{k:"pauta", ic:"🗓️", nm:"Reuniões de Squad", cls:"", bcls:""}];
+  ACTIVE = "pauta";
+  document.addEventListener("DOMContentLoaded", ()=>{
+    try{ document.title="Reuniões de Squad · Wal";
+      const h=document.querySelector(".brand h1"); if(h) h.innerHTML='Reuniões <span style="color:var(--cyan)">·</span> de Squad';
+      const sub=document.querySelector(".brand .sub, .brand p"); if(sub) sub.textContent="pauta das reuniões com meus squads";
+      const selo=document.querySelector('[style*="font-weight:900"][style*="19px"]'); if(selo) selo.textContent="Reuniões de Squad";
+    }catch(e){}
+  });
+}
 const ROT_MS = 15000;
 
 /* ---------- follow-up compartilhado (Netlify Function + Blobs) ---------- */
