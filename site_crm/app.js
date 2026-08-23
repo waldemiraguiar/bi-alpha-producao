@@ -40,6 +40,7 @@ const SQUAD_MODE = /squad/i.test(location.hostname);
 if(SQUAD_MODE){
   TABS = [{k:"pauta", ic:"🗓️", nm:"Reuniões de Squad", cls:"", bcls:""}];
   ACTIVE = "pauta";
+  try{ if(!localStorage.getItem("crm_operador")){ localStorage.setItem("crm_operador","Waldemir"); localStorage.setItem("crm_rep","Waldemir"); localStorage.setItem("crm_operador_papel","diretoria"); } }catch(e){}   // app pessoal: já entra como Waldemir (sem tela de "quem é você"); o gate+digital são o login
   document.addEventListener("DOMContentLoaded", ()=>{
     try{ document.title="Reuniões de Squad · Wal";
       const h=document.querySelector(".brand h1"); if(h) h.innerHTML='Reuniões <span style="color:var(--cyan)">·</span> de Squad';
