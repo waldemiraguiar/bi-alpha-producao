@@ -393,7 +393,14 @@ function render(D){
 }
 
 /* ---------- Modo TV (rotação) + Resumo PDF ---------- */
+async function atualizarBI(){
+  const b=document.getElementById('btnReload'); if(b){b.disabled=true;b.textContent='Atualizando…';}
+  try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+  try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations){ const rs=await navigator.serviceWorker.getRegistrations(); rs.forEach(r=>r.unregister()); } }catch(e){}
+  location.replace(location.origin+location.pathname+'?r='+Date.now());
+}
 function wireTools(){
+  const rl=document.getElementById('btnReload'); if(rl && !rl.__w){ rl.__w=1; rl.addEventListener('click',atualizarBI); }
   const tv=document.getElementById('btnTV'), pr=document.getElementById('btnPrint');
   if(pr && !pr.__w){ pr.__w=1; pr.addEventListener('click',()=>{
     const g=[...document.querySelectorAll('.ftab')].find(x=>x.dataset.v==='geral');
