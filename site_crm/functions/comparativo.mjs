@@ -29,6 +29,7 @@ export default async (req) => {
     const exames = Array.isArray(d.exames) ? d.exames.slice(0, 4000).map((e) => {
       const precos = {};
       if (e.precos && typeof e.precos === "object") for (const k of Object.keys(e.precos)) { const v = num(e.precos[k]); if (v != null) precos[String(k).slice(0, 20)] = v; }
+      const t = num(e.teste);
       return {
         id: String(e.id || ("e" + Math.random().toString(36).slice(2, 8))).slice(0, 24),
         cat: String(e.cat || "").slice(0, 40),
@@ -36,6 +37,7 @@ export default async (req) => {
         precos,
         flag: e.flag ? 1 : 0,        // ⚑ marcado p/ revisar (de-para torto)
         ok: e.ok ? 1 : 0,            // ✓ conferido pelo Wal (silencia o ⚠️ automático)
+        teste: t != null ? t : 0,    // 🧪 preço de teste (sandbox) da coluna Alpha TESTE; 0 = sem override
       };
     }).filter((e) => e.nome) : [];
     await store.setJSON("dados", { labs, exames, ts: Date.now() });
