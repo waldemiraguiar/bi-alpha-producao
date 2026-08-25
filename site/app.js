@@ -460,7 +460,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',financeiro:'financeiro'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -469,6 +469,7 @@ function wireFTabs(){
     if(v==='analises'){ drawAnalisesChart(); drawDailyChart(); }
     if(v==='petlove'){ drawPetloveChart(); drawPetloveYearChart(); }
     if(v==='estudo') drawEstudoChart();
+    if(v==='financeiro'){ const c=document.getElementById('financeiro'); if(c&&!c.dataset.loaded){ c.dataset.loaded='1'; c.innerHTML='<div style="margin:14px 0 8px;color:var(--mut);font-size:13px">💼 <b>Financeiro de Saída · Custos</b> — Alpha 1 · Alpha 2 · Cabo Frio, espelhado aqui no ambiente fechado (só você e o Fúlvio). Faça login com sua senha do financeiro. A 4ª tabela (retiradas dos sócios) entra só aqui, privada.</div><iframe src="financeiro/index.html" style="width:100%;height:82vh;border:1px solid var(--line);border-radius:12px;background:#0b1220"></iframe>'; } }
   });});
 }
 
