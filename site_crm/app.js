@@ -29,6 +29,7 @@ let TABS = [
   {k:"pauta",           ic:"🗓️", nm:"Pauta",           cls:"",         bcls:""},
   {k:"clinicas",        ic:"🌂", nm:"Guarda-Chuva",    cls:"",         bcls:""},
   {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
+  {k:"comparativo",     ic:"⚖️", nm:"Comparativo Tabelas", cls:"",    bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
   {k:"sensiveis",       ic:"🚨", nm:"Sensíveis",       cls:"urgtab",   bcls:"urgb"},
@@ -338,6 +339,51 @@ function syncPautas(l, ex, sq){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage
 async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos, j.squads); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
 async function saveSquads(){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"squads_set",squads:SQUADS,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); if(Array.isArray(j.squads)) SQUADS=j.squads; return true; } }catch(e){} return false; }
 function setSquadAtual(s){ squadAtual=s; try{localStorage.setItem("crm_squad_atual",s);}catch(e){} }
+
+/* ================= COMPARATIVO DE TABELAS (Alpha × concorrentes) ================= */
+const COMP_API="/api/crm-comparativo";
+let COMP={labs:[],exames:[]};
+let compDescPct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true;
+function compMeu(){ return (COMP.labs.find(l=>l.meu)||COMP.labs[0]||{}).id||""; }   // id do meu lab (Alpha)
+function _cuid(p){ return p+Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-3); }
+async function loadComp(){ try{ const r=await fetch(COMP_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&Array.isArray(j.labs)){ COMP={labs:j.labs,exames:Array.isArray(j.exames)?j.exames:[]}; try{localStorage.setItem("crm_comp_cache",JSON.stringify(COMP));}catch(e){} } } }catch(e){ try{ const c=localStorage.getItem("crm_comp_cache"); if(c&&!COMP.exames.length) COMP=JSON.parse(c); }catch(_){} } }
+let _compTimer=null;
+async function saveComp(reRender){ try{localStorage.setItem("crm_comp_cache",JSON.stringify(COMP));}catch(e){}
+  clearTimeout(_compTimer);
+  _compTimer=setTimeout(async()=>{ try{ await fetch(COMP_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({senha:window.__pwd,dados:COMP})}); }catch(e){} },500);
+  if(reRender!==false) renderTab();
+}
+function compAddLab(){ const n=(prompt("Nome do laboratório / tabela (ex.: Concorrente X, Tabela Convênio):","")||"").trim(); if(!n) return; COMP.labs.push({id:_cuid("l"),nome:n,meu:false}); saveComp(); }
+function compRenameLab(id){ const l=COMP.labs.find(x=>x.id===id); if(!l) return; const n=(prompt("Renomear tabela:",l.nome)||"").trim(); if(!n) return; l.nome=n; saveComp(); }
+function compToggleMeu(id){ COMP.labs.forEach(l=>l.meu=(l.id===id)); if(compAlvo===id) compAlvo=""; saveComp(); }
+function compRemoveLab(id){ const l=COMP.labs.find(x=>x.id===id); if(!l) return; if(!confirm(`Remover a tabela "${l.nome}" e todos os seus preços?`)) return; COMP.labs=COMP.labs.filter(x=>x.id!==id); COMP.exames.forEach(e=>{ if(e.precos) delete e.precos[id]; }); if(compAlvo===id) compAlvo=""; saveComp(); }
+function compMoveLab(id,dir){ const i=COMP.labs.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=COMP.labs.length) return; const t=COMP.labs[i]; COMP.labs[i]=COMP.labs[j]; COMP.labs[j]=t; saveComp(); }
+function compAddExame(){ const n=(prompt("Nome do exame:","")||"").trim(); if(!n) return; const cat=(prompt("Categoria (opcional — ex.: Bioquímica, Hematologia, Hormônio):",compCat||"")||"").trim(); COMP.exames.unshift({id:_cuid("e"),nome:n,cat,precos:{}}); saveComp(); }
+function compRenameExame(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const n=(prompt("Renomear exame:",e.nome)||"").trim(); if(!n) return; e.nome=n; saveComp(); }
+function compSetCat(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const cat=(prompt("Categoria do exame:",e.cat||"")||"").trim(); e.cat=cat; saveComp(); }
+function compRemoveExame(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; if(!confirm(`Remover o exame "${e.nome}"?`)) return; COMP.exames=COMP.exames.filter(x=>x.id!==id); saveComp(); }
+function compSetPreco(exId,labId,val){ const e=COMP.exames.find(x=>x.id===exId); if(!e) return; if(!e.precos) e.precos={}; const n=parseFloat(String(val).replace(",",".")); if(isFinite(n)&&n>0) e.precos[labId]=Math.round(n*100)/100; else delete e.precos[labId]; saveComp(false); }
+function compEditPreco(exId,labId){ const e=COMP.exames.find(x=>x.id===exId); const l=COMP.labs.find(x=>x.id===labId); if(!e||!l) return; const cur=e.precos&&e.precos[labId]!=null?e.precos[labId]:""; const v=prompt(`${e.nome}\nPreço em ${l.nome} (R$) — vazio para limpar:`,cur); if(v===null) return; compSetPreco(exId,labId,v); renderTab(); }
+function compFmt(v){ return v==null?"—":("R$ "+(Math.round(v*100)/100).toFixed(2).replace(".",",")); }
+/* estatística por exame: min/max/quem é o mais barato/alpha vs mercado */
+function compRowStats(e){ const p=e.precos||{}; const vals=COMP.labs.map(l=>({id:l.id,meu:l.meu,v:p[l.id]})).filter(x=>x.v!=null&&x.v>0);
+  if(!vals.length) return {min:null,max:null,avg:null,n:0};
+  const nums=vals.map(x=>x.v); const min=Math.min(...nums),max=Math.max(...nums),avg=nums.reduce((a,b)=>a+b,0)/nums.length;
+  return {min,max,avg,n:vals.length}; }
+function compExamesView(){ let arr=COMP.exames.slice();
+  if(compSoComp) arr=arr.filter(e=>Object.values(e.precos||{}).filter(v=>v>0).length>=2);
+  if(compCat) arr=arr.filter(e=>(e.cat||"")===compCat);
+  if(compBusca){ const q=compBusca.toLowerCase(); arr=arr.filter(e=>(e.nome||"").toLowerCase().includes(q)); }
+  const meu=compMeu();
+  const nLabs=e=>Object.values(e.precos||{}).filter(v=>v>0).length;
+  if(compOrdem==="comp") arr.sort((a,b)=>{ const d=nLabs(b)-nLabs(a); return d||(a.nome||"").localeCompare(b.nome||"","pt"); });
+  else if(compOrdem==="nome") arr.sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt"));
+  else if(compOrdem==="caro") arr.sort((a,b)=>((b.precos||{})[meu]||0)-((a.precos||{})[meu]||0));
+  else if(compOrdem==="barato") arr.sort((a,b)=>((a.precos||{})[meu]||1e9)-((b.precos||{})[meu]||1e9));
+  else if(compOrdem==="gap"){ arr.sort((a,b)=>{ const ga=compGapAlvo(a),gb=compGapAlvo(b); return (gb==null?-1e9:gb)-(ga==null?-1e9:ga); }); }
+  return arr; }
+/* gap vs alvo: quanto Alpha (com desconto) está ABAIXO do alvo (positivo=mais barato) em % */
+function compGapAlvo(e){ const meu=compMeu(); const p=e.precos||{}; const a=p[meu], alvo=compAlvo?p[compAlvo]:null; if(a==null||alvo==null||alvo<=0) return null; const ad=a*(1-compDescPct/100); return 100*(alvo-ad)/alvo; }
 async function addSquad(){ const n=(prompt("Nome do novo squad (ex.: Microbiologia, PCR e ELISA, Qualidade):","")||"").trim(); if(!n) return; if(SQUADS.some(x=>x.toLowerCase()===n.toLowerCase())){ alert("Esse squad já existe."); setSquadAtual(SQUADS.find(x=>x.toLowerCase()===n.toLowerCase())); renderTab(); return; } SQUADS=[...SQUADS,n]; if(await saveSquads()){ setSquadAtual(n); pautaHistId=null; renderTab(); } }
 async function renomearSquad(s){ const n=(prompt("Renomear squad:",s)||"").trim(); if(!n||n===s) return; SQUADS=SQUADS.map(x=>x===s?n:x); PAUTAS.forEach(p=>{ if(p.squad===s){ p.squad=n; } }); if(await saveSquads()){ for(const p of PAUTAS.filter(p=>p.squad===n)) await savePautaDoc(p); setSquadAtual(n); renderTab(); } }
 async function removerSquad(s){ const n=PAUTAS.filter(p=>p.squad===s).length; if(!confirm(`Remover o squad "${s}"?${n?` (as ${n} pauta(s) dele continuam salvas, mas somem da lista)`:""}`)) return; SQUADS=SQUADS.filter(x=>x!==s); if(await saveSquads()){ if(squadAtual===s) setSquadAtual(SQUADS[0]||""); renderTab(); } }
@@ -2055,6 +2101,117 @@ function renderTab(){
     return;
   }
 
+  if(ACTIVE==="comparativo"){
+    const meu=compMeu(), meuLab=COMP.labs.find(l=>l.id===meu);
+    const labsOut=COMP.labs.filter(l=>l.id!==meu);   // concorrentes
+    const cats=[...new Set(COMP.exames.map(e=>(e.cat||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt"));
+    // ---- KPIs de mercado ----
+    let nComp=0, nAlphaCheapest=0, somaIdx=0, nIdx=0, nAbaixoAlvo=0, nComAlvo=0;
+    COMP.exames.forEach(e=>{ const st=compRowStats(e); if(st.n<2) return; const p=e.precos||{}; const a=p[meu];
+      if(a!=null){ nComp++; if(a<=st.min+1e-6) nAlphaCheapest++; if(st.avg>0){ somaIdx+=a/st.avg; nIdx++; } }
+      if(compAlvo && a!=null && p[compAlvo]!=null){ nComAlvo++; if(a*(1-compDescPct/100)<=p[compAlvo]+1e-6) nAbaixoAlvo++; }
+    });
+    const idxMed = nIdx? Math.round(100*somaIdx/nIdx) : null;   // <100 = Alpha mais barato que a média
+    const view=compExamesView();
+    const alvoLab=compAlvo?COMP.labs.find(l=>l.id===compAlvo):null;
+    // heatmap por célula
+    const cellBG=(v,st,meuCol)=>{ if(v==null||!st||st.n<2||st.max===st.min) return meuCol?"rgba(0,212,255,.10)":""; const pos=(v-st.min)/(st.max-st.min); const hue=Math.round(140*(1-pos)); return `hsla(${hue},72%,46%,${meuCol?.34:.20})`; };
+    if(!COMP.labs.length){
+      c.innerHTML=`<div class="empty" style="margin-top:18px">⚖️ Nenhuma tabela ainda. Clique <b>＋ Tabela/Lab</b> para começar. Marque a sua como <b>⭐ minha</b> (Alpha) para ativar o simulador de desconto.</div>
+        <div style="margin-top:12px"><button class="regbtn" onclick="compAddLab()">＋ Tabela/Lab</button> <button class="regbtn" onclick="compAddExame()">＋ Exame</button></div>`;
+      return;
+    }
+    const labChip=l=>{ const i=COMP.labs.findIndex(x=>x.id===l.id); return `<div style="display:inline-flex;align-items:center;gap:5px;background:${l.meu?'rgba(0,212,255,.16)':'rgba(255,255,255,.05)'};border:1px solid ${l.meu?'rgba(0,212,255,.5)':'rgba(255,255,255,.12)'};border-radius:7px;padding:5px 8px;margin:3px">
+        <button title="marcar como a minha (Alpha)" onclick="compToggleMeu('${l.id}')" style="background:none;border:none;cursor:pointer;font-size:14px;color:${l.meu?'#00D4FF':'#7d8ea6'}">${l.meu?'⭐':'☆'}</button>
+        <b onclick="compRenameLab('${l.id}')" style="cursor:text;color:${l.meu?'#00D4FF':'#e8eef7'}">${esc(l.nome)}</b>
+        <button title="mover ◄" onclick="compMoveLab('${l.id}',-1)" style="background:none;border:none;cursor:pointer;color:#7d8ea6" ${i<=0?'disabled':''}>◄</button>
+        <button title="mover ►" onclick="compMoveLab('${l.id}',1)" style="background:none;border:none;cursor:pointer;color:#7d8ea6" ${i>=COMP.labs.length-1?'disabled':''}>►</button>
+        <button title="remover" onclick="compRemoveLab('${l.id}')" style="background:none;border:none;cursor:pointer;color:#FF5470">✕</button>
+      </div>`; };
+    // cabeçalho da matriz
+    const colsLab = COMP.labs.map(l=>`<th style="text-align:right;white-space:nowrap;${l.meu?'color:#00D4FF;border-bottom:2px solid #00D4FF':''}">${esc(l.nome)}${l.meu?' ⭐':''}</th>`).join("");
+    const rows = view.map(e=>{ const st=compRowStats(e); const p=e.precos||{};
+      const tds = COMP.labs.map(l=>{ const v=p[l.id]; const bg=cellBG(v,st,l.meu);
+        return `<td onclick="compEditPreco('${e.id}','${l.id}')" title="clique p/ editar" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;${bg?`background:${bg};`:''}${l.meu?'font-weight:800;color:#eafaff;':''}">${v==null?'<span style="color:#5b6b82">＋</span>':compFmt(v).replace('R$ ','')}</td>`; }).join("");
+      const a=p[meu]; let simTd="";
+      if(alvoLab){ const gap=compGapAlvo(e); const ad=a!=null?a*(1-compDescPct/100):null;
+        simTd=`<td style="text-align:right;font-variant-numeric:tabular-nums;background:rgba(0,212,255,.12);font-weight:700">${ad==null?'—':compFmt(ad).replace('R$ ','')}</td>
+          <td style="text-align:right;font-weight:800;${gap==null?'color:#5b6b82':(gap>=0?'color:#00E5A0':'color:#FF5470')}">${gap==null?'—':(gap>=0?'▼ ':'▲ ')+Math.abs(Math.round(gap))+'%'}</td>`; }
+      return `<tr>
+        <td style="position:sticky;left:0;background:#0d1a2e;min-width:190px">
+          <b onclick="compRenameExame('${e.id}')" style="cursor:text">${esc(e.nome)}</b>
+          ${e.cat?`<span onclick="compSetCat('${e.id}')" class="tag" style="cursor:text;margin-left:5px">${esc(e.cat)}</span>`:`<span onclick="compSetCat('${e.id}')" style="cursor:text;color:#5b6b82;font-size:11px;margin-left:5px">+cat</span>`}
+          <button onclick="compRemoveExame('${e.id}')" title="remover exame" style="background:none;border:none;cursor:pointer;color:#5b6b82;float:right">✕</button>
+        </td>
+        ${tds}${simTd}
+      </tr>`; }).join("");
+    c.innerHTML=`
+      <div class="kgrid">
+        ${kpi("", COMP.exames.length, "Exames na base", `${COMP.labs.length} tabelas · ${nComp} comparáveis`)}
+        ${kpi(nAlphaCheapest>=nComp*0.6?"g":"a", nComp?`${nAlphaCheapest}/${nComp}`:"—", "Alpha é o + barato", "entre exames com ≥2 tabelas")}
+        ${kpi(idxMed!=null&&idxMed<100?"g":(idxMed!=null&&idxMed>100?"r":""), idxMed!=null?idxMed+"%":"—", "Índice Alpha vs mercado", idxMed!=null?(idxMed<100?`${100-idxMed}% abaixo da média`:idxMed>100?`${idxMed-100}% acima da média`:"na média"):"marque sua tabela ⭐")}
+        ${alvoLab?kpi(nComAlvo&&nAbaixoAlvo>=nComAlvo*0.6?"g":"a", nComAlvo?`${nAbaixoAlvo}/${nComAlvo}`:"—", `≤ ${esc(alvoLab.nome)}`, `com ${compDescPct}% desconto`):kpi("", COMP.labs.length-1<0?0:COMP.labs.length-1, "Concorrentes", "tabelas comparadas")}
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <h3>🧪 Tabelas / laboratórios <span class="tag">clique no nome p/ renomear · ⭐ = a minha (Alpha)</span></h3>
+        <div style="display:flex;flex-wrap:wrap;align-items:center">${COMP.labs.map(labChip).join("")}
+          <button class="regbtn" style="margin:3px" onclick="compAddLab()">＋ Tabela/Lab</button></div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-color:rgba(0,212,255,.35);background:linear-gradient(180deg,rgba(0,212,255,.06),transparent)">
+        <h3>🎚️ Simulador — “e se eu der desconto?” <span class="tag">brinque com os seus valores</span></h3>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+          <div style="flex:1;min-width:240px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#9fb2cc"><span>Desconto na tabela Alpha</span><b style="color:#00D4FF;font-size:16px">${compDescPct}%</b></div>
+            <input type="range" min="0" max="40" step="1" value="${compDescPct}" oninput="compDescPct=+this.value; const b=this.previousElementSibling&&this.previousElementSibling.querySelector('b'); if(b)b.textContent=this.value+'%'; clearTimeout(window._cds); window._cds=setTimeout(renderTab,140)" style="width:100%;accent-color:#00D4FF">
+          </div>
+          <div>
+            <div style="font-size:12px;color:#9fb2cc;margin-bottom:3px">Comparar contra</div>
+            <select onchange="compAlvo=this.value; renderTab()" style="background:#0d1a2e;color:#e8eef7;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:7px 9px;font-size:13px">
+              <option value="">— escolha um concorrente —</option>
+              ${labsOut.map(l=>`<option value="${l.id}" ${compAlvo===l.id?'selected':''}>${esc(l.nome)}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <div style="font-size:12px;color:#9fb2cc;margin-bottom:3px">Ordenar</div>
+            <select onchange="compOrdem=this.value; renderTab()" style="background:#0d1a2e;color:#e8eef7;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:7px 9px;font-size:13px">
+              <option value="comp" ${compOrdem==="comp"?'selected':''}>Mais comparáveis primeiro</option>
+              <option value="nome" ${compOrdem==="nome"?'selected':''}>Nome (A–Z)</option>
+              <option value="barato" ${compOrdem==="barato"?'selected':''}>Alpha mais barato</option>
+              <option value="caro" ${compOrdem==="caro"?'selected':''}>Alpha mais caro</option>
+              ${compAlvo?`<option value="gap" ${compOrdem==="gap"?'selected':''}>Maior vantagem vs alvo</option>`:''}
+            </select>
+          </div>
+        </div>
+        ${alvoLab?`<div style="margin-top:12px;padding:11px 13px;border-radius:9px;background:${nAbaixoAlvo>=nComAlvo*0.6?'rgba(0,229,160,.12)':'rgba(255,122,0,.12)'};border:1px solid ${nAbaixoAlvo>=nComAlvo*0.6?'rgba(0,229,160,.4)':'rgba(255,122,0,.4)'};font-size:14px;line-height:1.5">
+          Com <b style="color:#00D4FF">${compDescPct}% de desconto</b>, a Alpha fica <b>≤ ${esc(alvoLab.nome)}</b> em <b>${nAbaixoAlvo} de ${nComAlvo}</b> exames comparáveis${nComAlvo?` (${Math.round(100*nAbaixoAlvo/nComAlvo)}%)`:''}. ${nAbaixoAlvo<nComAlvo?`Faltam <b>${nComAlvo-nAbaixoAlvo}</b> — ordene por “maior vantagem” para ver onde apertar.`:'Você cobre a tabela inteira. 🎯'}</div>`:`<div style="margin-top:10px;font-size:12px;color:#9fb2cc">Escolha um concorrente acima para ver, exame a exame, quanto de desconto te coloca abaixo dele.</div>`}
+      </div>
+
+      <div class="tabsbar" style="margin:6px 0 10px;gap:8px;flex-wrap:wrap">
+        <input placeholder="🔎 buscar exame…" value="${esc(compBusca)}" oninput="compBusca=this.value; clearTimeout(window._cbz); window._cbz=setTimeout(renderTab,220)" style="flex:1;min-width:180px;background:#0d1a2e;color:#e8eef7;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:8px 11px;font-size:13px">
+        <button onclick="compSoComp=!compSoComp; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compSoComp?'#00D4FF':'rgba(255,255,255,.14)'};background:${compSoComp?'rgba(0,212,255,.18)':'transparent'};color:${compSoComp?'#00D4FF':'#9fb2cc'}" title="mostrar só exames presentes em 2+ tabelas">${compSoComp?'☑':'☐'} só comparáveis</button>
+        <button class="regbtn" onclick="compAddExame()">＋ Exame</button>
+      </div>
+      ${cats.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        <button onclick="compCat=''; renderTab()" style="cursor:pointer;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;border:1px solid ${!compCat?'#00D4FF':'rgba(255,255,255,.14)'};background:${!compCat?'rgba(0,212,255,.18)':'transparent'};color:${!compCat?'#00D4FF':'#9fb2cc'}">Todas (${COMP.exames.length})</button>
+        ${cats.map(cc=>`<button onclick="compCat=${JSON.stringify(cc).replace(/"/g,'&quot;')}; renderTab()" style="cursor:pointer;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;border:1px solid ${compCat===cc?'#00D4FF':'rgba(255,255,255,.14)'};background:${compCat===cc?'rgba(0,212,255,.18)':'transparent'};color:${compCat===cc?'#00D4FF':'#9fb2cc'}">${esc(cc)}</button>`).join("")}
+      </div>`:''}
+
+      <div class="card" style="padding:0;overflow:auto;max-height:70vh">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead style="position:sticky;top:0;z-index:2"><tr style="background:#0a1420">
+            <th style="text-align:left;position:sticky;left:0;background:#0a1420;z-index:3;min-width:190px;padding:9px 10px">Exame</th>
+            ${colsLab}
+            ${alvoLab?`<th style="text-align:right;color:#00D4FF;background:rgba(0,212,255,.12);white-space:nowrap">Alpha −${compDescPct}%</th><th style="text-align:right;white-space:nowrap">vs ${esc(alvoLab.nome)}</th>`:''}
+          </tr></thead>
+          <tbody>${rows||`<tr><td colspan="${COMP.labs.length+1}" style="padding:22px;text-align:center;color:#9fb2cc">Nenhum exame ${compBusca?'para essa busca':'nesta categoria'}.</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.6">🟩 verde = mais barato da linha · 🟥 vermelho = mais caro · coluna azul = <b>Alpha</b>. Clique em qualquer preço para editar, no nome do exame/lab para renomear. O de-para foi montado automaticamente por semelhança de nome — <b>revise e ajuste à vontade</b>, perfis muito específicos podem não ter casado. Tudo é salvo e permanente.</div>`;
+    return;
+  }
+
   if(ACTIVE==="resultados"){
     const s=biStats();
     c.innerHTML = `
@@ -3365,7 +3522,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
