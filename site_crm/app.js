@@ -343,7 +343,18 @@ function setSquadAtual(s){ squadAtual=s; try{localStorage.setItem("crm_squad_atu
 /* ================= COMPARATIVO DE TABELAS (Alpha × concorrentes) ================= */
 const COMP_API="/api/crm-comparativo";
 let COMP={labs:[],exames:[]};
-let compDescPct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true;
+let compDescPct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true, compRevisar=false;
+/* detecção de de-para torto: preço que destoa MUITO da mediana da linha (≥3 preços) => provável match errado */
+function compRowSpread(e){ const p=e.precos||{}; const arr=COMP.labs.map(l=>({id:l.id,v:p[l.id]})).filter(x=>x.v!=null&&x.v>0);
+  if(arr.length<3) return {median:null,susp:{}};
+  const vals=arr.map(x=>x.v).slice().sort((a,b)=>a-b); const n=vals.length;
+  const med = n%2 ? vals[(n-1)/2] : (vals[n/2-1]+vals[n/2])/2;
+  const susp={}; if(med>0) arr.forEach(x=>{ const r=x.v/med; if(r>=2.5||r<=0.4) susp[x.id]=Math.round(r*100)/100; });
+  return {median:med,susp}; }
+function compIsSusp(e){ return !e.ok && Object.keys(compRowSpread(e).susp).length>0; }   // ⚠️ automático (silenciado se ✓ ok)
+function compIsRevisar(e){ return !!e.flag || compIsSusp(e); }
+function compToggleFlag(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; e.flag=e.flag?0:1; if(e.flag) e.ok=0; saveComp(); }
+function compMarcarOk(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; e.ok=1; e.flag=0; saveComp(); }   // ✓ conferido: silencia ⚠️ e limpa ⚑
 function compMeu(){ return (COMP.labs.find(l=>l.meu)||COMP.labs[0]||{}).id||""; }   // id do meu lab (Alpha)
 function _cuid(p){ return p+Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-3); }
 async function loadComp(){ try{ const r=await fetch(COMP_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&Array.isArray(j.labs)){ COMP={labs:j.labs,exames:Array.isArray(j.exames)?j.exames:[]}; try{localStorage.setItem("crm_comp_cache",JSON.stringify(COMP));}catch(e){} } } }catch(e){ try{ const c=localStorage.getItem("crm_comp_cache"); if(c&&!COMP.exames.length) COMP=JSON.parse(c); }catch(_){} } }
@@ -371,7 +382,8 @@ function compRowStats(e){ const p=e.precos||{}; const vals=COMP.labs.map(l=>({id
   const nums=vals.map(x=>x.v); const min=Math.min(...nums),max=Math.max(...nums),avg=nums.reduce((a,b)=>a+b,0)/nums.length;
   return {min,max,avg,n:vals.length}; }
 function compExamesView(){ let arr=COMP.exames.slice();
-  if(compSoComp) arr=arr.filter(e=>Object.values(e.precos||{}).filter(v=>v>0).length>=2);
+  if(compRevisar) arr=arr.filter(compIsRevisar);
+  else if(compSoComp) arr=arr.filter(e=>Object.values(e.precos||{}).filter(v=>v>0).length>=2);
   if(compCat) arr=arr.filter(e=>(e.cat||"")===compCat);
   if(compBusca){ const q=compBusca.toLowerCase(); arr=arr.filter(e=>(e.nome||"").toLowerCase().includes(q)); }
   const meu=compMeu();
@@ -2112,6 +2124,7 @@ function renderTab(){
       if(compAlvo && a!=null && p[compAlvo]!=null){ nComAlvo++; if(a*(1-compDescPct/100)<=p[compAlvo]+1e-6) nAbaixoAlvo++; }
     });
     const idxMed = nIdx? Math.round(100*somaIdx/nIdx) : null;   // <100 = Alpha mais barato que a média
+    const nRev = COMP.exames.filter(compIsRevisar).length;       // ⚠️ automáticos + ⚑ marcados
     const view=compExamesView();
     const alvoLab=compAlvo?COMP.labs.find(l=>l.id===compAlvo):null;
     // heatmap por célula
@@ -2131,15 +2144,19 @@ function renderTab(){
     // cabeçalho da matriz
     const colsLab = COMP.labs.map(l=>`<th style="text-align:right;white-space:nowrap;${l.meu?'color:#00D4FF;border-bottom:2px solid #00D4FF':''}">${esc(l.nome)}${l.meu?' ⭐':''}</th>`).join("");
     const rows = view.map(e=>{ const st=compRowStats(e); const p=e.precos||{};
-      const tds = COMP.labs.map(l=>{ const v=p[l.id]; const bg=cellBG(v,st,l.meu);
-        return `<td onclick="compEditPreco('${e.id}','${l.id}')" title="clique p/ editar" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;${bg?`background:${bg};`:''}${l.meu?'font-weight:800;color:#eafaff;':''}">${v==null?'<span style="color:#5b6b82">＋</span>':compFmt(v).replace('R$ ','')}</td>`; }).join("");
+      const sp=compRowSpread(e), susp=sp.susp, isSusp=compIsSusp(e), flagged=!!e.flag, okd=!!e.ok;
+      const rowBG = flagged?'#2a1e0a':(isSusp?'#241a1e':'#0d1a2e');
+      const tds = COMP.labs.map(l=>{ const v=p[l.id]; const bg=cellBG(v,st,l.meu); const bad=susp[l.id]&&!okd;
+        return `<td onclick="compEditPreco('${e.id}','${l.id}')" title="${bad?`destoa ${susp[l.id]}× da mediana — confira o de-para · `:''}clique p/ editar" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;${bg?`background:${bg};`:''}${bad?'box-shadow:inset 0 0 0 2px rgba(255,176,0,.9);':''}${l.meu?'font-weight:800;color:#eafaff;':''}">${bad?'<span style="color:#FFB000">⚠️</span> ':''}${v==null?'<span style="color:#5b6b82">＋</span>':compFmt(v).replace('R$ ','')}</td>`; }).join("");
       const a=p[meu]; let simTd="";
       if(alvoLab){ const gap=compGapAlvo(e); const ad=a!=null?a*(1-compDescPct/100):null;
         simTd=`<td style="text-align:right;font-variant-numeric:tabular-nums;background:rgba(0,212,255,.12);font-weight:700">${ad==null?'—':compFmt(ad).replace('R$ ','')}</td>
           <td style="text-align:right;font-weight:800;${gap==null?'color:#5b6b82':(gap>=0?'color:#00E5A0':'color:#FF5470')}">${gap==null?'—':(gap>=0?'▼ ':'▲ ')+Math.abs(Math.round(gap))+'%'}</td>`; }
-      return `<tr>
-        <td style="position:sticky;left:0;background:#0d1a2e;min-width:190px">
+      return `<tr style="${(flagged||isSusp)?`box-shadow:inset 3px 0 0 ${flagged?'#FFB000':'#FF7A7A'};`:''}">
+        <td style="position:sticky;left:0;background:${rowBG};min-width:210px">
+          <button onclick="compToggleFlag('${e.id}')" title="${flagged?'desmarcar':'marcar p/ revisar'}" style="background:none;border:none;cursor:pointer;color:${flagged?'#FFB000':'#5b6b82'};font-size:13px">${flagged?'⚑':'⚐'}</button>
           <b onclick="compRenameExame('${e.id}')" style="cursor:text">${esc(e.nome)}</b>
+          ${isSusp?`<span title="preço destoa da mediana — pode ser de-para torto" style="color:#FFB000;font-size:11px;margin-left:4px">⚠️</span> <button onclick="compMarcarOk('${e.id}')" title="conferi, está certo — silenciar aviso" style="background:rgba(0,229,160,.15);border:1px solid rgba(0,229,160,.5);color:#00E5A0;border-radius:5px;cursor:pointer;font-size:10px;padding:1px 5px">✓ ok</button>`:''}
           ${e.cat?`<span onclick="compSetCat('${e.id}')" class="tag" style="cursor:text;margin-left:5px">${esc(e.cat)}</span>`:`<span onclick="compSetCat('${e.id}')" style="cursor:text;color:#5b6b82;font-size:11px;margin-left:5px">+cat</span>`}
           <button onclick="compRemoveExame('${e.id}')" title="remover exame" style="background:none;border:none;cursor:pointer;color:#5b6b82;float:right">✕</button>
         </td>
@@ -2191,6 +2208,7 @@ function renderTab(){
       <div class="tabsbar" style="margin:6px 0 10px;gap:8px;flex-wrap:wrap">
         <input placeholder="🔎 buscar exame…" value="${esc(compBusca)}" oninput="compBusca=this.value; clearTimeout(window._cbz); window._cbz=setTimeout(renderTab,220)" style="flex:1;min-width:180px;background:#0d1a2e;color:#e8eef7;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:8px 11px;font-size:13px">
         <button onclick="compSoComp=!compSoComp; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compSoComp?'#00D4FF':'rgba(255,255,255,.14)'};background:${compSoComp?'rgba(0,212,255,.18)':'transparent'};color:${compSoComp?'#00D4FF':'#9fb2cc'}" title="mostrar só exames presentes em 2+ tabelas">${compSoComp?'☑':'☐'} só comparáveis</button>
+        <button onclick="compRevisar=!compRevisar; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compRevisar?'#FFB000':'rgba(255,176,0,.35)'};background:${compRevisar?'rgba(255,176,0,.2)':'transparent'};color:#FFB000" title="mostrar só os que precisam de conferência (⚠️ preço destoa + ⚑ marcados)">⚠️ revisar${nRev?` (${nRev})`:''}</button>
         <button class="regbtn" onclick="compAddExame()">＋ Exame</button>
       </div>
       ${cats.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
@@ -2208,7 +2226,7 @@ function renderTab(){
           <tbody>${rows||`<tr><td colspan="${COMP.labs.length+1}" style="padding:22px;text-align:center;color:#9fb2cc">Nenhum exame ${compBusca?'para essa busca':'nesta categoria'}.</td></tr>`}</tbody>
         </table>
       </div>
-      <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.6">🟩 verde = mais barato da linha · 🟥 vermelho = mais caro · coluna azul = <b>Alpha</b>. Clique em qualquer preço para editar, no nome do exame/lab para renomear. O de-para foi montado automaticamente por semelhança de nome — <b>revise e ajuste à vontade</b>, perfis muito específicos podem não ter casado. Tudo é salvo e permanente.</div>`;
+      <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.6">🟩 verde = mais barato da linha · 🟥 vermelho = mais caro · coluna azul = <b>Alpha</b>. <b style="color:#FFB000">⚠️</b> preço que <b>destoa muito da mediana</b> = possível de-para torto (confira e clique <b style="color:#00E5A0">✓ ok</b> se estiver certo, ou corrija o preço). <b style="color:#FFB000">⚐/⚑</b> marca você mesmo p/ revisar; o filtro <b style="color:#FFB000">⚠️ revisar</b> mostra só esses. Clique em qualquer preço p/ editar, no nome p/ renomear. Tudo é salvo e permanente.</div>`;
     return;
   }
 

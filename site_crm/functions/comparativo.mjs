@@ -34,6 +34,8 @@ export default async (req) => {
         cat: String(e.cat || "").slice(0, 40),
         nome: String(e.nome || "").slice(0, 160),
         precos,
+        flag: e.flag ? 1 : 0,        // ⚑ marcado p/ revisar (de-para torto)
+        ok: e.ok ? 1 : 0,            // ✓ conferido pelo Wal (silencia o ⚠️ automático)
       };
     }).filter((e) => e.nome) : [];
     await store.setJSON("dados", { labs, exames, ts: Date.now() });
