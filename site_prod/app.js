@@ -568,6 +568,7 @@ function renderActive(){
   const K=special?KIND[x.kind]:null;
   const col=special?K.c:ringColor(x.pct_no_prazo);
   const ders=(x.derivacoes||[]).slice(0,18);
+  const petMensal=(special&&x.kind==='pet')?petMensalCardHtml():'';
   const wlItems=(x.exames||[]).map(e=>({...e,_urg:urgentOf(e),_manual:manual.has(String(e.registro))&&!e.urgente&&!baixados.has(String(e.registro))}))
     .sort((a,b)=>(b._urg?1:0)-(a._urg?1:0)||b.dias-a.dias);
   const urgItems=wlItems.filter(e=>e._urg);
@@ -600,6 +601,7 @@ function renderActive(){
       ${(special&&x.kind==='urg'&&baixasInfo.length)?`<div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column"><h3>↩ Baixados <span class="tag">${baixasInfo.length} · desfazer</span></h3><div class="scroll">${baixasInfo.map(b=>`<div class="wl"><span class="reg">#${esc(b.registro)}</span><div class="cli-x"><div class="pac" style="font-size:13px">${esc(b.paciente||'—')}</div><div class="exm">baixa dada pela equipe</div></div><button class="desfazbtn" data-reg="${esc(b.registro)}">↩ desfazer</button></div>`).join('')}</div></div>`:''}
     </div>
     <div class="right">
+      ${petMensal}
       <div class="card"><h3>${special?'Por categoria':'Derivações'} <span class="tag">${ders.length} ${special?'categorias':'tipos'} · em processo / atrasado</span></h3>
         <div class="ders">${ders.map(d=>{
           const okp=100*(d.em_processo-d.atrasado)/(d.em_processo||1), lp=100-okp;
@@ -629,6 +631,23 @@ function renderActive(){
 }
 function fmtD(d){if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}`:d;}
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+// Card de PRODUÇÃO MENSAL Pet Love (exames/mês, dos relatórios que o Wal manda). Fonte: DATA.pl_mensal (build).
+const _MESab=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function petMensalCardHtml(){
+  const m=(DATA&&DATA.pl_mensal)||{}; const ks=Object.keys(m).sort();
+  if(!ks.length) return '';
+  const vis=ks.slice(-12); const mx=Math.max(...vis.map(k=>m[k]||0))||1;
+  const bars=vis.map(k=>{const v=m[k]||0,h=Math.round(100*v/mx),mm=+k.slice(5,7),yy=k.slice(2,4);
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:30px">
+      <div style="font-size:12px;font-weight:800;color:${C.petlove}">${num(v)}</div>
+      <div style="width:62%;background:linear-gradient(180deg,${C.petlove},#8f2f79);border-radius:4px 4px 0 0;height:${Math.max(6,h)}px"></div>
+      <div style="font-size:11px;color:var(--mut)">${_MESab[mm]}/${yy}</div></div>`;}).join('');
+  const last=m[vis[vis.length-1]]||0, prev=vis.length>1?(m[vis[vis.length-2]]||0):null;
+  const dl=prev?Math.round(100*(last-prev)/prev):null;
+  return `<div class="card"><h3>💗 Produção mensal Pet Love <span class="tag">exames/mês · dos relatórios</span></h3>
+    <div style="display:flex;align-items:flex-end;gap:8px;height:120px;padding:8px 2px 2px">${bars}</div>
+    <div style="font-size:11px;color:var(--mut);margin-top:8px">${dl!=null?`último mês <b style="color:${dl>=0?C.green:C.red}">${dl>=0?'▲ +':'▼ '}${dl}%</b> vs anterior · `:''}Pet Love ≈ 14% da produção total do lab. Atualizado quando você manda o relatório do mês.</div></div>`;
+}
 
 /* Auto-reload na virada do dia (meia-noite BRT): a TV/PC fica ligada a noite toda;
    isso garante que ela pegue o codigo novo + o reset diario da Triagem sem F5 manual. */

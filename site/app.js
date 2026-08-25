@@ -467,7 +467,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',financeiro:'financeiro'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',financeiro:'financeiro',socios:'socios'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -477,6 +477,7 @@ function wireFTabs(){
     if(v==='petlove'){ drawPetloveChart(); drawPetloveYearChart(); }
     if(v==='estudo') drawEstudoChart();
     if(v==='financeiro') renderCustos();
+    if(v==='socios') renderSocios();
   });});
 }
 
@@ -1183,6 +1184,8 @@ async function renderCustos(){
   drawCustos(D);
 }
 function _custVal(D,emp,m){ const d=((D.custosFin.dados||{})[emp]||{})[m]; if(!d) return 0; return _custosConf? d.total : (d.operacional||0); }
+// Imposto trimestral (Lucro Presumido: IRPJ+CSLL) — Alpha 2 e Cabo Frio apuram no fim do trimestre (Mar/Jun/Set/Dez).
+function _trimQ(m){ const mm=(m||'').slice(5,7); return mm==='03'||mm==='06'||mm==='09'||mm==='12'; }
 function drawCustos(D){
   const wrap=document.getElementById('financeiro'); const C=D.custosFin; if(!wrap||!C) return;
   const emps=C.empresas||[]; if(!_custosSel) _custosSel=new Set(emps);
@@ -1206,7 +1209,7 @@ function drawCustTable(D){
     const soma=sel.reduce((a,e)=>a+_custVal(D,e,m),0);
     const priv=sel.reduce((a,e)=>a+(((C.dados[e]||{})[m]||{}).sigiloso||0),0);
     const pr=prod[m]||0, marg=pr-soma, mp=pr?100*marg/pr:null;
-    return `<tr><td>${ymLabel(m)}</td>
+    return `<tr><td>${ymLabel(m)}${_trimQ(m)?` <span title="Imposto trimestral (Lucro Presumido): IRPJ + CSLL apurados no fim do trimestre — Alpha 2 e Cabo Frio. Recolhimento no mês seguinte." style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.4px;color:var(--amber);border:1px solid var(--amber);border-radius:4px;padding:1px 4px;margin-left:5px;vertical-align:middle">◆ TRIM.</span>`:''}</td>
       ${emps.map(e=>`<td class="num" style="${_custosSel.has(e)?'':'opacity:.35'}">${brl(_custVal(D,e,m))}</td>`).join('')}
       <td class="num" style="font-weight:800;color:var(--amber)">${brl(soma)}</td>
       <td class="num" style="color:var(--mut)">${_custosConf?brl(priv):'—'}</td>
@@ -1215,8 +1218,185 @@ function drawCustTable(D){
       <td class="num" style="color:${mp==null?'var(--mut)':(mp>=0?AZUL2:'var(--red)')};font-weight:700">${mp==null?'—':mp.toFixed(0)+'%'}</td></tr>`;
   }).join('');
   el.innerHTML=`<div style="overflow-x:auto"><table class="atab"><thead><tr><th>Mês</th>${emps.map(e=>`<th class="num">${esc(e)}</th>`).join('')}<th class="num">SOMA custos</th><th class="num">(confid.)</th><th class="num">Produção lab</th><th class="num">Margem</th><th class="num">%</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div style="color:var(--mut);font-size:11px;margin-top:8px">SOMA = empresas marcadas${_custosConf?' (inclui confidencial: impostos/retiradas)':' (só operacional)'}. Produção lab = sistema+Pet Love (todo o lab). <b>Margem = Produção − Custos</b> (aprox.: produção é do lab Matriz; custos das empresas marcadas).</div>`;
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">SOMA = empresas marcadas${_custosConf?' (inclui confidencial: impostos/retiradas)':' (só operacional)'}. Produção lab = sistema+Pet Love (todo o lab). <b>Margem = Produção − Custos</b> (aprox.: produção é do lab Matriz; custos das empresas marcadas).</div>
+    <div style="color:var(--mut);font-size:11px;margin-top:4px"><span style="color:var(--amber);font-weight:800">◆ TRIM.</span> = fim de trimestre com <b>imposto trimestral</b> (IRPJ + CSLL, Lucro Presumido) de <b>Alpha 2 + Cabo Frio</b> — apurado em Mar/Jun/Set/Dez, recolhido no mês seguinte. Peso extra de caixa nesses meses.</div>`;
 }
+
+/* ===================== ABA 🔐 SÓCIOS (cofre cifrado · 2ª senha · editável) =====================
+   BLINDAGEM: conteúdo cifrado com uma 2ª senha (só Wal+Fúlvio). Nunca Supabase, nunca texto puro.
+   Ler = 2ª senha; Salvar = recifra no browser + POST /api/enc?f=socios (x-pwd = senha do painel). */
+let _socD=null, _socPW=null, _socMsg='', _socDirty=false;
+async function encryptEncObj(obj, pwd){
+  const te=new TextEncoder();
+  const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+  const bk=await crypto.subtle.importKey('raw', te.encode(pwd),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'}, bk, {name:'AES-GCM',length:256}, false, ['encrypt']);
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, te.encode(JSON.stringify(obj)));
+  const b64=b=>btoa(String.fromCharCode.apply(null,new Uint8Array(b)));
+  return {v:1,kdf:'PBKDF2-SHA256',iter:250000,salt:b64(salt),iv:b64(iv),ct:b64(ct)};
+}
+function _sn(v){return (v==null||v==='')?null:(isNaN(+v)?v:+v);}
+function renderSocios(){
+  const wrap=document.getElementById('socios'); if(!wrap) return;
+  if(_socD){ drawSocios(); return; }
+  wrap.innerHTML=`<div class="card" style="max-width:460px;margin:34px auto;text-align:center">
+    <div style="font-size:32px;margin-bottom:4px">🔐</div>
+    <h3 style="justify-content:center">Cofre dos Sócios</h3>
+    <div style="color:var(--mut);font-size:13px;margin:6px 0 16px">Camada extra de sigilo — só você e o Fúlvio. Digite a 2ª senha do cofre.</div>
+    <input id="soc-pw" type="password" autocomplete="off" placeholder="2ª senha do cofre" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:15px;margin-bottom:10px">
+    <button id="soc-enter" class="toolbtn" style="width:100%;padding:12px;font-weight:700">Abrir cofre 🔓</button>
+    <div id="soc-err" style="color:var(--red);font-size:12px;margin-top:10px;min-height:16px">${esc(_socMsg)}</div></div>`;
+  const go=async()=>{
+    const el=document.getElementById('soc-pw'), err=document.getElementById('soc-err'); const pw=el.value;
+    if(!pw){err.textContent='Digite a senha.';return;}
+    err.textContent='Abrindo…';
+    try{
+      const r=await fetch('/api/enc?f=socios&_='+Date.now());
+      if(!r.ok) throw new Error('cofre vazio');
+      const env=await r.json();
+      _socD=await decryptEncObj(env, pw); _socPW=pw; _socMsg=''; _socDirty=false; drawSocios();
+    }catch(e){ err.textContent='Senha incorreta ou cofre indisponível.'; }
+  };
+  document.getElementById('soc-enter').onclick=go;
+  document.getElementById('soc-pw').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+}
+function _socRet(m){ // retirada total do sócio no mês
+  return {wal:(+m.sal_wal||0)+(+m.pl_wal||0), ful:(+m.sal_ful||0)+(+m.pl_ful||0)};
+}
+function drawSocios(){
+  const wrap=document.getElementById('socios'); const D=_socD; if(!wrap||!D) return;
+  const M=D.meses||[];
+  const order=M.map((m,i)=>i).sort((a,b)=>(M[b].ym||'').localeCompare(M[a].ym||''));
+  // agregados do ano corrente (2026)
+  const yr=(M.map(m=>(m.ym||'').slice(0,4)).sort().pop())||'2026';
+  let ytdW=0,ytdF=0; M.forEach(m=>{ if((m.ym||'').slice(0,4)===yr){const r=_socRet(m); ytdW+=r.wal; ytdF+=r.ful;} });
+  const inp=(i,f,val,col)=>`<input class="soc-in" data-i="${i}" data-f="${f}" value="${val==null?'':val}" inputmode="decimal" autocomplete="off" style="width:88px;text-align:right;padding:5px 6px;border-radius:6px;border:1px solid var(--line);background:#0E1E36;color:${col||'#E8EEF6'};font-size:12px">`;
+  const rows=order.map(i=>{const m=M[i];
+    return `<tr><td style="font-weight:700;white-space:nowrap">${ymLabel(m.ym)}</td>
+      <td class="num">${inp(i,'receita',m.receita)}</td>
+      <td class="num">${inp(i,'sal_wal',m.sal_wal,'#4D9DFF')}</td>
+      <td class="num">${inp(i,'pl_wal',m.pl_wal,'#4D9DFF')}</td>
+      <td class="num">${inp(i,'sal_ful',m.sal_ful,'#00E5A0')}</td>
+      <td class="num">${inp(i,'pl_ful',m.pl_ful,'#00E5A0')}</td>
+      <td class="num">${inp(i,'total',m.total)}</td>
+      <td><button class="soc-it toolbtn" data-i="${i}" style="padding:4px 9px;font-size:11px">itens ${(m.itens||[]).length}</button></td></tr>`;
+  }).join('');
+  wrap.innerHTML=`<div class="card" style="margin-bottom:16px">
+    <h3>🔐 Cofre dos Sócios · retiradas Wal + Fúlvio <span class="cap">SIGILOSO · só você + Fúlvio · snapshot ${esc(D.gerado||'')}</span></h3>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="b" style="background:rgba(77,157,255,.10);border:1px solid rgba(77,157,255,.35);border-radius:10px;padding:9px 14px">
+        <div style="font-size:11px;color:var(--mut)">Retiradas Wal · ${yr}</div><div style="font-size:19px;font-weight:800;color:#4D9DFF">${brl(ytdW)}</div></div>
+      <div class="b" style="background:rgba(0,229,160,.10);border:1px solid rgba(0,229,160,.35);border-radius:10px;padding:9px 14px">
+        <div style="font-size:11px;color:var(--mut)">Retiradas Fúlvio · ${yr}</div><div style="font-size:19px;font-weight:800;color:#00E5A0">${brl(ytdF)}</div></div>
+      <div class="b" style="background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.3);border-radius:10px;padding:9px 14px">
+        <div style="font-size:11px;color:var(--mut)">Meses no cofre</div><div style="font-size:19px;font-weight:800;color:var(--amber)">${M.length}</div></div>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button id="soc-save" class="toolbtn" style="padding:9px 16px;font-weight:700;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#04121f">💾 Salvar</button>
+        <button id="soc-report" class="toolbtn" style="padding:9px 14px">📄 Relatório contábil</button>
+        <button id="soc-add" class="toolbtn" style="padding:9px 14px">➕ Mês</button>
+        <button id="soc-pw2" class="toolbtn" style="padding:9px 14px">🔑 Trocar senha</button>
+      </div>
+    </div>
+    <div id="soc-status" style="font-size:12px;min-height:16px;margin-bottom:6px;color:${_socDirty?'var(--amber)':'var(--mut)'}">${_socDirty?'● alterações não salvas':'✓ tudo salvo'}</div>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr>
+      <th>Mês</th><th class="num">Receita</th>
+      <th class="num" style="color:#4D9DFF">Salário Wal</th><th class="num" style="color:#4D9DFF">Pró-labore Wal</th>
+      <th class="num" style="color:#00E5A0">Salário Fúlvio</th><th class="num" style="color:#00E5A0">Pró-labore Fúlvio</th>
+      <th class="num">Total mês</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">Edite qualquer valor e clique 💾 Salvar (recifra no seu navegador e grava só no cofre — jamais em texto puro). Azul = Wal · Verde = Fúlvio. "itens" abre o detalhe de lançamentos do mês.</div>
+  </div>`;
+  // wiring
+  wrap.querySelectorAll('.soc-in').forEach(el=>el.addEventListener('input',()=>{
+    const i=+el.dataset.i, f=el.dataset.f; _socD.meses[i][f]=_sn(el.value); _socDirty=true;
+    const st=document.getElementById('soc-status'); if(st){st.textContent='● alterações não salvas';st.style.color='var(--amber)';}
+  }));
+  wrap.querySelector('#soc-save').onclick=socSave;
+  wrap.querySelector('#soc-report').onclick=socReport;
+  wrap.querySelector('#soc-add').onclick=socAddMonth;
+  wrap.querySelector('#soc-pw2').onclick=socChangePw;
+  wrap.querySelectorAll('.soc-it').forEach(b=>b.onclick=()=>socItens(+b.dataset.i));
+}
+async function socSave(){
+  const st=document.getElementById('soc-status'); if(st){st.textContent='Salvando (cifrando)…';st.style.color='var(--cyan)';}
+  try{
+    const env=await encryptEncObj(_socD, _socPW);
+    const r=await fetch('/api/enc?f=socios',{method:'POST',headers:{'Content-Type':'application/json','x-pwd':(window.__PW||'')},body:JSON.stringify(env)});
+    if(!r.ok) throw new Error('POST '+r.status);
+    _socDirty=false; if(st){st.textContent='✓ salvo no cofre '+new Date().toLocaleTimeString('pt-BR');st.style.color='var(--green)';}
+  }catch(e){ if(st){st.textContent='✗ falhou ao salvar: '+(e.message||e);st.style.color='var(--red)';} }
+}
+function socAddMonth(){
+  const ym=prompt('Novo mês (AAAA-MM):',''); if(!ym||!/^\d{4}-\d{2}$/.test(ym))return;
+  if(_socD.meses.some(m=>m.ym===ym)){alert('Esse mês já existe no cofre.');return;}
+  _socD.meses.push({ym,receita:null,sal_wal:null,pl_wal:null,sal_ful:null,pl_ful:null,total:null,obs:'',itens:[]});
+  _socDirty=true; drawSocios();
+}
+async function socChangePw(){
+  const p1=prompt('Nova 2ª senha do cofre (mín. 6):',''); if(!p1)return;
+  if(p1.length<6){alert('Muito curta.');return;}
+  if(prompt('Confirme a nova senha:','')!==p1){alert('Não conferem.');return;}
+  const st=document.getElementById('soc-status');
+  try{ const env=await encryptEncObj(_socD, p1);
+    const r=await fetch('/api/enc?f=socios',{method:'POST',headers:{'Content-Type':'application/json','x-pwd':(window.__PW||'')},body:JSON.stringify(env)});
+    if(!r.ok) throw new Error('POST '+r.status);
+    _socPW=p1; _socDirty=false; if(st){st.textContent='✓ senha do cofre trocada e salva';st.style.color='var(--green)';}
+    alert('Senha do cofre trocada. Guarde bem — sem ela ninguém (nem eu) lê o cofre.');
+  }catch(e){ alert('Falhou: '+(e.message||e)); }
+}
+function socItens(i){
+  const m=_socD.meses[i]; const its=m.itens||(m.itens=[]);
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(4,10,22,.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:18px';
+  const row=(it,j)=>`<tr>
+    <td><input class="it-d" data-j="${j}" value="${escA(it.d||'')}" style="width:260px;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:12px"></td>
+    <td><input class="it-v" data-j="${j}" value="${it.v==null?'':it.v}" inputmode="decimal" style="width:100px;text-align:right;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:12px"></td>
+    <td><input class="it-dt" data-j="${j}" value="${escA(it.dt||'')}" placeholder="AAAA-MM-DD" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:12px"></td>
+    <td><button class="it-del" data-j="${j}" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:15px">✕</button></td></tr>`;
+  modal.innerHTML=`<div class="card" style="max-width:640px;width:100%;max-height:82vh;display:flex;flex-direction:column">
+    <h3>🗒 Lançamentos · ${ymLabel(m.ym)} <button id="it-close" style="margin-left:auto;background:none;border:none;color:var(--mut);cursor:pointer;font-size:18px">✕</button></h3>
+    <div style="overflow:auto;flex:1"><table class="atab"><thead><tr><th>Descrição</th><th class="num">Valor</th><th>Data</th><th></th></tr></thead><tbody id="it-body">${its.map(row).join('')||'<tr><td colspan="4" style="color:var(--mut);padding:12px">Sem lançamentos.</td></tr>'}</tbody></table></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button id="it-add" class="toolbtn" style="padding:7px 12px">➕ Lançamento</button>
+      <button id="it-ok" class="toolbtn" style="padding:7px 14px;margin-left:auto;background:linear-gradient(135deg,#00D4FF,#00E5A0);color:#04121f;font-weight:700">Aplicar</button></div></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();
+  modal.querySelector('#it-close').onclick=close;
+  modal.addEventListener('click',e=>{if(e.target===modal)close();});
+  modal.querySelectorAll('.it-del').forEach(b=>b.onclick=()=>{its.splice(+b.dataset.j,1);_socDirty=true;close();socItens(i);});
+  modal.querySelector('#it-add').onclick=()=>{its.push({d:'',v:null,dt:''});_socDirty=true;close();socItens(i);};
+  modal.querySelector('#it-ok').onclick=()=>{
+    modal.querySelectorAll('.it-d').forEach(el=>its[+el.dataset.j].d=el.value);
+    modal.querySelectorAll('.it-v').forEach(el=>its[+el.dataset.j].v=_sn(el.value));
+    modal.querySelectorAll('.it-dt').forEach(el=>its[+el.dataset.j].dt=el.value||null);
+    _socDirty=true; const st=document.getElementById('soc-status'); if(st){st.textContent='● alterações não salvas';st.style.color='var(--amber)';}
+    close(); drawSocios();
+  };
+}
+function socReport(){
+  const M=(_socD.meses||[]).slice().sort((a,b)=>(a.ym||'').localeCompare(b.ym||''));
+  const yr=(M.map(m=>(m.ym||'').slice(0,4)).sort().pop())||'2026';
+  const rows=M.filter(m=>(m.ym||'').slice(0,4)===yr).map(m=>`<tr>
+    <td>${ymLabel(m.ym)}</td>
+    <td class="r">${_rbrl(m.pl_wal)}</td><td class="r">${_rbrl(m.pl_ful)}</td>
+    <td class="r">${_rbrl(m.sal_wal)}</td><td class="r">${_rbrl(m.sal_ful)}</td></tr>`).join('');
+  const sum=f=>M.filter(m=>(m.ym||'').slice(0,4)===yr).reduce((a,m)=>a+(+m[f]||0),0);
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Relatório Sócios ${yr}</title>
+  <style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#111;padding:26px;max-width:760px;margin:auto}
+  h1{font-size:18px;margin:0 0 2px}h2{font-size:12px;font-weight:400;color:#666;margin:0 0 18px}
+  table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #ccc;padding:6px 9px}
+  th{background:#f2f4f7;text-align:left}.r{text-align:right}tfoot td{font-weight:700;background:#fafafa}
+  .note{font-size:11px;color:#777;margin-top:14px}@media print{button{display:none}}</style></head><body>
+  <h1>Pró-labore e retiradas dos sócios — ${yr}</h1>
+  <h2>Sócios: Waldemir e Fúlvio · valores por mês · documento interno para a contabilidade</h2>
+  <table><thead><tr><th>Mês</th><th class="r">Pró-labore Wal</th><th class="r">Pró-labore Fúlvio</th><th class="r">Salário/Distrib. Wal</th><th class="r">Salário/Distrib. Fúlvio</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr><td>Total ${yr}</td><td class="r">${_rbrl(sum('pl_wal'))}</td><td class="r">${_rbrl(sum('pl_ful'))}</td><td class="r">${_rbrl(sum('sal_wal'))}</td><td class="r">${_rbrl(sum('sal_ful'))}</td></tr></tfoot></table>
+  <p class="note">Gerado do Cofre dos Sócios em ${new Date().toLocaleDateString('pt-BR')}. Pró-labore e salário/distribuições lançados separadamente. Confidencial.</p>
+  <button onclick="window.print()" style="margin-top:16px;padding:9px 16px;font-size:14px;cursor:pointer">🖨 Imprimir / Salvar PDF</button>
+  </body></html>`;
+  const w=window.open('','_blank'); if(!w){alert('Permita pop-up para abrir o relatório.');return;}
+  w.document.write(html); w.document.close();
+}
+function _rbrl(v){return (v==null||v==='')?'—':(+v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
 let _AD=null, selWin='5', _achart=null, _dayMap=null, _manMetric='q', _manChart=null;

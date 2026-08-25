@@ -27,6 +27,9 @@ JUNK = {55,56,60,24,25,35,36,37,50,52,54}   # CANCELADO/DINHEIRO/FAKE/Z NAO UTIL
 # PISO da Atenção/Especializados: começa a contar a partir desta data (zera o histórico p/ a equipe
 # não afogar). Só entradas >= ATEN_PISO aparecem. Mudar a data = novo recorte.
 ATEN_PISO = "2026-06-26"
+# Produção mensal Pet Love (exames/mês) — dos RELATÓRIOS que o Wal manda (export .xls do sistema, plano 'Petlove%').
+# Contagem exata do export. ATUALIZAR aqui quando ele mandar um mês novo (ex.: "2026-08": N).
+PL_MENSAL = {"2026-06": 7605, "2026-07": 8758}
 
 # Cortes diários (horas) p/ a "baixa" da separação — editar aqui muda os dois cortes
 CORTES = [15, 21]
@@ -357,6 +360,7 @@ def build():
                     "itens":sep_itens,"historico":hist_itens},
        "clientes":{"lista":cli_lista,"reqs":cli_reqs},
        "especializados":esp_itens,
+       "pl_mensal":PL_MENSAL,
        "nao_classificados":naoclass}
     conn.close()
     return D
