@@ -344,6 +344,14 @@ function setSquadAtual(s){ squadAtual=s; try{localStorage.setItem("crm_squad_atu
 const COMP_API="/api/crm-comparativo";
 let COMP={labs:[],exames:[]};
 let compDescPct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true, compRevisar=false;
+let compView="matriz";        // "matriz" | "conferir"
+let compConfIdx=0;            // posição no modo conferência
+let compTesteOn=false;        // mostrar coluna Alpha TESTE (sandbox)
+/* ---- DESFAZER: pilha de snapshots (voltar em cada processo) ---- */
+let compUndo=[];
+function _compSnap(){ return JSON.stringify({labs:COMP.labs,exames:COMP.exames}); }
+function compPush(label){ compUndo.push({label:label||"alteração",snap:_compSnap(),t:Date.now()}); if(compUndo.length>30) compUndo.shift(); }
+function compUndoLast(){ if(!compUndo.length) return; const u=compUndo.pop(); try{ COMP=JSON.parse(u.snap); }catch(e){ return; } saveComp(); }
 /* detecção de de-para torto: preço que destoa MUITO da mediana da linha (≥3 preços) => provável match errado */
 function compRowSpread(e){ const p=e.precos||{}; const arr=COMP.labs.map(l=>({id:l.id,v:p[l.id]})).filter(x=>x.v!=null&&x.v>0);
   if(arr.length<3) return {median:null,susp:{}};
@@ -353,8 +361,8 @@ function compRowSpread(e){ const p=e.precos||{}; const arr=COMP.labs.map(l=>({id
   return {median:med,susp}; }
 function compIsSusp(e){ return !e.ok && Object.keys(compRowSpread(e).susp).length>0; }   // ⚠️ automático (silenciado se ✓ ok)
 function compIsRevisar(e){ return !!e.flag || compIsSusp(e); }
-function compToggleFlag(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; e.flag=e.flag?0:1; if(e.flag) e.ok=0; saveComp(); }
-function compMarcarOk(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; e.ok=1; e.flag=0; saveComp(); }   // ✓ conferido: silencia ⚠️ e limpa ⚑
+function compToggleFlag(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; compPush(e.flag?"desmarcar ⚑":"marcar ⚑"); e.flag=e.flag?0:1; if(e.flag) e.ok=0; saveComp(); }
+function compMarcarOk(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; compPush("✓ ok"); e.ok=1; e.flag=0; saveComp(); }   // ✓ conferido: silencia ⚠️ e limpa ⚑
 function compMeu(){ return (COMP.labs.find(l=>l.meu)||COMP.labs[0]||{}).id||""; }   // id do meu lab (Alpha)
 function _cuid(p){ return p+Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-3); }
 async function loadComp(){ try{ const r=await fetch(COMP_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&Array.isArray(j.labs)){ COMP={labs:j.labs,exames:Array.isArray(j.exames)?j.exames:[]}; try{localStorage.setItem("crm_comp_cache",JSON.stringify(COMP));}catch(e){} } } }catch(e){ try{ const c=localStorage.getItem("crm_comp_cache"); if(c&&!COMP.exames.length) COMP=JSON.parse(c); }catch(_){} } }
@@ -364,17 +372,27 @@ async function saveComp(reRender){ try{localStorage.setItem("crm_comp_cache",JSO
   _compTimer=setTimeout(async()=>{ try{ await fetch(COMP_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({senha:window.__pwd,dados:COMP})}); }catch(e){} },500);
   if(reRender!==false) renderTab();
 }
-function compAddLab(){ const n=(prompt("Nome do laboratório / tabela (ex.: Concorrente X, Tabela Convênio):","")||"").trim(); if(!n) return; COMP.labs.push({id:_cuid("l"),nome:n,meu:false}); saveComp(); }
-function compRenameLab(id){ const l=COMP.labs.find(x=>x.id===id); if(!l) return; const n=(prompt("Renomear tabela:",l.nome)||"").trim(); if(!n) return; l.nome=n; saveComp(); }
-function compToggleMeu(id){ COMP.labs.forEach(l=>l.meu=(l.id===id)); if(compAlvo===id) compAlvo=""; saveComp(); }
-function compRemoveLab(id){ const l=COMP.labs.find(x=>x.id===id); if(!l) return; if(!confirm(`Remover a tabela "${l.nome}" e todos os seus preços?`)) return; COMP.labs=COMP.labs.filter(x=>x.id!==id); COMP.exames.forEach(e=>{ if(e.precos) delete e.precos[id]; }); if(compAlvo===id) compAlvo=""; saveComp(); }
-function compMoveLab(id,dir){ const i=COMP.labs.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=COMP.labs.length) return; const t=COMP.labs[i]; COMP.labs[i]=COMP.labs[j]; COMP.labs[j]=t; saveComp(); }
-function compAddExame(){ const n=(prompt("Nome do exame:","")||"").trim(); if(!n) return; const cat=(prompt("Categoria (opcional — ex.: Bioquímica, Hematologia, Hormônio):",compCat||"")||"").trim(); COMP.exames.unshift({id:_cuid("e"),nome:n,cat,precos:{}}); saveComp(); }
-function compRenameExame(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const n=(prompt("Renomear exame:",e.nome)||"").trim(); if(!n) return; e.nome=n; saveComp(); }
-function compSetCat(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const cat=(prompt("Categoria do exame:",e.cat||"")||"").trim(); e.cat=cat; saveComp(); }
-function compRemoveExame(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; if(!confirm(`Remover o exame "${e.nome}"?`)) return; COMP.exames=COMP.exames.filter(x=>x.id!==id); saveComp(); }
-function compSetPreco(exId,labId,val){ const e=COMP.exames.find(x=>x.id===exId); if(!e) return; if(!e.precos) e.precos={}; const n=parseFloat(String(val).replace(",",".")); if(isFinite(n)&&n>0) e.precos[labId]=Math.round(n*100)/100; else delete e.precos[labId]; saveComp(false); }
+function compAddLab(){ const n=(prompt("Nome do laboratório / tabela (ex.: Concorrente X, Tabela Convênio):","")||"").trim(); if(!n) return; compPush("＋ tabela"); COMP.labs.push({id:_cuid("l"),nome:n,meu:false}); saveComp(); }
+function compRenameLab(id){ const l=COMP.labs.find(x=>x.id===id); if(!l) return; const n=(prompt("Renomear tabela:",l.nome)||"").trim(); if(!n) return; compPush("renomear tabela"); l.nome=n; saveComp(); }
+function compToggleMeu(id){ compPush("trocar tabela ⭐"); COMP.labs.forEach(l=>l.meu=(l.id===id)); if(compAlvo===id) compAlvo=""; saveComp(); }
+function compRemoveLab(id){ const l=COMP.labs.find(x=>x.id===id); if(!l) return; if(!confirm(`Remover a tabela "${l.nome}" e todos os seus preços?`)) return; compPush("remover tabela"); COMP.labs=COMP.labs.filter(x=>x.id!==id); COMP.exames.forEach(e=>{ if(e.precos) delete e.precos[id]; }); if(compAlvo===id) compAlvo=""; saveComp(); }
+function compMoveLab(id,dir){ const i=COMP.labs.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=COMP.labs.length) return; compPush("mover coluna"); const t=COMP.labs[i]; COMP.labs[i]=COMP.labs[j]; COMP.labs[j]=t; saveComp(); }
+function compAddExame(){ const n=(prompt("Nome do exame:","")||"").trim(); if(!n) return; const cat=(prompt("Categoria (opcional — ex.: Bioquímica, Hematologia, Hormônio):",compCat||"")||"").trim(); compPush("＋ exame"); COMP.exames.unshift({id:_cuid("e"),nome:n,cat,precos:{}}); saveComp(); }
+function compRenameExame(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const n=(prompt("Renomear exame:",e.nome)||"").trim(); if(!n) return; compPush("renomear exame"); e.nome=n; saveComp(); }
+function compSetCat(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const cat=(prompt("Categoria do exame:",e.cat||"")||"").trim(); compPush("categoria"); e.cat=cat; saveComp(); }
+function compRemoveExame(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; if(!confirm(`Remover o exame "${e.nome}"?`)) return; compPush("remover exame"); COMP.exames=COMP.exames.filter(x=>x.id!==id); saveComp(); }
+function compSetPreco(exId,labId,val,push){ const e=COMP.exames.find(x=>x.id===exId); if(!e) return; if(push!==false) compPush("editar preço"); if(!e.precos) e.precos={}; const n=parseFloat(String(val).replace(",",".")); if(isFinite(n)&&n>0) e.precos[labId]=Math.round(n*100)/100; else delete e.precos[labId]; saveComp(false); }
 function compEditPreco(exId,labId){ const e=COMP.exames.find(x=>x.id===exId); const l=COMP.labs.find(x=>x.id===labId); if(!e||!l) return; const cur=e.precos&&e.precos[labId]!=null?e.precos[labId]:""; const v=prompt(`${e.nome}\nPreço em ${l.nome} (R$) — vazio para limpar:`,cur); if(v===null) return; compSetPreco(exId,labId,v); renderTab(); }
+/* ---- coluna Alpha TESTE (sandbox): NÃO altera o preço real (REF). Override por exame OU % global ---- */
+function compTesteEfetivo(e){ const ref=(e.precos||{})[compMeu()];
+  if(e.teste!=null && e.teste>0) return e.teste;
+  if(compDescPct>0 && ref!=null && ref>0) return Math.round(ref*(1-compDescPct/100)*100)/100;
+  return ref!=null?ref:null; }
+function compEditTeste(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const ref=(e.precos||{})[compMeu()]; const cur=e.teste&&e.teste>0?e.teste:(ref!=null?ref:""); const v=prompt(`${e.nome}\nPreço de TESTE (sandbox — não mexe no seu preço real R$ ${ref!=null?ref:'—'}).\nDigite um valor, ou vazio p/ voltar a seguir o % global:`,cur); if(v===null) return; compPush("preço teste"); const n=parseFloat(String(v).replace(",",".")); e.teste=(isFinite(n)&&n>0)?Math.round(n*100)/100:0; saveComp(); }
+function compPosTeste(e){ const t=compTesteEfetivo(e); if(t==null) return null;
+  const comp=COMP.labs.filter(l=>!l.meu).map(l=>(e.precos||{})[l.id]).filter(v=>v!=null&&v>0);
+  if(!comp.length) return {t,solo:true};
+  const minC=Math.min(...comp); return {t,minC,cheaper:t<=minC+1e-6,pctVsMin:minC>0?100*(minC-t)/minC:0}; }
 function compFmt(v){ return v==null?"—":("R$ "+(Math.round(v*100)/100).toFixed(2).replace(".",",")); }
 /* estatística por exame: min/max/quem é o mais barato/alpha vs mercado */
 function compRowStats(e){ const p=e.precos||{}; const vals=COMP.labs.map(l=>({id:l.id,meu:l.meu,v:p[l.id]})).filter(x=>x.v!=null&&x.v>0);
@@ -2134,6 +2152,74 @@ function renderTab(){
         <div style="margin-top:12px"><button class="regbtn" onclick="compAddLab()">＋ Tabela/Lab</button> <button class="regbtn" onclick="compAddExame()">＋ Exame</button></div>`;
       return;
     }
+    // posição de mercado por concorrente (% de exames em que Alpha ≤ concorrente)
+    const posComp = labsOut.map(l=>{ let n=0,win=0; COMP.exames.forEach(e=>{const p=e.precos||{};const a=p[meu],b=p[l.id]; if(a!=null&&a>0&&b!=null&&b>0){n++; if(a<=b+1e-6)win++;}}); return {l,n,win,pct:n?Math.round(100*win/n):0}; });
+    const barCol=p=>p>=60?'#00E5A0':p>=40?'#FFC400':'#FF5470';
+    // ---- barra superior: abas de visão + DESFAZER ----
+    const uLast = compUndo.length?compUndo[compUndo.length-1]:null;
+    const head=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div style="display:inline-flex;background:#0a1420;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:3px">
+          <button onclick="compView='matriz'; renderTab()" style="cursor:pointer;border:none;border-radius:8px;padding:8px 15px;font-size:13px;font-weight:800;background:${compView==='matriz'?'rgba(0,212,255,.9)':'transparent'};color:${compView==='matriz'?'#04121f':'#9fb2cc'}">📊 Matriz</button>
+          <button onclick="compView='conferir'; renderTab()" style="cursor:pointer;border:none;border-radius:8px;padding:8px 15px;font-size:13px;font-weight:800;background:${compView==='conferir'?'rgba(0,212,255,.9)':'transparent'};color:${compView==='conferir'?'#04121f':'#9fb2cc'}">🔍 Conferir linha a linha</button>
+        </div>
+        <button onclick="compUndoLast()" ${uLast?'':'disabled'} title="voltar a última alteração" style="cursor:${uLast?'pointer':'default'};border-radius:9px;padding:8px 14px;font-size:13px;font-weight:800;border:1px solid ${uLast?'rgba(255,176,0,.55)':'rgba(255,255,255,.1)'};background:${uLast?'rgba(255,176,0,.15)':'transparent'};color:${uLast?'#FFB000':'#4a5a70'}">↩ Desfazer${uLast?` · ${esc(uLast.label)}`:''}</button>
+      </div>`;
+
+    /* ==================== MODO CONFERIR (linha a linha) ==================== */
+    if(compView==="conferir"){
+      if(!view.length){ c.innerHTML=head+`<div class="empty" style="margin-top:14px">Nenhum exame no filtro atual. Ajuste a busca/filtros na aba 📊 Matriz.</div>`; return; }
+      if(compConfIdx>=view.length) compConfIdx=view.length-1; if(compConfIdx<0) compConfIdx=0;
+      const e=view[compConfIdx]; const p=e.precos||{}; const st=compRowStats(e); const sp=compRowSpread(e); const isSusp=compIsSusp(e), flagged=!!e.flag;
+      const pct=Math.round(100*(compConfIdx+1)/view.length);
+      const linha=l=>{ const v=p[l.id]; const bad=sp.susp[l.id]&&!e.ok; const isMin=v!=null&&st.n>=2&&v<=st.min+1e-6; const isMax=v!=null&&st.n>=2&&v>=st.max-1e-6&&st.max!==st.min;
+        return `<div onclick="compEditPreco('${e.id}','${l.id}')" title="clique p/ editar" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-radius:9px;margin:6px 0;background:${l.meu?'rgba(0,212,255,.12)':'rgba(255,255,255,.035)'};border:1px solid ${l.meu?'rgba(0,212,255,.45)':(bad?'rgba(255,176,0,.5)':'rgba(255,255,255,.08)')}">
+          <span style="font-weight:${l.meu?800:600};color:${l.meu?'#00D4FF':'#e8eef7'};font-size:14px">${l.meu?'⭐ ':''}${esc(l.nome)}${l.meu?' <span style="color:#6b7f97;font-weight:400;font-size:11px">(seu preço real)</span>':''}</span>
+          <span style="font-variant-numeric:tabular-nums;font-weight:800;font-size:16px;color:${bad?'#FFB000':(isMin?'#00E5A0':(isMax?'#FF7A7A':'#e8eef7'))}">${bad?'⚠️ ':''}${isMin?'🥇 ':''}${v==null?'<span style="color:#5b6b82;font-size:13px">＋ definir</span>':compFmt(v)}</span>
+        </div>`; };
+      const t=compTesteEfetivo(e); const pos=compPosTeste(e); const ref=p[meu];
+      let posTxt="—";
+      if(alvoLab){ const av=p[compAlvo]; if(t!=null&&av!=null&&av>0){ const g=100*(av-t)/av; posTxt=`<b style="color:${g>=0?'#00E5A0':'#FF5470'}">${g>=0?'▼':'▲'} ${Math.abs(Math.round(g))}%</b> vs ${esc(alvoLab.nome)}`; } }
+      else if(pos&&!pos.solo){ posTxt=pos.cheaper?`<b style="color:#00E5A0">🥇 mais barato que todos os concorrentes</b>`:`<b style="color:#FF5470">▲ ${Math.abs(Math.round(pos.pctVsMin))}%</b> acima do concorrente mais barato (${compFmt(pos.minC)})`; }
+      c.innerHTML=head+`
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="flex:1;height:8px;border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden"><div style="height:100%;width:${pct}%;background:#00D4FF"></div></div>
+          <b style="color:#9fb2cc;font-size:13px;white-space:nowrap">${compConfIdx+1} / ${view.length}</b>
+        </div>
+        <div class="card" style="border-color:${flagged?'rgba(255,176,0,.5)':(isSusp?'rgba(255,176,0,.4)':'rgba(0,212,255,.3)')}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:220px">
+              <div onclick="compRenameExame('${e.id}')" style="cursor:text;font-size:20px;font-weight:800;line-height:1.25">${esc(e.nome)}</div>
+              <div style="margin-top:4px">${e.cat?`<span onclick="compSetCat('${e.id}')" class="tag" style="cursor:text">${esc(e.cat)}</span>`:`<span onclick="compSetCat('${e.id}')" style="cursor:text;color:#5b6b82;font-size:11px">+ categoria</span>`}
+                ${isSusp?`<span style="color:#FFB000;font-size:12px;margin-left:6px">⚠️ preço destoa — confira</span>`:''}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button onclick="compToggleFlag('${e.id}')" style="cursor:pointer;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;border:1px solid ${flagged?'#FFB000':'rgba(255,255,255,.15)'};background:${flagged?'rgba(255,176,0,.18)':'transparent'};color:${flagged?'#FFB000':'#9fb2cc'}">${flagged?'⚑ marcado':'⚐ marcar'}</button>
+              ${isSusp?`<button onclick="compMarcarOk('${e.id}')" style="cursor:pointer;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;border:1px solid rgba(0,229,160,.5);background:rgba(0,229,160,.15);color:#00E5A0">✓ ok, está certo</button>`:''}
+            </div>
+          </div>
+          <div style="margin-top:12px">${COMP.labs.slice().sort((a,b)=>{const va=p[a.id],vb=p[b.id]; if(a.meu)return -1; if(b.meu)return 1; return (va==null?9e9:va)-(vb==null?9e9:vb);}).map(linha).join("")}</div>
+          <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.35)">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div><span style="color:#9fb2cc;font-size:12px">🧪 Seu preço de TESTE (sandbox — não altera o real)</span>
+                <div onclick="compEditTeste('${e.id}')" style="cursor:pointer;font-size:20px;font-weight:800;color:#00E5A0">${t==null?'—':compFmt(t)}${e.teste&&e.teste>0?' <span style="font-size:11px;color:#7d8ea6">• definido</span>':(compDescPct>0?` <span style="font-size:11px;color:#7d8ea6">• −${compDescPct}%</span>`:'')}</div>
+              </div>
+              <div style="text-align:right;font-size:13px;color:#c9d6e5">${posTxt}</div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+              <button onclick="compEditTeste('${e.id}')" class="regbtn" style="font-size:12px">✎ definir preço teste</button>
+              ${ref!=null?`<button onclick="compSetPreco('${e.id}','${meu}','${ref}');renderTab()" title="referência" style="cursor:default;border:none;background:transparent;color:#6b7f97;font-size:12px">real: ${compFmt(ref)}</button>`:''}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button onclick="compConfIdx=Math.max(0,compConfIdx-1); renderTab()" ${compConfIdx<=0?'disabled':''} style="flex:1;cursor:${compConfIdx<=0?'default':'pointer'};border-radius:10px;padding:13px;font-size:15px;font-weight:800;border:1px solid rgba(255,255,255,.14);background:${compConfIdx<=0?'transparent':'rgba(255,255,255,.05)'};color:${compConfIdx<=0?'#4a5a70':'#e8eef7'}">◀ Anterior</button>
+          <button onclick="compConfIdx=Math.min(${view.length-1},compConfIdx+1); renderTab()" ${compConfIdx>=view.length-1?'disabled':''} style="flex:2;cursor:${compConfIdx>=view.length-1?'default':'pointer'};border-radius:10px;padding:13px;font-size:15px;font-weight:800;border:1px solid rgba(0,212,255,.4);background:${compConfIdx>=view.length-1?'transparent':'rgba(0,212,255,.9)'};color:${compConfIdx>=view.length-1?'#4a5a70':'#04121f'}">Próximo ▶</button>
+        </div>
+        <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.6">Percorra exame por exame. 🥇 = mais barato · ⚠️ = destoa (confira/✓ ok) · clique num preço p/ corrigir · <b style="color:#00E5A0">🧪 preço de teste</b> é só simulação (não mexe no seu preço real). O filtro de exibição (só comparáveis / revisar / categoria) vem da aba Matriz.</div>`;
+      return;
+    }
+
+    /* ==================== MODO MATRIZ (BI) ==================== */
     const labChip=l=>{ const i=COMP.labs.findIndex(x=>x.id===l.id); return `<div style="display:inline-flex;align-items:center;gap:5px;background:${l.meu?'rgba(0,212,255,.16)':'rgba(255,255,255,.05)'};border:1px solid ${l.meu?'rgba(0,212,255,.5)':'rgba(255,255,255,.12)'};border-radius:7px;padding:5px 8px;margin:3px">
         <button title="marcar como a minha (Alpha)" onclick="compToggleMeu('${l.id}')" style="background:none;border:none;cursor:pointer;font-size:14px;color:${l.meu?'#00D4FF':'#7d8ea6'}">${l.meu?'⭐':'☆'}</button>
         <b onclick="compRenameLab('${l.id}')" style="cursor:text;color:${l.meu?'#00D4FF':'#e8eef7'}">${esc(l.nome)}</b>
@@ -2141,46 +2227,64 @@ function renderTab(){
         <button title="mover ►" onclick="compMoveLab('${l.id}',1)" style="background:none;border:none;cursor:pointer;color:#7d8ea6" ${i>=COMP.labs.length-1?'disabled':''}>►</button>
         <button title="remover" onclick="compRemoveLab('${l.id}')" style="background:none;border:none;cursor:pointer;color:#FF5470">✕</button>
       </div>`; };
-    // cabeçalho da matriz
-    const colsLab = COMP.labs.map(l=>`<th style="text-align:right;white-space:nowrap;${l.meu?'color:#00D4FF;border-bottom:2px solid #00D4FF':''}">${esc(l.nome)}${l.meu?' ⭐':''}</th>`).join("");
+    const showAlvoCols = alvoLab && !compTesteOn;
+    const colCount = 1 + COMP.labs.length + (compTesteOn?2:0) + (showAlvoCols?2:0);
+    const colsLab = COMP.labs.map(l=>`<th style="text-align:right;white-space:nowrap;padding:9px 10px;${l.meu?'color:#00D4FF;border-bottom:2px solid #00D4FF':''}">${esc(l.nome)}${l.meu?' ⭐':''}</th>`).join("");
+    const alvoShort = alvoLab?esc(alvoLab.nome.split(" ")[0]):"";
     const rows = view.map(e=>{ const st=compRowStats(e); const p=e.precos||{};
       const sp=compRowSpread(e), susp=sp.susp, isSusp=compIsSusp(e), flagged=!!e.flag, okd=!!e.ok;
       const rowBG = flagged?'#2a1e0a':(isSusp?'#241a1e':'#0d1a2e');
       const tds = COMP.labs.map(l=>{ const v=p[l.id]; const bg=cellBG(v,st,l.meu); const bad=susp[l.id]&&!okd;
-        return `<td onclick="compEditPreco('${e.id}','${l.id}')" title="${bad?`destoa ${susp[l.id]}× da mediana — confira o de-para · `:''}clique p/ editar" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;${bg?`background:${bg};`:''}${bad?'box-shadow:inset 0 0 0 2px rgba(255,176,0,.9);':''}${l.meu?'font-weight:800;color:#eafaff;':''}">${bad?'<span style="color:#FFB000">⚠️</span> ':''}${v==null?'<span style="color:#5b6b82">＋</span>':compFmt(v).replace('R$ ','')}</td>`; }).join("");
-      const a=p[meu]; let simTd="";
-      if(alvoLab){ const gap=compGapAlvo(e); const ad=a!=null?a*(1-compDescPct/100):null;
-        simTd=`<td style="text-align:right;font-variant-numeric:tabular-nums;background:rgba(0,212,255,.12);font-weight:700">${ad==null?'—':compFmt(ad).replace('R$ ','')}</td>
-          <td style="text-align:right;font-weight:800;${gap==null?'color:#5b6b82':(gap>=0?'color:#00E5A0':'color:#FF5470')}">${gap==null?'—':(gap>=0?'▼ ':'▲ ')+Math.abs(Math.round(gap))+'%'}</td>`; }
+        return `<td onclick="compEditPreco('${e.id}','${l.id}')" title="${bad?`destoa ${susp[l.id]}× da mediana — confira o de-para · `:''}clique p/ editar" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;padding:8px 10px;${bg?`background:${bg};`:''}${bad?'box-shadow:inset 0 0 0 2px rgba(255,176,0,.9);':''}${l.meu?'font-weight:800;color:#eafaff;':''}">${bad?'<span style="color:#FFB000">⚠️</span> ':''}${v==null?'<span style="color:#5b6b82">＋</span>':compFmt(v).replace('R$ ','')}</td>`; }).join("");
+      let simTd="";
+      if(showAlvoCols){ const gap=compGapAlvo(e); const a=p[meu]; const ad=a!=null?a*(1-compDescPct/100):null;
+        simTd=`<td style="text-align:right;font-variant-numeric:tabular-nums;background:rgba(0,212,255,.12);font-weight:700;padding:8px 10px">${ad==null?'—':compFmt(ad).replace('R$ ','')}</td>
+          <td style="text-align:right;font-weight:800;padding:8px 10px;${gap==null?'color:#5b6b82':(gap>=0?'color:#00E5A0':'color:#FF5470')}">${gap==null?'—':(gap>=0?'▼ ':'▲ ')+Math.abs(Math.round(gap))+'%'}</td>`; }
+      let testeTd="";
+      if(compTesteOn){ const t=compTesteEfetivo(e); const over=(e.teste&&e.teste>0); const pos=compPosTeste(e);
+        let ph="—";
+        if(alvoLab){ const av=p[compAlvo]; if(t!=null&&av!=null&&av>0){ const g=100*(av-t)/av; ph=`<span style="color:${g>=0?'#00E5A0':'#FF5470'};font-weight:800">${g>=0?'▼':'▲'} ${Math.abs(Math.round(g))}%</span>`; } }
+        else if(pos&&!pos.solo){ ph=pos.cheaper?`<span style="color:#00E5A0;font-weight:800">🥇</span>`:`<span style="color:#FF5470;font-weight:800">▲${Math.abs(Math.round(pos.pctVsMin))}%</span>`; }
+        testeTd=`<td onclick="compEditTeste('${e.id}')" title="preço de teste — não altera o real" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;padding:8px 10px;background:rgba(0,229,160,.1);font-weight:800;color:#c8ffe9;box-shadow:inset 2px 0 0 #00E5A0">${t==null?'—':compFmt(t).replace('R$ ','')}${over?' <span style="color:#00E5A0">•</span>':''}</td>
+          <td style="text-align:right;padding:8px 10px;font-size:12px">${ph}</td>`; }
       return `<tr style="${(flagged||isSusp)?`box-shadow:inset 3px 0 0 ${flagged?'#FFB000':'#FF7A7A'};`:''}">
-        <td style="position:sticky;left:0;background:${rowBG};min-width:210px">
+        <td style="position:sticky;left:0;background:${rowBG};min-width:210px;padding:8px 10px">
           <button onclick="compToggleFlag('${e.id}')" title="${flagged?'desmarcar':'marcar p/ revisar'}" style="background:none;border:none;cursor:pointer;color:${flagged?'#FFB000':'#5b6b82'};font-size:13px">${flagged?'⚑':'⚐'}</button>
           <b onclick="compRenameExame('${e.id}')" style="cursor:text">${esc(e.nome)}</b>
           ${isSusp?`<span title="preço destoa da mediana — pode ser de-para torto" style="color:#FFB000;font-size:11px;margin-left:4px">⚠️</span> <button onclick="compMarcarOk('${e.id}')" title="conferi, está certo — silenciar aviso" style="background:rgba(0,229,160,.15);border:1px solid rgba(0,229,160,.5);color:#00E5A0;border-radius:5px;cursor:pointer;font-size:10px;padding:1px 5px">✓ ok</button>`:''}
           ${e.cat?`<span onclick="compSetCat('${e.id}')" class="tag" style="cursor:text;margin-left:5px">${esc(e.cat)}</span>`:`<span onclick="compSetCat('${e.id}')" style="cursor:text;color:#5b6b82;font-size:11px;margin-left:5px">+cat</span>`}
           <button onclick="compRemoveExame('${e.id}')" title="remover exame" style="background:none;border:none;cursor:pointer;color:#5b6b82;float:right">✕</button>
         </td>
-        ${tds}${simTd}
+        ${tds}${simTd}${testeTd}
       </tr>`; }).join("");
-    c.innerHTML=`
+    c.innerHTML=head+`
       <div class="kgrid">
         ${kpi("", COMP.exames.length, "Exames na base", `${COMP.labs.length} tabelas · ${nComp} comparáveis`)}
         ${kpi(nAlphaCheapest>=nComp*0.6?"g":"a", nComp?`${nAlphaCheapest}/${nComp}`:"—", "Alpha é o + barato", "entre exames com ≥2 tabelas")}
         ${kpi(idxMed!=null&&idxMed<100?"g":(idxMed!=null&&idxMed>100?"r":""), idxMed!=null?idxMed+"%":"—", "Índice Alpha vs mercado", idxMed!=null?(idxMed<100?`${100-idxMed}% abaixo da média`:idxMed>100?`${idxMed-100}% acima da média`:"na média"):"marque sua tabela ⭐")}
-        ${alvoLab?kpi(nComAlvo&&nAbaixoAlvo>=nComAlvo*0.6?"g":"a", nComAlvo?`${nAbaixoAlvo}/${nComAlvo}`:"—", `≤ ${esc(alvoLab.nome)}`, `com ${compDescPct}% desconto`):kpi("", COMP.labs.length-1<0?0:COMP.labs.length-1, "Concorrentes", "tabelas comparadas")}
+        ${kpi(nRev?"a":"g", nRev, "A revisar", nRev?"⚠️ destoam + ⚑ marcados":"tudo conferido")}
       </div>
 
-      <div class="card" style="margin-bottom:12px">
-        <h3>🧪 Tabelas / laboratórios <span class="tag">clique no nome p/ renomear · ⭐ = a minha (Alpha)</span></h3>
-        <div style="display:flex;flex-wrap:wrap;align-items:center">${COMP.labs.map(labChip).join("")}
-          <button class="regbtn" style="margin:3px" onclick="compAddLab()">＋ Tabela/Lab</button></div>
+      <div class="bigrid">
+        <div class="card">
+          <h3>📊 Posição de mercado <span class="tag">% de exames em que a Alpha é ≤ o concorrente</span></h3>
+          ${posComp.length?posComp.map(pc=>`<div style="margin:9px 0">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#c9d6e5">${esc(pc.l.nome)}</span><b style="color:${barCol(pc.pct)}">${pc.pct}% <span style="color:#6b7f97;font-weight:400">(${pc.win}/${pc.n})</span></b></div>
+            <div style="height:10px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden"><div style="height:100%;width:${pc.pct}%;background:${barCol(pc.pct)};border-radius:6px"></div></div>
+          </div>`).join(""):`<div class="t-mut" style="font-size:13px">Sem concorrentes ainda.</div>`}
+        </div>
+        <div class="card">
+          <h3>🧪 Tabelas / laboratórios <span class="tag">clique no nome p/ renomear · ⭐ = Alpha</span></h3>
+          <div style="display:flex;flex-wrap:wrap;align-items:center">${COMP.labs.map(labChip).join("")}
+            <button class="regbtn" style="margin:3px" onclick="compAddLab()">＋ Tabela/Lab</button></div>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:12px;border-color:rgba(0,212,255,.35);background:linear-gradient(180deg,rgba(0,212,255,.06),transparent)">
-        <h3>🎚️ Simulador — “e se eu der desconto?” <span class="tag">brinque com os seus valores</span></h3>
+        <h3>🎚️ Simulador — “e se eu mexer nos meus preços?” <span class="tag">sandbox · não altera o preço real</span></h3>
         <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
-          <div style="flex:1;min-width:240px">
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#9fb2cc"><span>Desconto na tabela Alpha</span><b style="color:#00D4FF;font-size:16px">${compDescPct}%</b></div>
+          <div style="flex:1;min-width:230px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#9fb2cc"><span>Desconto na tabela Alpha (teste)</span><b style="color:#00D4FF;font-size:16px">${compDescPct}%</b></div>
             <input type="range" min="0" max="40" step="1" value="${compDescPct}" oninput="compDescPct=+this.value; const b=this.previousElementSibling&&this.previousElementSibling.querySelector('b'); if(b)b.textContent=this.value+'%'; clearTimeout(window._cds); window._cds=setTimeout(renderTab,140)" style="width:100%;accent-color:#00D4FF">
           </div>
           <div>
@@ -2190,23 +2294,21 @@ function renderTab(){
               ${labsOut.map(l=>`<option value="${l.id}" ${compAlvo===l.id?'selected':''}>${esc(l.nome)}</option>`).join("")}
             </select>
           </div>
-          <div>
-            <div style="font-size:12px;color:#9fb2cc;margin-bottom:3px">Ordenar</div>
-            <select onchange="compOrdem=this.value; renderTab()" style="background:#0d1a2e;color:#e8eef7;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:7px 9px;font-size:13px">
-              <option value="comp" ${compOrdem==="comp"?'selected':''}>Mais comparáveis primeiro</option>
-              <option value="nome" ${compOrdem==="nome"?'selected':''}>Nome (A–Z)</option>
-              <option value="barato" ${compOrdem==="barato"?'selected':''}>Alpha mais barato</option>
-              <option value="caro" ${compOrdem==="caro"?'selected':''}>Alpha mais caro</option>
-              ${compAlvo?`<option value="gap" ${compOrdem==="gap"?'selected':''}>Maior vantagem vs alvo</option>`:''}
-            </select>
-          </div>
+          <button onclick="compTesteOn=!compTesteOn; renderTab()" style="align-self:flex-end;cursor:pointer;border-radius:8px;padding:9px 13px;font-size:13px;font-weight:800;border:1px solid ${compTesteOn?'#00E5A0':'rgba(0,229,160,.4)'};background:${compTesteOn?'rgba(0,229,160,.2)':'transparent'};color:#00E5A0">${compTesteOn?'☑':'☐'} coluna Alpha TESTE</button>
         </div>
         ${alvoLab?`<div style="margin-top:12px;padding:11px 13px;border-radius:9px;background:${nAbaixoAlvo>=nComAlvo*0.6?'rgba(0,229,160,.12)':'rgba(255,122,0,.12)'};border:1px solid ${nAbaixoAlvo>=nComAlvo*0.6?'rgba(0,229,160,.4)':'rgba(255,122,0,.4)'};font-size:14px;line-height:1.5">
-          Com <b style="color:#00D4FF">${compDescPct}% de desconto</b>, a Alpha fica <b>≤ ${esc(alvoLab.nome)}</b> em <b>${nAbaixoAlvo} de ${nComAlvo}</b> exames comparáveis${nComAlvo?` (${Math.round(100*nAbaixoAlvo/nComAlvo)}%)`:''}. ${nAbaixoAlvo<nComAlvo?`Faltam <b>${nComAlvo-nAbaixoAlvo}</b> — ordene por “maior vantagem” para ver onde apertar.`:'Você cobre a tabela inteira. 🎯'}</div>`:`<div style="margin-top:10px;font-size:12px;color:#9fb2cc">Escolha um concorrente acima para ver, exame a exame, quanto de desconto te coloca abaixo dele.</div>`}
+          Com <b style="color:#00D4FF">${compDescPct}% de desconto</b>, a Alpha fica <b>≤ ${esc(alvoLab.nome)}</b> em <b>${nAbaixoAlvo} de ${nComAlvo}</b> exames comparáveis${nComAlvo?` (${Math.round(100*nAbaixoAlvo/nComAlvo)}%)`:''}. ${nAbaixoAlvo<nComAlvo?`Faltam <b>${nComAlvo-nAbaixoAlvo}</b> — ligue a <b>coluna Alpha TESTE</b> e ajuste exame a exame.`:'Você cobre a tabela inteira. 🎯'}</div>`:`<div style="margin-top:10px;font-size:12px;color:#9fb2cc">O % é uma simulação global. Ligue a <b style="color:#00E5A0">coluna Alpha TESTE</b> p/ ver o preço simulado ao lado do real e ajustar valores exame a exame — <b>sem tocar no seu preço de verdade</b>.</div>`}
       </div>
 
       <div class="tabsbar" style="margin:6px 0 10px;gap:8px;flex-wrap:wrap">
         <input placeholder="🔎 buscar exame…" value="${esc(compBusca)}" oninput="compBusca=this.value; clearTimeout(window._cbz); window._cbz=setTimeout(renderTab,220)" style="flex:1;min-width:180px;background:#0d1a2e;color:#e8eef7;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:8px 11px;font-size:13px">
+        <select onchange="compOrdem=this.value; renderTab()" style="background:#0d1a2e;color:#e8eef7;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:8px 9px;font-size:12px">
+          <option value="comp" ${compOrdem==="comp"?'selected':''}>↕ Mais comparáveis</option>
+          <option value="nome" ${compOrdem==="nome"?'selected':''}>↕ Nome A–Z</option>
+          <option value="barato" ${compOrdem==="barato"?'selected':''}>↕ Alpha + barato</option>
+          <option value="caro" ${compOrdem==="caro"?'selected':''}>↕ Alpha + caro</option>
+          ${compAlvo?`<option value="gap" ${compOrdem==="gap"?'selected':''}>↕ Maior vantagem</option>`:''}
+        </select>
         <button onclick="compSoComp=!compSoComp; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compSoComp?'#00D4FF':'rgba(255,255,255,.14)'};background:${compSoComp?'rgba(0,212,255,.18)':'transparent'};color:${compSoComp?'#00D4FF':'#9fb2cc'}" title="mostrar só exames presentes em 2+ tabelas">${compSoComp?'☑':'☐'} só comparáveis</button>
         <button onclick="compRevisar=!compRevisar; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compRevisar?'#FFB000':'rgba(255,176,0,.35)'};background:${compRevisar?'rgba(255,176,0,.2)':'transparent'};color:#FFB000" title="mostrar só os que precisam de conferência (⚠️ preço destoa + ⚑ marcados)">⚠️ revisar${nRev?` (${nRev})`:''}</button>
         <button class="regbtn" onclick="compAddExame()">＋ Exame</button>
@@ -2221,12 +2323,13 @@ function renderTab(){
           <thead style="position:sticky;top:0;z-index:2"><tr style="background:#0a1420">
             <th style="text-align:left;position:sticky;left:0;background:#0a1420;z-index:3;min-width:190px;padding:9px 10px">Exame</th>
             ${colsLab}
-            ${alvoLab?`<th style="text-align:right;color:#00D4FF;background:rgba(0,212,255,.12);white-space:nowrap">Alpha −${compDescPct}%</th><th style="text-align:right;white-space:nowrap">vs ${esc(alvoLab.nome)}</th>`:''}
+            ${showAlvoCols?`<th style="text-align:right;color:#00D4FF;background:rgba(0,212,255,.12);white-space:nowrap;padding:9px 10px">Alpha −${compDescPct}%</th><th style="text-align:right;white-space:nowrap;padding:9px 10px">vs ${alvoShort}</th>`:''}
+            ${compTesteOn?`<th style="text-align:right;color:#00E5A0;background:rgba(0,229,160,.12);white-space:nowrap;padding:9px 10px">Alpha TESTE</th><th style="text-align:right;white-space:nowrap;padding:9px 10px">${alvoLab?'vs '+alvoShort:'posição'}</th>`:''}
           </tr></thead>
-          <tbody>${rows||`<tr><td colspan="${COMP.labs.length+1}" style="padding:22px;text-align:center;color:#9fb2cc">Nenhum exame ${compBusca?'para essa busca':'nesta categoria'}.</td></tr>`}</tbody>
+          <tbody>${rows||`<tr><td colspan="${colCount}" style="padding:22px;text-align:center;color:#9fb2cc">Nenhum exame ${compBusca?'para essa busca':'nesta categoria'}.</td></tr>`}</tbody>
         </table>
       </div>
-      <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.6">🟩 verde = mais barato da linha · 🟥 vermelho = mais caro · coluna azul = <b>Alpha</b>. <b style="color:#FFB000">⚠️</b> preço que <b>destoa muito da mediana</b> = possível de-para torto (confira e clique <b style="color:#00E5A0">✓ ok</b> se estiver certo, ou corrija o preço). <b style="color:#FFB000">⚐/⚑</b> marca você mesmo p/ revisar; o filtro <b style="color:#FFB000">⚠️ revisar</b> mostra só esses. Clique em qualquer preço p/ editar, no nome p/ renomear. Tudo é salvo e permanente.</div>`;
+      <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.6">🟩 verde = mais barato da linha · 🟥 vermelho = mais caro · coluna azul = <b>Alpha (real)</b> · coluna verde = <b style="color:#00E5A0">Alpha TESTE</b> (sandbox, não altera o real). <b style="color:#FFB000">⚠️</b> preço que <b>destoa da mediana</b> = possível de-para torto (✓ ok se estiver certo). Clique num preço p/ editar, no nome p/ renomear. <b>↩ Desfazer</b> volta a última alteração. Tudo salvo e permanente.</div>`;
     return;
   }
 
