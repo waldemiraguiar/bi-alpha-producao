@@ -343,7 +343,9 @@ function setSquadAtual(s){ squadAtual=s; try{localStorage.setItem("crm_squad_atu
 /* ================= COMPARATIVO DE TABELAS (Alpha × concorrentes) ================= */
 const COMP_API="/api/crm-comparativo";
 let COMP={labs:[],exames:[]};
-let compDescPct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true, compRevisar=false;
+let compAjustePct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true, compRevisar=false;
+let compLotePct=0;   // valor do input de aplicação em lote
+function compAjLabel(){ return (compAjustePct>0?'+':'')+compAjustePct+'%'; }
 let compView="matriz";        // "matriz" | "conferir"
 let compConfIdx=0;            // posição no modo conferência
 let compTesteOn=false;        // mostrar coluna Alpha TESTE (sandbox)
@@ -386,9 +388,29 @@ function compEditPreco(exId,labId){ const e=COMP.exames.find(x=>x.id===exId); co
 /* ---- coluna Alpha TESTE (sandbox): NÃO altera o preço real (REF). Override por exame OU % global ---- */
 function compTesteEfetivo(e){ const ref=(e.precos||{})[compMeu()];
   if(e.teste!=null && e.teste>0) return e.teste;
-  if(compDescPct>0 && ref!=null && ref>0) return Math.round(ref*(1-compDescPct/100)*100)/100;
+  if(compAjustePct!==0 && ref!=null && ref>0) return Math.round(ref*(1+compAjustePct/100)*100)/100;
   return ref!=null?ref:null; }
-function compEditTeste(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const ref=(e.precos||{})[compMeu()]; const cur=e.teste&&e.teste>0?e.teste:(ref!=null?ref:""); const v=prompt(`${e.nome}\nPreço de TESTE (sandbox — não mexe no seu preço real R$ ${ref!=null?ref:'—'}).\nDigite um valor, ou vazio p/ voltar a seguir o % global:`,cur); if(v===null) return; compPush("preço teste"); const n=parseFloat(String(v).replace(",",".")); e.teste=(isFinite(n)&&n>0)?Math.round(n*100)/100:0; saveComp(); }
+function compEditTeste(id){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const ref=(e.precos||{})[compMeu()];
+  const cur=e.teste&&e.teste>0?e.teste:(ref!=null?ref:"");
+  const v=prompt(`${e.nome}\nPreço de TESTE (sandbox — NÃO mexe no seu preço real R$ ${ref!=null?ref:'—'}).\n• Digite um VALOR (ex.: 45)\n• ou um PERCENTUAL: -10% reduz, +8% aumenta\n• vazio = volta a seguir o ajuste global`,cur);
+  if(v===null) return; const s=String(v).trim();
+  compPush("preço teste");
+  if(s===""){ e.teste=0; saveComp(); return; }
+  const mPct=s.match(/^([+-]?\d+(?:[.,]\d+)?)\s*%$/);
+  if(mPct && ref!=null && ref>0){ const pct=parseFloat(mPct[1].replace(",",".")); e.teste=Math.round(ref*(1+pct/100)*100)/100; }
+  else { const n=parseFloat(s.replace(",",".")); e.teste=(isFinite(n)&&n>0)?Math.round(n*100)/100:0; }
+  saveComp(); }
+/* aplica % (com sinal) como PREÇO DE TESTE a um exame (individual) */
+function compPctExame(id,pct){ const e=COMP.exames.find(x=>x.id===id); if(!e) return; const ref=(e.precos||{})[compMeu()]; if(ref==null||ref<=0) return; compPush(`teste ${pct>0?'+':''}${pct}% (1 exame)`); e.teste=Math.round(ref*(1+pct/100)*100)/100; saveComp(); }
+/* aplica % em LOTE aos exames em exibição (respeita busca/categoria/filtros) */
+function compPctLote(){ const pct=parseFloat(String(compLotePct).replace(",",".")); if(!isFinite(pct)){ alert("Digite um percentual (ex.: -10 ou 8)."); return; }
+  const ids=compExamesView().map(x=>x.id); if(!ids.length){ alert("Nenhum exame em exibição."); return; }
+  if(!confirm(`Aplicar TESTE de ${pct>0?'+':''}${pct}% em ${ids.length} exame(s) em exibição? (não mexe no preço real)`)) return;
+  compPush(`teste ${pct>0?'+':''}${pct}% (${ids.length} exames)`); const meu=compMeu();
+  COMP.exames.forEach(e=>{ if(ids.includes(e.id)){ const ref=(e.precos||{})[meu]; if(ref!=null&&ref>0) e.teste=Math.round(ref*(1+pct/100)*100)/100; } });
+  compTesteOn=true; saveComp(); }
+/* zera os preços de teste dos exames em exibição */
+function compLimpaLote(){ const ids=compExamesView().map(x=>x.id); if(!ids.length) return; if(!confirm(`Limpar os preços de TESTE de ${ids.length} exame(s) em exibição? (voltam a seguir o ajuste global)`)) return; compPush("limpar testes"); COMP.exames.forEach(e=>{ if(ids.includes(e.id)) e.teste=0; }); saveComp(); }
 function compPosTeste(e){ const t=compTesteEfetivo(e); if(t==null) return null;
   const comp=COMP.labs.filter(l=>!l.meu).map(l=>(e.precos||{})[l.id]).filter(v=>v!=null&&v>0);
   if(!comp.length) return {t,solo:true};
@@ -413,7 +435,7 @@ function compExamesView(){ let arr=COMP.exames.slice();
   else if(compOrdem==="gap"){ arr.sort((a,b)=>{ const ga=compGapAlvo(a),gb=compGapAlvo(b); return (gb==null?-1e9:gb)-(ga==null?-1e9:ga); }); }
   return arr; }
 /* gap vs alvo: quanto Alpha (com desconto) está ABAIXO do alvo (positivo=mais barato) em % */
-function compGapAlvo(e){ const meu=compMeu(); const p=e.precos||{}; const a=p[meu], alvo=compAlvo?p[compAlvo]:null; if(a==null||alvo==null||alvo<=0) return null; const ad=a*(1-compDescPct/100); return 100*(alvo-ad)/alvo; }
+function compGapAlvo(e){ const meu=compMeu(); const p=e.precos||{}; const a=p[meu], alvo=compAlvo?p[compAlvo]:null; if(a==null||alvo==null||alvo<=0) return null; const t=compTesteEfetivo(e); const ad=t!=null?t:a; return 100*(alvo-ad)/alvo; }
 async function addSquad(){ const n=(prompt("Nome do novo squad (ex.: Microbiologia, PCR e ELISA, Qualidade):","")||"").trim(); if(!n) return; if(SQUADS.some(x=>x.toLowerCase()===n.toLowerCase())){ alert("Esse squad já existe."); setSquadAtual(SQUADS.find(x=>x.toLowerCase()===n.toLowerCase())); renderTab(); return; } SQUADS=[...SQUADS,n]; if(await saveSquads()){ setSquadAtual(n); pautaHistId=null; renderTab(); } }
 async function renomearSquad(s){ const n=(prompt("Renomear squad:",s)||"").trim(); if(!n||n===s) return; SQUADS=SQUADS.map(x=>x===s?n:x); PAUTAS.forEach(p=>{ if(p.squad===s){ p.squad=n; } }); if(await saveSquads()){ for(const p of PAUTAS.filter(p=>p.squad===n)) await savePautaDoc(p); setSquadAtual(n); renderTab(); } }
 async function removerSquad(s){ const n=PAUTAS.filter(p=>p.squad===s).length; if(!confirm(`Remover o squad "${s}"?${n?` (as ${n} pauta(s) dele continuam salvas, mas somem da lista)`:""}`)) return; SQUADS=SQUADS.filter(x=>x!==s); if(await saveSquads()){ if(squadAtual===s) setSquadAtual(SQUADS[0]||""); renderTab(); } }
@@ -2139,7 +2161,7 @@ function renderTab(){
     let nComp=0, nAlphaCheapest=0, somaIdx=0, nIdx=0, nAbaixoAlvo=0, nComAlvo=0;
     COMP.exames.forEach(e=>{ const st=compRowStats(e); if(st.n<2) return; const p=e.precos||{}; const a=p[meu];
       if(a!=null){ nComp++; if(a<=st.min+1e-6) nAlphaCheapest++; if(st.avg>0){ somaIdx+=a/st.avg; nIdx++; } }
-      if(compAlvo && a!=null && p[compAlvo]!=null){ nComAlvo++; if(a*(1-compDescPct/100)<=p[compAlvo]+1e-6) nAbaixoAlvo++; }
+      if(compAlvo && a!=null && p[compAlvo]!=null){ nComAlvo++; const t=compTesteEfetivo(e); if((t!=null?t:a)<=p[compAlvo]+1e-6) nAbaixoAlvo++; }
     });
     const idxMed = nIdx? Math.round(100*somaIdx/nIdx) : null;   // <100 = Alpha mais barato que a média
     const nRev = COMP.exames.filter(compIsRevisar).length;       // ⚠️ automáticos + ⚑ marcados
@@ -2201,13 +2223,16 @@ function renderTab(){
           <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.35)">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
               <div><span style="color:#9fb2cc;font-size:12px">🧪 Seu preço de TESTE (sandbox — não altera o real)</span>
-                <div onclick="compEditTeste('${e.id}')" style="cursor:pointer;font-size:20px;font-weight:800;color:#00E5A0">${t==null?'—':compFmt(t)}${e.teste&&e.teste>0?' <span style="font-size:11px;color:#7d8ea6">• definido</span>':(compDescPct>0?` <span style="font-size:11px;color:#7d8ea6">• −${compDescPct}%</span>`:'')}</div>
+                <div onclick="compEditTeste('${e.id}')" style="cursor:pointer;font-size:20px;font-weight:800;color:#00E5A0">${t==null?'—':compFmt(t)}${e.teste&&e.teste>0?' <span style="font-size:11px;color:#7d8ea6">• definido</span>':(compAjustePct!==0?` <span style="font-size:11px;color:#7d8ea6">• ${compAjLabel()}</span>`:'')}</div>
               </div>
               <div style="text-align:right;font-size:13px;color:#c9d6e5">${posTxt}</div>
             </div>
-            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-              <button onclick="compEditTeste('${e.id}')" class="regbtn" style="font-size:12px">✎ definir preço teste</button>
-              ${ref!=null?`<button onclick="compSetPreco('${e.id}','${meu}','${ref}');renderTab()" title="referência" style="cursor:default;border:none;background:transparent;color:#6b7f97;font-size:12px">real: ${compFmt(ref)}</button>`:''}
+            <div style="margin-top:9px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+              <span style="font-size:11px;color:#7d8ea6">ajustar este exame:</span>
+              ${[-15,-10,-5,5,10,15].map(pp=>`<button onclick="compPctExame('${e.id}',${pp})" style="cursor:pointer;border-radius:6px;padding:5px 9px;font-size:12px;font-weight:800;border:1px solid ${pp<0?'rgba(0,229,160,.4)':'rgba(255,176,0,.4)'};background:transparent;color:${pp<0?'#00E5A0':'#FFB000'}">${pp>0?'+':''}${pp}%</button>`).join("")}
+              <button onclick="compEditTeste('${e.id}')" class="regbtn" style="font-size:12px">✎ valor/%</button>
+              ${(e.teste&&e.teste>0)?`<button onclick="compPush('limpar teste');(COMP.exames.find(x=>x.id==='${e.id}')||{}).teste=0;saveComp()" style="cursor:pointer;border:none;background:transparent;color:#7d8ea6;font-size:12px;text-decoration:underline">limpar</button>`:''}
+              ${ref!=null?`<span style="color:#6b7f97;font-size:12px;margin-left:auto">real: ${compFmt(ref)}</span>`:''}
             </div>
           </div>
         </div>
@@ -2237,7 +2262,7 @@ function renderTab(){
       const tds = COMP.labs.map(l=>{ const v=p[l.id]; const bg=cellBG(v,st,l.meu); const bad=susp[l.id]&&!okd;
         return `<td onclick="compEditPreco('${e.id}','${l.id}')" title="${bad?`destoa ${susp[l.id]}× da mediana — confira o de-para · `:''}clique p/ editar" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;padding:8px 10px;${bg?`background:${bg};`:''}${bad?'box-shadow:inset 0 0 0 2px rgba(255,176,0,.9);':''}${l.meu?'font-weight:800;color:#eafaff;':''}">${bad?'<span style="color:#FFB000">⚠️</span> ':''}${v==null?'<span style="color:#5b6b82">＋</span>':compFmt(v).replace('R$ ','')}</td>`; }).join("");
       let simTd="";
-      if(showAlvoCols){ const gap=compGapAlvo(e); const a=p[meu]; const ad=a!=null?a*(1-compDescPct/100):null;
+      if(showAlvoCols){ const gap=compGapAlvo(e); const ad=compTesteEfetivo(e);
         simTd=`<td style="text-align:right;font-variant-numeric:tabular-nums;background:rgba(0,212,255,.12);font-weight:700;padding:8px 10px">${ad==null?'—':compFmt(ad).replace('R$ ','')}</td>
           <td style="text-align:right;font-weight:800;padding:8px 10px;${gap==null?'color:#5b6b82':(gap>=0?'color:#00E5A0':'color:#FF5470')}">${gap==null?'—':(gap>=0?'▼ ':'▲ ')+Math.abs(Math.round(gap))+'%'}</td>`; }
       let testeTd="";
@@ -2281,11 +2306,12 @@ function renderTab(){
       </div>
 
       <div class="card" style="margin-bottom:12px;border-color:rgba(0,212,255,.35);background:linear-gradient(180deg,rgba(0,212,255,.06),transparent)">
-        <h3>🎚️ Simulador — “e se eu mexer nos meus preços?” <span class="tag">sandbox · não altera o preço real</span></h3>
+        <h3>🎚️ Simulador — “e se eu mexer nos meus preços?” <span class="tag">+ aumenta · − reduz · sandbox, não altera o preço real</span></h3>
         <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
-          <div style="flex:1;min-width:230px">
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#9fb2cc"><span>Desconto na tabela Alpha (teste)</span><b style="color:#00D4FF;font-size:16px">${compDescPct}%</b></div>
-            <input type="range" min="0" max="40" step="1" value="${compDescPct}" oninput="compDescPct=+this.value; const b=this.previousElementSibling&&this.previousElementSibling.querySelector('b'); if(b)b.textContent=this.value+'%'; clearTimeout(window._cds); window._cds=setTimeout(renderTab,140)" style="width:100%;accent-color:#00D4FF">
+          <div style="flex:1;min-width:250px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#9fb2cc"><span><b>1) Tabela toda</b> — ajuste global na Alpha</span><b style="color:${compAjustePct>0?'#FFB000':(compAjustePct<0?'#00E5A0':'#9fb2cc')};font-size:16px">${compAjLabel()}</b></div>
+            <input type="range" min="-40" max="40" step="1" value="${compAjustePct}" oninput="compAjustePct=+this.value; const b=this.previousElementSibling&&this.previousElementSibling.querySelector('b'); if(b){b.textContent=(this.value>0?'+':'')+this.value+'%';b.style.color=this.value>0?'#FFB000':(this.value<0?'#00E5A0':'#9fb2cc');} clearTimeout(window._cds); window._cds=setTimeout(renderTab,140)" style="width:100%;accent-color:${compAjustePct>0?'#FFB000':'#00E5A0'}">
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#5b6b82"><span>−40% (reduzir)</span><span>0</span><span>+40% (aumentar)</span></div>
           </div>
           <div>
             <div style="font-size:12px;color:#9fb2cc;margin-bottom:3px">Comparar contra</div>
@@ -2296,8 +2322,17 @@ function renderTab(){
           </div>
           <button onclick="compTesteOn=!compTesteOn; renderTab()" style="align-self:flex-end;cursor:pointer;border-radius:8px;padding:9px 13px;font-size:13px;font-weight:800;border:1px solid ${compTesteOn?'#00E5A0':'rgba(0,229,160,.4)'};background:${compTesteOn?'rgba(0,229,160,.2)':'transparent'};color:#00E5A0">${compTesteOn?'☑':'☐'} coluna Alpha TESTE</button>
         </div>
+        <div style="margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-wrap:wrap;gap:9px;align-items:center">
+          <span style="font-size:12px;color:#9fb2cc"><b>2) Em lote</b> — gravar teste nos <b>${view.length}</b> exame(s) em exibição:</span>
+          <div style="display:inline-flex;align-items:center;background:#0d1a2e;border:1px solid rgba(255,255,255,.15);border-radius:7px;overflow:hidden">
+            <input type="number" step="1" value="${compLotePct}" oninput="compLotePct=this.value" style="width:64px;background:transparent;color:#e8eef7;border:none;padding:7px 8px;font-size:13px;text-align:right"><span style="padding:0 8px;color:#9fb2cc">%</span>
+          </div>
+          <button onclick="compPctLote()" class="regbtn" style="font-size:12px">aplicar ao lote</button>
+          <button onclick="compLimpaLote()" style="cursor:pointer;border-radius:7px;padding:7px 11px;font-size:12px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#9fb2cc">limpar testes do lote</button>
+          <span style="font-size:11px;color:#5b6b82">dica: use a busca/categoria/“só comparáveis” p/ definir o lote · <b>3) individual</b> = botões ±% em cada exame no 🔍 Conferir ou clicando na célula TESTE</span>
+        </div>
         ${alvoLab?`<div style="margin-top:12px;padding:11px 13px;border-radius:9px;background:${nAbaixoAlvo>=nComAlvo*0.6?'rgba(0,229,160,.12)':'rgba(255,122,0,.12)'};border:1px solid ${nAbaixoAlvo>=nComAlvo*0.6?'rgba(0,229,160,.4)':'rgba(255,122,0,.4)'};font-size:14px;line-height:1.5">
-          Com <b style="color:#00D4FF">${compDescPct}% de desconto</b>, a Alpha fica <b>≤ ${esc(alvoLab.nome)}</b> em <b>${nAbaixoAlvo} de ${nComAlvo}</b> exames comparáveis${nComAlvo?` (${Math.round(100*nAbaixoAlvo/nComAlvo)}%)`:''}. ${nAbaixoAlvo<nComAlvo?`Faltam <b>${nComAlvo-nAbaixoAlvo}</b> — ligue a <b>coluna Alpha TESTE</b> e ajuste exame a exame.`:'Você cobre a tabela inteira. 🎯'}</div>`:`<div style="margin-top:10px;font-size:12px;color:#9fb2cc">O % é uma simulação global. Ligue a <b style="color:#00E5A0">coluna Alpha TESTE</b> p/ ver o preço simulado ao lado do real e ajustar valores exame a exame — <b>sem tocar no seu preço de verdade</b>.</div>`}
+          Do jeito que está (${compAjLabel()} global + ajustes por exame), a Alpha fica <b>≤ ${esc(alvoLab.nome)}</b> em <b>${nAbaixoAlvo} de ${nComAlvo}</b> exames comparáveis${nComAlvo?` (${Math.round(100*nAbaixoAlvo/nComAlvo)}%)`:''}. ${nAbaixoAlvo<nComAlvo?`Faltam <b>${nComAlvo-nAbaixoAlvo}</b> — ordene por “maior vantagem” e ajuste onde falta.`:'Você cobre a tabela inteira. 🎯'}</div>`:`<div style="margin-top:10px;font-size:12px;color:#9fb2cc">Ligue a <b style="color:#00E5A0">coluna Alpha TESTE</b> p/ ver o preço simulado ao lado do real, e escolha um concorrente p/ medir sua posição. <b>Nada disso toca no seu preço de verdade.</b></div>`}
       </div>
 
       <div class="tabsbar" style="margin:6px 0 10px;gap:8px;flex-wrap:wrap">
@@ -2323,7 +2358,7 @@ function renderTab(){
           <thead style="position:sticky;top:0;z-index:2"><tr style="background:#0a1420">
             <th style="text-align:left;position:sticky;left:0;background:#0a1420;z-index:3;min-width:190px;padding:9px 10px">Exame</th>
             ${colsLab}
-            ${showAlvoCols?`<th style="text-align:right;color:#00D4FF;background:rgba(0,212,255,.12);white-space:nowrap;padding:9px 10px">Alpha −${compDescPct}%</th><th style="text-align:right;white-space:nowrap;padding:9px 10px">vs ${alvoShort}</th>`:''}
+            ${showAlvoCols?`<th style="text-align:right;color:#00D4FF;background:rgba(0,212,255,.12);white-space:nowrap;padding:9px 10px">Alpha ${compAjLabel()}</th><th style="text-align:right;white-space:nowrap;padding:9px 10px">vs ${alvoShort}</th>`:''}
             ${compTesteOn?`<th style="text-align:right;color:#00E5A0;background:rgba(0,229,160,.12);white-space:nowrap;padding:9px 10px">Alpha TESTE</th><th style="text-align:right;white-space:nowrap;padding:9px 10px">${alvoLab?'vs '+alvoShort:'posição'}</th>`:''}
           </tr></thead>
           <tbody>${rows||`<tr><td colspan="${colCount}" style="padding:22px;text-align:center;color:#9fb2cc">Nenhum exame ${compBusca?'para essa busca':'nesta categoria'}.</td></tr>`}</tbody>
