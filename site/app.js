@@ -1175,16 +1175,16 @@ async function decryptEncObj(env, pwd){
 let _custosSel=null, _custosConf=true;
 async function renderCustos(){
   const wrap=document.getElementById('financeiro'); if(!wrap) return; const D=window.__D;
-  if(!D.custos){
+  if(!D.custosFin){
     wrap.innerHTML='<div class="card" style="margin-top:16px;color:var(--mut)">Carregando custos (cifrado)…</div>';
-    try{ const env=await fetchEncF('custos','data/custos.enc'); D.custos=await decryptEncObj(env, window.__PW||''); }
+    try{ const env=await fetchEncF('custos','data/custos.enc'); D.custosFin=await decryptEncObj(env, window.__PW||''); }
     catch(e){ wrap.innerHTML='<div class="card" style="margin-top:16px;color:var(--red)">Falha ao carregar custos: '+esc(e.message||e)+'</div>'; return; }
   }
   drawCustos(D);
 }
-function _custVal(D,emp,m){ const d=((D.custos.dados||{})[emp]||{})[m]; if(!d) return 0; return _custosConf? d.total : (d.operacional||0); }
+function _custVal(D,emp,m){ const d=((D.custosFin.dados||{})[emp]||{})[m]; if(!d) return 0; return _custosConf? d.total : (d.operacional||0); }
 function drawCustos(D){
-  const wrap=document.getElementById('financeiro'); const C=D.custos; if(!wrap||!C) return;
+  const wrap=document.getElementById('financeiro'); const C=D.custosFin; if(!wrap||!C) return;
   const emps=C.empresas||[]; if(!_custosSel) _custosSel=new Set(emps);
   wrap.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>💼 Custos por empresa · mês <span class="cap">com provisão · ambiente fechado (você + Fúlvio) · snapshot ${esc(C.gerado||'')}</span></h3>
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
@@ -1199,7 +1199,7 @@ function drawCustos(D){
   drawCustTable(D);
 }
 function drawCustTable(D){
-  const el=document.getElementById('custTable'); if(!el) return; const C=D.custos; const emps=C.empresas||[];
+  const el=document.getElementById('custTable'); if(!el) return; const C=D.custosFin; const emps=C.empresas||[];
   const prod={}; (D.mensal||[]).forEach(x=>prod[x.ym]=(x.fat||0)+(x.petlove||0));
   const meses=(C.meses||[]).slice().reverse(); const sel=emps.filter(e=>_custosSel.has(e));
   const rows=meses.map(m=>{
