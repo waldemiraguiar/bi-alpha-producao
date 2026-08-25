@@ -2309,9 +2309,17 @@ function renderTab(){
         <h3>🎚️ Simulador — “e se eu mexer nos meus preços?” <span class="tag">+ aumenta · − reduz · sandbox, não altera o preço real</span></h3>
         <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
           <div style="flex:1;min-width:250px">
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#9fb2cc"><span><b>1) Tabela toda</b> — ajuste global na Alpha</span><b style="color:${compAjustePct>0?'#FFB000':(compAjustePct<0?'#00E5A0':'#9fb2cc')};font-size:16px">${compAjLabel()}</b></div>
-            <input type="range" min="-40" max="40" step="1" value="${compAjustePct}" oninput="compAjustePct=+this.value; const b=this.previousElementSibling&&this.previousElementSibling.querySelector('b'); if(b){b.textContent=(this.value>0?'+':'')+this.value+'%';b.style.color=this.value>0?'#FFB000':(this.value<0?'#00E5A0':'#9fb2cc');} clearTimeout(window._cds); window._cds=setTimeout(renderTab,140)" style="width:100%;accent-color:${compAjustePct>0?'#FFB000':'#00E5A0'}">
-            <div style="display:flex;justify-content:space-between;font-size:10px;color:#5b6b82"><span>−40% (reduzir)</span><span>0</span><span>+40% (aumentar)</span></div>
+            <div style="font-size:12px;color:#9fb2cc;margin-bottom:6px"><b>1) Tabela toda</b> — digite o ajuste global na Alpha <span style="color:#5b6b82">( + aumenta · − reduz )</span></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onclick="compAjustePct=Math.max(-95,compAjustePct-1);renderTab()" title="−1%" style="cursor:pointer;width:38px;height:42px;border-radius:9px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#e8eef7;font-size:20px;font-weight:800">−</button>
+              <div style="display:inline-flex;align-items:center;background:#0d1a2e;border:2px solid ${compAjustePct>0?'#FFB000':(compAjustePct<0?'#00E5A0':'rgba(255,255,255,.2)')};border-radius:10px;overflow:hidden">
+                <input type="number" step="1" value="${compAjustePct}" onchange="compAjustePct=Math.max(-95,Math.min(500,Math.round(+this.value||0))); renderTab()" onkeydown="if(event.key==='Enter')this.blur()" style="width:88px;background:transparent;color:${compAjustePct>0?'#FFB000':(compAjustePct<0?'#00E5A0':'#e8eef7')};border:none;padding:9px 6px;font-size:22px;font-weight:800;text-align:right">
+                <span style="padding:0 11px 0 4px;color:#9fb2cc;font-size:17px;font-weight:700">%</span>
+              </div>
+              <button onclick="compAjustePct=Math.min(500,compAjustePct+1);renderTab()" title="+1%" style="cursor:pointer;width:38px;height:42px;border-radius:9px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#e8eef7;font-size:20px;font-weight:800">+</button>
+              ${compAjustePct!==0?`<button onclick="compAjustePct=0;renderTab()" style="cursor:pointer;border-radius:8px;padding:8px 11px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#9fb2cc;font-size:12px">zerar</button>`:''}
+            </div>
+            <div style="font-size:11px;color:#5b6b82;margin-top:5px">ex.: digite <b>-10</b> p/ reduzir 10% · <b>8</b> p/ aumentar 8% · Enter confirma</div>
           </div>
           <div>
             <div style="font-size:12px;color:#9fb2cc;margin-bottom:3px">Comparar contra</div>
