@@ -863,12 +863,14 @@ function renderPetlove(D){
     `<tr style="border-top:2px solid var(--line)"><td>${Y.curY} <span style="color:var(--cyan);font-size:10px;font-weight:700">PROJEÇÃO ano cheio</span></td><td class="num" style="color:var(--cyan);font-weight:700">${brl(Y.projTotal)}</td><td class="num" style="color:${prjColor};font-weight:700">${Y.projPct==null?'—':(Y.projPct>=0?'+':'')+Y.projPct.toFixed(0)+'%'}</td><td class="num">—</td></tr>`+
     `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">⚠ A "var. ano cheio" do ano corrente é enganosa (compara meses parciais contra 12 meses). Use a coluna "mesmo período".</div></div>`;
   // detalhe mensal — agora com produção interna do sistema
+  // Exames Pet Love/mês (dos relatórios .xls do sistema, plano 'Petlove%'). ATUALIZAR quando o Wal manda mês novo.
+  const PL_EXAMES={'2026-06':7605,'2026-07':8758};
   const rec=yms.slice(-18).reverse();
   html+=`<div class="card"><h3>Detalhe mensal <span class="cap">produção interna (sistema HF) + Pet Love · % = participação Pet Love no total do mês</span></h3>
-    <table class="atab"><thead><tr><th>Mês</th><th class="num">Produção interna (R$)</th><th class="num">Exames (sistema)</th><th class="num">Pet Love (R$)</th><th class="num">Atend. PL</th><th class="num">Total mês</th><th class="num">% Pet Love</th></tr></thead><tbody>`+
+    <table class="atab"><thead><tr><th>Mês</th><th class="num">Produção interna (R$)</th><th class="num">Exames (sistema)</th><th class="num">Pet Love (R$)</th><th class="num">Atend. PL</th><th class="num" style="color:#00D4FF">Exames PL</th><th class="num">Total mês</th><th class="num">% Pet Love</th></tr></thead><tbody>`+
     rec.map(ym=>{const v=men[ym]||0;const lab=(mensalLab[ym]||{}).fat||0;const q=(mensalLab[ym]||{}).qtd||0;const p=lab+v>0?100*v/(lab+v):0;const n=(at[ym]||{}).n_atend;
-      return `<tr><td>${ymLabel(ym)}</td><td class="num">${lab?brl(lab):'—'}</td><td class="num">${q?num(q):'—'}</td><td class="num" style="color:var(--cyan)">${brl(v)}</td><td class="num">${n?num(n):'—'}</td><td class="num">${brl(lab+v)}</td><td class="num" style="font-weight:700">${p.toFixed(1)}%</td></tr>`;}).join('')+
-    `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">Produção interna e exames vêm do sistema (inclui 2026). "Atend. PL" só consta dos meses cujos relatórios Pet Love foram importados.</div></div>`;
+      return `<tr><td>${ymLabel(ym)}</td><td class="num">${lab?brl(lab):'—'}</td><td class="num">${q?num(q):'—'}</td><td class="num" style="color:var(--cyan)">${brl(v)}</td><td class="num">${n?num(n):'—'}</td><td class="num" style="color:#00D4FF;font-weight:700">${PL_EXAMES[ym]?num(PL_EXAMES[ym]):'—'}</td><td class="num">${brl(lab+v)}</td><td class="num" style="font-weight:700">${p.toFixed(1)}%</td></tr>`;}).join('')+
+    `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">Produção interna e exames vêm do sistema (inclui 2026). "Atend. PL" e "Exames PL" (produção Pet Love, plano Petlove%) só constam dos meses cujos relatórios Pet Love foram importados. Mande o export do mês que eu adiciono.</div></div>`;
   wrap.innerHTML=html;
 }
 function drawPetloveChart(){
