@@ -345,6 +345,7 @@ const COMP_API="/api/crm-comparativo";
 let COMP={labs:[],exames:[]};
 let compAjustePct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true, compRevisar=false;
 let compLotePct=0;   // valor do input de aplicação em lote
+let compOpFilter="";  // "" | "subir" | "caro" — filtro de oportunidade de preço
 function compAjLabel(){ return (compAjustePct>0?'+':'')+compAjustePct+'%'; }
 let compView="matriz";        // "matriz" | "conferir"
 let compConfIdx=0;            // posição no modo conferência
@@ -415,6 +416,15 @@ function compPosTeste(e){ const t=compTesteEfetivo(e); if(t==null) return null;
   const comp=COMP.labs.filter(l=>!l.meu).map(l=>(e.precos||{})[l.id]).filter(v=>v!=null&&v>0);
   if(!comp.length) return {t,solo:true};
   const minC=Math.min(...comp); return {t,minC,cheaper:t<=minC+1e-6,pctVsMin:minC>0?100*(minC-t)/minC:0}; }
+/* ---- REGRA DE MERCADO (feijão com arroz): onde subir preço / onde está caro ---- */
+const COMP_FOLGA=0.20;   // "muito abaixo" = 20%+ abaixo do concorrente mais barato
+function compOportunidade(e){ const a=(e.precos||{})[compMeu()]; if(a==null||a<=0) return null;
+  const comp=COMP.labs.filter(l=>!l.meu).map(l=>(e.precos||{})[l.id]).filter(v=>v!=null&&v>0);
+  if(!comp.length) return null;
+  const minC=Math.min(...comp), maxC=Math.max(...comp);
+  if(a < minC && (minC-a)/minC >= COMP_FOLGA){ const alvo=Math.floor(minC-0.01); return {tipo:"subir", folga:(minC-a)/minC, minC, alvo, ganho:alvo-a}; }
+  if(a > maxC){ return {tipo:"caro", acima:(a-maxC)/maxC, maxC}; }
+  return null; }
 function compFmt(v){ return v==null?"—":("R$ "+(Math.round(v*100)/100).toFixed(2).replace(".",",")); }
 /* estatística por exame: min/max/quem é o mais barato/alpha vs mercado */
 function compRowStats(e){ const p=e.precos||{}; const vals=COMP.labs.map(l=>({id:l.id,meu:l.meu,v:p[l.id]})).filter(x=>x.v!=null&&x.v>0);
@@ -423,11 +433,13 @@ function compRowStats(e){ const p=e.precos||{}; const vals=COMP.labs.map(l=>({id
   return {min,max,avg,n:vals.length}; }
 function compExamesView(){ let arr=COMP.exames.slice();
   if(compRevisar) arr=arr.filter(compIsRevisar);
+  else if(compOpFilter) arr=arr.filter(e=>{ const o=compOportunidade(e); return o&&o.tipo===compOpFilter; });
   else if(compSoComp) arr=arr.filter(e=>Object.values(e.precos||{}).filter(v=>v>0).length>=2);
   if(compCat) arr=arr.filter(e=>(e.cat||"")===compCat);
   if(compBusca){ const q=compBusca.toLowerCase(); arr=arr.filter(e=>(e.nome||"").toLowerCase().includes(q)); }
   const meu=compMeu();
   const nLabs=e=>Object.values(e.precos||{}).filter(v=>v>0).length;
+  if(compOpFilter==="subir"){ arr.sort((a,b)=>((compOportunidade(b)||{}).ganho||0)-((compOportunidade(a)||{}).ganho||0)); return arr; }
   if(compOrdem==="comp") arr.sort((a,b)=>{ const d=nLabs(b)-nLabs(a); return d||(a.nome||"").localeCompare(b.nome||"","pt"); });
   else if(compOrdem==="nome") arr.sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt"));
   else if(compOrdem==="caro") arr.sort((a,b)=>((b.precos||{})[meu]||0)-((a.precos||{})[meu]||0));
@@ -2165,6 +2177,8 @@ function renderTab(){
     });
     const idxMed = nIdx? Math.round(100*somaIdx/nIdx) : null;   // <100 = Alpha mais barato que a média
     const nRev = COMP.exames.filter(compIsRevisar).length;       // ⚠️ automáticos + ⚑ marcados
+    let nSubir=0, nCaro=0, ganhoPot=0;                            // regra de mercado (feijão com arroz)
+    COMP.exames.forEach(e=>{ const o=compOportunidade(e); if(!o) return; if(o.tipo==="subir"){ nSubir++; ganhoPot+=o.ganho||0; } else if(o.tipo==="caro") nCaro++; });
     const view=compExamesView();
     const alvoLab=compAlvo?COMP.labs.find(l=>l.id===compAlvo):null;
     // heatmap por célula
@@ -2212,7 +2226,8 @@ function renderTab(){
             <div style="flex:1;min-width:220px">
               <div onclick="compRenameExame('${e.id}')" style="cursor:text;font-size:20px;font-weight:800;line-height:1.25">${esc(e.nome)}</div>
               <div style="margin-top:4px">${e.cat?`<span onclick="compSetCat('${e.id}')" class="tag" style="cursor:text">${esc(e.cat)}</span>`:`<span onclick="compSetCat('${e.id}')" style="cursor:text;color:#5b6b82;font-size:11px">+ categoria</span>`}
-                ${isSusp?`<span style="color:#FFB000;font-size:12px;margin-left:6px">⚠️ preço destoa — confira</span>`:''}</div>
+                ${isSusp?`<span style="color:#FFB000;font-size:12px;margin-left:6px">⚠️ preço destoa — confira</span>`:''}
+                ${(()=>{ const o=compOportunidade(e); return o&&o.tipo==="subir"?`<div style="margin-top:6px;color:#00E5A0;font-size:12px;font-weight:700">💰 dá p/ subir até ${compFmt(o.alvo)} e seguir o mais barato (hoje ${Math.round(o.folga*100)}% abaixo do concorrente + barato)</div>`:o&&o.tipo==="caro"?`<div style="margin-top:6px;color:#FF7A7A;font-size:12px;font-weight:700">🔴 você é o mais caro do mercado — justifique o valor ou reveja</div>`:""; })()}</div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button onclick="compToggleFlag('${e.id}')" style="cursor:pointer;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;border:1px solid ${flagged?'#FFB000':'rgba(255,255,255,.15)'};background:${flagged?'rgba(255,176,0,.18)':'transparent'};color:${flagged?'#FFB000':'#9fb2cc'}">${flagged?'⚑ marcado':'⚐ marcar'}</button>
@@ -2258,6 +2273,9 @@ function renderTab(){
     const alvoShort = alvoLab?esc(alvoLab.nome.split(" ")[0]):"";
     const rows = view.map(e=>{ const st=compRowStats(e); const p=e.precos||{};
       const sp=compRowSpread(e), susp=sp.susp, isSusp=compIsSusp(e), flagged=!!e.flag, okd=!!e.ok;
+      const op=compOportunidade(e);
+      const opTag = op&&op.tipo==="subir" ? `<span title="Você está ${Math.round(op.folga*100)}% abaixo do concorrente mais barato (${compFmt(op.minC)}). Dá p/ subir até ${compFmt(op.alvo)} e continuar o + barato — ganho de ${compFmt(op.ganho)}/exame." style="color:#00E5A0;font-size:11px;font-weight:800;margin-left:5px;cursor:help">💰 pode subir</span>`
+        : op&&op.tipo==="caro" ? `<span title="Você é o mais caro do mercado (acima de ${compFmt(op.maxC)}). Justifique o valor ou reveja." style="color:#FF7A7A;font-size:11px;font-weight:800;margin-left:5px;cursor:help">🔴 + caro</span>` : "";
       const rowBG = flagged?'#2a1e0a':(isSusp?'#241a1e':'#0d1a2e');
       const tds = COMP.labs.map(l=>{ const v=p[l.id]; const bg=cellBG(v,st,l.meu); const bad=susp[l.id]&&!okd;
         return `<td onclick="compEditPreco('${e.id}','${l.id}')" title="${bad?`destoa ${susp[l.id]}× da mediana — confira o de-para · `:''}clique p/ editar" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;padding:8px 10px;${bg?`background:${bg};`:''}${bad?'box-shadow:inset 0 0 0 2px rgba(255,176,0,.9);':''}${l.meu?'font-weight:800;color:#eafaff;':''}">${bad?'<span style="color:#FFB000">⚠️</span> ':''}${v==null?'<span style="color:#5b6b82">＋</span>':compFmt(v).replace('R$ ','')}</td>`; }).join("");
@@ -2277,7 +2295,7 @@ function renderTab(){
       return `<tr style="${(flagged||isSusp)?`box-shadow:inset 3px 0 0 ${flagged?'#FFB000':'#FF7A7A'};`:''}">
         <td style="position:sticky;left:0;background:${rowBG};min-width:210px;padding:8px 10px">
           <button onclick="compToggleFlag('${e.id}')" title="${flagged?'desmarcar':'marcar p/ revisar'}" style="background:none;border:none;cursor:pointer;color:${flagged?'#FFB000':'#5b6b82'};font-size:13px">${flagged?'⚑':'⚐'}</button>
-          <b onclick="compRenameExame('${e.id}')" style="cursor:text">${esc(e.nome)}</b>
+          <b onclick="compRenameExame('${e.id}')" style="cursor:text">${esc(e.nome)}</b>${opTag}
           ${isSusp?`<span title="preço destoa da mediana — pode ser de-para torto" style="color:#FFB000;font-size:11px;margin-left:4px">⚠️</span> <button onclick="compMarcarOk('${e.id}')" title="conferi, está certo — silenciar aviso" style="background:rgba(0,229,160,.15);border:1px solid rgba(0,229,160,.5);color:#00E5A0;border-radius:5px;cursor:pointer;font-size:10px;padding:1px 5px">✓ ok</button>`:''}
           ${e.cat?`<span onclick="compSetCat('${e.id}')" class="tag" style="cursor:text;margin-left:5px">${esc(e.cat)}</span>`:`<span onclick="compSetCat('${e.id}')" style="cursor:text;color:#5b6b82;font-size:11px;margin-left:5px">+cat</span>`}
           <button onclick="compRemoveExame('${e.id}')" title="remover exame" style="background:none;border:none;cursor:pointer;color:#5b6b82;float:right">✕</button>
@@ -2289,7 +2307,21 @@ function renderTab(){
         ${kpi("", COMP.exames.length, "Exames na base", `${COMP.labs.length} tabelas · ${nComp} comparáveis`)}
         ${kpi(nAlphaCheapest>=nComp*0.6?"g":"a", nComp?`${nAlphaCheapest}/${nComp}`:"—", "Alpha é o + barato", "entre exames com ≥2 tabelas")}
         ${kpi(idxMed!=null&&idxMed<100?"g":(idxMed!=null&&idxMed>100?"r":""), idxMed!=null?idxMed+"%":"—", "Índice Alpha vs mercado", idxMed!=null?(idxMed<100?`${100-idxMed}% abaixo da média`:idxMed>100?`${idxMed-100}% acima da média`:"na média"):"marque sua tabela ⭐")}
-        ${kpi(nRev?"a":"g", nRev, "A revisar", nRev?"⚠️ destoam + ⚑ marcados":"tudo conferido")}
+        ${kpi(nSubir?"g":"", nSubir, "💰 Podem subir", nSubir?"abaixo do mercado — dá p/ subir":"nada muito abaixo")}
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-color:rgba(0,229,160,.35);background:linear-gradient(180deg,rgba(0,229,160,.06),transparent)">
+        <h3>📏 Regra de mercado <span class="tag">feijão com arroz · o agente aponta sozinho</span></h3>
+        <div style="font-size:13px;line-height:1.6;color:#c9d6e5">
+          <b style="color:#00E5A0">💰 ${nSubir} exame(s) você pode SUBIR de preço</b> e continuar sendo o mais barato — está +${Math.round(COMP_FOLGA*100)}% abaixo do concorrente mais próximo${ganhoPot>0?` (ganho somado estimado de <b>${compFmt(ganhoPot)}</b> por rodada de exames)`:''}.
+          &nbsp;·&nbsp; <b style="color:#FF7A7A">🔴 ${nCaro} exame(s) você é o MAIS CARO</b> do mercado — justifique o valor ou reveja.
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="compOpFilter=compOpFilter==='subir'?'':'subir'; compRevisar=false; renderTab()" style="cursor:pointer;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:800;border:1px solid ${compOpFilter==='subir'?'#00E5A0':'rgba(0,229,160,.4)'};background:${compOpFilter==='subir'?'rgba(0,229,160,.2)':'transparent'};color:#00E5A0">💰 ver onde subir (${nSubir})</button>
+          <button onclick="compOpFilter=compOpFilter==='caro'?'':'caro'; compRevisar=false; renderTab()" style="cursor:pointer;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:800;border:1px solid ${compOpFilter==='caro'?'#FF7A7A':'rgba(255,122,122,.4)'};background:${compOpFilter==='caro'?'rgba(255,122,122,.2)':'transparent'};color:#FF7A7A">🔴 ver onde estou caro (${nCaro})</button>
+          ${compOpFilter?`<button onclick="compOpFilter=''; renderTab()" style="cursor:pointer;border-radius:8px;padding:8px 13px;font-size:13px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#9fb2cc">✕ limpar filtro</button>`:''}
+        </div>
+        <div class="t-mut" style="font-size:11px;margin-top:8px">Regra: comum (hemograma/bioquímica) o cliente compara preço; raro ele não compara — margem mora no raro. Não brigue por centavos onde já é o mais barato.</div>
       </div>
 
       <div class="bigrid">
