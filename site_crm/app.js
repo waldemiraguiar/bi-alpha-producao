@@ -348,7 +348,7 @@ let compLotePct=0;   // valor do input de aplicação em lote
 function compAjLabel(){ return (compAjustePct>0?'+':'')+compAjustePct+'%'; }
 let compView="matriz";        // "matriz" | "conferir"
 let compConfIdx=0;            // posição no modo conferência
-let compTesteOn=false;        // mostrar coluna Alpha TESTE (sandbox)
+let compTesteOn=true;         // mostrar coluna Alpha TESTE (sandbox) — ligada por padrão
 /* ---- DESFAZER: pilha de snapshots (voltar em cada processo) ---- */
 let compUndo=[];
 function _compSnap(){ return JSON.stringify({labs:COMP.labs,exames:COMP.exames}); }
@@ -2253,7 +2253,7 @@ function renderTab(){
         <button title="remover" onclick="compRemoveLab('${l.id}')" style="background:none;border:none;cursor:pointer;color:#FF5470">✕</button>
       </div>`; };
     const showAlvoCols = alvoLab && !compTesteOn;
-    const colCount = 1 + COMP.labs.length + (compTesteOn?2:0) + (showAlvoCols?2:0);
+    const colCount = 1 + COMP.labs.length + (compTesteOn?(alvoLab?3:2):0) + (showAlvoCols?2:0);
     const colsLab = COMP.labs.map(l=>`<th style="text-align:right;white-space:nowrap;padding:9px 10px;${l.meu?'color:#00D4FF;border-bottom:2px solid #00D4FF':''}">${esc(l.nome)}${l.meu?' ⭐':''}</th>`).join("");
     const alvoShort = alvoLab?esc(alvoLab.nome.split(" ")[0]):"";
     const rows = view.map(e=>{ const st=compRowStats(e); const p=e.precos||{};
@@ -2267,11 +2267,13 @@ function renderTab(){
           <td style="text-align:right;font-weight:800;padding:8px 10px;${gap==null?'color:#5b6b82':(gap>=0?'color:#00E5A0':'color:#FF5470')}">${gap==null?'—':(gap>=0?'▼ ':'▲ ')+Math.abs(Math.round(gap))+'%'}</td>`; }
       let testeTd="";
       if(compTesteOn){ const t=compTesteEfetivo(e); const over=(e.teste&&e.teste>0); const pos=compPosTeste(e);
-        let ph="—";
-        if(alvoLab){ const av=p[compAlvo]; if(t!=null&&av!=null&&av>0){ const g=100*(av-t)/av; ph=`<span style="color:${g>=0?'#00E5A0':'#FF5470'};font-weight:800">${g>=0?'▼':'▲'} ${Math.abs(Math.round(g))}%</span>`; } }
+        let ph="—", alvoTd="";
+        if(alvoLab){ const av=p[compAlvo];
+          alvoTd=`<td style="text-align:right;font-variant-numeric:tabular-nums;padding:8px 10px;background:rgba(255,255,255,.05);font-weight:700;box-shadow:inset 2px 0 0 rgba(255,255,255,.25)">${av==null?'<span style="color:#5b6b82">—</span>':compFmt(av).replace('R$ ','')}</td>`;
+          if(t!=null&&av!=null&&av>0){ const g=100*(av-t)/av; ph=`<span style="color:${g>=0?'#00E5A0':'#FF5470'};font-weight:800">${g>=0?'▼':'▲'} ${Math.abs(Math.round(g))}%</span>`; } }
         else if(pos&&!pos.solo){ ph=pos.cheaper?`<span style="color:#00E5A0;font-weight:800">🥇</span>`:`<span style="color:#FF5470;font-weight:800">▲${Math.abs(Math.round(pos.pctVsMin))}%</span>`; }
         testeTd=`<td onclick="compEditTeste('${e.id}')" title="preço de teste — não altera o real" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;padding:8px 10px;background:rgba(0,229,160,.1);font-weight:800;color:#c8ffe9;box-shadow:inset 2px 0 0 #00E5A0">${t==null?'—':compFmt(t).replace('R$ ','')}${over?' <span style="color:#00E5A0">•</span>':''}</td>
-          <td style="text-align:right;padding:8px 10px;font-size:12px">${ph}</td>`; }
+          ${alvoTd}<td style="text-align:right;padding:8px 10px;font-size:12px">${ph}</td>`; }
       return `<tr style="${(flagged||isSusp)?`box-shadow:inset 3px 0 0 ${flagged?'#FFB000':'#FF7A7A'};`:''}">
         <td style="position:sticky;left:0;background:${rowBG};min-width:210px;padding:8px 10px">
           <button onclick="compToggleFlag('${e.id}')" title="${flagged?'desmarcar':'marcar p/ revisar'}" style="background:none;border:none;cursor:pointer;color:${flagged?'#FFB000':'#5b6b82'};font-size:13px">${flagged?'⚑':'⚐'}</button>
@@ -2367,7 +2369,7 @@ function renderTab(){
             <th style="text-align:left;position:sticky;left:0;background:#0a1420;z-index:3;min-width:190px;padding:9px 10px">Exame</th>
             ${colsLab}
             ${showAlvoCols?`<th style="text-align:right;color:#00D4FF;background:rgba(0,212,255,.12);white-space:nowrap;padding:9px 10px">Alpha ${compAjLabel()}</th><th style="text-align:right;white-space:nowrap;padding:9px 10px">vs ${alvoShort}</th>`:''}
-            ${compTesteOn?`<th style="text-align:right;color:#00E5A0;background:rgba(0,229,160,.12);white-space:nowrap;padding:9px 10px">Alpha TESTE</th><th style="text-align:right;white-space:nowrap;padding:9px 10px">${alvoLab?'vs '+alvoShort:'posição'}</th>`:''}
+            ${compTesteOn?`<th style="text-align:right;color:#00E5A0;background:rgba(0,229,160,.12);white-space:nowrap;padding:9px 10px">Alpha TESTE</th>${alvoLab?`<th style="text-align:right;white-space:nowrap;padding:9px 10px;background:rgba(255,255,255,.05)">${alvoShort} <span style="color:#6b7f97;font-weight:400">(real)</span></th>`:''}<th style="text-align:right;white-space:nowrap;padding:9px 10px">${alvoLab?'vs '+alvoShort:'posição'}</th>`:''}
           </tr></thead>
           <tbody>${rows||`<tr><td colspan="${colCount}" style="padding:22px;text-align:center;color:#9fb2cc">Nenhum exame ${compBusca?'para essa busca':'nesta categoria'}.</td></tr>`}</tbody>
         </table>
