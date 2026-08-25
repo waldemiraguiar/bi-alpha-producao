@@ -469,7 +469,7 @@ function wireFTabs(){
     if(v==='analises'){ drawAnalisesChart(); drawDailyChart(); }
     if(v==='petlove'){ drawPetloveChart(); drawPetloveYearChart(); }
     if(v==='estudo') drawEstudoChart();
-    if(v==='financeiro'){ const c=document.getElementById('financeiro'); if(c&&!c.dataset.loaded){ c.dataset.loaded='1'; c.innerHTML='<div style="margin:14px 0 8px;color:var(--mut);font-size:13px">💼 <b>Financeiro de Saída · Custos</b> — Alpha 1 · Alpha 2 · Cabo Frio, espelhado aqui no ambiente fechado (só você e o Fúlvio). Faça login com sua senha do financeiro. A 4ª tabela (retiradas dos sócios) entra só aqui, privada.</div><iframe src="financeiro/index.html?classic=1" allow="publickey-credentials-get *; publickey-credentials-create *" style="width:100%;height:82vh;border:1px solid var(--line);border-radius:12px;background:#0b1220"></iframe><div style="margin-top:8px;font-size:12px"><a href="financeiro/index.html?classic=1" target="_blank" style="color:var(--cyan)">↗ abrir em aba cheia</a> <span style="color:var(--mut)">(use se o Touch ID não ativar dentro do quadro)</span></div>'; } }
+    if(v==='financeiro') renderCustos();
   });});
 }
 
@@ -1156,6 +1156,59 @@ function drawEstudoChart(){
   _estChart=new Chart(cv,{type:'bar',data:{labels:s.map(x=>ymLabel(x.ym)),datasets:[{label:'Exames Pet Carioca',data:s.map(x=>x.ex),backgroundColor:s.map(x=>x.ym===cur?'#FFB020':'#00D4FF')}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+num(c.raw)+' exames'}}},
       scales:{x:{ticks:{color:'#7f90a8',maxRotation:90,minRotation:90,font:{size:9}},grid:{display:false}},y:{ticks:{color:'#7f90a8',callback:v=>num(v)},grid:{color:'rgba(255,255,255,.05)'}}}}});
+}
+
+/* ===================== ABA CUSTOS (Financeiro de Saída · cifrado à parte) ===================== */
+async function decryptEncObj(env, pwd){
+  const bk=await crypto.subtle.importKey('raw', new TextEncoder().encode(pwd), 'PBKDF2', false, ['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2', salt:b64dec(env.salt), iterations:env.iter, hash:'SHA-256'}, bk, {name:'AES-GCM', length:256}, false, ['decrypt']);
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM', iv:b64dec(env.iv)}, key, b64dec(env.ct));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+let _custosSel=null, _custosConf=true;
+async function renderCustos(){
+  const wrap=document.getElementById('financeiro'); if(!wrap) return; const D=window.__D;
+  if(!D.custos){
+    wrap.innerHTML='<div class="card" style="margin-top:16px;color:var(--mut)">Carregando custos (cifrado)…</div>';
+    try{ const env=await fetchEncF('custos','data/custos.enc'); D.custos=await decryptEncObj(env, window.__PW||''); }
+    catch(e){ wrap.innerHTML='<div class="card" style="margin-top:16px;color:var(--red)">Falha ao carregar custos: '+esc(e.message||e)+'</div>'; return; }
+  }
+  drawCustos(D);
+}
+function _custVal(D,emp,m){ const d=((D.custos.dados||{})[emp]||{})[m]; if(!d) return 0; return _custosConf? d.total : (d.operacional||0); }
+function drawCustos(D){
+  const wrap=document.getElementById('financeiro'); const C=D.custos; if(!wrap||!C) return;
+  const emps=C.empresas||[]; if(!_custosSel) _custosSel=new Set(emps);
+  wrap.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>💼 Custos por empresa · mês <span class="cap">com provisão · ambiente fechado (você + Fúlvio) · snapshot ${esc(C.gerado||'')}</span></h3>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <span style="color:var(--mut);font-size:12px">somar empresas:</span>
+      ${emps.map(e=>`<label style="cursor:pointer;font-weight:600"><input type="checkbox" class="cust-emp" value="${esc(e)}" ${_custosSel.has(e)?'checked':''}> ${esc(e)}</label>`).join('')}
+      <label style="cursor:pointer;margin-left:auto;font-size:13px"><input type="checkbox" id="cust-conf" ${_custosConf?'checked':''}> incluir camada confidencial (impostos/retiradas)</label>
+    </div>
+    <div style="color:var(--mut);font-size:11px;margin-bottom:8px">${esc(C.obs||'')}</div>
+    <div id="custTable"></div></div>`;
+  wrap.querySelectorAll('.cust-emp').forEach(cb=>cb.addEventListener('change',()=>{ cb.checked?_custosSel.add(cb.value):_custosSel.delete(cb.value); drawCustTable(D); }));
+  const cf=wrap.querySelector('#cust-conf'); if(cf) cf.addEventListener('change',()=>{ _custosConf=cf.checked; drawCustTable(D); });
+  drawCustTable(D);
+}
+function drawCustTable(D){
+  const el=document.getElementById('custTable'); if(!el) return; const C=D.custos; const emps=C.empresas||[];
+  const prod={}; (D.mensal||[]).forEach(x=>prod[x.ym]=(x.fat||0)+(x.petlove||0));
+  const meses=(C.meses||[]).slice().reverse(); const sel=emps.filter(e=>_custosSel.has(e));
+  const rows=meses.map(m=>{
+    const soma=sel.reduce((a,e)=>a+_custVal(D,e,m),0);
+    const priv=sel.reduce((a,e)=>a+(((C.dados[e]||{})[m]||{}).sigiloso||0),0);
+    const pr=prod[m]||0, marg=pr-soma, mp=pr?100*marg/pr:null;
+    return `<tr><td>${ymLabel(m)}</td>
+      ${emps.map(e=>`<td class="num" style="${_custosSel.has(e)?'':'opacity:.35'}">${brl(_custVal(D,e,m))}</td>`).join('')}
+      <td class="num" style="font-weight:800;color:var(--amber)">${brl(soma)}</td>
+      <td class="num" style="color:var(--mut)">${_custosConf?brl(priv):'—'}</td>
+      <td class="num" style="color:var(--cyan)">${pr?brl(pr):'—'}</td>
+      <td class="num" style="font-weight:700;color:${marg>=0?AZUL2:'var(--red)'}">${pr?brl(marg):'—'}</td>
+      <td class="num" style="color:${mp==null?'var(--mut)':(mp>=0?AZUL2:'var(--red)')};font-weight:700">${mp==null?'—':mp.toFixed(0)+'%'}</td></tr>`;
+  }).join('');
+  el.innerHTML=`<div style="overflow-x:auto"><table class="atab"><thead><tr><th>Mês</th>${emps.map(e=>`<th class="num">${esc(e)}</th>`).join('')}<th class="num">SOMA custos</th><th class="num">(confid.)</th><th class="num">Produção lab</th><th class="num">Margem</th><th class="num">%</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">SOMA = empresas marcadas${_custosConf?' (inclui confidencial: impostos/retiradas)':' (só operacional)'}. Produção lab = sistema+Pet Love (todo o lab). <b>Margem = Produção − Custos</b> (aprox.: produção é do lab Matriz; custos das empresas marcadas).</div>`;
 }
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
