@@ -2072,27 +2072,30 @@ function relatorioSoW(curva){
   const NM={A:"Clínicas A — as maiores",B:"Clínicas B — o miolo",C:"Clínicas C — a base larga",D:"Clínicas D — a cauda ativa"}[curva]||("Clínicas "+curva);
   const AA=AAA.filter(a=>(a.curva||"A")===curva);
   if(!AA.length){ alert("Ainda sem clínicas nesta curva (aguarde o robô sincronizar)."); return; }
-  /* GOVERNANÇA: o relatório é um documento que SAI do app (impresso/baixado, sem gate) →
-     NUNCA leva faturamento/R$, pra ninguém (nem diretoria). R$ fica só no app ao vivo (cifrado). */
+  /* GOVERNANÇA DE R$: faturamento só sai no relatório de QUEM É DIRETORIA de verdade —
+     ou seja, destravou o R$ com a SENHA FINANCEIRA (+ Face ID) e tem o dado DECIFRADO (CLIN_RS).
+     Comercial (ex.: Luciane) nunca tem esse código → dir=false → relatório sai SEM R$. */
+  const dir = (typeof ehDiretoria==="function" && ehDiretoria()) && !!CLIN_RS;
   const buraco=AA.filter(a=>(a.falta||[]).length).slice().sort((a,b)=>(b.falta.length)-(a.falta.length));
   const cheio=AA.filter(a=>!(a.falta||[]).length);
   const nClasses=AAA_SETORES.length;
-  const oper=(operadorAtual&&operadorAtual())||"Equipe";
+  const oper=(operadorAtual&&operadorAtual())||(dir?"Diretoria":"Equipe");
   const now=new Date();
   const dstr=now.toLocaleDateString("pt-BR")+" "+now.toLocaleTimeString("pt-BR",{hour:'2-digit',minute:'2-digit'});
+  const rsTxt=cod=>{ if(!dir) return ""; const v=(typeof rsVal==="function")?rsVal(cod):null; return v!=null?fmtBRL(v):"—"; };
   const linha=(a,i)=>{ const send=(a.cats||[]).map(c=>c.setor), falta=(a.falta||[]);
     const status=falta.length?`<span class="st b">🎯 ${falta.length} na mesa</span>`:`<span class="st c">✅ cheio</span>`;
     return `<tr class="${falta.length?'rb':'rc'}">
       <td class="n">${i+1}</td>
       <td><b>${esc(a.nome)}</b>${a.cidade?`<div class="cid">${esc(a.cidade)}</div>`:''}</td>
-      <td class="n">${a.qtd||0}</td>
+      <td class="n">${a.qtd||0}</td>${dir?`<td class="n rs">${rsTxt(a.cod)}</td>`:''}
       <td>${status}</td>
       <td class="cl">${send.length?send.map(s=>`<span class="t ok">${esc(s)}</span>`).join(""):'<span class="mut">—</span>'}</td>
       <td class="cl">${falta.length?falta.map(s=>`<span class="t no">${esc(s)}</span>`).join(""):'<span class="mut">—</span>'}</td>
     </tr>`; };
   const sec=(titulo,cor,arr,base)=>arr.length?`
     <h2 style="color:${cor};border-color:${cor}"><span>${titulo}</span><span class="cnt">${arr.length}</span></h2>
-    <table><thead><tr><th class="n">#</th><th>Clínica</th><th class="n">Exames 12m</th><th>Share-of-wallet</th><th>✅ Manda</th><th>🎯 Não manda (na mesa)</th></tr></thead>
+    <table><thead><tr><th class="n">#</th><th>Clínica</th><th class="n">Exames 12m</th>${dir?'<th class="n">Faturamento</th>':''}<th>Share-of-wallet</th><th>✅ Manda</th><th>🎯 Não manda (na mesa)</th></tr></thead>
     <tbody>${arr.map((a,i)=>linha(a,base+i)).join("")}</tbody></table>`:"";
   const totFalta=buraco.reduce((s,a)=>s+(a.falta||[]).length,0);
   const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2126,7 +2129,7 @@ function relatorioSoW(curva){
     </div>
     ${sec("🎯 Deixando na mesa — prioridade de trabalho","#c0263a",buraco,0)}
     ${sec("✅ Share-of-wallet cheio — proteger","#0a7d55",cheio,buraco.length)}
-    <div class="ft"><b>Governança:</b> relatório gerado automaticamente pelo Agente CRM (curva ABC por volume 12m do HF). ✅ manda = classes que a clínica já envia; 🎯 na mesa = classes que ela NÃO envia (vão pro concorrente). <b>Sem valores em R$</b> — faturamento é confidencial e não sai em relatório. Documento de uso interno — Grupo Alpha.</div>
+    <div class="ft"><b>Governança:</b> relatório gerado automaticamente pelo Agente CRM (curva ABC por volume 12m do HF). ✅ manda = classes que a clínica já envia; 🎯 na mesa = classes que ela NÃO envia (vão pro concorrente). ${dir?'<b>Faturamento incluído</b> — visível só à diretoria (você destravou o R$ com a senha financeira). Documento CONFIDENCIAL, não compartilhar.':'<b>Sem faturamento</b> — R$ é exclusivo da diretoria e não sai neste relatório.'} Documento de uso interno — Grupo Alpha.</div>
     <script>
       function baixar(){ var blob=new Blob([document.documentElement.outerHTML],{type:'text/html'}); var u=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=u; a.download='relatorio-share-of-wallet-${esc(curva)}-'+new Date().toISOString().slice(0,10)+'.html'; a.click(); setTimeout(function(){URL.revokeObjectURL(u)},2000); }
     <\/script>
