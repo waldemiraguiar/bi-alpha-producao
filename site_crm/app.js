@@ -589,7 +589,7 @@ async function openIdentidade(force){
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
 /* ---- 🏥 CLÍNICAS: master do HF (autocomplete) + carteira Novas/Reconquistadas ---- */
 const CLIN_API="/api/crm-clinicas", CART_API="/api/crm-carteira";
-let CLINICAS=[], CLIN_TS=0, CARTEIRA=[], clinView="reconquistada";
+let CLINICAS=[], CLIN_TS=0, CARTEIRA=[], clinView="reconquistada", sowFilter="";  // sowFilter: "" | "cheio" | "buraco"
 const PORTE_PROD_BAIXA=40;   // porte Grande com produção L12 abaixo disso = 🚩 pode estar dividindo exame (heurística até ter categoria)
 function syncClin(o){ CLINICAS=(o&&o.clinicas)||[]; CLIN_TS=(o&&o.ts)||0; }
 async function loadClin(){ try{ const r=await fetch(CLIN_API, {cache:"no-store"}); if(r.ok) syncClin(await r.json()); }catch(e){} }
@@ -2067,6 +2067,74 @@ function list(arr, opts){
 /* ---------- render por aba ---------- */
 let diaFilter = false;   // #2: filtro "contatos do dia" (retorno hoje/atrasado)
 function dueOnly(arr){ return (arr||[]).filter(x=>{const rt=retorno(x.cod); return rt&&(rt.status==="hoje"||rt.status==="atrasado");}); }
+/* ===== RELATÓRIO SHARE-OF-WALLET (imprimível / salvável · governança) ===== */
+function relatorioSoW(curva){
+  const NM={A:"Clínicas A — as maiores",B:"Clínicas B — o miolo",C:"Clínicas C — a base larga",D:"Clínicas D — a cauda ativa"}[curva]||("Clínicas "+curva);
+  const AA=AAA.filter(a=>(a.curva||"A")===curva);
+  if(!AA.length){ alert("Ainda sem clínicas nesta curva (aguarde o robô sincronizar)."); return; }
+  const dir=ehDiretoria();
+  const buraco=AA.filter(a=>(a.falta||[]).length).slice().sort((a,b)=>(b.falta.length)-(a.falta.length));
+  const cheio=AA.filter(a=>!(a.falta||[]).length);
+  const nClasses=AAA_SETORES.length;
+  const oper=(operadorAtual&&operadorAtual())||"Diretoria";
+  const now=new Date();
+  const dstr=now.toLocaleDateString("pt-BR")+" "+now.toLocaleTimeString("pt-BR",{hour:'2-digit',minute:'2-digit'});
+  const rsTxt=cod=>{ if(!dir) return ""; const v=(typeof rsVal==="function")?rsVal(cod):null; return v!=null?fmtBRL(v):"—"; };
+  const linha=(a,i)=>{ const send=(a.cats||[]).map(c=>c.setor), falta=(a.falta||[]);
+    const status=falta.length?`<span class="st b">🎯 ${falta.length} na mesa</span>`:`<span class="st c">✅ cheio</span>`;
+    return `<tr class="${falta.length?'rb':'rc'}">
+      <td class="n">${i+1}</td>
+      <td><b>${esc(a.nome)}</b>${a.cidade?`<div class="cid">${esc(a.cidade)}</div>`:''}</td>
+      <td class="n">${a.qtd||0}</td>${dir?`<td class="n rs">${rsTxt(a.cod)}</td>`:''}
+      <td>${status}</td>
+      <td class="cl">${send.length?send.map(s=>`<span class="t ok">${esc(s)}</span>`).join(""):'<span class="mut">—</span>'}</td>
+      <td class="cl">${falta.length?falta.map(s=>`<span class="t no">${esc(s)}</span>`).join(""):'<span class="mut">—</span>'}</td>
+    </tr>`; };
+  const sec=(titulo,cor,arr,base)=>arr.length?`
+    <h2 style="color:${cor};border-color:${cor}"><span>${titulo}</span><span class="cnt">${arr.length}</span></h2>
+    <table><thead><tr><th class="n">#</th><th>Clínica</th><th class="n">Exames 12m</th>${dir?'<th class="n">Faturamento</th>':''}<th>Share-of-wallet</th><th>✅ Manda</th><th>🎯 Não manda (na mesa)</th></tr></thead>
+    <tbody>${arr.map((a,i)=>linha(a,base+i)).join("")}</tbody></table>`:"";
+  const totFalta=buraco.reduce((s,a)=>s+(a.falta||[]).length,0);
+  const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Relatório Share-of-Wallet · ${esc(curva)}</title><style>
+    *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Inter,Arial,sans-serif;color:#0d1a2e;margin:0;padding:28px;background:#fff;font-size:12px}
+    .hd{border-bottom:3px solid #0A1628;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px}
+    .hd h1{margin:0 0 3px;font-size:20px;color:#0A1628} .hd .sub{color:#5b6b82;font-size:12px}
+    .meta{text-align:right;font-size:11px;color:#5b6b82;line-height:1.6} .meta b{color:#0A1628}
+    .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px}
+    .kpi{flex:1;min-width:120px;border:1px solid #dfe6ef;border-radius:8px;padding:10px 12px} .kpi .v{font-size:22px;font-weight:800;color:#0A1628} .kpi .l{font-size:11px;color:#5b6b82;margin-top:2px}
+    h2{font-size:14px;margin:20px 0 8px;padding-bottom:5px;border-bottom:2px solid;display:flex;justify-content:space-between;align-items:center} h2 .cnt{background:#0A1628;color:#fff;border-radius:12px;font-size:11px;padding:1px 10px}
+    table{width:100%;border-collapse:collapse;margin-bottom:8px} th{background:#0A1628;color:#fff;text-align:left;padding:6px 8px;font-size:10.5px;font-weight:700}
+    td{padding:6px 8px;border-bottom:1px solid #eef2f7;vertical-align:top} tr.rb td{background:#fff5f6} .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap} .rs{color:#0a7d55;font-weight:700}
+    .cid{color:#8b97a7;font-size:10px} .cl{max-width:230px} .mut{color:#b3bdc9}
+    .t{display:inline-block;border-radius:11px;padding:1px 7px;font-size:10px;font-weight:700;margin:1px} .t.ok{background:#e3f8ee;color:#0a7d55;border:1px solid #b8ead2} .t.no{background:#ffe9ec;color:#c0263a;border:1px solid #f6c4cc}
+    .st{border-radius:11px;padding:2px 9px;font-size:10.5px;font-weight:800;white-space:nowrap} .st.c{background:#e3f8ee;color:#0a7d55} .st.b{background:#ffe9ec;color:#c0263a}
+    .ft{margin-top:22px;border-top:1px solid #dfe6ef;padding-top:10px;font-size:10px;color:#8b97a7;line-height:1.6}
+    .bar{position:sticky;top:0;background:#0A1628;padding:10px 14px;margin:-28px -28px 20px;display:flex;gap:10px;justify-content:flex-end}
+    .bar button{background:#00D4FF;color:#04121f;border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer} .bar button.sec{background:#22344a;color:#e8eef7}
+    @media print{.bar{display:none} body{padding:0} .rb td{background:#fff5f6 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact} th{-webkit-print-color-adjust:exact;print-color-adjust:exact} h2{page-break-after:avoid} tr{page-break-inside:avoid}}
+    </style></head><body>
+    <div class="bar"><button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button><button class="sec" onclick="baixar()">⬇️ Baixar HTML</button></div>
+    <div class="hd"><div><h1>Relatório Share-of-Wallet</h1><div class="sub">${esc(NM)} · Agente CRM Matriz — Grupo Alpha</div></div>
+      <div class="meta">Gerado em <b>${esc(dstr)}</b><br>Por <b>${esc(oper)}</b><br><b>CONFIDENCIAL</b> — uso interno</div></div>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${AA.length}</div><div class="l">Clínicas na curva ${esc(curva)}</div></div>
+      <div class="kpi"><div class="v" style="color:#0a7d55">${cheio.length}</div><div class="l">✅ Share-of-wallet cheio</div></div>
+      <div class="kpi"><div class="v" style="color:#c0263a">${buraco.length}</div><div class="l">🎯 Com buraco (deixando na mesa)</div></div>
+      <div class="kpi"><div class="v">${totFalta}</div><div class="l">Classes indo pro concorrente (soma)</div></div>
+      <div class="kpi"><div class="v">${nClasses}</div><div class="l">Classes de exame do lab</div></div>
+    </div>
+    ${sec("🎯 Deixando na mesa — prioridade de trabalho","#c0263a",buraco,0)}
+    ${sec("✅ Share-of-wallet cheio — proteger","#0a7d55",cheio,buraco.length)}
+    <div class="ft"><b>Governança:</b> relatório gerado automaticamente pelo Agente CRM (curva ABC por faturamento 12m do HF). ✅ manda = classes que a clínica já envia; 🎯 na mesa = classes que ela NÃO envia (vão pro concorrente). ${dir?'Valores em R$ são confidenciais da diretoria.':'Valores em R$ omitidos (visíveis só à diretoria).'} Documento de uso interno — Grupo Alpha.</div>
+    <script>
+      function baixar(){ var blob=new Blob([document.documentElement.outerHTML],{type:'text/html'}); var u=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=u; a.download='relatorio-share-of-wallet-${esc(curva)}-'+new Date().toISOString().slice(0,10)+'.html'; a.click(); setTimeout(function(){URL.revokeObjectURL(u)},2000); }
+    <\/script>
+    </body></html>`;
+  const w=window.open("","_blank");
+  if(!w){ alert("Permita pop-ups para abrir o relatório (ou toque de novo)."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function renderTab(){
   const D = DATA, r = D.resumo || {}, c = document.getElementById("content");
   const cnt = k => act(D[k]||[]).length;                 // contagem JÁ sem encerrados (#1)
@@ -3021,9 +3089,11 @@ function renderTab(){
         D:{ic:"🇩",cor:"#c0a8ff",bord:"rgba(150,133,233,.45)",nome:"Clínicas D",desc:`a cauda ativa — as ${aaaD.length||150} seguintes em faturamento 12m`}};
       const meta=META[curva];
       const q2=search.trim().toLowerCase();
-      const aarr=q2?AA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AA;
+      let aarr=q2?AA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AA.slice();
+      if(sowFilter==="cheio") aarr=aarr.filter(a=>!(a.falta||[]).length);
+      else if(sowFilter==="buraco") aarr=aarr.filter(a=>(a.falta||[]).length);
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
-      const comMesa=AA.filter(a=>(a.falta||[]).length).length;
+      const comMesa=AA.filter(a=>(a.falta||[]).length).length, cheios=AA.length-comMesa;
       const acard=(a,i)=>{ const [pv,pl2]=porteDe(a.qtd||0); const falta=(a.falta||[]).slice(); const cats=(a.cats||[]).slice();
         // 🎯 O QUE NÃO MANDA = bloco vermelho de MUITO destaque (pedido do Wal)
         const mesa = falta.length ? `<div style="background:rgba(255,45,85,.13);border:1px solid rgba(255,45,85,.5);border-left:3px solid #FF2D55;border-radius:8px;padding:7px 10px;margin-top:6px">
@@ -3050,9 +3120,18 @@ function renderTab(){
           ${kpi("", AAA_TS?"✓":"—", "Sincronizado", AAA_TS?new Date(AAA_TS).toLocaleDateString("pt-BR"):"aguardando robô")}
         </div>
         <div class="t-mut" style="font-size:11.5px;margin:2px 0 8px;text-align:center">Numeradas por faturamento (maior → menor). ✅ o que manda × <b style="color:#ff8fa3">🎯 o que deixa na mesa</b>. R$ só diretoria (senha + Face ID).</div>
-        <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${meta.ic} Ranking ${meta.nome}</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
-        ${AA.length?(aarr.length?aarr.map(a=>acard(a, AA.indexOf(a))).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">⏳ As clínicas ${meta.nome} chegam quando o robô sincronizar (traz por faturamento 12m automaticamente).</div>`}`;
-      document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 10px">
+          <span style="font-size:11.5px;color:#9fb2cc;font-weight:700">Share-of-wallet:</span>
+          <button data-sow="" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${!sowFilter?'#00D4FF':'rgba(255,255,255,.14)'};background:${!sowFilter?'rgba(0,212,255,.18)':'transparent'};color:${!sowFilter?'#00D4FF':'#9fb2cc'}">Todas (${AA.length})</button>
+          <button data-sow="cheio" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${sowFilter==='cheio'?'#00E5A0':'rgba(0,229,160,.35)'};background:${sowFilter==='cheio'?'rgba(0,229,160,.2)':'transparent'};color:#00E5A0">✅ SoW cheio (${cheios})</button>
+          <button data-sow="buraco" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${sowFilter==='buraco'?'#FF6B81':'rgba(255,107,129,.35)'};background:${sowFilter==='buraco'?'rgba(255,107,129,.2)':'transparent'};color:#FF6B81">🎯 Com buraco (${comMesa})</button>
+          <button id="relSoW" style="margin-left:auto;cursor:pointer;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:800;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.12);color:#00D4FF">🖨️ Relatório completo</button>
+        </div>
+        <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${meta.ic} Ranking ${meta.nome}${sowFilter?` · ${sowFilter==='cheio'?'✅ SoW cheio':'🎯 com buraco'} (${aarr.length})`:''}</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
+        ${AA.length?(aarr.length?aarr.map(a=>acard(a, AA.indexOf(a))).join(""):`<div class="empty">${sowFilter?`Nenhuma clínica ${sowFilter==='cheio'?'com share-of-wallet cheio':'com buraco'}${q2?' para essa busca':''} nesta curva.`:`Nada encontrado para "${esc(search)}".`}</div>`):`<div class="empty">⏳ As clínicas ${meta.nome} chegam quando o robô sincronizar (traz por faturamento 12m automaticamente).</div>`}`;
+      document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; renderTab(); });
+      document.querySelectorAll("#content [data-sow]").forEach(el=>el.onclick=()=>{ sowFilter=el.dataset.sow; renderTab(); });
+      const rb=document.getElementById("relSoW"); if(rb) rb.onclick=()=>relatorioSoW(curva);
       const la=document.getElementById("lupaAAA"); if(la){ la.addEventListener("input", e=>{ search=e.target.value; const p=la.selectionStart; renderTab(); const l2=document.getElementById("lupaAAA"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
       return;
     }
