@@ -30,6 +30,8 @@ jobs:
           echo "selo -> $STAMP"
           V=$(date +%s)
           sed -i "s#\(src=\"app\.js\)\"#\1?v=$V\"#g; s#\(src=\"gate-crypto\.js\)\"#\1?v=$V\"#g" site_crm/index.html
+          sed -i "s#__APP_BUILD__#$V#g" site_crm/app.js               # AUTO-UPDATE: carimba a versão no app
+          printf '{"v":"%s"}' "$V" > site_crm/version.json           # AUTO-UPDATE: publica a versão atual
 
       - name: Renomear (URL bonita) + publicar
         env:

@@ -1669,6 +1669,40 @@ async function forceRefresh(){
   location.replace(location.origin + location.pathname + "?r=" + Date.now() + location.hash);
 }
 
+/* ===== AUTO-UPDATE (trava "nunca mais versão antiga") =====
+   APP_BUILD é carimbado no deploy (= app.js?v=$V = version.json.v). Se a versão publicada
+   difere da que está rodando, recarrega SOZINHO (limpa cache/SW). Cobre o caso clássico
+   "aba aberta há dias com JS velho": ao voltar pra aba/focar, o app se atualiza sem pedir 🔄.
+   Guarda por-build em sessionStorage evita qualquer loop se um edge servir asset velho. */
+const APP_BUILD = "__APP_BUILD__";   // trocado por um timestamp (dígitos) no deploy; se ficar assim = dev/local
+let _verBusy=false;
+async function checkVersion(){
+  if(!/^[0-9]{6,}$/.test(APP_BUILD) || _verBusy) return;   // sem carimbo real → desligado (dev/local)
+  _verBusy=true;
+  try{
+    const r=await fetch("version.json?_="+Date.now(),{cache:"no-store"});
+    if(r.ok){
+      const j=await r.json(); const srv=String((j&&(j.v||j.build))||"");
+      if(srv && srv!==String(APP_BUILD)){
+        if(sessionStorage.getItem("crm_ver_tried")!==srv){   // só tenta 1x por versão nova
+          sessionStorage.setItem("crm_ver_tried",srv);
+          try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+          try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(x=>x.unregister())); } }catch(e){}
+          location.replace(location.origin+location.pathname+"?v="+encodeURIComponent(srv)+location.hash);
+          return;
+        }
+      }
+    }
+  }catch(e){}
+  _verBusy=false;
+}
+try{
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) checkVersion(); });
+  window.addEventListener("focus", checkVersion);
+  setInterval(checkVersion, 5*60*1000);          // ronda a cada 5 min
+  setTimeout(checkVersion, 4000);                // 1ª checagem logo após carregar
+}catch(e){}
+
 /* ===== PAUTA de reunião semanal ===== */
 function _pautaById(id){ return PAUTAS.find(p=>p.id===id); }
 function proxSexta(base){ const d=base?new Date(base+"T00:00:00"):new Date(); const add=((5-d.getDay())+7)%7||7; d.setDate(d.getDate()+add); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
