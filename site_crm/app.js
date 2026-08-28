@@ -2715,7 +2715,12 @@ function renderTab(){
     const aaaA=AAA.filter(a=>a.curva==="A"||!a.curva), aaaB=AAA.filter(a=>a.curva==="B"), aaaC=AAA.filter(a=>a.curva==="C"), aaaD=AAA.filter(a=>a.curva==="D");   // curvas por faturamento 12m
     const lista=(clinView==="nova"?nov:clinView==="divide"?divm:clinView==="particular"?part:rec);
     const q=search.trim().toLowerCase();
-    const arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista;
+    // SoW por clínica (verde=manda todas as classes · buraco=deixa na mesa · none=sem dado/não vinculada)
+    const sowDe=x=>{ const det=x.cod?CLIN_DET[String(x.cod)]:null; if(!det) return "none"; const nf=(det.falta||[]).length, nc=(det.cats||[]).length; if(nc&&!nf) return "cheio"; if(nf) return "buraco"; return "none"; };
+    const sowCheios=lista.filter(x=>sowDe(x)==="cheio").length, sowBuraco=lista.filter(x=>sowDe(x)==="buraco").length;
+    let arr=q?lista.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):lista.slice();
+    if(sowFilter==="cheio") arr=arr.filter(x=>sowDe(x)==="cheio");
+    else if(sowFilter==="buraco") arr=arr.filter(x=>sowDe(x)==="buraco");
     const semVinc=CARTEIRA.filter(x=>!x.cod).length;
     const porteLbl={G:"🐘 Grande",M:"🐎 Médio",P:"🐇 Pequeno"};
     // R$ total da carteira (só diretoria com R$ aberto)
@@ -3159,9 +3164,16 @@ function renderTab(){
           🚨 <b>Comissão paga mas 0 exames (${z.length})</b> — clínica na carteira mas o HF não registra <b>nenhum exame</b>:<br>
           ${z.map(x=>`• <b>${esc(x.nome)}</b>${x.cidade?" ("+esc(x.cidade)+")":""}${x.reconq_data?" · desde "+esc(fmtDataBR(x.reconq_data)):""}`).join("<br>")}
           <br><span class="t-mut" style="font-size:11.5px">Confira no HF: comissão de reconquista (normal) × exames em OUTRO código × ainda não digitados. Toque a clínica → 🔬 Ver exames.</span></div>`; })()}
-      <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${VM.sec}</div><input class="wlsearch" id="lupaCart" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
-      ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">Nada encontrado para "${esc(search)}".</div>`):`<div class="empty">Nenhuma clínica ${VM.vazio} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
-    document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
+      ${(sowCheios||sowBuraco)?`<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:8px 0 4px">
+        <span style="font-size:11.5px;color:#9fb2cc;font-weight:700">Share-of-wallet:</span>
+        <button data-sow="" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${!sowFilter?'#00D4FF':'rgba(255,255,255,.14)'};background:${!sowFilter?'rgba(0,212,255,.18)':'transparent'};color:${!sowFilter?'#00D4FF':'#9fb2cc'}">Todas (${lista.length})</button>
+        <button data-sow="cheio" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${sowFilter==='cheio'?'#00E5A0':'rgba(0,229,160,.35)'};background:${sowFilter==='cheio'?'rgba(0,229,160,.2)':'transparent'};color:#00E5A0">✅ SoW cheio (${sowCheios})</button>
+        <button data-sow="buraco" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${sowFilter==='buraco'?'#FF6B81':'rgba(255,107,129,.35)'};background:${sowFilter==='buraco'?'rgba(255,107,129,.2)':'transparent'};color:#FF6B81">🎯 Com buraco (${sowBuraco})</button>
+      </div>`:''}
+      <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${VM.sec}${sowFilter?` · ${sowFilter==='cheio'?'✅ SoW cheio':'🎯 com buraco'} (${arr.length})`:''}</div><input class="wlsearch" id="lupaCart" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
+      ${lista.length?(arr.length?arr.map(card).join(""):`<div class="empty">${sowFilter?`Nenhuma clínica ${sowFilter==='cheio'?'com share-of-wallet cheio':'com buraco'}${q?' para essa busca':''} nesta aba.`:`Nada encontrado para "${esc(search)}".`}</div>`):`<div class="empty">Nenhuma clínica ${VM.vazio} ainda. Toque <b>➕ Adicionar</b> e comece a digitar o nome — eu acho no HF.</div>`}`;
+    document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; renderTab(); });
+    document.querySelectorAll("#content [data-sow]").forEach(el=>el.onclick=()=>{ sowFilter=el.dataset.sow; renderTab(); });
     const ac=document.getElementById("addCart"); if(ac) ac.onclick=()=>openCarteira(clinView, null);
     const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>abrirFinanceiro();
     document.querySelectorAll("#content [data-cart]").forEach(el=>el.onclick=()=>openCarteira(null, el.dataset.cart));
