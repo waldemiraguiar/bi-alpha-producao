@@ -73,9 +73,11 @@ jobs:
         run: |
           V=$(date +%s)
           sed -i "s#\(src=\"app\.js\)\"#\1?v=$V\"#g; s#\(src=\"gate-crypto\.js\)\"#\1?v=$V\"#g" site_crm/index.html
+          sed -i "s#__APP_BUILD__#$V#g" site_crm/app.js               # AUTO-UPDATE: carimba a versão no app
+          printf '{"v":"%s"}' "$V" > site_crm/version.json           # AUTO-UPDATE: publica a versão atual
           STAMP="v $(TZ='America/Sao_Paulo' date +'%d/%m %Hh%M') · MZ · $(git rev-parse --short HEAD)"
           sed -i "s#__BUILD_VER__#$STAMP#g" site_crm/index.html   # SELO DE VERSÃO (de-para Matriz×CF)
-          echo "cache-bust -> $(grep -oE 'app\.js\?v=[0-9]+' site_crm/index.html | head -1) · selo -> $STAMP"
+          echo "cache-bust -> $(grep -oE 'app\.js\?v=[0-9]+' site_crm/index.html | head -1) · build=$V · selo -> $STAMP"
       - name: Publicar no Netlify (Agente CRM)
         if: env.DEPLOY_FULL == 'true'
         env:

@@ -3,6 +3,8 @@
   Cache-Control: no-store, max-age=0, must-revalidate
 /app.js
   Cache-Control: no-store, max-age=0, must-revalidate
+/version.json
+  Cache-Control: no-store, max-age=0, must-revalidate
 /gate-crypto.js
   Cache-Control: no-store, max-age=0, must-revalidate
 /telao.html
