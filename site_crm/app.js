@@ -351,7 +351,17 @@ function compToggleSel(id){ if(compSel.has(id)) compSel.delete(id); else compSel
 function compSelAll(){ compExamesView().forEach(e=>compSel.add(e.id)); renderTab(); }
 function compSelClear(){ compSel.clear(); if(compSoSel) compSoSel=false; renderTab(); }
 function compAjLabel(){ return (compAjustePct>0?'+':'')+compAjustePct+'%'; }
-let compView="matriz";        // "matriz" | "conferir"
+let compView="simples";       // "simples" (padrão, guiado p/ colaborador) | "matriz" (avançado) | "conferir"
+let compAlvos=new Set();       // concorrentes escolhidos no Simulador (1 ou +)
+let compSimDesc=10;            // % de desconto do Simulador
+let compSimEscopo="todos";     // "todos" | "sel" (tabela toda × exames escolhidos)
+/* stats do Simulador: quantos exames Alpha (com desconto) fica <= o concorrente */
+function compSimStats(alvoId){ const meu=compMeu(); let n=0,ganho=0;
+  const base = compSimEscopo==="sel" ? COMP.exames.filter(e=>compSel.has(e.id)) : COMP.exames;
+  base.forEach(e=>{ const p=e.precos||{}; const a=p[meu], c=p[alvoId]; if(a==null||a<=0||c==null||c<=0) return;
+    n++; const ad=a*(1-compSimDesc/100); if(ad<=c+1e-6) ganho++; });
+  return {n, ganho, perco:n-ganho, pct: n?Math.round(100*ganho/n):0}; }
+function compToggleAlvo(id){ if(compAlvos.has(id)) compAlvos.delete(id); else compAlvos.add(id); renderTab(); }
 let compConfIdx=0;            // posição no modo conferência
 let compTesteOn=true;         // mostrar coluna Alpha TESTE (sandbox) — ligada por padrão
 /* ---- DESFAZER: pilha de snapshots (voltar em cada processo) ---- */
@@ -2247,6 +2257,57 @@ function relatorioComparativo(){
   const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para abrir o relatório."); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+/* ===== RELATÓRIO do SIMULADOR (Alpha × 1..N concorrentes, desconto simples) ===== */
+function relatorioSimulador(){
+  const meu=compMeu(), meuLab=COMP.labs.find(l=>l.id===meu);
+  const alvos=[...compAlvos].map(id=>COMP.labs.find(l=>l.id===id)).filter(Boolean);
+  if(!meuLab){ alert("Marque a sua tabela (⭐) antes."); return; }
+  if(!alvos.length){ alert("Escolha ao menos 1 concorrente no passo 1."); return; }
+  const desc=compSimDesc, sel=(compSimEscopo==="sel");
+  const baseEx = sel ? COMP.exames.filter(e=>compSel.has(e.id)) : COMP.exames;
+  const f=v=>compFmt(v);
+  const blocks=alvos.map(alvoLab=>{
+    const rows=baseEx.map(e=>{ const p=e.precos||{}; const aR=p[meu], c=p[alvoLab.id]; if(aR==null||aR<=0||c==null||c<=0) return null;
+        const ad=Math.round(aR*(1-desc/100)*100)/100; const gap=100*(c-ad)/c; const igualar=ad>c?Math.max(0,Math.round((aR-c)/aR*100)):0;
+        return {nome:e.nome,cat:e.cat,aR,ad,c,gap,ganho:ad<=c+1e-6,igualar}; }).filter(Boolean);
+    return {alvoLab,rows}; }).filter(b=>b.rows.length);
+  if(!blocks.length){ alert("Nenhum exame comparável na seleção atual."); return; }
+  const oper=(operadorAtual&&operadorAtual())||"Equipe";
+  const now=new Date(); const dstr=now.toLocaleDateString("pt-BR")+" "+now.toLocaleTimeString("pt-BR",{hour:'2-digit',minute:'2-digit'});
+  const th=alvoLab=>`<tr><th class="n">#</th><th>Exame</th><th class="n">${esc(meuLab.nome.split(' ')[0])} hoje</th><th class="n">com -${desc}%</th><th class="n">${esc(alvoLab.nome)}</th><th class="n">Situação</th></tr>`;
+  const linha=(r,i)=>`<tr class="${r.ganho?'g':'b'}"><td class="n">${i+1}</td><td><b>${esc(r.nome)}</b>${r.cat?`<div class="cid">${esc(r.cat)}</div>`:''}</td><td class="n">${f(r.aR)}</td><td class="n test">${f(r.ad)}</td><td class="n">${f(r.c)}</td><td class="n">${r.ganho?'<span class="st g">✅ ganho</span>':`<span class="st b">falta -${r.igualar}% (→ ${f(r.c)})</span>`}</td></tr>`;
+  const blkHtml=({alvoLab,rows})=>{ const g=rows.filter(r=>r.ganho).sort((a,b)=>b.gap-a.gap), b=rows.filter(r=>!r.ganho).sort((a,b)=>a.gap-b.gap); const pct=Math.round(100*g.length/rows.length);
+    const tbl=(arr,cor,tit,off)=>arr.length?`<h3 style="color:${cor}">${tit} <span class="cnt">${arr.length}</span></h3><table><thead>${th(alvoLab)}</thead><tbody>${arr.map((r,i)=>linha(r,off+i)).join("")}</tbody></table>`:"";
+    return `<div class="blk">
+      <h2>Alpha × <b>${esc(alvoLab.nome)}</b></h2>
+      <div class="verdict ${pct>=60?'ok':'no'}">Com <b>-${desc}%</b> na sua tabela, você fica <b>≤ ${esc(alvoLab.nome)}</b> em <b>${g.length} de ${rows.length}</b> exames (<b>${pct}%</b>). ${b.length?`Faltam <b>${b.length}</b> — veja abaixo quanto baixar em cada.`:'Cobre a tabela inteira. 🎯'}</div>
+      ${tbl(b,"#c0263a","🔴 Onde ainda PERDE (concorrente + barato)",0)}
+      ${tbl(g,"#0a7d55","🟢 Onde GANHA (mais barato)",b.length)}
+    </div>`; };
+  const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Simulador -${desc}% · Alpha × ${alvos.length} concorrente(s)</title><style>
+  *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Inter,Arial,sans-serif;color:#0d1a2e;margin:0;padding:26px;background:#fff;font-size:12px}
+  .hd{border-bottom:3px solid #0A1628;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px}
+  .hd h1{margin:0 0 3px;font-size:21px;color:#0A1628}.hd .sub{color:#5b6b82;font-size:12px}.meta{text-align:right;font-size:11px;color:#5b6b82;line-height:1.6}.meta b{color:#0A1628}
+  .blk{margin:0 0 26px}h2{font-size:16px;margin:18px 0 8px;color:#0A1628}
+  .verdict{border-radius:10px;padding:11px 14px;margin:0 0 12px;font-size:13.5px;line-height:1.5}.verdict.ok{background:#f0fbf5;border:1px solid #b8ead2}.verdict.no{background:#fff7ed;border:1px solid #f3d19e}
+  h3{font-size:13px;margin:14px 0 6px;display:flex;align-items:center;gap:8px}h3 .cnt{background:#0A1628;color:#fff;border-radius:12px;font-size:11px;padding:1px 9px}
+  table{width:100%;border-collapse:collapse;margin-bottom:6px}th{background:#0A1628;color:#fff;text-align:left;padding:6px 8px;font-size:10.5px}td{padding:6px 8px;border-bottom:1px solid #eef2f7}tr.b td{background:#fff5f6}tr.g td{background:#f0fbf5}
+  .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.test{color:#0a7d55;font-weight:700}.cid{color:#8b97a7;font-size:10px}
+  .st{border-radius:11px;padding:2px 8px;font-size:10px;font-weight:800;white-space:nowrap}.st.g{background:#e3f8ee;color:#0a7d55}.st.b{background:#ffe9ec;color:#c0263a}
+  .ft{margin-top:16px;border-top:1px solid #dfe6ef;padding-top:10px;font-size:10px;color:#8b97a7;line-height:1.6}
+  .bar{position:sticky;top:0;background:#0A1628;padding:10px 14px;margin:-26px -26px 18px;display:flex;gap:10px;justify-content:flex-end}.bar button{background:#00D4FF;color:#04121f;border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer}.bar button.sec{background:#22344a;color:#e8eef7}
+  @media print{.bar{display:none}body{padding:0}tr.b td{background:#fff5f6!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}tr.g td{background:#f0fbf5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}th,h3{-webkit-print-color-adjust:exact;print-color-adjust:exact}.blk{page-break-inside:avoid}}
+  </style></head><body>
+  <div class="bar"><button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button><button class="sec" onclick="baixar()">⬇️ Baixar HTML</button></div>
+  <div class="hd"><div><h1>Simulação de preço · desconto de ${desc}%</h1><div class="sub"><b>${esc(meuLab.nome)}</b> × ${alvos.map(a=>esc(a.nome)).join(" · ")} · ${sel?`${compSel.size} exame(s) escolhido(s)`:'tabela toda'}</div></div>
+    <div class="meta">Gerado em <b>${esc(dstr)}</b><br>Por <b>${esc(oper)}</b><br>Uso interno · Grupo Alpha</div></div>
+  ${blocks.map(blkHtml).join("")}
+  <div class="ft"><b>Como ler:</b> “com -${desc}%” = seu preço com o desconto simulado (NÃO altera sua tabela real). ✅ ganho = você fica ≤ o concorrente. 🔴 “falta -X%” = quanto ainda precisa baixar do seu preço de hoje pra empatar. Foque nos exames de maior volume; onde já ganha, não precisa baixar. Documento de uso interno.</div>
+  <script>function baixar(){var b=new Blob([document.documentElement.outerHTML],{type:'text/html'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='simulacao-${desc}pct-'+new Date().toISOString().slice(0,10)+'.html';a.click();setTimeout(function(){URL.revokeObjectURL(u)},2000);}<\/script>
+  </body></html>`;
+  const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para abrir o relatório."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function renderTab(){
   const D = DATA, r = D.resumo || {}, c = document.getElementById("content");
   const cnt = k => act(D[k]||[]).length;                 // contagem JÁ sem encerrados (#1)
@@ -2374,12 +2435,72 @@ function renderTab(){
     // ---- barra superior: abas de visão + DESFAZER ----
     const uLast = compUndo.length?compUndo[compUndo.length-1]:null;
     const head=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div style="display:inline-flex;background:#0a1420;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:3px">
-          <button onclick="compView='matriz'; renderTab()" style="cursor:pointer;border:none;border-radius:8px;padding:8px 15px;font-size:13px;font-weight:800;background:${compView==='matriz'?'rgba(0,212,255,.9)':'transparent'};color:${compView==='matriz'?'#04121f':'#9fb2cc'}">📊 Matriz</button>
-          <button onclick="compView='conferir'; renderTab()" style="cursor:pointer;border:none;border-radius:8px;padding:8px 15px;font-size:13px;font-weight:800;background:${compView==='conferir'?'rgba(0,212,255,.9)':'transparent'};color:${compView==='conferir'?'#04121f':'#9fb2cc'}">🔍 Conferir linha a linha</button>
+        <div style="display:inline-flex;background:#0a1420;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:3px;flex-wrap:wrap">
+          <button onclick="compView='simples'; renderTab()" style="cursor:pointer;border:none;border-radius:8px;padding:8px 15px;font-size:13px;font-weight:800;background:${compView==='simples'?'rgba(0,212,255,.9)':'transparent'};color:${compView==='simples'?'#04121f':'#9fb2cc'}">⚡ Simulador</button>
+          <button onclick="compView='matriz'; renderTab()" style="cursor:pointer;border:none;border-radius:8px;padding:8px 15px;font-size:13px;font-weight:800;background:${compView==='matriz'?'rgba(0,212,255,.9)':'transparent'};color:${compView==='matriz'?'#04121f':'#9fb2cc'}">📊 Tabela completa</button>
+          <button onclick="compView='conferir'; renderTab()" style="cursor:pointer;border:none;border-radius:8px;padding:8px 15px;font-size:13px;font-weight:800;background:${compView==='conferir'?'rgba(0,212,255,.9)':'transparent'};color:${compView==='conferir'?'#04121f':'#9fb2cc'}">🔍 Conferir</button>
         </div>
         <button onclick="compUndoLast()" ${uLast?'':'disabled'} title="voltar a última alteração" style="cursor:${uLast?'pointer':'default'};border-radius:9px;padding:8px 14px;font-size:13px;font-weight:800;border:1px solid ${uLast?'rgba(255,176,0,.55)':'rgba(255,255,255,.1)'};background:${uLast?'rgba(255,176,0,.15)':'transparent'};color:${uLast?'#FFB000':'#4a5a70'}">↩ Desfazer${uLast?` · ${esc(uLast.label)}`:''}</button>
       </div>`;
+
+    /* ==================== MODO SIMULADOR (simples, guiado p/ colaborador) ==================== */
+    if(compView==="simples"){
+      const conc=labsOut;   // concorrentes (não-meu)
+      const DESCS=[0,5,10,15,20,25];
+      const alvosSel=[...compAlvos].filter(id=>conc.some(l=>l.id===id));
+      const selN=compSel.size;
+      // cards de resultado por concorrente escolhido
+      const resultados = alvosSel.map(id=>{ const l=conc.find(x=>x.id===id); const s=compSimStats(id); return {l,s}; });
+      const chipConc = l=>{ const on=compAlvos.has(l.id); return `<button onclick="compToggleAlvo('${l.id}')" style="cursor:pointer;border-radius:22px;padding:9px 15px;font-size:13.5px;font-weight:800;border:2px solid ${on?'#00D4FF':'rgba(255,255,255,.15)'};background:${on?'rgba(0,212,255,.2)':'transparent'};color:${on?'#00D4FF':'#c9d6e5'};margin:4px">${on?'☑':'☐'} ${esc(l.nome)}</button>`; };
+      const chipDesc = d=>`<button onclick="compSimDesc=${d}; renderTab()" style="cursor:pointer;border-radius:22px;padding:9px 16px;font-size:15px;font-weight:800;border:2px solid ${compSimDesc===d?'#00E5A0':'rgba(255,255,255,.15)'};background:${compSimDesc===d?'rgba(0,229,160,.2)':'transparent'};color:${compSimDesc===d?'#00E5A0':'#c9d6e5'};margin:4px">-${d}%</button>`;
+      c.innerHTML = head + `
+        <div class="t-mut" style="font-size:13px;text-align:center;margin:2px 0 14px;line-height:1.5">Simule um desconto na sua tabela e veja <b style="color:#00E5A0">onde você ganha</b> e <b style="color:#FF6B81">onde perde</b> contra o concorrente. <b>Nada aqui muda seu preço real.</b></div>
+
+        <div class="card" style="margin-bottom:12px;border-color:rgba(0,212,255,.3)">
+          <h3>1️⃣ Contra quem você quer comparar? <span class="tag">pode marcar 1 ou vários</span></h3>
+          <div style="display:flex;flex-wrap:wrap">${conc.map(chipConc).join("")}</div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px;border-color:rgba(0,229,160,.3)">
+          <h3>2️⃣ Quanto de desconto na sua tabela? <span class="tag">simulação</span></h3>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px">${DESCS.map(chipDesc).join("")}
+            <span style="margin-left:10px;color:#9fb2cc;font-size:13px">ou digite:</span>
+            <div style="display:inline-flex;align-items:center;background:#0d1a2e;border:1px solid rgba(255,255,255,.15);border-radius:8px;margin:4px">
+              <input type="number" min="0" max="90" value="${compSimDesc}" onchange="compSimDesc=Math.max(0,Math.min(90,Math.round(+this.value||0))); renderTab()" style="width:64px;background:transparent;color:#00E5A0;border:none;padding:9px;font-size:16px;font-weight:800;text-align:right"><span style="padding:0 10px;color:#9fb2cc">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px;border-color:rgba(255,255,255,.12)">
+          <h3>3️⃣ Em quais exames? </h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button onclick="compSimEscopo='todos'; renderTab()" style="cursor:pointer;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:800;border:2px solid ${compSimEscopo==='todos'?'#00D4FF':'rgba(255,255,255,.15)'};background:${compSimEscopo==='todos'?'rgba(0,212,255,.18)':'transparent'};color:${compSimEscopo==='todos'?'#00D4FF':'#c9d6e5'}">📋 Tabela toda</button>
+            <button onclick="compSimEscopo='sel'; compView='matriz'; compSelMode=true; renderTab()" style="cursor:pointer;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:800;border:2px solid ${compSimEscopo==='sel'?'#00E5A0':'rgba(255,255,255,.15)'};background:${compSimEscopo==='sel'?'rgba(0,229,160,.18)':'transparent'};color:${compSimEscopo==='sel'?'#00E5A0':'#c9d6e5'}">✅ Escolher exames${selN?` (${selN})`:''}</button>
+            ${compSimEscopo==='sel'?`<span style="font-size:12px;color:#9fb2cc">${selN?`${selN} exame(s) escolhido(s) · marque mais na aba 📊 Tabela completa`:'nenhum ainda — vá em 📊 Tabela completa e marque no ☑'}</span>`:''}
+          </div>
+        </div>
+
+        ${resultados.length ? `
+        <div class="seclabel" style="margin:6px 0 8px">📊 Resultado com <b style="color:#00E5A0">-${compSimDesc}%</b> ${compSimEscopo==='sel'?`nos ${selN} exames escolhidos`:'na tabela toda'}</div>
+        ${resultados.map(({l,s})=>{ const ok=s.pct>=60; const col=ok?'#00E5A0':(s.pct>=40?'#FFC400':'#FF6B81');
+          return `<div class="card" style="margin-bottom:10px;border-left:4px solid ${col}">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div style="font-size:16px;font-weight:800;color:#e8eef7">${esc(l.nome)}</div>
+              <div style="font-size:13px"><b style="color:#00E5A0">✅ ganha em ${s.ganho}</b> &nbsp;·&nbsp; <b style="color:#FF6B81">🔴 perde em ${s.perco}</b> &nbsp; <span class="t-mut">de ${s.n}</span></div>
+            </div>
+            <div style="height:14px;border-radius:8px;overflow:hidden;background:rgba(255,107,129,.25);margin-top:9px;display:flex">
+              <div style="width:${s.pct}%;background:${col};display:flex;align-items:center;justify-content:${s.pct>15?'center':'flex-start'};color:#04121f;font-size:11px;font-weight:800;padding:0 6px">${s.pct}%</div>
+            </div>
+            <div style="font-size:12.5px;color:#c9d6e5;margin-top:8px">${s.pct>=60?`🎯 Com -${compSimDesc}% você é competitivo contra a ${esc(l.nome.split(' ')[0])} (${s.pct}% dos exames).`:s.perco?`⚠️ Ainda perde em <b>${s.perco}</b> exames. O relatório mostra <b>quanto baixar em cada</b> pra empatar.`:''}</div>
+          </div>`; }).join("")}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+          <button onclick="relatorioSimulador()" style="flex:1;min-width:220px;cursor:pointer;border-radius:10px;padding:14px;font-size:15px;font-weight:800;border:none;background:#00D4FF;color:#04121f">🖨️ Gerar relatório (ganho × perco, exame a exame)</button>
+        </div>
+        <div class="t-mut" style="font-size:12px;margin-top:10px;line-height:1.5">O relatório abre pronto pra <b>imprimir ou salvar em PDF</b> — com a lista de onde você perde e <b>quanto baixar</b> pra empatar em cada exame. Precisa de mais detalhe? A aba <b>📊 Tabela completa</b> tem tudo.</div>
+        ` : `<div class="empty" style="margin-top:16px">👆 Escolha ao menos <b>um concorrente</b> no passo 1 para ver o resultado.</div>`}
+      `;
+      return;
+    }
 
     /* ==================== MODO CONFERIR (linha a linha) ==================== */
     if(compView==="conferir"){
