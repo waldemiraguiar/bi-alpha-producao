@@ -346,6 +346,10 @@ let COMP={labs:[],exames:[]};
 let compAjustePct=0, compAlvo="", compBusca="", compCat="", compOrdem="comp", compSoComp=true, compRevisar=false;
 let compLotePct=0;   // valor do input de aplicação em lote
 let compOpFilter="";  // "" | "subir" | "caro" — filtro de oportunidade de preço
+let compSel=new Set(), compSelMode=false, compSoSel=false;   // seleção de exames p/ comparar/relatar
+function compToggleSel(id){ if(compSel.has(id)) compSel.delete(id); else compSel.add(id); renderTab(); }
+function compSelAll(){ compExamesView().forEach(e=>compSel.add(e.id)); renderTab(); }
+function compSelClear(){ compSel.clear(); if(compSoSel) compSoSel=false; renderTab(); }
 function compAjLabel(){ return (compAjustePct>0?'+':'')+compAjustePct+'%'; }
 let compView="matriz";        // "matriz" | "conferir"
 let compConfIdx=0;            // posição no modo conferência
@@ -432,7 +436,8 @@ function compRowStats(e){ const p=e.precos||{}; const vals=COMP.labs.map(l=>({id
   const nums=vals.map(x=>x.v); const min=Math.min(...nums),max=Math.max(...nums),avg=nums.reduce((a,b)=>a+b,0)/nums.length;
   return {min,max,avg,n:vals.length}; }
 function compExamesView(){ let arr=COMP.exames.slice();
-  if(compRevisar) arr=arr.filter(compIsRevisar);
+  if(compSoSel) arr=arr.filter(e=>compSel.has(e.id));
+  else if(compRevisar) arr=arr.filter(compIsRevisar);
   else if(compOpFilter) arr=arr.filter(e=>{ const o=compOportunidade(e); return o&&o.tipo===compOpFilter; });
   else if(compSoComp) arr=arr.filter(e=>Object.values(e.precos||{}).filter(v=>v>0).length>=2);
   if(compCat) arr=arr.filter(e=>(e.cat||"")===compCat);
@@ -2172,6 +2177,76 @@ function relatorioSoW(curva){
   if(!w){ alert("Permita pop-ups para abrir o relatório (ou toque de novo)."); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+/* ===== RELATÓRIO COMPARATIVO (Alpha × concorrente escolhido) — imprimível/baixável ===== */
+function relatorioComparativo(){
+  const meu=compMeu(), meuLab=COMP.labs.find(l=>l.id===meu);
+  const alvoLab=compAlvo?COMP.labs.find(l=>l.id===compAlvo):null;
+  if(!meuLab){ alert("Marque a sua tabela (⭐) antes."); return; }
+  if(!alvoLab){ alert("Escolha um concorrente em “Comparar contra” antes de gerar o relatório comparativo."); return; }
+  const selN=compSel.size;
+  const base=(selN?COMP.exames.filter(e=>compSel.has(e.id)):compExamesView());
+  const rows=base.map(e=>{ const p=e.precos||{}; const aR=p[meu], c=p[compAlvo]; if(aR==null||aR<=0||c==null||c<=0) return null;
+      const t=compTesteEfetivo(e); const aT=(t!=null?t:aR); const gap=100*(c-aT)/c;   // + = Alpha + barato
+      const igualar=aT>c?Math.max(0,Math.round((aR-c)/aR*100)):0;                       // % a baixar do REAL p/ empatar
+      return {nome:e.nome,cat:e.cat,aR,aT,c,gap,ganho:aT<=c+1e-6,igualar}; }).filter(Boolean);
+  if(!rows.length){ alert(`Nenhum exame comparável entre ${meuLab.nome} e ${alvoLab.nome}${selN?' na seleção':''}.`); return; }
+  const ganho=rows.filter(r=>r.ganho).sort((a,b)=>b.gap-a.gap);
+  const perco=rows.filter(r=>!r.ganho).sort((a,b)=>a.gap-b.gap);
+  const temTeste=compAjustePct!==0 || rows.some(r=>Math.abs(r.aT-r.aR)>0.001);
+  const oper=(operadorAtual&&operadorAtual())||"Equipe";
+  const now=new Date(); const dstr=now.toLocaleDateString("pt-BR")+" "+now.toLocaleTimeString("pt-BR",{hour:'2-digit',minute:'2-digit'});
+  const f=v=>compFmt(v);
+  const linha=(r,i)=>`<tr class="${r.ganho?'g':'b'}">
+      <td class="n">${i+1}</td><td><b>${esc(r.nome)}</b>${r.cat?`<div class="cid">${esc(r.cat)}</div>`:''}</td>
+      <td class="n">${f(r.aR)}</td>${temTeste?`<td class="n test">${f(r.aT)}</td>`:''}
+      <td class="n">${f(r.c)}</td>
+      <td class="n" style="font-weight:800;color:${r.gap>=0?'#0a7d55':'#c0263a'}">${r.gap>=0?'▼':'▲'} ${Math.abs(Math.round(r.gap))}%</td>
+      <td class="n">${r.ganho?'<span class="st g">✅ ganho</span>':`<span class="st b">baixar ${r.igualar}% → ${f(r.c)}</span>`}</td>
+    </tr>`;
+  const th=`<tr><th class="n">#</th><th>Exame</th><th class="n">${esc(meuLab.nome)} real</th>${temTeste?`<th class="n">${esc(meuLab.nome)} teste</th>`:''}<th class="n">${esc(alvoLab.nome)}</th><th class="n">Δ vs ${esc(alvoLab.nome.split(' ')[0])}</th><th class="n">Situação</th></tr>`;
+  const sec=(titulo,cor,arr,base0)=>arr.length?`<h2 style="color:${cor};border-color:${cor}"><span>${titulo}</span><span class="cnt">${arr.length}</span></h2>
+    <table><thead>${th}</thead><tbody>${arr.map((r,i)=>linha(r,base0+i)).join("")}</tbody></table>`:"";
+  const pctPerco=rows.length?Math.round(100*ganho.length/rows.length):0;
+  const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Comparativo ${esc(meuLab.nome)} × ${esc(alvoLab.nome)}</title><style>
+  *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Inter,Arial,sans-serif;color:#0d1a2e;margin:0;padding:26px;background:#fff;font-size:12px}
+  .hd{border-bottom:3px solid #0A1628;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px}
+  .hd h1{margin:0 0 3px;font-size:20px;color:#0A1628}.hd .sub{color:#5b6b82;font-size:12px}.meta{text-align:right;font-size:11px;color:#5b6b82;line-height:1.6}.meta b{color:#0A1628}
+  .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px}.kpi{flex:1;min-width:110px;border:1px solid #dfe6ef;border-radius:8px;padding:10px 12px}.kpi .v{font-size:22px;font-weight:800}.kpi .l{font-size:11px;color:#5b6b82;margin-top:2px}
+  h2{font-size:14px;margin:20px 0 8px;padding-bottom:5px;border-bottom:2px solid;display:flex;justify-content:space-between;align-items:center}h2 .cnt{background:#0A1628;color:#fff;border-radius:12px;font-size:11px;padding:1px 10px}
+  table{width:100%;border-collapse:collapse;margin-bottom:8px}th{background:#0A1628;color:#fff;text-align:left;padding:6px 8px;font-size:10.5px}td{padding:6px 8px;border-bottom:1px solid #eef2f7;vertical-align:top}tr.b td{background:#fff5f6}tr.g td{background:#f0fbf5}
+  .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.test{color:#0a7d55}.cid{color:#8b97a7;font-size:10px}
+  .st{border-radius:11px;padding:2px 8px;font-size:10px;font-weight:800;white-space:nowrap}.st.g{background:#e3f8ee;color:#0a7d55}.st.b{background:#ffe9ec;color:#c0263a}
+  .box{border:1px solid #dfe6ef;border-radius:10px;padding:12px 14px;margin:14px 0;font-size:12.5px;line-height:1.6}
+  .ft{margin-top:20px;border-top:1px solid #dfe6ef;padding-top:10px;font-size:10px;color:#8b97a7;line-height:1.6}
+  .bar{position:sticky;top:0;background:#0A1628;padding:10px 14px;margin:-26px -26px 18px;display:flex;gap:10px;justify-content:flex-end}
+  .bar button{background:#00D4FF;color:#04121f;border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer}.bar button.sec{background:#22344a;color:#e8eef7}
+  @media print{.bar{display:none}body{padding:0}tr.b td{background:#fff5f6!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}tr.g td{background:#f0fbf5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}h2{page-break-after:avoid}tr{page-break-inside:avoid}}
+  </style></head><body>
+  <div class="bar"><button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button><button class="sec" onclick="baixar()">⬇️ Baixar HTML</button></div>
+  <div class="hd"><div><h1>Comparativo de preços</h1><div class="sub"><b>${esc(meuLab.nome)}</b> × <b>${esc(alvoLab.nome)}</b> · ${selN?`${selN} exame(s) selecionado(s)`:`${rows.length} exames comparáveis`}${temTeste?` · com ajuste de teste (${compAjLabel()})`:''}</div></div>
+    <div class="meta">Gerado em <b>${esc(dstr)}</b><br>Por <b>${esc(oper)}</b><br>Uso interno · Grupo Alpha</div></div>
+  <div class="kpis">
+    <div class="kpi"><div class="v">${rows.length}</div><div class="l">Exames comparados</div></div>
+    <div class="kpi"><div class="v" style="color:#0a7d55">${ganho.length}</div><div class="l">🟢 Onde ${esc(meuLab.nome.split(' ')[0])} ganha (≤ ${esc(alvoLab.nome.split(' ')[0])})</div></div>
+    <div class="kpi"><div class="v" style="color:#c0263a">${perco.length}</div><div class="l">🔴 Onde perde (mais caro)</div></div>
+    <div class="kpi"><div class="v">${pctPerco}%</div><div class="l">competitividade${temTeste?` (teste ${compAjLabel()})`:''}</div></div>
+  </div>
+  <div class="box" style="background:${pctPerco>=60?'#f0fbf5':'#fff7ed'};border-color:${pctPerco>=60?'#b8ead2':'#f3d19e'}">
+    <b>Leitura rápida:</b> ${temTeste?`com o ajuste de <b>${compAjLabel()}</b> na sua tabela, `:''}você fica <b>≤ ${esc(alvoLab.nome)}</b> em <b>${ganho.length} de ${rows.length}</b> exames (${pctPerco}%).
+    ${perco.length?` Nos <b>${perco.length}</b> em que perde, ${esc(alvoLab.nome.split(' ')[0])} está mais barato — a coluna “Situação” mostra <b>quanto baixar pra empatar</b>.`:` Você cobre a tabela inteira contra ${esc(alvoLab.nome)}. 🎯`}</div>
+  ${sec(`🔴 Onde PERCO — ${esc(alvoLab.nome)} está mais barato (atacar)`,"#c0263a",perco,0)}
+  ${sec(`🟢 Onde GANHO — mais barato que ${esc(alvoLab.nome)} (defender)`,"#0a7d55",ganho,perco.length)}
+  <div class="box"><b>O que fazer / não fazer:</b><br>
+    ${perco.length?`🔴 <b>Fazer:</b> nos ${perco.length} em que perde, decidir por exame — baixar até o valor da coluna “Situação” pra empatar, OU segurar o preço se o seu diferencial (velocidade de laudo, PCR de verdade, IHQ) justifica.`:`🟢 Você não perde em nenhum — posição forte contra ${esc(alvoLab.nome)}.`}<br>
+    🟢 <b>Não fazer:</b> não baixe onde já ganha (${ganho.length} exames) — é margem sua. Em vários dá até pra <b>subir</b> e seguir mais barato (veja a aba, marcador 💰).<br>
+    🧠 <b>Regra:</b> exame comum (hemograma/bioquímica) o cliente compara preço — seja competitivo; exame raro/especializado ele não compara — margem mora ali.</div>
+  <div class="ft"><b>Governança:</b> comparativo gerado pelo Agente CRM a partir das tabelas cadastradas. Δ = quanto ${esc(meuLab.nome.split(' ')[0])}${temTeste?' (com teste)':''} está abaixo (▼) ou acima (▲) de ${esc(alvoLab.nome)}. Preços de teste são simulação (não alteram sua tabela real). Documento de uso interno.</div>
+  <script>function baixar(){var b=new Blob([document.documentElement.outerHTML],{type:'text/html'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='comparativo-${esc(meuLab.nome.split(' ')[0])}-x-${esc(alvoLab.nome.split(' ')[0])}-'+new Date().toISOString().slice(0,10)+'.html';a.click();setTimeout(function(){URL.revokeObjectURL(u)},2000);}<\/script>
+  </body></html>`;
+  const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para abrir o relatório."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function renderTab(){
   const D = DATA, r = D.resumo || {}, c = document.getElementById("content");
   const cnt = k => act(D[k]||[]).length;                 // contagem JÁ sem encerrados (#1)
@@ -2397,8 +2472,10 @@ function renderTab(){
         else if(pos&&!pos.solo){ ph=pos.cheaper?`<span style="color:#00E5A0;font-weight:800">🥇</span>`:`<span style="color:#FF5470;font-weight:800">▲${Math.abs(Math.round(pos.pctVsMin))}%</span>`; }
         testeTd=`<td onclick="compEditTeste('${e.id}')" title="preço de teste — não altera o real" style="text-align:right;cursor:pointer;font-variant-numeric:tabular-nums;padding:8px 10px;background:rgba(0,229,160,.1);font-weight:800;color:#c8ffe9;box-shadow:inset 2px 0 0 #00E5A0">${t==null?'—':compFmt(t).replace('R$ ','')}${over?' <span style="color:#00E5A0">•</span>':''}</td>
           ${alvoTd}<td style="text-align:right;padding:8px 10px;font-size:12px">${ph}</td>`; }
-      return `<tr style="${(flagged||isSusp)?`box-shadow:inset 3px 0 0 ${flagged?'#FFB000':'#FF7A7A'};`:''}">
-        <td style="position:sticky;left:0;background:${rowBG};min-width:210px;padding:8px 10px">
+      const selCk=compSel.has(e.id);
+      return `<tr style="${selCk?'box-shadow:inset 3px 0 0 #00D4FF;background:rgba(0,212,255,.05);':(flagged||isSusp)?`box-shadow:inset 3px 0 0 ${flagged?'#FFB000':'#FF7A7A'};`:''}">
+        <td style="position:sticky;left:0;background:${selCk?'#0b2233':rowBG};min-width:210px;padding:8px 10px">
+          ${compSelMode?`<input type="checkbox" ${selCk?'checked':''} onclick="event.stopPropagation();compToggleSel('${e.id}')" style="margin-right:7px;width:16px;height:16px;vertical-align:middle;accent-color:#00D4FF;cursor:pointer">`:''}
           <button onclick="compToggleFlag('${e.id}')" title="${flagged?'desmarcar':'marcar p/ revisar'}" style="background:none;border:none;cursor:pointer;color:${flagged?'#FFB000':'#5b6b82'};font-size:13px">${flagged?'⚑':'⚐'}</button>
           <b onclick="compRenameExame('${e.id}')" style="cursor:text">${esc(e.nome)}</b>${opTag}
           ${isSusp?`<span title="preço destoa da mediana — pode ser de-para torto" style="color:#FFB000;font-size:11px;margin-left:4px">⚠️</span> <button onclick="compMarcarOk('${e.id}')" title="conferi, está certo — silenciar aviso" style="background:rgba(0,229,160,.15);border:1px solid rgba(0,229,160,.5);color:#00E5A0;border-radius:5px;cursor:pointer;font-size:10px;padding:1px 5px">✓ ok</button>`:''}
@@ -2493,8 +2570,17 @@ function renderTab(){
         </select>
         <button onclick="compSoComp=!compSoComp; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compSoComp?'#00D4FF':'rgba(255,255,255,.14)'};background:${compSoComp?'rgba(0,212,255,.18)':'transparent'};color:${compSoComp?'#00D4FF':'#9fb2cc'}" title="mostrar só exames presentes em 2+ tabelas">${compSoComp?'☑':'☐'} só comparáveis</button>
         <button onclick="compRevisar=!compRevisar; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compRevisar?'#FFB000':'rgba(255,176,0,.35)'};background:${compRevisar?'rgba(255,176,0,.2)':'transparent'};color:#FFB000" title="mostrar só os que precisam de conferência (⚠️ preço destoa + ⚑ marcados)">⚠️ revisar${nRev?` (${nRev})`:''}</button>
+        <button onclick="compSelMode=!compSelMode; renderTab()" style="cursor:pointer;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;border:1px solid ${compSelMode?'#00D4FF':'rgba(255,255,255,.14)'};background:${compSelMode?'rgba(0,212,255,.18)':'transparent'};color:${compSelMode?'#00D4FF':'#9fb2cc'}" title="marcar exames específicos p/ comparar/relatar">${compSelMode?'☑':'☐'} selecionar exames${compSel.size?` (${compSel.size})`:''}</button>
+        <button onclick="relatorioComparativo()" style="cursor:pointer;border-radius:7px;padding:8px 13px;font-size:12.5px;font-weight:800;border:1px solid ${alvoLab?'rgba(0,212,255,.5)':'rgba(255,255,255,.14)'};background:${alvoLab?'rgba(0,212,255,.14)':'transparent'};color:${alvoLab?'#00D4FF':'#5b6b82'}" title="${alvoLab?'gerar relatório Alpha × '+esc(alvoLab.nome):'escolha um concorrente em Comparar contra primeiro'}">🖨️ Relatório comparativo</button>
         <button class="regbtn" onclick="compAddExame()">＋ Exame</button>
       </div>
+      ${compSelMode?`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px;padding:9px 12px;border-radius:9px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.3)">
+        <b style="color:#00D4FF;font-size:13px">☑ ${compSel.size} exame(s) selecionado(s)</b>
+        <button onclick="compSelAll()" style="cursor:pointer;border-radius:6px;padding:6px 11px;font-size:12px;font-weight:700;border:1px solid rgba(0,212,255,.4);background:transparent;color:#00D4FF">＋ selecionar os em exibição (${view.length})</button>
+        <button onclick="compSelClear()" style="cursor:pointer;border-radius:6px;padding:6px 11px;font-size:12px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#9fb2cc">limpar seleção</button>
+        <button onclick="compSoSel=!compSoSel; renderTab()" ${compSel.size?'':'disabled'} style="cursor:${compSel.size?'pointer':'default'};border-radius:6px;padding:6px 11px;font-size:12px;font-weight:700;border:1px solid ${compSoSel?'#00E5A0':'rgba(0,229,160,.35)'};background:${compSoSel?'rgba(0,229,160,.2)':'transparent'};color:${compSel.size?'#00E5A0':'#4a5a70'}">${compSoSel?'☑':'☐'} ver só os selecionados</button>
+        <span style="font-size:11px;color:#7d8ea6">marque no ☑ de cada linha · depois <b>🖨️ Relatório comparativo</b> usa só os selecionados</span>
+      </div>`:''}
       ${cats.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         <button onclick="compCat=''; renderTab()" style="cursor:pointer;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;border:1px solid ${!compCat?'#00D4FF':'rgba(255,255,255,.14)'};background:${!compCat?'rgba(0,212,255,.18)':'transparent'};color:${!compCat?'#00D4FF':'#9fb2cc'}">Todas (${COMP.exames.length})</button>
         ${cats.map(cc=>`<button onclick="compCat=${JSON.stringify(cc).replace(/"/g,'&quot;')}; renderTab()" style="cursor:pointer;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;border:1px solid ${compCat===cc?'#00D4FF':'rgba(255,255,255,.14)'};background:${compCat===cc?'rgba(0,212,255,.18)':'transparent'};color:${compCat===cc?'#00D4FF':'#9fb2cc'}">${esc(cc)}</button>`).join("")}
