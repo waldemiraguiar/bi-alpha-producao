@@ -65,6 +65,16 @@ export default async (req) => {
       arq: !!t.arq,                                    // ARQUIVADO (sai da pauta ativa, fica no acervo, reversível)
       arq_ts: +t.arq_ts || 0,
       arq_por: String(t.arq_por || "").slice(0, 40),
+      // ✅ AÇÕES do tópico (quem faz o quê até quando) — cobrança da reunião
+      acoes: Array.isArray(t.acoes) ? t.acoes.slice(0, 50).map((a) => ({
+        id: String(a.id || ("a" + Date.now() + Math.random().toString(36).slice(2, 5))),
+        txt: String(a.txt || "").slice(0, 400),
+        dono: String(a.dono || "").slice(0, 60),
+        prazo: String(a.prazo || "").slice(0, 10),   // YYYY-MM-DD
+        feito: !!a.feito,
+        feito_ts: +a.feito_ts || 0,
+        ts: +a.ts || Date.now(),
+      })) : [],
       ts: +t.ts || Date.now(),
     });
     const clean = {

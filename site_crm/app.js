@@ -339,6 +339,9 @@ function syncPautas(l, ex, sq){ if(Array.isArray(l)){ PAUTAS=l; try{localStorage
 async function loadPautas(){ try{ const r=await fetch(PAUTA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); syncPautas(j.pautas, j.excluidos, j.squads); } }catch(e){ try{ const c=localStorage.getItem("crm_pautas_cache"); if(c&&!PAUTAS.length) PAUTAS=JSON.parse(c); }catch(_){} } }
 async function saveSquads(){ try{ const r=await fetch(PAUTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"squads_set",squads:SQUADS,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); if(Array.isArray(j.squads)) SQUADS=j.squads; return true; } }catch(e){} return false; }
 function setSquadAtual(s){ squadAtual=s; try{localStorage.setItem("crm_squad_atual",s);}catch(e){} }
+function hojeISO(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
+/* ✅ marca/desmarca uma AÇÃO de tópico como feita */
+async function toggleAcao(pautaId, tid, aid){ const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return; const a=(t.acoes||[]).find(x=>x.id===aid); if(!a) return; a.feito=!a.feito; a.feito_ts=a.feito?Date.now():0; if(await savePautaDoc(p)) renderTab(); }
 
 /* ================= COMPARATIVO DE TABELAS (Alpha × concorrentes) ================= */
 const COMP_API="/api/crm-comparativo";
@@ -1787,7 +1790,10 @@ function openTopico(pautaId, topId, secPre){
     <div class="m-lbl">✅ Decisão / encaminhamento</div><textarea id="tDec" class="m-ta" style="min-height:44px">${t?esc(t.decisao):''}</textarea>
     <div class="m-lbl">💡 Melhor de mercado <span class="t-mut" style="font-weight:500">— referência/benchmark pra enriquecer</span></div>
     <textarea id="tEnr" class="m-ta" style="min-height:56px">${t?esc(t.enr):''}</textarea>
-    <button class="m-save" id="tSave">${t?"Salvar alterações":"Adicionar tópico"}</button>
+    <div class="m-lbl" style="display:flex;align-items:center;justify-content:space-between">✅ Ações <span class="t-mut" style="font-weight:500;font-size:11px">— quem faz o quê até quando (aparece na aba Ações)</span></div>
+    <div id="tAcoes"></div>
+    <button type="button" id="tAddAcao" class="minibtn" style="border-color:rgba(0,229,160,.5);color:#7effcf;margin-top:4px">＋ nova ação</button>
+    <button class="m-save" id="tSave" style="margin-top:12px">${t?"Salvar alterações":"Adicionar tópico"}</button>
     ${t?`<button class="m-enc" id="tDel" style="border-color:var(--red);color:#ff8fa3">🗑️ Remover tópico</button>`:""}`;
   document.getElementById("modal").style.display="flex";
   document.getElementById("mClose").onclick=closeModal;
@@ -1796,11 +1802,29 @@ function openTopico(pautaId, topId, secPre){
   document.querySelectorAll("#tStRow [data-tst]").forEach(b=>b.onclick=()=>{ st=b.dataset.tst; document.querySelectorAll("#tStRow .opt").forEach(x=>x.classList.remove("on")); b.classList.add("on"); });
   // 🎤 voz no texto
   { const mb=document.getElementById("tMic"), tta=document.getElementById("tTxt"); if(mb&&tta) mb.onclick=function(){ pistaMic(this, tta); }; }
+  // ✅ AÇÕES (quem faz o quê até quando)
+  let _acoes = (t&&Array.isArray(t.acoes)) ? t.acoes.map(a=>({...a})) : [];
+  const _renderAcoes=()=>{ const box=document.getElementById("tAcoes"); if(!box) return;
+    box.innerHTML = _acoes.length ? _acoes.map((a,i)=>`
+      <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;flex-wrap:wrap;background:rgba(0,229,160,.05);border:1px solid rgba(0,229,160,.2);border-radius:8px;padding:6px 8px">
+        <input data-actxt="${i}" class="m-date" style="flex:1;min-width:120px" value="${esc(a.txt||'')}" placeholder="O que fazer">
+        <input data-acdono="${i}" class="m-date" style="width:95px" value="${esc(a.dono||'')}" placeholder="Quem">
+        <input data-acprazo="${i}" type="date" class="m-date" style="width:140px" value="${esc(a.prazo||'')}">
+        <button type="button" data-acdel="${i}" class="minibtn" style="border-color:var(--red);color:#ff8fa3">✕</button>
+      </div>`).join("") : `<div class="t-mut" style="font-size:12px;padding:2px 0 4px">Nenhuma ação ainda — toque "＋ nova ação".</div>`;
+    box.querySelectorAll("[data-actxt]").forEach(el=>el.oninput=e=>{_acoes[+e.target.dataset.actxt].txt=e.target.value;});
+    box.querySelectorAll("[data-acdono]").forEach(el=>el.oninput=e=>{_acoes[+e.target.dataset.acdono].dono=e.target.value;});
+    box.querySelectorAll("[data-acprazo]").forEach(el=>el.oninput=e=>{_acoes[+e.target.dataset.acprazo].prazo=e.target.value;});
+    box.querySelectorAll("[data-acdel]").forEach(el=>el.onclick=()=>{ _acoes.splice(+el.dataset.acdel,1); _renderAcoes(); });
+  };
+  _renderAcoes();
+  { const ab=document.getElementById("tAddAcao"); if(ab) ab.onclick=()=>{ _acoes.push({id:"a"+Date.now()+Math.random().toString(36).slice(2,5),txt:"",dono:"",prazo:"",feito:false,ts:Date.now()}); _renderAcoes(); const box=document.getElementById("tAcoes"); if(box){ const inp=box.querySelector(`[data-actxt="${_acoes.length-1}"]`); if(inp) inp.focus(); } }; }
   document.getElementById("tSave").onclick=async()=>{
     const tit=(document.getElementById("tTit").value||"").trim(); if(!tit){ alert("Põe um título no tópico."); return; }
     const novo={ id:t?t.id:("t"+Date.now()+Math.random().toString(36).slice(2,6)), sec:(document.getElementById("tSec").value||"Geral").trim(), titulo:tit,
       texto:(document.getElementById("tTxt").value||"").trim(), cor, status:st, resp:(document.getElementById("tResp").value||"").trim(),
-      decisao:(document.getElementById("tDec").value||"").trim(), enr:(document.getElementById("tEnr").value||"").trim(), fwd:t?t.fwd:false, de:t?t.de:"", ts:t?t.ts:Date.now() };
+      decisao:(document.getElementById("tDec").value||"").trim(), enr:(document.getElementById("tEnr").value||"").trim(), fwd:t?t.fwd:false, de:t?t.de:"", ts:t?t.ts:Date.now(),
+      acoes:_acoes.filter(a=>(a.txt||"").trim()).map(a=>({id:a.id,txt:(a.txt||"").trim(),dono:(a.dono||"").trim(),prazo:a.prazo||"",feito:!!a.feito,feito_ts:a.feito_ts||0,ts:a.ts||Date.now()})) };
     p.topicos = t ? (p.topicos||[]).map(x=>x.id===t.id?novo:x) : [...(p.topicos||[]), novo];
     if(await savePautaDoc(p)){ closeModal(); renderTab(); }
   };
@@ -2801,7 +2825,44 @@ function renderTab(){
     const _proxN=_prox0?(_prox0.topicos||[]).filter(t=>!t.arq).length:0;
     const _curIdSub=pautaHistId||(doc?doc.id:null); const _curPSub=PAUTAS.find(p=>p.id===_curIdSub);
     const _verProx=!!(_curPSub && doc && _curPSub.data>doc.data);
-    const subtabs=squadBar+`<div class="subtabs"><button class="subtab ${pautaView==='atual'&&!_verProx?'on':''}" data-pav="atual">🗓️ Esta semana</button><button class="subtab ${_verProx?'on':''}" data-pav="proxima">➡️ Próxima${_proxN?` (${_proxN})`:''}</button><button class="subtab ${pautaView==='arquivados'?'on':''}" data-pav="arquivados">🗄️ Arquivo</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">📅 Calendário${pautasDoSquad().length?` (${pautasDoSquad().length})`:''}</button></div>`;
+    const _acN=doc?(doc.topicos||[]).filter(t=>!t.arq).reduce((s,t)=>s+((t.acoes||[]).filter(a=>!a.feito).length),0):0;
+    const subtabs=squadBar+`<div class="subtabs"><button class="subtab ${pautaView==='atual'&&!_verProx?'on':''}" data-pav="atual">🗓️ Esta semana</button><button class="subtab ${pautaView==='acoes'?'on':''}" data-pav="acoes" style="${pautaView==='acoes'?'':'border-color:rgba(0,229,160,.5);color:#7effcf'}">✅ Ações${_acN?` (${_acN})`:''}</button><button class="subtab ${_verProx?'on':''}" data-pav="proxima">➡️ Próxima${_proxN?` (${_proxN})`:''}</button><button class="subtab ${pautaView==='arquivados'?'on':''}" data-pav="arquivados">🗄️ Arquivo</button><button class="subtab ${pautaView==='historico'?'on':''}" data-pav="historico">📅 Calendário${pautasDoSquad().length?` (${pautasDoSquad().length})`:''}</button></div>`;
+
+    // ===== ✅ AÇÕES (quem faz o quê até quando — cobrança da reunião) =====
+    if(pautaView==="acoes"){
+      const curA = pautaHistId ? (PAUTAS.find(p=>p.id===pautaHistId)||doc) : doc;
+      const _wnav=()=>{ document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){abrirProxima();return;} pautaView=el.dataset.pav; pautaHistId=null; renderTab(); }); _wireSquad(); };
+      if(!curA){ c.innerHTML=`${subtabs}<div class="empty">Crie uma pauta primeiro.</div>`; _wnav(); return; }
+      const H=hojeISO(); const d7=(()=>{ const d=new Date(); d.setDate(d.getDate()+7); const p=n=>String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); })();
+      const all=[]; (curA.topicos||[]).filter(t=>!t.arq).forEach(t=>(t.acoes||[]).forEach(a=>all.push({a,t})));
+      const feitas=all.filter(o=>o.a.feito), abertas=all.filter(o=>!o.a.feito);
+      const venc=abertas.filter(o=>o.a.prazo&&o.a.prazo<H).sort((x,y)=>x.a.prazo<y.a.prazo?-1:1);
+      const semana=abertas.filter(o=>o.a.prazo&&o.a.prazo>=H&&o.a.prazo<=d7).sort((x,y)=>x.a.prazo<y.a.prazo?-1:1);
+      const depois=abertas.filter(o=>!o.a.prazo||o.a.prazo>d7).sort((x,y)=>(x.a.prazo||"9")<(y.a.prazo||"9")?-1:1);
+      const pct=all.length?Math.round(feitas.length/all.length*100):0;
+      const row=(o,cor)=>{ const venci=o.a.prazo&&!o.a.feito&&o.a.prazo<H; return `<div style="display:flex;align-items:flex-start;gap:9px;background:rgba(255,255,255,.03);border-left:3px solid ${cor};border-radius:8px;padding:8px 11px;margin-bottom:6px">
+        <button data-acheck="${esc(o.t.id)}|${esc(o.a.id)}" style="flex-shrink:0;width:20px;height:20px;border-radius:6px;border:2px solid ${cor};background:${o.a.feito?cor:'transparent'};color:#04231a;font-weight:900;cursor:pointer;font-size:12px;line-height:1;padding:0">${o.a.feito?'✓':''}</button>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#e8f0f7;${o.a.feito?'text-decoration:line-through;opacity:.55':''}">${esc(o.a.txt)}</div>
+          <div class="t-mut" style="font-size:11px;margin-top:2px">${o.a.dono?`👤 <b style="color:#9fe6ff">${esc(o.a.dono)}</b> · `:''}${o.a.prazo?`<span style="${venci?'color:#fff;background:#e11d48;border-radius:4px;padding:0 6px;font-weight:800':'color:#ffc266'}">📅 ${esc(fmtDataBR(o.a.prazo).split(' ')[0])}${venci?' · VENCIDA':''}</span> · `:'sem prazo · '}<span style="opacity:.8">${esc(o.t.titulo)}</span></div></div></div>`; };
+      const grupo=(tit,arr,cor)=>arr.length?`<div class="seclabel" style="margin:14px 0 6px;color:${cor}">${tit} (${arr.length})</div>${arr.map(o=>row(o,cor)).join("")}`:"";
+      c.innerHTML=`${subtabs}
+        <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px;line-height:1.5">✅ <b>Ações da reunião</b> — quem faz o quê até quando. Marca o ✓ ao concluir. <span class="t-mut">(regra de mercado: meta de 90% concluído até a próxima)</span></div>
+        <div class="kgrid">
+          ${kpi("", all.length, "Ações", "no total")}
+          ${kpi("g", pct+"%", "Concluídas", feitas.length+" de "+all.length)}
+          ${kpi(venc.length?"a":"", venc.length, "⏰ Vencidas", "cobrar hoje")}
+          ${kpi("", semana.length, "📅 Esta semana", "no prazo")}
+        </div>
+        ${all.length?`<div style="margin:6px 0 12px;height:9px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#00D4FF,#00E5A0)"></div></div>`:''}
+        ${grupo("⏰ Vencidas",venc,"#e11d48")}
+        ${grupo("📅 Esta semana",semana,"#FFC400")}
+        ${grupo("🔜 Depois / sem prazo",depois,"#00CCFF")}
+        ${grupo("✅ Concluídas",feitas,"#00E5A0")}
+        ${!all.length?`<div class="empty">Nenhuma ação ainda. Abra um tópico (na aba "Esta semana") e adicione ações — quem faz o quê até quando.</div>`:''}`;
+      _wnav();
+      document.querySelectorAll("#content [data-acheck]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); const [tid,aid]=el.dataset.acheck.split("|"); await toggleAcao(curA.id,tid,aid); });
+      return;
+    }
 
     // ===== CALENDÁRIO / HISTÓRICO (por mês/ano, cada pauta = 1 dia) =====
     if(pautaView==="historico"){
@@ -2871,6 +2932,13 @@ function renderTab(){
         ${t.resp?`<div style="margin-top:8px"><span style="font-size:11px;color:${tc};background:${panel};border-radius:20px;padding:2px 10px;font-weight:700">👤 ${esc(t.resp)}</span></div>`:""}
         ${t.decisao?`<div style="font-size:12px;margin-top:8px;color:${tc};background:${panel};border-radius:8px;padding:7px 10px;line-height:1.5;font-weight:600">✅ <b>Decisão:</b> ${esc(t.decisao)}</div>`:""}
         ${t.enr?`<div style="margin-top:9px;background:${panel};border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.6;color:${tc}">💡 <b style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Melhor de mercado</b><div style="margin-top:3px;font-weight:500">${linkify(esc(t.enr))}</div></div>`:""}
+        ${(t.acoes&&t.acoes.length)?`<div style="margin-top:9px;background:${panel};border-radius:9px;padding:8px 11px" onclick="event.stopPropagation()">
+          <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:${tc};opacity:.9;margin-bottom:5px">✅ Ações (${t.acoes.filter(a=>a.feito).length}/${t.acoes.length})</div>
+          ${t.acoes.map(a=>{ const venc=a.prazo&&!a.feito&&a.prazo<hojeISO(); return `<div style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;margin:4px 0;color:${tc};font-weight:500">
+            <button data-acheck="${esc(t.id)}|${esc(a.id)}" title="marcar feito" style="flex-shrink:0;width:19px;height:19px;border-radius:5px;border:2px solid ${tc};background:${a.feito?tc:'transparent'};color:${col.h};font-size:12px;font-weight:900;cursor:pointer;line-height:1;padding:0">${a.feito?'✓':''}</button>
+            <span style="flex:1;${a.feito?'text-decoration:line-through;opacity:.55':''}">${esc(a.txt)}${a.dono?` <b>· 👤 ${esc(a.dono)}</b>`:''}${a.prazo?` <span style="${venc?'color:#fff;background:#e11d48;border-radius:4px;padding:1px 6px;font-weight:800':'opacity:.85'}">📅 ${esc(fmtDataBR(a.prazo).split(' ')[0])}${venc?' vencida':''}</span>`:''}</span>
+          </div>`; }).join("")}
+        </div>`:""}
         <div style="display:flex;gap:5px;margin-top:11px;flex-wrap:wrap" onclick="event.stopPropagation()">
           ${[["▲","moveup","Subir"],["▼","movedown","Descer"],["🎨","corpick","Cor"],["➡️ próxima","mandaprox","Próxima"],[(selHas(t.id)?"✓ sel":"☐ sel"),"topsel","Selecionar"],["🗄️","arq","Arquivar"],["🗑️","exc","Excluir"]].map(([lbl,act,ti])=>`<button data-${act}="${esc(t.id)}" title="${ti}" style="background:${panel};border:none;color:${tc};font-size:11.5px;font-weight:700;border-radius:7px;padding:4px 9px;cursor:pointer">${lbl}</button>`).join("")}
         </div>
@@ -2919,13 +2987,13 @@ function renderTab(){
         <button class="checkinbtn" id="addTopico" type="button" style="flex:1;min-width:130px;margin:0">➕ Novo tópico</button>
         <button class="checkinbtn" id="novoBlocoBtn" type="button" style="flex:1;min-width:130px;margin:0">🧩 Novo bloco</button>
         <button class="checkinbtn" id="gravarBtn" type="button" style="flex:1;min-width:130px;margin:0;background:rgba(255,45,85,.14);border-color:#FF2D55;color:#ff8fa3">🎙️ Gravar reunião</button>
-        <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:130px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">📋 Carregar p/ próxima</button>
+        <button class="checkinbtn" id="rolarBtn" type="button" style="flex:1;min-width:130px;margin:0;background:rgba(0,229,160,.14);border-color:#00E5A0;color:#7effcf">🔒 Fechar reunião → próxima</button>
       </div>
       ${toc?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${toc}</div>`:""}
       ${arqN?`<div class="t-mut" style="font-size:11px;margin-bottom:8px">🗄️ ${arqN} tópico(s) arquivado(s) — veja na aba <b>Arquivo</b>.</div>`:""}
       ${PAUTA_SEL.size?`<div class="proxhint" style="border-color:rgba(0,229,160,.45);color:#7effcf;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span><b>${PAUTA_SEL.size}</b> selecionado(s)</span><span style="display:flex;gap:6px"><button class="minibtn on" id="encSel">➡️ Encaminhar p/ próxima</button><button class="minibtn" id="limpaSel">limpar</button></span></div>`:""}
       ${tops.length?secBlocks:`<div class="empty">${arqN?"Todos os tópicos estão arquivados.":"Pauta criada."} Toque <b>➕ Novo tópico</b> pra montar.</div>`}
-      <div class="proxhint" style="font-size:11.5px;margin-top:16px;line-height:1.6;border-color:rgba(0,229,160,.3);color:#c9f5e6">📋 <b>Rolar a pauta</b> (regra de mercado — agenda rolante do sales huddle / EOS): "📋 Carregar p/ próxima semana" leva os tópicos <b>em aberto</b> pra semana seguinte automaticamente; os <b>resolvidos</b> ficam pra trás. Assim os temas quentes nunca caem no esquecimento — voltam toda semana até fechar.</div>`;
+      <div class="proxhint" style="font-size:11.5px;margin-top:16px;line-height:1.6;border-color:rgba(0,229,160,.3);color:#c9f5e6">🔒 <b>Fechar reunião</b> (regra de mercado — agenda rolante EOS/Level 10): leva os tópicos <b>em aberto</b> (com suas <b>✅ ações</b>) pra semana seguinte automaticamente; os <b>resolvidos</b> ficam pra trás. Assim nada quente cai no esquecimento — volta toda semana até fechar. As ações (quem faz o quê até quando) ficam reunidas na aba <b>✅ Ações</b>, com cobrança das <b>vencidas</b>.</div>`;
     document.querySelectorAll("#content [data-pav]").forEach(el=>el.onclick=()=>{ if(el.dataset.pav==="proxima"){ abrirProxima(); return; } pautaView=el.dataset.pav; pautaHistId=null; renderTab(); }); _wireSquad();
     const at=document.getElementById("addTopico"); if(at) at.onclick=()=>openTopico(cur.id, null);
     const nbl=document.getElementById("novoBlocoBtn"); if(nbl) nbl.onclick=()=>novoBloco(cur.id);
@@ -2944,6 +3012,7 @@ function renderTab(){
     document.querySelectorAll("#content [data-movedown]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await moverTopico(cur.id, el.dataset.movedown, 1); });
     document.querySelectorAll("#content [data-arq]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await arquivarTopico(cur.id, el.dataset.arq, true); });
     document.querySelectorAll("#content [data-exc]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await excluirTopico(cur.id, el.dataset.exc); });
+    document.querySelectorAll("#content [data-acheck]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); const [tid,aid]=el.dataset.acheck.split("|"); await toggleAcao(cur.id,tid,aid); });
     const es=document.getElementById("encSel"); if(es) es.onclick=()=>encaminharSelecionados(cur.id);
     const ls=document.getElementById("limpaSel"); if(ls) ls.onclick=()=>{ PAUTA_SEL.clear(); renderTab(); };
     return;
