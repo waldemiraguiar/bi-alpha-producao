@@ -1859,6 +1859,11 @@ async function moverTopico(pautaId, tid, dir){   // ▲▼: move dentro da seç�
   p.topicos=no.flatMap(s=>blocks[s]);
   if(await savePautaDoc(p)) renderTab();
 }
+/* ↕️ REORDENAR SEÇÃO (bloco) inteira: sobe/desce, manda pro topo, ou solta (drag) antes de outra */
+function _secOrderBlocks(p){ const tops=p.topicos||[]; const order=[]; tops.forEach(t=>{ const s=t.sec||"Geral"; if(!order.includes(s)) order.push(s); }); const blocks={}; order.forEach(s=>blocks[s]=[]); tops.forEach(t=>blocks[t.sec||"Geral"].push(t)); return {order,blocks}; }
+async function moverSecao(pautaId, sec, dir){ const p=_pautaById(pautaId); if(!p) return; const {order,blocks}=_secOrderBlocks(p); const si=order.indexOf(sec); if(si<0) return; const sj=si+dir; if(sj<0||sj>=order.length) return; const no=order.slice(); no[si]=order[sj]; no[sj]=sec; p.topicos=no.flatMap(s=>blocks[s]); if(await savePautaDoc(p)) renderTab(); }
+async function secaoTopo(pautaId, sec){ const p=_pautaById(pautaId); if(!p) return; const {order,blocks}=_secOrderBlocks(p); if(order.indexOf(sec)<=0) return; const no=[sec,...order.filter(s=>s!==sec)]; p.topicos=no.flatMap(s=>blocks[s]); if(await savePautaDoc(p)) renderTab(); }
+async function secaoSolta(pautaId, secFrom, secTo){ if(!secFrom||secFrom===secTo) return; const p=_pautaById(pautaId); if(!p) return; const {order,blocks}=_secOrderBlocks(p); if(order.indexOf(secFrom)<0||order.indexOf(secTo)<0) return; const semFrom=order.filter(s=>s!==secFrom); const ti=semFrom.indexOf(secTo); semFrom.splice(ti,0,secFrom); p.topicos=semFrom.flatMap(s=>blocks[s]); if(await savePautaDoc(p)) renderTab(); }
 async function arquivarTopico(pautaId, tid, arq){
   const p=_pautaById(pautaId); if(!p) return; const t=(p.topicos||[]).find(x=>x.id===tid); if(!t) return;
   if(arq && !confirm(`Arquivar "${t.titulo}"? (sai da pauta ativa, fica no Arquivo — dá pra restaurar)`)) return;
@@ -2947,11 +2952,15 @@ function renderTab(){
         </div></div>`; };
     const secColor=s=>{ const cnt={}; bySec[s].forEach(t=>cnt[t.cor]=(cnt[t.cor]||0)+1); const k=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||"cinza"; return (PAUTA_CORES[k]||PAUTA_CORES.cinza).h; };
     const secBlocks=secs.map((s,i)=>{ const sh=secColor(s), emo=(s.match(/^\S+/)||["📌"])[0], nome=s.replace(/^\S+\s/,"")||s, rs=bySec[s].filter(t=>t.status==="resolvido").length, stc=_txtOn(sh), spanel=_panelOn(sh);
-      return `<div id="sec-${i}" style="scroll-margin-top:80px;margin:24px 0 11px;display:flex;align-items:center;gap:10px;background:${sh};border-radius:12px;padding:11px 14px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.18), 0 5px 20px -7px ${sh}">
+      return `<div id="sec-${i}" draggable="true" data-secname="${esc(s)}" style="scroll-margin-top:80px;margin:24px 0 11px;display:flex;align-items:center;gap:8px;background:${sh};border-radius:12px;padding:11px 14px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.18), 0 5px 20px -7px ${sh};cursor:grab">
+        <span style="color:${stc};opacity:.5;font-size:15px;cursor:grab" title="Arraste pra reordenar">⠿</span>
         <span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">${emo}</span>
         <span style="font-weight:900;color:${stc};font-size:15.5px;flex:1;letter-spacing:.3px;text-shadow:${stc==='#ffffff'?'0 1px 3px rgba(0,0,0,.5)':'none'}">${esc(nome)}</span>
         ${rs?`<span style="color:${stc};font-size:10.5px;font-weight:800;opacity:.85">${rs}/${bySec[s].length} ✓</span>`:""}
         <span style="background:${spanel};color:${stc};font-weight:900;font-size:11.5px;border-radius:20px;padding:2px 11px">${bySec[s].length}</span>
+        ${i>0?`<button data-sectop="${esc(s)}" title="Mandar pro topo" onclick="event.stopPropagation()" style="background:${spanel};border:none;color:${stc};font-weight:900;font-size:13px;line-height:1;border-radius:8px;width:26px;height:26px;cursor:pointer">⤒</button>`:""}
+        <button data-secup="${esc(s)}" title="Subir bloco" onclick="event.stopPropagation()" style="background:${spanel};border:none;color:${stc};font-weight:900;font-size:12px;line-height:1;border-radius:8px;width:26px;height:26px;cursor:pointer;${i===0?'opacity:.35':''}">▲</button>
+        <button data-secdown="${esc(s)}" title="Descer bloco" onclick="event.stopPropagation()" style="background:${spanel};border:none;color:${stc};font-weight:900;font-size:12px;line-height:1;border-radius:8px;width:26px;height:26px;cursor:pointer;${i===secs.length-1?'opacity:.35':''}">▼</button>
         <button data-addsec="${esc(s)}" title="Adicionar item nesta seção" onclick="event.stopPropagation()" style="background:${spanel};border:none;color:${stc};font-weight:900;font-size:15px;line-height:1;border-radius:8px;width:28px;height:28px;cursor:pointer">＋</button></div>${bySec[s].map(topCard).join("")}`; }).join("");
     // BI: barra empilhada por cor + progresso resolvidos + índice (hipertexto)
     const _tb=tops.length||1;
@@ -3007,6 +3016,17 @@ function renderTab(){
     document.querySelectorAll("#content [data-mandaprox]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await mandarProxima(cur.id,el.dataset.mandaprox); });
     document.querySelectorAll("#content [data-goto]").forEach(el=>el.onclick=()=>{ const g=document.getElementById(el.dataset.goto); if(g) g.scrollIntoView({behavior:"smooth",block:"start"}); });
     document.querySelectorAll("#content [data-addsec]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openTopico(cur.id, null, el.dataset.addsec); });
+    document.querySelectorAll("#content [data-sectop]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await secaoTopo(cur.id, el.dataset.sectop); });
+    document.querySelectorAll("#content [data-secup]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await moverSecao(cur.id, el.dataset.secup, -1); });
+    document.querySelectorAll("#content [data-secdown]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await moverSecao(cur.id, el.dataset.secdown, 1); });
+    // ↕️ arrastar seções (PC): solta uma seção antes de outra
+    { let _dragSec=null;
+      document.querySelectorAll("#content [data-secname]").forEach(el=>{
+        el.addEventListener("dragstart",e=>{ _dragSec=el.dataset.secname; el.style.opacity=".5"; try{e.dataTransfer.effectAllowed="move";}catch(_){}});
+        el.addEventListener("dragend",()=>{ el.style.opacity="1"; });
+        el.addEventListener("dragover",e=>{ e.preventDefault(); el.style.outline="2px dashed rgba(255,255,255,.75)"; el.style.outlineOffset="-2px"; });
+        el.addEventListener("dragleave",()=>{ el.style.outline="none"; });
+        el.addEventListener("drop",async e=>{ e.preventDefault(); el.style.outline="none"; const to=el.dataset.secname; if(_dragSec&&to&&_dragSec!==to) await secaoSolta(cur.id,_dragSec,to); _dragSec=null; }); }); }
     document.querySelectorAll("#content [data-topsel]").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const id=el.dataset.topsel; PAUTA_SEL.has(id)?PAUTA_SEL.delete(id):PAUTA_SEL.add(id); renderTab(); });
     document.querySelectorAll("#content [data-moveup]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await moverTopico(cur.id, el.dataset.moveup, -1); });
     document.querySelectorAll("#content [data-movedown]").forEach(el=>el.onclick=async e=>{ e.stopPropagation(); await moverTopico(cur.id, el.dataset.movedown, 1); });
