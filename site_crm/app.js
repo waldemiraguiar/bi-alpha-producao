@@ -811,15 +811,18 @@ function visitaLoad(){ try{ return JSON.parse(localStorage.getItem("crm_visita")
 function visitaSave(v){ try{ localStorage.setItem("crm_visita", JSON.stringify(v)); }catch(e){} }
 function visitaClear(){ try{ localStorage.removeItem("crm_visita"); }catch(e){} }
 function iniciarVisita(ret){   // ret = retorno da agenda {id,cliente,bairro} → amarra a visita ao agendamento
-  if(!navigator.geolocation){ alert("Este aparelho não tem GPS/localização."); return; }
   let cli, bairro, returnId=null;
   if(ret){ cli=ret.cliente||""; bairro=ret.bairro||""; returnId=ret.id||null; }
   else { cli=(prompt("📍 CHECK-IN DE CHEGADA — qual cliente/clínica você está visitando agora?")||"").trim(); if(!cli) return; bairro=(prompt("Bairro (pra montar a rota):")||"").trim(); }
+  const _salva=(checkin)=>{ visitaSave({cliente:cli, bairro, por:meuRep()||"", returnId, checkin});
+    alert(checkin.semgps?"✅ Check-in registrado SEM GPS (localização indisponível). Faça a visita. Ao SAIR, toque em '📝 Feedback + check-out'.":"✅ Check-in de chegada registrado! Faça a visita. Ao SAIR, toque em '📝 Feedback + check-out'.");
+    if(ACTIVE==="pista"){ pistaView="feed"; renderTab(); } };
+  // GPS falhou/indisponível → NÃO trava: oferece registrar sem GPS (o rep na rua não pode ficar preso)
+  const _semGps=()=>{ if(confirm("Não consegui a localização (GPS desligado ou sem permissão no navegador).\n\nRegistrar o check-in MESMO ASSIM, sem GPS?")) _salva({semgps:true, ts:Date.now()}); };
+  if(!navigator.geolocation){ _semGps(); return; }
   navigator.geolocation.getCurrentPosition(pos=>{ const c=pos.coords;
-    visitaSave({cliente:cli, bairro, por:meuRep()||"", returnId, checkin:{lat:+c.latitude.toFixed(6),lng:+c.longitude.toFixed(6),acc:Math.round(c.accuracy||0),ts:Date.now()}});
-    alert("✅ Check-in de chegada registrado! Faça a visita. Ao SAIR, toque em '📝 Feedback + check-out'.");
-    if(ACTIVE==="pista"){ pistaView="feed"; renderTab(); }
-  }, ()=>alert("Não consegui pegar sua localização. Ative o GPS e permita o acesso."), {enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    _salva({lat:+c.latitude.toFixed(6),lng:+c.longitude.toFixed(6),acc:Math.round(c.accuracy||0),ts:Date.now()});
+  }, ()=>_semGps(), {enableHighAccuracy:true,timeout:15000,maximumAge:0});
 }
 /* "Cliquei em Cheguei sem querer" — cancela a chegada. Seguro contra golpe: a chegada mora só no aparelho
    (localStorage), NADA foi gravado no servidor ainda; e o horário NÃO é editável — ao chegar de verdade
@@ -1230,8 +1233,8 @@ function fmtDist(m){ return m>=1000?(m/1000).toFixed(1).replace(".",",")+" km":m
 /* resumo padronizado do check-in: 🟢 ENTRADA (mapa) · 🔴 SAÍDA (mapa) · ⏱ tempo · 🚩 alerta de distância — identifica cada processo */
 function checkinResumo(ci, co){
   const p=n=>String(n).padStart(2,"0"), hm=x=>{const d=new Date(x.ts); return p(d.getHours())+":"+p(d.getMinutes());}, parts=[];
-  if(ci&&ci.ts) parts.push(`🟢 <b>Entrada</b> ${hm(ci)} ${mapPin(ci,"📍 mapa")}`); else parts.push(`<span style="color:#ffc266">⚠️ sem check-in de entrada</span>`);
-  if(co&&co.ts) parts.push(`🔴 <b>Saída</b> ${hm(co)} ${mapPin(co,"📍 mapa")}`); else if(ci&&ci.ts) parts.push(`<span style="color:#ffc266">⏳ sem saída (não bateu o check-out)</span>`);
+  if(ci&&ci.ts) parts.push(`🟢 <b>Entrada</b> ${hm(ci)} ${ci.semgps?'<span style="color:#ffc266">🛰️ sem GPS</span>':mapPin(ci,"📍 mapa")}`); else parts.push(`<span style="color:#ffc266">⚠️ sem check-in de entrada</span>`);
+  if(co&&co.ts) parts.push(`🔴 <b>Saída</b> ${hm(co)} ${co.semgps?'<span style="color:#ffc266">🛰️ sem GPS</span>':mapPin(co,"📍 mapa")}`); else if(ci&&ci.ts) parts.push(`<span style="color:#ffc266">⏳ sem saída (não bateu o check-out)</span>`);
   const dw=dwellMin(ci,co); if(dw!=null) parts.push(`⏱ <b>${dw} min</b> na clínica`);
   const dist=checkinDistM(ci,co);
   if(dist!=null && dist>CHECKOUT_LONGE_M) parts.push(`<span style="color:#ff5470;font-weight:700">🚩 saída a ${fmtDist(dist)} da entrada — conferir</span>`);
@@ -1239,15 +1242,16 @@ function checkinResumo(ci, co){
 }
 /* check-in (entrada) / check-out (saída) por georreferência (Geolocation API — anti-golpe + tempo na clínica) */
 function fazerCheckin(btn, kind){
-  if(!navigator.geolocation){ alert("Este aparelho não tem localização/GPS."); return; }
+  const _set=(obj)=>{ if(kind==="out") F_CHECKOUT=obj; else F_CHECKIN=obj;
+    btn.disabled=false; btn.classList.add("done"); btn.textContent=kind==="out"?"✅ Saída (refazer)":"✅ Entrada (refazer)"; renderCheckinStatus(); };
+  // GPS falhou → oferece marcar SEM GPS (não trava o check-out do rep)
+  const _semGps=()=>{ btn.disabled=false; btn.textContent=kind==="out"?"📍 Check-out (saída)":"📍 Check-in (entrada)";
+    if(confirm("Não consegui a localização (GPS desligado ou sem permissão).\n\nMarcar "+(kind==="out"?"a SAÍDA":"a ENTRADA")+" SEM GPS mesmo assim?")) _set({semgps:true, ts:Date.now()}); };
+  if(!navigator.geolocation){ _semGps(); return; }
   btn.disabled=true; btn.textContent="📍 Localizando…";
   navigator.geolocation.getCurrentPosition(pos=>{
-    const c=pos.coords, obj={lat:+c.latitude.toFixed(6), lng:+c.longitude.toFixed(6), acc:Math.round(c.accuracy||0), ts:Date.now()};
-    if(kind==="out") F_CHECKOUT=obj; else F_CHECKIN=obj;
-    btn.disabled=false; btn.classList.add("done"); btn.textContent=kind==="out"?"✅ Saída (refazer)":"✅ Entrada (refazer)";
-    renderCheckinStatus();
-  }, ()=>{ btn.disabled=false; btn.textContent=kind==="out"?"📍 Check-out (saída)":"📍 Check-in (entrada)"; alert("Não consegui pegar sua localização. Ative o GPS e PERMITA o acesso."); },
-  {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+    const c=pos.coords; _set({lat:+c.latitude.toFixed(6), lng:+c.longitude.toFixed(6), acc:Math.round(c.accuracy||0), ts:Date.now()});
+  }, ()=>_semGps(), {enableHighAccuracy:true, timeout:15000, maximumAge:0});
 }
 function renderCheckinStatus(){
   const el=document.getElementById("fCheckinStatus"); if(!el) return;
