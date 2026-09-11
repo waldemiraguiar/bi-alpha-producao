@@ -1641,7 +1641,7 @@ function drawAnalisesChart(){
    Conteúdo cifrado com a 2ª senha do Cofre dos Sócios (Wal + Fúlvio). Publicado SÓ no Blob
    (/api/enc?f=estudo_custos) a partir do Mac do Wal — nunca neste repositório (público).
    A senha do painel NÃO abre. Mostra a data de inclusão em destaque no topo. */
-let _estD=null, _estMsg='', _estFull=false;
+let _estD=null, _estMsg='', _estFull=false, _estPW=null;
 async function _estFetch(){ const r=await fetch('/api/enc?f=estudo_custos&_='+Date.now()); if(!r.ok) throw new Error('vazio'); return r.json(); }
 async function renderEstudoCustos(){
   const box=document.getElementById('estudoCustosBox'); if(!box) return;
@@ -1649,16 +1649,25 @@ async function renderEstudoCustos(){
   if(_estD){ drawEstudoCustos(); return; }
   let env=null; try{ env=await _estFetch(); }catch(e){ box.innerHTML=''; return; }
   box.innerHTML=`<div class="card" style="border:1px solid rgba(255,106,213,.5)"><h3>🔐 Estudo de custo por setor <span class="cap">cofre · só você + Fúlvio · 2ª senha (a mesma da aba Sócios)</span></h3>
+    ${_estBioOn()?'<button id="est-bio" class="toolbtn" style="width:100%;padding:13px;font-weight:800;font-size:15px;margin-bottom:10px">👆 Abrir com a digital</button>':''}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input id="est-pw" type="password" autocomplete="off" placeholder="2ª senha do cofre" style="flex:1;min-width:220px;padding:11px;border-radius:10px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:14px">
       <button id="est-go" class="toolbtn" style="padding:11px 16px;font-weight:700">Abrir estudo 🔓</button></div>
     <div id="est-err" style="color:var(--red);font-size:12px;margin-top:8px;min-height:14px">${esc(_estMsg)}</div></div>`;
   const go=async()=>{ const pw=document.getElementById('est-pw').value, err=document.getElementById('est-err');
     if(!pw){ err.textContent='Digite a senha.'; return; } err.textContent='Abrindo…';
-    try{ _estD=await decryptEncObj(env, pw); _estMsg=''; drawEstudoCustos(); }
+    try{ _estD=await decryptEncObj(env, pw); _estPW=pw; _estMsg=''; drawEstudoCustos(); }
     catch(e){ err.textContent='Senha incorreta.'; } };
   document.getElementById('est-go').addEventListener('click',go);
   document.getElementById('est-pw').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  const bb=document.getElementById('est-bio');
+  if(bb) bb.addEventListener('click',async()=>{ const err=document.getElementById('est-err');
+    err.style.color='var(--mut)'; err.textContent='👆 Encoste o dedo no Touch ID — o pedido abre na tela principal do Mac…';
+    let pw=null;
+    try{ pw=await estBioAbrir(); }catch(e){ err.style.color='var(--red)'; err.textContent='Digital cancelada ou indisponível — use a senha.'; return; }
+    try{ _estD=await decryptEncObj(env,pw); _estPW=pw; drawEstudoCustos(); }
+    catch(e){ err.style.color='var(--red)'; err.textContent='A digital guardou uma senha antiga (o cofre mudou de senha): digite a 2ª senha e ative a digital de novo.'; }
+  });
 }
 function drawEstudoCustos(){
   const box=document.getElementById('estudoCustosBox'); const E=_estD; if(!box||!E) return;
@@ -1666,10 +1675,47 @@ function drawEstudoCustos(){
     <div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:linear-gradient(90deg,#0c2a3d,#0f1f2e);border:1px solid #38bdf8;border-radius:10px;padding:12px 16px;margin-bottom:12px">
       <span style="font-size:17px">📅 Estudo incluído em <b style="color:#7dd3fc;font-size:22px">${esc(E.incluido_em_br||E.incluido_em||'')}</b></span>
       <span style="color:var(--mut);font-size:12px">${esc(E.titulo||'')} · ${esc(E.periodo||'')}</span>
-      <button id="est-full" class="toolbtn" style="margin-left:auto">${_estFull?'Reduzir':'Tela cheia'}</button>
+      ${(_estPW && !_estBioOn() && window.PublicKeyCredential)?'<button id="est-bioset" class="toolbtn" style="margin-left:auto;border-color:#38bdf8">👆 Ativar digital neste aparelho</button>':''}
+      <button id="est-full" class="toolbtn" style="${(_estPW && !_estBioOn() && window.PublicKeyCredential)?'':'margin-left:auto'}">${_estFull?'Reduzir':'Tela cheia'}</button>
       <button id="est-close" class="toolbtn">Fechar 🔒</button></div>
     <iframe id="est-frame" sandbox="" title="Estudo de custo por setor" style="width:100%;height:${_estFull?'92vh':'72vh'};border:1px solid var(--line);border-radius:10px;background:#0b0f14"></iframe></div>`;
   document.getElementById('est-frame').srcdoc=E.html||'';
   document.getElementById('est-full').addEventListener('click',()=>{ _estFull=!_estFull; drawEstudoCustos(); });
-  document.getElementById('est-close').addEventListener('click',()=>{ _estD=null; _estFull=false; renderEstudoCustos(); });
+  document.getElementById('est-close').addEventListener('click',()=>{ _estD=null; _estPW=null; _estFull=false; renderEstudoCustos(); });
+  const bs=document.getElementById('est-bioset');
+  if(bs) bs.addEventListener('click',async()=>{ bs.disabled=true; bs.textContent='👆 Encoste o dedo (tela principal do Mac)…';
+    try{ await estBioRegistrar(_estPW); bs.textContent='✅ Digital ativada neste aparelho'; }
+    catch(e){ bs.disabled=false; bs.textContent='👆 Ativar digital neste aparelho'; alert('Não deu para ativar a digital: '+(e.message||e)); } });
+}
+
+/* 👆 DIGITAL DO COFRE (estudo de custos) — mesma técnica do bio.js (WebAuthn PRF), em slot PRÓPRIO
+   ('bi:bio:cofre'): não mexe no Touch ID do painel. A 2ª senha fica cifrada por uma chave que só o
+   Touch ID deste aparelho libera; nunca em texto puro. */
+const _EST_BIO='bi:bio:cofre';
+const _eb64e=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))), _eb64d=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0)), _erand=n=>crypto.getRandomValues(new Uint8Array(n));
+function _estBioOn(){ try{ return !!localStorage.getItem(_EST_BIO); }catch(_){ return false; } }
+async function _estAes(prf){ return crypto.subtle.importKey('raw', prf, {name:'AES-GCM'}, false, ['encrypt','decrypt']); }
+async function estBioRegistrar(pw){
+  if(!(window.PublicKeyCredential && navigator.credentials)) throw new Error('este navegador não tem Touch ID (WebAuthn) — use o Chrome do Mac');
+  if(!pw) throw new Error('abra o estudo com a 2ª senha antes');
+  const salt=_erand(32);
+  const cred=await navigator.credentials.create({publicKey:{challenge:_erand(32),rp:{name:'BI Alpha — Cofre',id:location.hostname},
+    user:{id:_erand(16),name:'cofre@bi-alpha',displayName:'Cofre (estudo de custos)'},
+    pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+    authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'required'},
+    timeout:60000, extensions:{prf:{eval:{first:salt}}}}});
+  if(!cred) throw new Error('credencial não criada');
+  let prf=cred.getClientExtensionResults?.().prf?.results?.first;
+  if(!prf){ const a=await navigator.credentials.get({publicKey:{challenge:_erand(32),allowCredentials:[{id:cred.rawId,type:'public-key'}],userVerification:'required',timeout:60000,extensions:{prf:{eval:{first:salt}}}}});
+    prf=a.getClientExtensionResults?.().prf?.results?.first; }
+  if(!prf) throw new Error('o navegador não liberou a chave da digital (PRF) — use o Chrome do Mac');
+  const iv=_erand(12); const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv}, await _estAes(prf), new TextEncoder().encode(pw));
+  localStorage.setItem(_EST_BIO, JSON.stringify({credId:_eb64e(cred.rawId),salt:_eb64e(salt),iv:_eb64e(iv),ct:_eb64e(ct)}));
+  return true;
+}
+async function estBioAbrir(){
+  const c=JSON.parse(localStorage.getItem(_EST_BIO)||'null'); if(!c) throw new Error('digital não ativada');
+  const a=await navigator.credentials.get({publicKey:{challenge:_erand(32),allowCredentials:[{id:_eb64d(c.credId),type:'public-key'}],userVerification:'required',timeout:60000,extensions:{prf:{eval:{first:_eb64d(c.salt)}}}}});
+  const prf=a.getClientExtensionResults?.().prf?.results?.first; if(!prf) throw new Error('a digital não liberou a chave');
+  return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:_eb64d(c.iv)}, await _estAes(prf), _eb64d(c.ct)));
 }
