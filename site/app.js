@@ -1645,7 +1645,7 @@ let _estD=null, _estMsg='', _estFull=false, _estPW=null;
 async function _estFetch(){ const r=await fetch('/api/enc?f=estudo_custos&_='+Date.now()); if(!r.ok) throw new Error('vazio'); return r.json(); }
 async function renderEstudoCustos(){
   const box=document.getElementById('estudoCustosBox'); if(!box) return;
-  if(!_estD && _socPW){ try{ _estD=await decryptEncObj(await _estFetch(), _socPW); }catch(e){} }
+  if(!_estD && _socPW){ try{ _estD=await decryptEncObj(await _estFetch(), _socPW); _estPW=_socPW; }catch(e){} }   // aberto pela aba Sócios: guarda a senha em memória p/ oferecer a digital
   if(_estD){ drawEstudoCustos(); return; }
   let env=null; try{ env=await _estFetch(); }catch(e){ box.innerHTML=''; return; }
   box.innerHTML=`<div class="card" style="border:1px solid rgba(255,106,213,.5)"><h3>🔐 Estudo de custo por setor <span class="cap">cofre · só você + Fúlvio · 2ª senha (a mesma da aba Sócios)</span></h3>
@@ -1675,8 +1675,9 @@ function drawEstudoCustos(){
     <div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:linear-gradient(90deg,#0c2a3d,#0f1f2e);border:1px solid #38bdf8;border-radius:10px;padding:12px 16px;margin-bottom:12px">
       <span style="font-size:17px">📅 Estudo incluído em <b style="color:#7dd3fc;font-size:22px">${esc(E.incluido_em_br||E.incluido_em||'')}</b></span>
       <span style="color:var(--mut);font-size:12px">${esc(E.titulo||'')} · ${esc(E.periodo||'')}</span>
-      ${(_estPW && !_estBioOn() && window.PublicKeyCredential)?'<button id="est-bioset" class="toolbtn" style="margin-left:auto;border-color:#38bdf8">👆 Ativar digital neste aparelho</button>':''}
-      <button id="est-full" class="toolbtn" style="${(_estPW && !_estBioOn() && window.PublicKeyCredential)?'':'margin-left:auto'}">${_estFull?'Reduzir':'Tela cheia'}</button>
+      <span style="margin-left:auto"></span>
+      ${_estBioOn()?'<span style="font-size:12px;color:var(--green)">✅ digital ativa neste aparelho</span>':(window.PublicKeyCredential?'<button id="est-bioset" class="toolbtn" style="border-color:#38bdf8;font-weight:800">👆 Ativar digital neste aparelho</button>':'<span style="font-size:12px;color:var(--mut)">digital indisponível neste navegador — use o Chrome do Mac</span>')}
+      <button id="est-full" class="toolbtn">${_estFull?'Reduzir':'Tela cheia'}</button>
       <button id="est-close" class="toolbtn">Fechar 🔒</button></div>
     <iframe id="est-frame" sandbox="" title="Estudo de custo por setor" style="width:100%;height:${_estFull?'92vh':'72vh'};border:1px solid var(--line);border-radius:10px;background:#0b0f14"></iframe></div>`;
   document.getElementById('est-frame').srcdoc=E.html||'';
@@ -1684,7 +1685,7 @@ function drawEstudoCustos(){
   document.getElementById('est-close').addEventListener('click',()=>{ _estD=null; _estPW=null; _estFull=false; renderEstudoCustos(); });
   const bs=document.getElementById('est-bioset');
   if(bs) bs.addEventListener('click',async()=>{ bs.disabled=true; bs.textContent='👆 Encoste o dedo (tela principal do Mac)…';
-    try{ await estBioRegistrar(_estPW); bs.textContent='✅ Digital ativada neste aparelho'; }
+    try{ if(!_estPW) throw new Error('feche o estudo e abra de novo digitando a 2ª senha'); await estBioRegistrar(_estPW); bs.textContent='✅ Digital ativada neste aparelho'; }
     catch(e){ bs.disabled=false; bs.textContent='👆 Ativar digital neste aparelho'; alert('Não deu para ativar a digital: '+(e.message||e)); } });
 }
 
