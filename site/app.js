@@ -1192,7 +1192,7 @@ function _trimQ(m){ const mm=(m||'').slice(5,7); return mm==='03'||mm==='06'||mm
 function drawCustos(D){
   const wrap=document.getElementById('financeiro'); const C=D.custosFin; if(!wrap||!C) return;
   const emps=C.empresas||[]; if(!_custosSel) _custosSel=new Set(emps);
-  wrap.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>💼 Custos por empresa · mês <span class="cap">com provisão · ambiente fechado (você + Fúlvio) · snapshot ${esc(C.gerado||'')}</span></h3>
+  wrap.innerHTML=`<div id="estudoCustosBox" style="margin-bottom:16px"></div><div class="card" style="margin-bottom:16px"><h3>💼 Custos por empresa · mês <span class="cap">com provisão · ambiente fechado (você + Fúlvio) · snapshot ${esc(C.gerado||'')}</span></h3>
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <span style="color:var(--mut);font-size:12px">somar empresas:</span>
       ${emps.map(e=>`<label style="cursor:pointer;font-weight:600"><input type="checkbox" class="cust-emp" value="${esc(e)}" ${_custosSel.has(e)?'checked':''}> ${esc(e)}</label>`).join('')}
@@ -1203,6 +1203,7 @@ function drawCustos(D){
   wrap.querySelectorAll('.cust-emp').forEach(cb=>cb.addEventListener('change',()=>{ cb.checked?_custosSel.add(cb.value):_custosSel.delete(cb.value); drawCustTable(D); }));
   const cf=wrap.querySelector('#cust-conf'); if(cf) cf.addEventListener('change',()=>{ _custosConf=cf.checked; drawCustTable(D); });
   drawCustTable(D);
+  renderEstudoCustos();
 }
 function drawCustTable(D){
   const el=document.getElementById('custTable'); if(!el) return; const C=D.custosFin; const emps=C.empresas||[];
@@ -1634,4 +1635,41 @@ function drawAnalisesChart(){
       scales:{x:{ticks:{maxTicksLimit:14,color:'#8aa2bd'},grid:{display:false}},
         f:{position:'left',ticks:{callback:v=>brlk(v),color:'#00D4FF'},grid:{color:'rgba(255,255,255,.05)'}},
         q:{position:'right',ticks:{callback:v=>num(v),color:'#00E5A0'},grid:{display:false}}}}});
+}
+
+/* ===================== 🔐 ESTUDO DE CUSTO POR SETOR (topo da aba 💼 Custos) =====================
+   Conteúdo cifrado com a 2ª senha do Cofre dos Sócios (Wal + Fúlvio). Publicado SÓ no Blob
+   (/api/enc?f=estudo_custos) a partir do Mac do Wal — nunca neste repositório (público).
+   A senha do painel NÃO abre. Mostra a data de inclusão em destaque no topo. */
+let _estD=null, _estMsg='', _estFull=false;
+async function _estFetch(){ const r=await fetch('/api/enc?f=estudo_custos&_='+Date.now()); if(!r.ok) throw new Error('vazio'); return r.json(); }
+async function renderEstudoCustos(){
+  const box=document.getElementById('estudoCustosBox'); if(!box) return;
+  if(!_estD && _socPW){ try{ _estD=await decryptEncObj(await _estFetch(), _socPW); }catch(e){} }
+  if(_estD){ drawEstudoCustos(); return; }
+  let env=null; try{ env=await _estFetch(); }catch(e){ box.innerHTML=''; return; }
+  box.innerHTML=`<div class="card" style="border:1px solid rgba(255,106,213,.5)"><h3>🔐 Estudo de custo por setor <span class="cap">cofre · só você + Fúlvio · 2ª senha (a mesma da aba Sócios)</span></h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="est-pw" type="password" autocomplete="off" placeholder="2ª senha do cofre" style="flex:1;min-width:220px;padding:11px;border-radius:10px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:14px">
+      <button id="est-go" class="toolbtn" style="padding:11px 16px;font-weight:700">Abrir estudo 🔓</button></div>
+    <div id="est-err" style="color:var(--red);font-size:12px;margin-top:8px;min-height:14px">${esc(_estMsg)}</div></div>`;
+  const go=async()=>{ const pw=document.getElementById('est-pw').value, err=document.getElementById('est-err');
+    if(!pw){ err.textContent='Digite a senha.'; return; } err.textContent='Abrindo…';
+    try{ _estD=await decryptEncObj(env, pw); _estMsg=''; drawEstudoCustos(); }
+    catch(e){ err.textContent='Senha incorreta.'; } };
+  document.getElementById('est-go').addEventListener('click',go);
+  document.getElementById('est-pw').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+}
+function drawEstudoCustos(){
+  const box=document.getElementById('estudoCustosBox'); const E=_estD; if(!box||!E) return;
+  box.innerHTML=`<div class="card" style="border:2px solid #38bdf8">
+    <div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:linear-gradient(90deg,#0c2a3d,#0f1f2e);border:1px solid #38bdf8;border-radius:10px;padding:12px 16px;margin-bottom:12px">
+      <span style="font-size:17px">📅 Estudo incluído em <b style="color:#7dd3fc;font-size:22px">${esc(E.incluido_em_br||E.incluido_em||'')}</b></span>
+      <span style="color:var(--mut);font-size:12px">${esc(E.titulo||'')} · ${esc(E.periodo||'')}</span>
+      <button id="est-full" class="toolbtn" style="margin-left:auto">${_estFull?'Reduzir':'Tela cheia'}</button>
+      <button id="est-close" class="toolbtn">Fechar 🔒</button></div>
+    <iframe id="est-frame" sandbox="" title="Estudo de custo por setor" style="width:100%;height:${_estFull?'92vh':'72vh'};border:1px solid var(--line);border-radius:10px;background:#0b0f14"></iframe></div>`;
+  document.getElementById('est-frame').srcdoc=E.html||'';
+  document.getElementById('est-full').addEventListener('click',()=>{ _estFull=!_estFull; drawEstudoCustos(); });
+  document.getElementById('est-close').addEventListener('click',()=>{ _estD=null; _estFull=false; renderEstudoCustos(); });
 }
