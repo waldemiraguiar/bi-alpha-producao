@@ -209,7 +209,20 @@ jobs:
                       mc.execute("SELECT MAX(DataModificacao) FROM `TabExameNumeroRequisiçao`"); ult=mc.fetchone()[0]
                       mc.execute("SELECT MAX(ADDTIME(CAST(DataEntrada AS DATETIME), UsuarioHoraEntrada)) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 3 DAY) AND UsuarioHoraEntrada IS NOT NULL"); ins=mc.fetchone()[0]
                       mc.execute("SELECT COUNT(*) FROM `TabExameNumeroRequisiçao` WHERE DataEntrada>=CURDATE()"); req_hoje=mc.fetchone()[0] or 0
+                      # GUARDIÃO DE DUPLICIDADE (14/set): a chave de baixa do painel é NumeroSequencial-CodExame.
+                      # Provado que o número NÃO repete entre anos, então hoje é seguro; este check só ALERTA se um dia
+                      # 2 requisições DIFERENTES (telas distintas) caírem na mesma chave na janela ativa — aí a baixa
+                      # poderia marcar a errada. Read-only, custo zero, quase nunca dispara. Blindar chaveOf p/ tela se soar.
+                      mc.execute("""SELECT r.NumeroSequencial, s.CodExame, COUNT(DISTINCT r.CodNumeroSequencialTela) telas
+                        FROM TabExameNumeroSolicitado s JOIN `TabExameNumeroRequisiçao` r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
+                        WHERE r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 30 DAY) AND s.DataExame IS NULL
+                          AND r.NumeroSequencial IS NOT NULL AND r.NumeroSequencial>0
+                        GROUP BY r.NumeroSequencial, s.CodExame HAVING COUNT(DISTINCT r.CodNumeroSequencialTela)>1 LIMIT 5""")
+                      colisoes=mc.fetchall()
                   cnx.close()
+                  if colisoes:
+                      e0=colisoes[0]
+                      falhas.append(f"COLISÃO DE CHAVE no painel: nº {e0[0]} + exame cod {e0[1]} está em {e0[2]} requisições distintas ({len(colisoes)} caso(s)) — a baixa pode marcar a errada. Blindar chaveOf (usar CodNumeroSequencialTela).")
                   # ⚠️ FREEZE = a réplica parou de receber dado DURANTE a janela em que o lab COMPROVADAMENTE opera.
                   # NÃO gatear por volume (req_hoje): o próprio freeze derruba o volume e silenciaria o alarme
                   # (ERRO 27/jul: réplica congelou 10:49 numa segunda cheia; req_hoje=10 fez o >=40 achar "lab
