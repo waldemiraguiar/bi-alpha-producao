@@ -130,8 +130,11 @@ def build():
             s.Urgencia urg, DATEDIFF(CURDATE(), r.DataEntrada) dias
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
             WHERE s.DataExame IS NULL AND s.CodExame IN ({codes})
-              AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 5 DAY)
+              AND r.DataEntrada>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)
             ORDER BY r.DataEntrada DESC, r.NumeroSequencial DESC LIMIT 1500""")
+            # janela 5→30 dias (Wal 14/set): exame LENTO (histo/cito/imuno/cultura/PCR) fica pendente
+            # semanas e sumia da baixa aos 5 dias (caso Vick 638397, histo, 6 dias). DataExame IS NULL já
+            # garante que só o PENDENTE aparece; o feito cai fora sozinho. Ver histórico HIST_DIAS abaixo.
         for r in sep_rows:
             if r["cod"] in JUNK: continue
             classe = COFRE.get(r["codex"])
@@ -155,7 +158,7 @@ def build():
             })
 
     # --- HISTÓRICO: universo cofre dos últimos N dias (p/ ver separados E NÃO-separados por setor) ---
-    HIST_DIAS = 7
+    HIST_DIAS = 30
     hist_itens = []
     if COFRE:
         codes_h = ",".join(str(k) for k in COFRE)
