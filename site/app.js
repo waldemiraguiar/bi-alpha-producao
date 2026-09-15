@@ -476,7 +476,8 @@ function wireFTabs(){
     if(v==='analises'){ drawAnalisesChart(); drawDailyChart(); }
     if(v==='petlove'){ drawPetloveChart(); drawPetloveYearChart(); }
     if(v==='estudo') drawEstudoChart();
-    if(v==='financeiro') renderCustos();
+    if(v==='financeiro') renderCustosFin();
+    if(v==='custos') renderCustosIA();
     if(v==='socios') renderSocios();
   });});
 }
@@ -1048,7 +1049,7 @@ function renderEstudo(D){
   wrap.innerHTML=html;
 }
 function renderCustos(D){
-  const wrap=document.getElementById('custos'); if(!wrap) return;
+  const wrap=document.getElementById('custosFinops'); if(!wrap) return;
   const C=D.custos||{};
   if(C.erro){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--red)">Falha ao carregar custos: ${esc(C.erro)}</div>`; return; }
   // ===== estrutura NOVA (FinOps por SETOR) — custo do ECOSSISTEMA inteiro, separado e catalogado =====
@@ -1177,7 +1178,7 @@ async function decryptEncObj(env, pwd){
   return JSON.parse(new TextDecoder().decode(plain));
 }
 let _custosSel=null, _custosConf=true;
-async function renderCustos(){
+async function renderCustosFin(){
   const wrap=document.getElementById('financeiro'); if(!wrap) return; const D=window.__D;
   if(!D.custosFin){
     wrap.innerHTML='<div class="card" style="margin-top:16px;color:var(--mut)">Carregando custos (cifrado)…</div>';
@@ -1719,4 +1720,122 @@ async function estBioAbrir(){
   const a=await navigator.credentials.get({publicKey:{challenge:_erand(32),allowCredentials:[{id:_eb64d(c.credId),type:'public-key'}],userVerification:'required',timeout:60000,extensions:{prf:{eval:{first:_eb64d(c.salt)}}}}});
   const prf=a.getClientExtensionResults?.().prf?.results?.first; if(!prf) throw new Error('a digital não liberou a chave');
   return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:_eb64d(c.iv)}, await _estAes(prf), _eb64d(c.ct)));
+}
+
+/* ===================== 💸 CUSTO DE IA — PAINEL DIÁRIO (Wal 15/set) =====================
+   Dado REAL do medidor de cada mesa, coletado no Air às 06h (custos_ia/coletor_custos_ia.py),
+   cifrado e publicado no Blob f=custos_ia — sem deploy. Selo "última atualização" no topo. */
+let _custosIAok=false, _ciaCharts=[];
+async function renderCustosIA(force){
+  const wrap=document.getElementById('custosIA'); if(!wrap) return;
+  if(_custosIAok && !force) return;
+  wrap.innerHTML='<div class="card" style="margin-top:18px;color:var(--mut)">Carregando o custo de IA…</div>';
+  let D;
+  try{ const env=await fetchEncF('custos_ia','data/custos_ia.enc'); D=await decryptEncObj(env, window.__PW||''); }
+  catch(e){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--amber)">O painel diário de IA ainda não foi publicado (${esc(String(e.message||e))}). O robô roda às 06h no Air.</div>`; return; }
+  _custosIAok=true; _ciaCharts.forEach(c=>{try{c.destroy()}catch(e){}}); _ciaCharts=[];
+  const R=(v,d=2)=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+  const N=v=>v==null?'—':Math.round(v).toLocaleString('pt-BR');
+  const dm=s=>s?s.slice(8,10)+'/'+s.slice(5,7):'';
+  const COR={verde:'var(--green)',amarelo:'var(--amber)',vermelho:'var(--red)'};
+  const ROT={verde:'🟢 SOB CONTROLE',amarelo:'🟡 ATENÇÃO',vermelho:'🔴 ESTOUROU / FORA DO AR'};
+  // selo de frescor: publicado hoje depois das 06h = em dia
+  const g=D.gerado||''; const hoje=new Date(); const hs=hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0')+'-'+String(hoje.getDate()).padStart(2,'0');
+  const emDia=g.slice(0,10)===hs;
+  const selo=`<span style="font-weight:800;color:${emDia?'var(--green)':'var(--red)'}">${emDia?'✔':'⚠ ATRASADO —'} última atualização ${dm(g)}/${g.slice(0,4)} às ${g.slice(11,16)}</span>`;
+  const st=D.status||'verde';
+  let h=`<div class="card" style="margin-top:18px;border-color:${COR[st]}">
+    <h3>💸 Custo de IA — painel diário <span class="cap">${selo} · dia analisado: <b>${dm(D.dia)}</b> · atualiza todo dia às 06h · câmbio R$ ${String(D.cambio).replace('.',',')}</span></h3>
+    <div style="display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin-top:10px">
+      <div style="min-width:190px"><div class="acmp-l">Situação</div><div class="acmp-v" style="color:${COR[st]};font-size:22px">${ROT[st]}</div><div class="acmp-s">${(D.alertas||[]).length} aviso(s)</div></div>
+      ${(D.farejadores||[]).filter(f=>f.u_dia!==undefined&&f.meta).map(f=>{const u=f.u_dia; const pouco=(f.n_dia||0)<10; const c=(u==null||pouco)?'var(--mut)':(u>f.teto?'var(--red)':(u>f.meta*1.08?'var(--amber)':'var(--green)'));
+        return `<div style="min-width:170px"><div class="acmp-l">${f.emoji} ${esc(f.nome)} · ontem</div><div class="acmp-v" style="color:${c}">${R(u,3)}</div><div class="acmp-s">${pouco?'<b>volume baixo — vale a média 7d</b> · ':''}meta ${R(f.meta)} · teto ${R(f.teto)} · 7 dias ${R(f.u7,3)} · ${N(f.n_dia)} un. = ${R(f.rs_dia)}</div></div>`;}).join('')}
+      <div style="min-width:170px"><div class="acmp-l">Total de IA ontem</div><div class="acmp-v">${R((D.serie||[]).slice(-1)[0]?.total)}</div><div class="acmp-s">4 mesas · requisição + hemograma</div></div>
+    </div>
+    <div style="margin-top:14px;font-size:13.5px;line-height:1.6;background:linear-gradient(90deg,rgba(0,212,255,.08),transparent);border-left:3px solid var(--cyan);padding:10px 14px;border-radius:6px">
+      <b>🧠 Interpretação</b><br>${(D.texto||[]).map(esc).join('<br>')}</div>`;
+  if((D.alertas||[]).length){
+    h+=`<div style="margin-top:12px">${D.alertas.map(a=>`<div style="border-left:3px solid ${COR[a.nivel]};padding:7px 12px;margin:6px 0;background:rgba(255,255,255,.02);border-radius:6px">
+      <b style="color:${COR[a.nivel]}">${a.nivel==='vermelho'?'🔴':'🟡'} ${esc(a.titulo)}</b><div style="font-size:12.5px;color:var(--mut);margin-top:2px">Por quê: ${esc(a.porque)}</div></div>`).join('')}</div>`;
+  } else h+=`<div style="margin-top:10px;color:var(--green);font-size:13px">✔ Nenhum aviso: travas de custo ligadas nas 4 mesas e unitários dentro do teto.</div>`;
+  h+=`</div>`;
+
+  // ---- farejadores (os 4) ----
+  h+=`<div class="card" style="margin-top:14px"><h3>🐾 Por farejador <span class="cap">o que usa IA, quanto custa por unidade, o que ainda não usa</span></h3>
+    <table class="atab"><thead><tr><th>Farejador</th><th>Situação</th><th class="num">Ontem (un.)</th><th class="num">R$ ontem</th><th class="num">R$/un. ontem</th><th class="num">R$/un. 7 dias</th><th class="num">Meta</th></tr></thead><tbody>
+    ${(D.farejadores||[]).map(f=>f.meta?`<tr><td>${f.emoji} <b>${esc(f.nome)}</b></td><td>${esc(f.status)}</td><td class="num">${N(f.n_dia)}</td><td class="num">${R(f.rs_dia)}</td><td class="num"><b>${R(f.u_dia,3)}</b></td><td class="num">${R(f.u7,3)}</td><td class="num">${R(f.meta)}</td></tr>`
+      :`<tr><td>${f.emoji} <b>${esc(f.nome)}</b></td><td>${esc(f.status)}</td><td colspan="5" style="color:var(--mut)">${esc(f.nota||'')}${f.rs7?` · <b style="color:var(--amber)">apareceu R$ ${f.rs7} de IA nos últimos 7 dias</b>`:''}</td></tr>`).join('')}
+    </tbody></table></div>`;
+
+  // ---- cenário 500 + 300 ----
+  const C2=D.cenario||{};
+  h+=`<div class="card" style="margin-top:14px"><h3>📐 Simulação: ${N(C2.req_dia)} requisições + ${N(C2.hemo_dia)} hemogramas por dia × ${C2.dias} dias <span class="cap">com o custo unitário REAL dos últimos 7 dias</span></h3>
+    <table class="atab"><thead><tr><th>Farejador</th><th class="num">por dia</th><th class="num">R$/un.</th><th class="num">R$/dia</th><th class="num">R$/mês</th></tr></thead><tbody>
+    ${(C2.linhas||[]).map(l=>`<tr><td>${esc(l.f)}</td><td class="num">${l.n==null?'—':N(l.n)}</td><td class="num">${R(l.u,3)}</td><td class="num">${R(l.dia)}</td><td class="num"><b>${R(l.mes)}</b></td></tr>`).join('')}
+    <tr style="border-top:1px solid var(--line)"><td><b>TOTAL (real 7 dias)</b></td><td></td><td></td><td class="num">${R(C2.mes_real/C2.dias)}</td><td class="num" style="font-size:16px"><b>${R(C2.mes_real)}</b></td></tr>
+    </tbody></table>
+    <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:12px">
+      <div><div class="acmp-l">Na meta (R$ ${String(D.meta.req).replace('.',',')} + R$ ${String(D.meta.hemo).replace('.',',')})</div><div class="acmp-v" style="color:var(--green);font-size:20px">${R(C2.mes_meta)}</div></div>
+      <div><div class="acmp-l">No teto (estourou acima disso)</div><div class="acmp-v" style="color:var(--red);font-size:20px">${R(C2.mes_teto)}</div></div>
+      <div><div class="acmp-l">Com a sugestão de patologista (fora do medidor)</div><div class="acmp-v" style="color:var(--amber);font-size:20px">${R(C2.mes_real_com_lacuna)}</div></div>
+      <div><div class="acmp-l">Como era em agosto</div><div class="acmp-v" style="color:var(--mut);font-size:20px;text-decoration:line-through">${R(C2.mes_agosto)}</div></div>
+    </div></div>`;
+
+  // ---- gráficos ----
+  h+=`<div class="grid g2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">
+    <div class="card"><h3>📈 R$ por unidade, dia a dia <span class="cap">linha tracejada = meta · cai quando a trava funciona</span></h3><div class="chartbox"><canvas id="ciaU"></canvas></div></div>
+    <div class="card"><h3>💰 R$ de IA por dia, por mesa <span class="cap">quem está gerando e quem não está</span></h3><div class="chartbox"><canvas id="ciaM"></canvas></div></div></div>`;
+
+  // ---- mesas ----
+  h+=`<div class="card" style="margin-top:14px"><h3>🖥️ Mesa a mesa — ontem <span class="cap">trava = leitura única + freio de releitura ligados E o servidor rodando esse código</span></h3>
+    <table class="atab"><thead><tr><th>Mesa</th><th>Trava de custo</th><th class="num">Folhas</th><th class="num">Leituras/folha</th><th class="num">R$/req</th><th class="num">R$/req 7d</th><th class="num">Hemogramas</th><th class="num">R$/hemo</th><th class="num">Total R$</th><th>Última leitura</th></tr></thead><tbody>
+    ${(D.mesas||[]).map(m=>{const t=m.trava||{}; const tv=m.acesso?`<span style="color:var(--red)">🔴 sem acesso</span>`:(t.ok?(t.git_sujo?'<span style="color:var(--amber)">🟡 ligada (sem commit)</span>':'<span style="color:var(--green)">🟢 ligada</span>'):'<span style="color:var(--red)">🔴 DESLIGADA</span>');
+      const rc=m.rel==null?'':(m.rel>D.teto.rel?'color:var(--red)':'');
+      return `<tr><td><b>${esc(m.mesa)}</b></td><td>${tv}</td><td class="num">${N(m.folhas)}</td><td class="num" style="${rc}">${m.rel==null?'—':String(m.rel).replace('.',',')+'×'}</td><td class="num">${R(m.u_req,3)}</td><td class="num">${R(m.u7,3)}</td><td class="num">${N(m.hemos)}</td><td class="num">${R(m.u_hemo,3)}</td><td class="num"><b>${R(m.total)}</b></td><td style="color:var(--mut)">${m.ultima?dm(m.ultima)+' '+m.ultima.slice(11,16):'—'}</td></tr>`;}).join('')}
+    </tbody></table></div>`;
+
+  // ---- benchmark ----
+  const B=D.benchmark||{}; const eu=B.farejador_usd_1k;
+  const merc=[...(B.mercado||[]), ...(eu?[{srv:'🔬 Farejador Alpha (7 dias)',usd:eu,eu:true}]:[])].sort((a,b)=>b.usd-a.usd);
+  const mx=Math.max(...merc.map(x=>x.usd),1);
+  h+=`<div class="grid g2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">
+    <div class="card"><h3>🏁 Benchmark: custo de ler 1.000 páginas <span class="cap">US$ · tabela pública 2026 · o Farejador faz mais que extrair (casa com o catálogo do HF)</span></h3>
+      ${merc.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12.5px"><div style="width:190px;${x.eu?'font-weight:800;color:var(--cyan)':''}">${esc(x.srv)}</div>
+        <div style="flex:1;background:rgba(255,255,255,.05);border-radius:4px;height:14px"><div style="width:${(x.usd/mx*100).toFixed(1)}%;height:100%;border-radius:4px;background:${x.eu?'var(--cyan)':'rgba(138,162,189,.5)'}"></div></div>
+        <div style="width:70px;text-align:right">US$ ${x.usd.toFixed(2).replace('.',',')}</div></div>`).join('')}
+      <div style="font-size:12px;color:var(--mut);margin-top:8px">Em agosto o Farejador custava US$ 67,52 (igual ao Textract completo). ${eu?`Hoje: <b style="color:var(--cyan)">US$ ${eu.toFixed(2).replace('.',',')}</b> — ${eu<30?'abaixo do Azure e do Google.':'ainda acima do Azure/Google.'}`:''}</div></div>
+    <div class="card"><h3>🧪 Quanto a leitura pesa no MATERIAL do exame <span class="cap">régua do Wal: ler não pode custar o mesmo que fazer</span></h3>
+      <table class="atab"><thead><tr><th>Setor</th><th class="num">Material/exame</th><th class="num">Ler 1 requisição (7d)</th><th class="num">pesa</th></tr></thead><tbody>
+      ${(B.material||[]).map(x=>{const u=(D.sete||{}).u_req||D.meta.req; const p=u/x.m*100; return `<tr><td>${esc(x.s)}</td><td class="num">${R(x.m)}</td><td class="num">${R(u,3)}</td><td class="num" style="color:${p>15?'var(--red)':p>5?'var(--amber)':'var(--green)'}"><b>${p.toFixed(1).replace('.',',')}%</b></td></tr>`;}).join('')}
+      </tbody></table>
+      <div style="font-size:12px;color:var(--mut);margin-top:8px">Uma requisição tem em média ~2,2 exames — por exame o peso é menos da metade disso.</div>
+      <table class="atab" style="margin-top:10px"><thead><tr><th>Histórico</th><th class="num">R$/req</th><th class="num">R$/hemo</th></tr></thead><tbody>
+      ${(B.historico||[]).map(x=>`<tr><td>${esc(x.q)}</td><td class="num">${R(x.req,3)}</td><td class="num">${R(x.hemo,3)}</td></tr>`).join('')}</tbody></table></div></div>`;
+
+  // ---- lacunas + netlify ----
+  const NT=D.netlify||{};
+  h+=`<div class="grid g2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">
+    <div class="card"><h3>🕳️ O que ainda NÃO entra no medidor <span class="cap">custo que existe mas não aparece no número acima</span></h3>
+      ${(D.lacunas||[]).map(l=>`<div style="margin:6px 0"><b style="color:var(--amber)">${esc(l.titulo)}</b><div style="font-size:12.5px;color:var(--mut)">${esc(l.detalhe)}</div></div>`).join('')||'<div style="color:var(--green)">Nenhuma.</div>'}</div>
+    <div class="card"><h3>☁️ Netlify — deploys de produção em ${dm(NT.dia)} <span class="cap">cada deploy ≈ 15 créditos · a sangria vem daqui</span></h3>
+      ${NT.erro?`<div style="color:var(--amber)">${esc(NT.erro)}</div>`:`<div class="acmp-v" style="font-size:22px;color:${NT.creditos>450?'var(--red)':NT.creditos>150?'var(--amber)':'var(--green)'}">${N(NT.creditos)} créditos ≈ US$ ${String(NT.usd_estimado).replace('.',',')}</div>
+      <table class="atab" style="margin-top:8px"><thead><tr><th>Site</th><th class="num">Deploys</th><th class="num">Créditos</th></tr></thead><tbody>
+      ${(NT.sites||[]).map(s=>`<tr><td>${esc(s.site)}</td><td class="num">${s.deploys}</td><td class="num">${s.creditos}</td></tr>`).join('')}</tbody></table>
+      <div style="font-size:11.5px;color:var(--mut);margin-top:6px">${esc(NT.obs||'')}</div>`}</div></div>`;
+  h+=`<div style="font-size:11px;color:var(--mut);margin:10px 2px">Fonte: ${esc(D.fonte||'')}. Meta medida em ${esc((D.ref||{}).periodo||'')}. Requisições lidas = folhas × imagens por chamada ÷ 2 (aproximação; conferida contra o portal HF).</div>`;
+  wrap.innerHTML=h;
+
+  if(window.Chart){
+    const S=D.serie||[]; const lab=S.map(x=>dm(x.d));
+    const tick={color:'#8aa2bd',font:{size:10}}, grid={color:'rgba(255,255,255,.05)'};
+    _ciaCharts.push(new Chart(document.getElementById('ciaU'),{type:'line',data:{labels:lab,datasets:[
+      {label:'R$/requisição',data:S.map(x=>x.u_req),borderColor:'#00D4FF',backgroundColor:'#00D4FF',tension:.25,spanGaps:true,pointRadius:2},
+      {label:'R$/hemograma',data:S.map(x=>x.u_hemo),borderColor:'#FF6AD5',backgroundColor:'#FF6AD5',tension:.25,spanGaps:true,pointRadius:2},
+      {label:'meta req',data:S.map(()=>D.meta.req),borderColor:'rgba(0,229,160,.7)',borderDash:[5,4],pointRadius:0,borderWidth:1},
+      {label:'teto req',data:S.map(()=>D.teto.req),borderColor:'rgba(255,84,112,.6)',borderDash:[2,4],pointRadius:0,borderWidth:1}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:10}}}},scales:{x:{ticks:tick,grid},y:{ticks:{...tick,callback:v=>'R$ '+Number(v).toFixed(2).replace('.',',')},grid,suggestedMax:.4,min:0}}}}));
+    const cores={'Mesa 1':'#00D4FF','Mesa 2':'#A78BFA','Mesa 3':'#00E5A0','Mesa 4':'#FFB020'};
+    _ciaCharts.push(new Chart(document.getElementById('ciaM'),{type:'bar',data:{labels:lab,datasets:Object.keys(cores).map(m=>({label:m,data:S.map(x=>(x.mesas||{})[m]||0),backgroundColor:cores[m]}))},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:10}}}},scales:{x:{stacked:true,ticks:tick,grid},y:{stacked:true,ticks:{...tick,callback:v=>'R$ '+v},grid}}}}));
+  }
 }
