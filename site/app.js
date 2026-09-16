@@ -1852,7 +1852,7 @@ async function renderApoio(force){
   let D;
   try{ const env=await fetchEncF('apoio_vetlab','data/apoio_vetlab.enc'); D=await decryptEncObj(env, window.__PW||''); }
   catch(e){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--amber)">Painel do apoio ainda não publicado (${esc(String(e.message||e))}).</div>`; return; }
-  _apoioOk=true; _apoioCharts.forEach(c=>{try{c.destroy()}catch(e){}}); _apoioCharts=[];
+  _apoioOk=true; _apoioCharts.forEach(c=>{try{if(c.$apIv)clearInterval(c.$apIv);c.destroy()}catch(e){}}); _apoioCharts=[];
   const R=(v,d=0)=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
   const N=v=>v==null?'—':Math.round(v).toLocaleString('pt-BR');
   const P=(v,d=1)=>v==null?'—':Number(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%';
@@ -1875,7 +1875,32 @@ async function renderApoio(force){
     <div style="margin-top:14px;font-size:13.5px;line-height:1.65;background:linear-gradient(90deg,rgba(0,229,160,.08),transparent);border-left:3px solid var(--green);padding:10px 14px;border-radius:6px">
       <b>🧠 Interpretação</b><br>${(D.texto||[]).map(t=>'• '+esc(t)).join('<br>')}</div></div>`;
 
-  h+=`<div class="card" style="margin-top:14px"><h3>📉 A queda do apoio, mês a mês <span class="cap">barras = boleto da Vet Lab por área · linha = % do faturamento da matriz</span></h3><div class="chartbox" style="height:340px"><canvas id="apQueda"></canvas></div></div>`;
+  // ★ QUEDA EM % PISCANDO (Wal 16/set): tem que chamar atenção
+  if(!document.getElementById('apPiscaCSS')){ const st=document.createElement('style'); st.id='apPiscaCSS';
+    st.textContent=`@keyframes apPisca{0%,100%{opacity:1;transform:scale(1);text-shadow:0 0 18px rgba(0,229,160,.9)}50%{opacity:.25;transform:scale(.94);text-shadow:none}}
+    @keyframes apBorda{0%,100%{box-shadow:0 0 0 0 rgba(0,229,160,.0),0 0 28px rgba(0,229,160,.55)}50%{box-shadow:0 0 0 6px rgba(0,229,160,.25),0 0 6px rgba(0,229,160,.1)}}
+    .apPisca{animation:apPisca 1.1s ease-in-out infinite;display:inline-block}
+    .apBig{font-size:clamp(38px,6vw,72px);font-weight:900;color:#00E5A0;letter-spacing:-.03em;line-height:1}
+    .apBox{border:2px solid #00E5A0;border-radius:14px;padding:12px 18px;animation:apBorda 1.1s ease-in-out infinite;background:rgba(0,229,160,.07);text-align:center;flex:1;min-width:210px}
+    .apChip{border-radius:10px;padding:6px 4px;text-align:center;flex:1;min-width:64px;background:rgba(255,255,255,.03);border:1px solid var(--line)}`;
+    document.head.appendChild(st); }
+  const pv0=M[0].boleto, pico=Math.max(...M.map(m=>m.boleto)), ult=M[M.length-1];
+  const qJan=(ult.boleto/pv0-1)*100, qPico=(ult.boleto/pico-1)*100, qTri=K.queda_q1_pct;
+  const seta=v=>v<0?'▼':'▲', corq=v=>v<0?'#00E5A0':'#FF5470';
+  const big=(v,rot)=>`<div class="apBox" style="border-color:${corq(v)}"><div class="apBig apPisca" style="color:${corq(v)}">${seta(v)} ${P(Math.abs(v))}</div><div style="margin-top:6px;font-size:13px;font-weight:700">${rot}</div></div>`;
+  h+=`<div class="card" style="margin-top:14px"><h3>📉 A queda do apoio, mês a mês <span class="cap">barras = boleto da Vet Lab por área · linha = % do faturamento · % no topo = variação contra JANEIRO</span></h3>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 14px">
+      ${big(qJan,'janeiro → '+ult.rotulo.split('/')[0]+' ('+R(pv0)+' → '+R(ult.boleto)+')')}
+      ${big(qTri,'média 1º trimestre → média jul–ago')}
+      ${big(qPico,'pico de '+M.find(m=>m.boleto===pico).rotulo.split('/')[0]+' → '+ult.rotulo.split('/')[0]+' ('+R(pico)+' → '+R(ult.boleto)+')')}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      ${M.map((m,i)=>{const vj=(m.boleto/pv0-1)*100, va=i?(m.boleto/M[i-1].boleto-1)*100:null;
+        return `<div class="apChip"><div style="font-size:11px;color:var(--mut)">${m.rotulo.split('/')[0]}</div>
+          <div class="${i&&vj<0?'apPisca':''}" style="font-size:20px;font-weight:900;color:${i?corq(vj):'var(--mut)'}">${i?seta(vj)+' '+P(Math.abs(vj),0):'base'}</div>
+          <div style="font-size:10.5px;color:${va==null?'var(--mut)':corq(va)}">${va==null?'&nbsp;':'mês ant. '+(va<0?'−':'+')+P(Math.abs(va),0)}</div></div>`;}).join('')}
+    </div>
+    <div class="chartbox" style="height:360px"><canvas id="apQueda"></canvas></div></div>`;
   h+=`<div class="grid g2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:14px">
     <div class="card"><h3>🔢 Exames enviados × custo médio por exame <span class="cap">o volume barato voltou para casa; ficou o exame caro e raro</span></h3><div class="chartbox"><canvas id="apVol"></canvas></div></div>
     <div class="card"><h3>🏠 Produção da Alpha × enviado à Vet Lab <span class="cap">prova de verticalização: a produção segue, o envio zera</span></h3>
@@ -1928,8 +1953,17 @@ async function renderApoio(force){
   _apoioCharts.push(new Chart(document.getElementById('apQueda'),{type:'bar',data:{labels:lab,datasets:[
      ...cats.map(c=>({label:c,data:M.map(m=>m.por_categoria[c]),backgroundColor:cor[c]||'#8aa2bd',stack:'s',yAxisID:'y',order:2})),
      {type:'line',label:'% do faturamento',data:M.map(m=>m.pct_receita),borderColor:'#00E5A0',backgroundColor:'#00E5A0',yAxisID:'y2',tension:.3,pointRadius:4,order:1}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:11}}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='y2'?' '+P(c.raw,2)+' da receita':' '+c.dataset.label+': '+R(c.raw)}}},
-      scales:{x:{stacked:true,ticks:tick,grid},y:{stacked:true,ticks:{...tick,callback:v=>'R$ '+(v/1000)+'k'},grid},y2:{position:'right',ticks:{...tick,callback:v=>v+'%'},grid:{display:false},min:0}}}}));
+    options:{responsive:true,maintainAspectRatio:false,animation:false,layout:{padding:{top:34}},plugins:{legend:{labels:{color:'#8aa2bd',font:{size:11}}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='y2'?' '+P(c.raw,2)+' da receita':' '+c.dataset.label+': '+R(c.raw)}}},
+      scales:{x:{stacked:true,ticks:tick,grid},y:{stacked:true,suggestedMax:pico*1.18,ticks:{...tick,callback:v=>'R$ '+(v/1000)+'k'},grid},y2:{position:'right',ticks:{...tick,callback:v=>v+'%'},grid:{display:false},min:0}}},
+    plugins:[{id:'apPct',afterDatasetsDraw(ch){                 // % contra janeiro no topo de cada barra, piscando
+      const ctx=ch.ctx, meta=ch.getDatasetMeta(cats.length-1), y=ch.scales.y, on=(Math.floor(Date.now()/550)%2)===0;
+      M.forEach((m,i)=>{ if(!i) return; const el=meta.data[i]; if(!el) return; const v=(m.boleto/pv0-1)*100;
+        const txt=(v<0?'▼ ':'▲ ')+P(Math.abs(v),0); ctx.save(); ctx.font='900 18px -apple-system,Helvetica,sans-serif'; ctx.textAlign='center';
+        ctx.globalAlpha=on?1:.3; ctx.fillStyle=v<0?'#00E5A0':'#FF5470'; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=on?14:0;
+        ctx.fillText(txt, el.x, y.getPixelForValue(m.boleto)-10); ctx.restore(); });
+    }}]}));
+  { const chQ=_apoioCharts[_apoioCharts.length-1]; const iv=setInterval(()=>{ if(!document.body.contains(chQ.canvas)){clearInterval(iv);return;} if(chQ.canvas.offsetParent) chQ.draw(); },550);
+    chQ.$apIv=iv; }
   _apoioCharts.push(new Chart(document.getElementById('apVol'),{type:'bar',data:{labels:lab,datasets:[
      {label:'Exames enviados',data:M.map(m=>m.exames),backgroundColor:'rgba(0,212,255,.55)',yAxisID:'y'},
      {type:'line',label:'Custo médio por exame',data:M.map(m=>m.custo_medio_exame),borderColor:'#FFB020',backgroundColor:'#FFB020',yAxisID:'y2',tension:.3}]},
