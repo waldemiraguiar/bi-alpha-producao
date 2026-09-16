@@ -169,11 +169,8 @@
       const s = SETORES[e.dono], aqui = abertos.filter(c => c.etapa === +n && c.status === 'aberto')
       const ruins = aqui.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
       return `<li class="${e.dono === setor ? 'minha' : ''}" style="--c:${s.cor}">
-        <div class="n"><i>${n}</i><span>${s.nome}</span></div>
-        <b>${e.nome}</b>
-        <small>prazo ${e.prazo}</small>
-        ${+n === 2 ? '<span class="volta">sem amostra ↩ volta ao call center</span>' : ''}
         <span class="conta ${ruins ? 'ruim' : ''}">${aqui.length}</span>
+        <div><span class="quem">${n} · ${s.nome}</span><b>${e.nome}</b><small>${e.prazo}${+n === 2 ? ' · sem amostra ↩ call center' : ''}</small></div>
       </li>`
     }).join('')
     $('btnNova').hidden = !(setor === 'cc' || todos)
@@ -192,30 +189,35 @@
 
     const ordem = { 's-x': 0, 's-v2': 1, 's-v1': 2, 's-a2': 3, 's-a1': 4, 's-p': 5 }
     meus.sort((a, b) => ordem[estado(a)] - ordem[estado(b)] || T(a.etapa_desde) - T(b.etapa_desde))
-    $('cartoes').innerHTML = meus.length ? meus.map(cartaoHTML).join('') : `<div class="vazio">Nada esperando por ${s.nome.toLowerCase()} agora.</div>`
+    $('cartoes').innerHTML = meus.length ? meus.map(cartaoHTML).join('') : `<div class="vazio grande">✓ Tudo em dia — nada esperando por ${s.nome.toLowerCase()}</div>`
 
     // outros setores agrupados: fica claro QUEM está segurando
     $('outros').innerHTML = ['cc', 'esc', 'tec'].filter(k => k !== setor).map(k => {
       const d = SETORES[k], lst = outros.filter(c => donoAtual(c) === k)
       return `<div class="grupo-setor" style="--c:${d.cor}"><div class="gs-cab"><span>${d.nome}</span><span>${lst.length}</span></div>
-        <div class="lista-outros">${lst.length ? lst.map(c => `<div class="mini ${estado(c)}"><span><b>${esc(c.pet || '')}</b> ${esc(c.req)} · +${esc(c.exame)}<br><span class="mudo">${ETAPAS[c.etapa]?.nome || ''}</span></span><span class="t">${c.pausado ? 'pausado' : fmt(minutosNaEtapa(c))}</span></div>`).join('') : '<div class="vazio">nada</div>'}</div></div>`
+        <div class="linhas">${lst.length ? lst.map(c => `<div class="lin ${['s-v1', 's-v2', 's-x'].includes(estado(c)) ? 'atras' : ''}"><span><b>${esc(c.pet || '')}</b> +${esc(c.exame)}</span><span class="t">${c.pausado ? 'cliente' : fmt(minutosNaEtapa(c))}</span></div>`).join('') : '<div class="lin mudo">—</div>'}</div></div>`
     }).join('')
 
     const hoje = new Date().toDateString()
     const conc = chamados.filter(c => c.status === 'concluido' && new Date(T(c.concluido_em)).toDateString() === hoje)
-    $('concluidas').innerHTML = conc.length ? conc.map(c => `<div style="--c:var(--ok)"><span class="ponto"></span><span><b>${esc(c.pet || '')}</b> ${esc(c.req)} · +${esc(c.exame)}</span><span class="t">${fmt((T(c.concluido_em) - T(c.criado_em)) / 60000)}</span></div>`).join('') : '<div class="vazio">Nenhuma ainda.</div>'
+    $('concluidas').innerHTML = conc.length ? `<div class="linhas">${conc.map(c => `<div class="lin"><span>✓ <b>${esc(c.pet || '')}</b> +${esc(c.exame)}</span><span class="t">${fmt((T(c.concluido_em) - T(c.criado_em)) / 60000)}</span></div>`).join('')}</div>` : '<div class="lin mudo">nenhuma ainda</div>'
 
     explodir(meus)
   }
   function cartaoHTML(c) {
-    const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[c.etapa], dono = SETORES[donoAtual(c)]
-    const prazoTxt = c.pausado ? `aguardando cliente` : c.etapa === 4 ? `prazo ${fmt(PRAZO_EXAME_MIN[c.setor])} · ${ROTULO[st]}` : ROTULO[st]
-    return `<article class="cartao ${st}" data-id="${c.id}">
-      <div class="topo-c"><span class="chip" style="--c:${dono.cor}">etapa ${c.etapa} · ${dono.nome}</span><span class="det">${e ? e.nome : ''}</span>${c.status === 'sem_amostra' ? '<span class="selo">sem amostra — avisar o cliente</span>' : ''}</div>
-      <div><span class="pet">${esc(c.pet || 'sem nome')}</span> <span class="req">${esc(c.req)}</span></div>
-      <div class="tempo">${c.pausado ? fmt(m) : fmt(m)}<small>${prazoTxt}</small></div>
-      <div><div class="inc">+ ${esc(c.exame)} <span class="det">· ${NOME_SETOR[c.setor] || c.setor}</span></div><div class="det">${esc(c.clinica || '')} · aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}${c.obs ? ' · ' + esc(c.obs) : ''}</div></div>
-      ${VALIDADE_H[c.setor] && c.amostra_entrada ? `<div class="amostra">amostra ${pct}% da validade (${VALIDADE_H[c.setor]} h) <span class="barra ${pct >= 80 ? 'alerta' : ''}"><i style="width:${pct}%"></i></span>${pct >= 80 ? '<b style="color:var(--vermelho)">vence logo</b>' : ''}</div>` : ''}
+    const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[c.etapa]
+    const prazoTxt = c.pausado ? 'esperando o cliente' : c.status === 'sem_amostra' ? 'avisar o cliente' : c.etapa === 4 ? `prazo ${fmt(PRAZO_EXAME_MIN[c.setor])}` : ROTULO[st]
+    const amostra = VALIDADE_H[c.setor] && c.amostra_entrada && pct >= 50
+      ? `<div class="amostra ${pct >= 80 ? 'alerta' : ''}">amostra ${pct}% da validade<span class="barra"><i style="width:${pct}%"></i></span></div>` : ''
+    return `<article class="cartao ${st}" data-id="${c.id}" title="aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}${c.obs ? ' · ' + esc(c.obs) : ''}">
+      <div class="c-esq">
+        <div class="c-etapa">${c.status === 'sem_amostra' ? '<span class="selo">sem amostra</span>' : `${c.etapa} · ${e ? e.nome : ''}`}</div>
+        <div class="c-pet">${esc(c.pet || 'sem nome')} <span class="req">${esc(c.req)}</span></div>
+        <div class="c-exame">+ ${esc(c.exame)}</div>
+        <div class="c-clin">${esc(c.clinica || '')} · ${NOME_SETOR[c.setor] || ''}</div>
+        ${amostra}
+      </div>
+      <div class="c-dir"><div class="tempo">${fmt(m)}</div><div class="rot">${prazoTxt}</div></div>
       <div class="acao">${botoes(c)}</div>
     </article>`
   }
@@ -241,20 +243,15 @@
   // LEGENDA fixa (pedido do Wal): as regras sempre à vista para o colaborador
   function desenharLegenda() {
     const [a, b, c, d] = ESCALA
-    $('legenda').innerHTML = `<div class="tit">Como funciona</div>
-      <div class="linha1">
-        <span><i class="cor" style="--c:var(--cc)"></i><b>Call center</b> registra</span>
-        <span><i class="cor" style="--c:var(--tec)"></i><b>Área técnica</b> vê a amostra e faz o exame</span>
-        <span><i class="cor" style="--c:var(--esc)"></i><b>Escritório</b> lança no HF, libera e encerra</span>
-        <span>· o cartão só some quando o <b>e-mail é enviado</b></span>
-        <span>· sem amostra ↩ volta ao <b>call center</b> avisar o cliente</span>
-      </div>
-      <div class="linha2">
-        <span><i class="cor" style="--c:var(--amarelo)"></i><b>0–${a} min</b> amarelo devagar · <b>${a}–${b}</b> amarelo rápido</span>
-        <span><i class="cor" style="--c:var(--vermelho)"></i><b>${b} min</b> vermelho, fica registrado · <b>${c} min</b> sobe pro topo e apita · <b>${d} min</b> explode na tela</span>
-        <span><i class="cor" style="--c:var(--pausa)"></i><b>cinza</b> = esperando o cliente autorizar (relógio corre; após <b>${fmt(LEMBRETE_CLIENTE_MIN)}</b> volta a piscar para cobrar o cliente)</span>
-        <span>· etapa 4 usa o <b>prazo do exame</b> (hemato ${fmt(PRAZO_EXAME_MIN.hemato)}, bioq ${fmt(PRAZO_EXAME_MIN.bioquimica)}, PCR ${fmt(PRAZO_EXAME_MIN.pcr_soro)})</span>
-      </div>`
+    $('legenda').innerHTML = `
+      <span><i class="pt" style="--c:var(--cc)"></i>Call center registra</span>
+      <span><i class="pt" style="--c:var(--tec)"></i>Técnica vê amostra e faz</span>
+      <span><i class="pt" style="--c:var(--esc)"></i>Escritório lança, libera e encerra</span>
+      <span class="sep"></span>
+      <span><i class="pt" style="--c:var(--amarelo)"></i>até ${b} min</span>
+      <span><i class="pt" style="--c:var(--vermelho)"></i>${b} min atrasado · ${c} apita · ${d} explode</span>
+      <span><i class="pt" style="--c:var(--pausa)"></i>esperando cliente (cobrar após ${fmt(LEMBRETE_CLIENTE_MIN)})</span>
+      <span class="mudo">· cartão só sai com o e-mail enviado</span>`
   }
 
   // ── contraprova: pedido de inclusão no WhatsApp sem cartão (o ouvinte lê os grupos das clínicas) ──

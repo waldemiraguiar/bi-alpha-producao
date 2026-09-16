@@ -182,3 +182,58 @@ main{padding:14px 22px 150px}
 body.tv .legenda{font-size:14px}
 body.tv main{padding-bottom:170px}
 @media (max-width:900px){.legenda{position:static;grid-template-columns:1fr}}
+
+/* ===== v3 · mais limpo (16/set) ===== */
+:root{--painel:#141d20;--painel2:#1a2528}
+main{gap:18px;padding:18px 28px 90px}
+.topo{padding:12px 28px}
+.eyebrow{display:none}
+.fluxo-cab{justify-content:flex-end;margin-bottom:-8px}
+.fluxo{gap:8px}
+.fluxo li,.fluxo li:first-child{clip-path:none;border-radius:10px;border-top:0;border-left:4px solid var(--c);padding:10px 14px;display:flex;gap:14px;align-items:center;background:var(--painel)}
+.fluxo li.minha{background:var(--painel2);box-shadow:inset 0 0 0 1px var(--c)}
+.fluxo .conta{position:static;font-size:30px;line-height:1;min-width:28px;text-align:center;color:var(--texto)}
+.fluxo .conta.ruim{color:var(--vermelho)}
+.fluxo .quem{display:block;color:var(--c);font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.fluxo b{display:block;font-size:18px}
+.fluxo small{font-size:12px}
+
+.vez-cab h2{font-size:34px}
+.cartoes{gap:12px}
+.cartao{grid-template-columns:1fr auto;padding:14px 18px;gap:6px 18px;border-left-width:6px;border-radius:12px}
+.c-esq{display:grid;gap:2px;min-width:0}
+.c-etapa{font-size:12px;color:var(--mudo);letter-spacing:.04em}
+.c-pet{font-family:var(--disp);font-size:30px;font-weight:700;line-height:1.05}
+.c-pet .req{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--mudo);margin-left:6px}
+.c-exame{font-size:19px;font-weight:700}
+.c-clin{font-size:13px;color:var(--mudo)}
+.c-dir{text-align:right;align-self:start}
+.c-dir .tempo{position:static;font-family:var(--mono);font-size:34px;font-weight:600;color:var(--estado);line-height:1}
+.c-dir .rot{font-size:12px;color:var(--mudo);margin-top:4px}
+.cartao .amostra{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--mudo);margin-top:4px}
+.cartao .amostra.alerta{color:var(--vermelho);font-weight:700}
+.cartao .amostra .barra{width:140px;flex:none}
+.cartao .amostra.alerta .barra i{background:var(--vermelho)}
+.acao{margin-top:6px}
+.acao button{font-size:19px;padding:8px 16px;border-radius:8px}
+/* piscar mais calmo: só a borda e o relógio, sem halo em volta */
+@keyframes pisca{50%{border-left-color:transparent}}
+@keyframes piscaT{50%{opacity:.35}}
+.s-v2 .tempo,.s-x .tempo{animation:piscaT .5s steps(2,jump-none) infinite}
+.vazio.grande{font-size:22px;padding:28px;text-align:center;color:var(--ok);background:var(--painel)}
+
+.lateral{gap:22px}
+.bloco-lat h3{font-size:17px;letter-spacing:.02em}
+.grupo-setor .gs-cab{font-size:12px;margin-bottom:6px}
+.linhas{display:grid;gap:2px}
+.lin{display:flex;justify-content:space-between;gap:10px;padding:6px 10px;border-radius:6px;background:var(--painel);font-size:14px}
+.lin .t{font-family:var(--mono);color:var(--mudo)}
+.lin.atras{box-shadow:inset 3px 0 0 var(--vermelho)}
+.lin.atras .t{color:var(--vermelho);font-weight:600}
+
+.legenda{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding:10px 28px;font-size:13px;color:var(--mudo);grid-template-columns:none}
+.legenda .pt{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c);margin-right:6px;vertical-align:0}
+.legenda .sep{width:1px;height:16px;background:var(--linha)}
+body.tv .legenda{font-size:15px}
+body.tv main{padding-bottom:90px}
+.suspeitas{border-radius:12px}
