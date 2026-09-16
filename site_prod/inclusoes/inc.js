@@ -183,7 +183,7 @@
       case 3: return `<button data-acao="clinica_confirmou">${c.cliente_status === 'autorizou' ? 'Clínica avisada · seguir' : 'Clínica autorizou · seguir'}</button>${c.pausado ? '' : '<button class="leve" data-acao="aguardando_clinica">Mensagem enviada · aguardando clínica</button>'}<button class="nao" data-acao="clinica_desistiu">Clínica não quer · cancelar</button>`
       case 4: return `<button data-acao="escritorio_ok">${c.novo_numero ? 'Lançado no HF com NOVO número' : 'Lançado no HF'}</button>${cancelar}`
       case 5: return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${cancelar}`
-      case 6: return `<button data-acao="encerrar">Liberado e e-mail enviado · encerrar</button>`
+      case 6: return `<button data-acao="encerrar">Liberado e e-mail enviado · encerrar</button>${cancelar}`
     }
     return cancelar
   }
