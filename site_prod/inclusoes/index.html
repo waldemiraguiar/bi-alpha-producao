@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=3">
+<link rel="stylesheet" href="inc.css?v=4">
 </head>
 <body>
 <header class="topo">
@@ -79,6 +79,19 @@
     <label>Senha<input id="loginSenha" type="password" inputmode="numeric" autocomplete="current-password" required></label>
     <p class="erro" id="loginErro"></p>
     <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Cancelar</button><button class="btn-principal" id="loginOk">Entrar</button></div>
+    <p class="primeiro">Primeiro acesso? <button type="button" class="link" id="btnCriar">Criar meu login</button></p>
+  </form>
+</dialog>
+
+<dialog id="dlgCriar">
+  <form method="dialog" id="formCriar">
+    <h2>Criar meu login</h2>
+    <p class="mudo" style="margin:0">Vale para o Quadro de Inclusões e para o painel da Produção. Use seu nome como a equipe conhece.</p>
+    <label>Seu nome<input id="criarNome" required maxlength="40" placeholder="ex.: Fúlvio"></label>
+    <label>Senha (números)<input id="criarSenha" type="password" inputmode="numeric" required minlength="4"></label>
+    <label>Repita a senha<input id="criarSenha2" type="password" inputmode="numeric" required minlength="4"></label>
+    <p class="erro" id="criarErro"></p>
+    <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Voltar</button><button class="btn-principal" id="criarOk">Criar e entrar</button></div>
   </form>
 </dialog>
 
@@ -132,6 +145,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=3"></script>
+<script src="inc.js?v=4"></script>
 </body>
 </html>

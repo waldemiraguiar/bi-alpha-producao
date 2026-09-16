@@ -237,3 +237,6 @@ main{gap:18px;padding:18px 28px 90px}
 body.tv .legenda{font-size:15px}
 body.tv main{padding-bottom:90px}
 .suspeitas{border-radius:12px}
+
+.primeiro{margin:4px 0 0;font-size:14px;color:var(--mudo);text-align:center}
+.link{background:none;border:0;color:var(--cc);text-decoration:underline;padding:0;font-size:14px}

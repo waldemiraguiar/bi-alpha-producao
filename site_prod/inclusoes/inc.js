@@ -112,6 +112,29 @@
     } catch (e) { $('loginErro').textContent = 'Sem conexão. Tente de novo.' }
   })
   $('loginSenha').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('formLogin').requestSubmit() } })
+  // autocadastro (mesmo sep_register do painel da Produção)
+  $('btnCriar').addEventListener('click', () => {
+    $('dlgLogin').close(); $('formCriar').reset(); $('criarErro').textContent = ''; $('dlgCriar').showModal(); $('criarNome').focus()
+  })
+  $('formCriar').addEventListener('submit', async ev => {
+    ev.preventDefault()
+    const nome = $('criarNome').value.trim(), s1 = $('criarSenha').value, s2 = $('criarSenha2').value
+    if (nome.length < 2) { $('criarErro').textContent = 'Escreva seu nome.'; return }
+    if (s1.length < 4) { $('criarErro').textContent = 'A senha precisa ter pelo menos 4 dígitos.'; return }
+    if (s1 !== s2) { $('criarErro').textContent = 'As duas senhas não são iguais.'; return }
+    if (DEMO) { $('criarErro').textContent = 'No modo demonstração não cria login.'; return }
+    $('criarOk').disabled = true
+    try {
+      const { data, error } = await SB.rpc('sep_register', { p_nome: nome, p_papel: 'ambos', p_pin: s1 })
+      const r = data && data[0]
+      if (error || !r || !r.ok) { $('criarErro').textContent = (r && r.erro) || 'Não consegui criar. Tente de novo.'; return }
+      sessao = { nome, senha: s1, ate: Date.now() + 12 * 3600e3 }
+      gravarLocal('inc_sessao', JSON.stringify(sessao)); gravarLocal('inc_ultimo_nome', nome)
+      $('dlgCriar').close(); desenharLogin(); toast(`Login criado. Bem-vindo, ${nome}`)
+      pedirLogin._res && pedirLogin._res(true)
+    } catch (e) { $('criarErro').textContent = 'Sem conexão. Tente de novo.' }
+    finally { $('criarOk').disabled = false }
+  })
   async function garantirLogin() { if (sessao && sessao.ate > Date.now()) return true; return pedirLogin() }
   function desenharLogin() { $('btnLogin').textContent = sessao ? `${sessao.nome} · Sair` : 'Entrar' }
   $('btnLogin').addEventListener('click', () => {
