@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quadro de Inclusões</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="inc.css?v=1">
+</head>
+<body>
+<header class="topo">
+  <div class="marca">
+    <div class="eyebrow">Alpha Labs</div>
+    <h1>Quadro de Inclusões</h1>
+  </div>
+  <nav class="abas" id="abas" aria-label="Setor">
+    <button data-setor="cc">Call Center</button>
+    <button data-setor="esc">Escritório</button>
+    <button data-setor="tec">Área Técnica</button>
+    <button data-setor="todos">Todos</button>
+    <button data-setor="hist">Histórico</button>
+  </nav>
+  <div class="ferramentas">
+    <span class="relogio" id="relogio">--:--</span>
+    <button class="btn-sec" id="btnSom" title="Liberar o som do alarme nesta tela">🔈 Som</button>
+    <button class="btn-sec" id="btnTV" title="Tela cheia para a TV">Modo TV</button>
+    <button class="btn-login" id="btnLogin">Entrar</button>
+  </div>
+</header>
+
+<main id="app">
+  <section id="vQuadro">
+    <div class="trilho" id="trilho"></div>
+    <div class="barra-acoes">
+      <button class="btn-principal" id="btnNova">+ Nova inclusão</button>
+      <span class="aviso-conexao" id="conexao"></span>
+    </div>
+    <div class="corpo">
+      <div class="vez">
+        <h2 id="tituloVez">Sua vez</h2>
+        <div class="cartoes" id="cartoes"></div>
+      </div>
+      <aside class="outros">
+        <h3>Aguardando outros setores</h3>
+        <div class="lista-outros" id="outros"></div>
+        <h3 class="mt">Concluídas hoje</h3>
+        <div class="lista-outros" id="concluidas"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="vHist" hidden>
+    <div class="hist-filtros">
+      <button data-per="dia" class="on">Hoje</button>
+      <button data-per="semana">7 dias</button>
+      <button data-per="mes">30 dias</button>
+    </div>
+    <div class="numeros" id="numeros"></div>
+    <div class="tabela"><table><thead><tr><th>Aberta</th><th>Req.</th><th>Pet · clínica</th><th>Exame</th><th>Status</th><th>Tempo por etapa</th><th>Total</th></tr></thead><tbody id="histLinhas"></tbody></table></div>
+  </section>
+</main>
+
+<div class="explode" id="explode" hidden>
+  <div class="grande" id="explodeTitulo"></div>
+  <p id="explodeTexto"></p>
+  <p class="mudo">Registrado como incidente</p>
+  <button id="explodeFechar">Estou resolvendo</button>
+</div>
+
+<dialog id="dlgLogin">
+  <form method="dialog" id="formLogin">
+    <h2>Entrar</h2>
+    <label>Seu nome<select id="loginNome" required></select></label>
+    <label>Senha<input id="loginSenha" type="password" inputmode="numeric" autocomplete="current-password" required></label>
+    <p class="erro" id="loginErro"></p>
+    <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Cancelar</button><button class="btn-principal" id="loginOk">Entrar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgNova">
+  <form method="dialog" id="formNova">
+    <h2>Nova inclusão</h2>
+    <label>Nº da requisição
+      <div class="linha"><input id="nReq" inputmode="numeric" required placeholder="ex.: 640112"><button type="button" class="btn-sec" id="btnBuscar">Buscar no HF</button></div>
+    </label>
+    <dl class="puxado" id="puxado" hidden></dl>
+    <div class="grade2">
+      <label>Pet<input id="nPet"></label>
+      <label>Clínica<input id="nClinica"></label>
+    </div>
+    <label>Exame a incluir<input id="nExame" required placeholder="ex.: Fósforo"></label>
+    <div class="grade2">
+      <label>Setor que faz
+        <select id="nSetor">
+          <option value="hemato">Hematologia</option>
+          <option value="bioquimica" selected>Bioquímica</option>
+          <option value="urina_fezes">Urina / Fezes</option>
+          <option value="pcr_soro">PCR / Sorologia</option>
+          <option value="cito_histo">Citologia / Histopatologia</option>
+          <option value="outros">Outros</option>
+        </select>
+      </label>
+      <label>Pedido chegou por
+        <select id="nOrigem"><option value="whatsapp">WhatsApp</option><option value="telefone">Telefone</option><option value="presencial">Presencial</option></select>
+      </label>
+    </div>
+    <fieldset class="opcoes">
+      <legend>Cliente</legend>
+      <label class="op"><input type="radio" name="nCliente" value="sim" checked> Autorizou (se tiver amostra)</label>
+      <label class="op"><input type="radio" name="nCliente" value="nao"> Perguntou o preço — aguardando resposta</label>
+    </fieldset>
+    <label>Observação<input id="nObs"></label>
+    <p class="erro" id="novaErro"></p>
+    <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Cancelar</button><button class="btn-principal" id="novaOk">Abrir inclusão</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgMotivo">
+  <form method="dialog" id="formMotivo">
+    <h2 id="motivoTitulo">Motivo</h2>
+    <label>Escreva o motivo<input id="motivoTexto" required></label>
+    <p class="erro" id="motivoErro"></p>
+    <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Voltar</button><button class="btn-principal" id="motivoOk">Confirmar</button></div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="../supabase-js.min.js"></script>
+<script src="inc.js?v=1"></script>
+</body>
+</html>

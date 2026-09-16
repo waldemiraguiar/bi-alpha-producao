@@ -1,0 +1,34 @@
+name: Inclusões — espelho do HF (requisições recentes → Supabase)
+
+# Alimenta o botão "+ Nova inclusão" do Quadro de Inclusões (puxa pet/clínica pelo nº da requisição).
+# Só leitura no MySQL. A cada 30 min das 7h às 21h (BRT) — barato em minutos do GitHub.
+
+on:
+  schedule:
+    - cron: '5,35 10-23 * * *'   # 7h05–20h35 BRT
+    - cron: '5 0 * * *'          # 21h05 BRT
+  workflow_dispatch:
+
+concurrency:
+  group: inclusoes-hf
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: pip install --quiet pymysql
+      - name: Sync requisições recentes (HF → Supabase)
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python inclusoes_hf_sync.py
