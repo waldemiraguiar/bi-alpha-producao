@@ -467,7 +467,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',financeiro:'financeiro',socios:'socios'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',financeiro:'financeiro',socios:'socios',apoio:'apoio'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -478,6 +478,7 @@ function wireFTabs(){
     if(v==='estudo') drawEstudoChart();
     if(v==='financeiro') renderCustosFin();
     if(v==='custos') renderCustosIA();
+    if(v==='apoio') renderApoio();
     if(v==='socios') renderSocios();
   });});
 }
@@ -1838,4 +1839,107 @@ async function renderCustosIA(force){
     _ciaCharts.push(new Chart(document.getElementById('ciaM'),{type:'bar',data:{labels:lab,datasets:Object.keys(cores).map(m=>({label:m,data:S.map(x=>(x.mesas||{})[m]||0),backgroundColor:cores[m]}))},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:10}}}},scales:{x:{stacked:true,ticks:tick,grid},y:{stacked:true,ticks:{...tick,callback:v=>'R$ '+v},grid}}}}));
   }
+}
+
+/* ===================== 🧪 APOIO · VET LAB (Wal 16/set) =====================
+   Faturas + boletos da Vet Lab cruzados com o que a Alpha produziu e cobrou (HF). Dado cifrado no Blob
+   f=apoio_vetlab (publicado do Air por apoio_vetlab/publicar_apoio.py) — sem deploy por atualização. */
+let _apoioOk=false, _apoioCharts=[];
+async function renderApoio(force){
+  const wrap=document.getElementById('apoio'); if(!wrap) return;
+  if(_apoioOk && !force) return;
+  wrap.innerHTML='<div class="card" style="margin-top:18px;color:var(--mut)">Carregando o apoio (Vet Lab)…</div>';
+  let D;
+  try{ const env=await fetchEncF('apoio_vetlab','data/apoio_vetlab.enc'); D=await decryptEncObj(env, window.__PW||''); }
+  catch(e){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--amber)">Painel do apoio ainda não publicado (${esc(String(e.message||e))}).</div>`; return; }
+  _apoioOk=true; _apoioCharts.forEach(c=>{try{c.destroy()}catch(e){}}); _apoioCharts=[];
+  const R=(v,d=0)=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+  const N=v=>v==null?'—':Math.round(v).toLocaleString('pt-BR');
+  const P=(v,d=1)=>v==null?'—':Number(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%';
+  const K=D.kpi, M=D.meses;
+  const kpi=(rot,val,sub,cor)=>`<div style="min-width:170px;flex:1"><div class="acmp-l">${rot}</div><div class="acmp-v" style="font-size:21px;${cor?`color:${cor}`:''}">${val}</div><div class="acmp-s">${sub}</div></div>`;
+  const STC={'saiu':'var(--green)','caiu':'var(--cyan)','caiu pouco':'var(--amber)','estável/subiu':'var(--red)','novo':'var(--purple)'};
+  const STR={'saiu':'✅ saiu do apoio','caiu':'⬇ caiu','caiu pouco':'↘ caiu pouco','estável/subiu':'⚠ continua','novo':'🆕 novo'};
+  const spark=(arr,cor)=>{const mx=Math.max(...arr,1);return `<span style="display:inline-flex;gap:2px;align-items:flex-end;height:18px">${arr.map(v=>`<span title="${v}" style="width:5px;height:${Math.max(1,v/mx*18)}px;background:${cor};opacity:${v?1:.25};border-radius:1px"></span>`).join('')}</span>`;};
+
+  let h=`<div class="card" style="margin-top:18px">
+    <h3>🧪 Laboratório de apoio · Vet Lab <span class="cap">${esc(D.apoio)} · ${esc(D.periodo)} · atualizado ${esc(D.gerado)}</span></h3>
+    <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:10px">
+      ${kpi('Boleto de janeiro → agosto', R(K.jan)+' → '+R(K.ago), 'queda de <b style="color:var(--green)">'+P(Math.abs(K.queda_jan_ago_pct))+'</b>', 'var(--ink)')}
+      ${kpi('Média 1º tri → média jul–ago', R(K.media_q1)+' → '+R(K.media_jul_ago), 'queda de '+P(Math.abs(K.queda_q1_pct))+' por mês')}
+      ${kpi('Peso na receita da matriz', P(K.pct_receita_jan)+' → '+P(K.pct_receita_ago), 'boleto ÷ faturamento HF do mês', 'var(--green)')}
+      ${kpi('Custo evitado / ano', R(K.economia_anual_ritmo_ago_vs_q1), 'ritmo de agosto × 1º trimestre (antes do reagente interno)', 'var(--green)')}
+      ${kpi('Pago em 8 meses', R(K.total_cheio), N(K.total_exames)+' exames · '+K.exames_distintos+' tipos · com desconto '+R(K.total_desc))}
+      ${kpi('Margem no que ainda vai', P(K.margem_bruta_pct_geral), 'preço praticado × custo Vet Lab c/ desconto · cobertura '+P(K.cobertura_preco_pct))}
+    </div>
+    <div style="margin-top:14px;font-size:13.5px;line-height:1.65;background:linear-gradient(90deg,rgba(0,229,160,.08),transparent);border-left:3px solid var(--green);padding:10px 14px;border-radius:6px">
+      <b>🧠 Interpretação</b><br>${(D.texto||[]).map(t=>'• '+esc(t)).join('<br>')}</div></div>`;
+
+  h+=`<div class="card" style="margin-top:14px"><h3>📉 A queda do apoio, mês a mês <span class="cap">barras = boleto da Vet Lab por área · linha = % do faturamento da matriz</span></h3><div class="chartbox" style="height:340px"><canvas id="apQueda"></canvas></div></div>`;
+  h+=`<div class="grid g2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:14px">
+    <div class="card"><h3>🔢 Exames enviados × custo médio por exame <span class="cap">o volume barato voltou para casa; ficou o exame caro e raro</span></h3><div class="chartbox"><canvas id="apVol"></canvas></div></div>
+    <div class="card"><h3>🏠 Produção da Alpha × enviado à Vet Lab <span class="cap">prova de verticalização: a produção segue, o envio zera</span></h3>
+      <select id="apSel" style="margin:4px 0 8px;background:var(--navy2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 8px;max-width:100%">${(D.producao_vs_apoio||[]).map((x,i)=>`<option value="${i}">${esc(x.exame)} — apoio ${x.pct_apoio_q1??'—'}% → ${x.pct_apoio_jul_ago??'—'}%</option>`).join('')}</select>
+      <div class="chartbox" style="height:250px"><canvas id="apProd"></canvas></div></div></div>`;
+
+  // tabela produção x apoio
+  h+=`<div class="card" style="margin-top:14px"><h3>🔬 Quanto de cada exame ainda vai para o apoio <span class="cap">% = exames na fatura Vet Lab ÷ exames produzidos no HF · 1º tri × jul–ago</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr><th>Exame</th><th>Produção HF (jan→ago)</th><th>Vet Lab (jan→ago)</th><th class="num">% apoio 1º tri</th><th class="num">% apoio jul–ago</th></tr></thead><tbody>
+    ${(D.producao_vs_apoio||[]).map(x=>{const a=x.pct_apoio_jul_ago; const c=a==null?'var(--mut)':a<=10?'var(--green)':a<=50?'var(--amber)':'var(--red)';
+      return `<tr><td>${esc(x.exame)}</td><td>${spark(x.producao,'var(--cyan)')} <span style="color:var(--mut);font-size:11px">${x.producao.reduce((a,b)=>a+b,0)}</span></td><td>${spark(x.vetlab,'var(--amber)')} <span style="color:var(--mut);font-size:11px">${x.vetlab.reduce((a,b)=>a+b,0)}</span></td><td class="num">${x.pct_apoio_q1==null?'—':x.pct_apoio_q1+'%'}</td><td class="num" style="color:${c}"><b>${a==null?'—':a+'%'}</b></td></tr>`;}).join('')}
+    </tbody></table></div><div style="font-size:11px;color:var(--mut);margin-top:6px">Acima de 100% = a Vet Lab fatura em itens separados o que o HF registra como um só (ex.: Ácidos Biliares basal + pós-prandial).</div></div>`;
+
+  // ainda envia em agosto
+  h+=`<div class="card" style="margin-top:14px"><h3>📋 O que ainda enviamos (fatura de agosto) <span class="cap">ordenado por R$ · custo Vet Lab com desconto × seu preço praticado</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr><th>Exame</th><th>Área</th><th class="num">Ago (qtd)</th><th class="num">Ago R$ cheio</th><th class="num">Custo Vet Lab</th><th class="num">Seu preço</th><th class="num">Margem</th><th class="num">Custo ÷ preço</th><th>Jan→Ago</th></tr></thead><tbody>
+    ${(D.ainda_envia_ago||[]).map(e=>{const cp=e.custo_sobre_preco; const cc=cp==null?'var(--mut)':cp>=75?'var(--red)':cp>=65?'var(--amber)':'var(--green)';
+      return `<tr><td>${esc(e.exame)}</td><td style="color:var(--mut);font-size:12px">${esc(e.categoria)}</td><td class="num">${e.ago}</td><td class="num">${R(e.ago_rs)}</td><td class="num">${R(e.custo,2)}</td><td class="num">${e.meu_preco?R(e.meu_preco,2):'<span title="sem preço identificado" style="color:var(--amber)">?</span>'}</td><td class="num">${P(e.margem_pct)}</td><td class="num" style="color:${cc}">${P(cp)}</td><td>${spark(e.por_mes,'var(--amber)')}</td></tr>`;}).join('')}
+    </tbody></table></div></div>`;
+
+  // ranking geral
+  h+=`<div class="card" style="margin-top:14px"><h3>🏆 Todos os exames do período <span class="cap">Pareto: ${K.exames_para_80pct} exames = 80% do gasto · top 10 = ${P(K.top10_pct)} · status = 1º tri × jul–ago</span></h3>
+    <div style="margin:4px 0 8px"><input id="apBusca" placeholder="Buscar exame…" style="background:var(--navy2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 9px;width:260px;max-width:100%"></div>
+    <div style="overflow-x:auto;max-height:520px;overflow-y:auto"><table class="atab" id="apTab"><thead><tr><th>#</th><th>Exame</th><th>Status</th><th class="num">Qtd</th><th class="num">Total pago</th><th class="num">Custo un.</th><th class="num">Seu preço</th><th class="num">Margem</th><th class="num">% acum.</th><th>Jan→Ago</th></tr></thead><tbody>
+    ${D.exames.map((e,i)=>`<tr data-n="${esc(e.exame.toLowerCase())}"><td style="color:var(--mut)">${i+1}</td><td>${esc(e.exame)}<div style="font-size:10.5px;color:var(--mut)">${esc(e.categoria)}${e.hf_nome?' · HF: '+esc(e.hf_nome):''}</div></td><td style="color:${STC[e.status]};white-space:nowrap">${STR[e.status]}</td><td class="num">${N(e.n)}</td><td class="num">${R(e.total)}</td><td class="num">${R(e.custo,2)}</td><td class="num" title="${esc(e.fonte_preco||'sem preço')}">${e.meu_preco?R(e.meu_preco,2):'—'}</td><td class="num">${P(e.margem_pct)}</td><td class="num">${P(e.pareto_pct)}</td><td>${spark(e.por_mes,'var(--cyan)')}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+
+  // benchmark
+  h+=`<div class="card" style="margin-top:14px"><h3>🏁 Benchmark de mercado <span class="cap">com fonte · o que cada referência diz sobre a Alpha</span></h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:8px">
+    ${(D.benchmark||[]).map(b=>`<div style="border:1px solid var(--line);border-radius:10px;padding:12px;background:rgba(255,255,255,.02)">
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em">${esc(b.t)}</div>
+      <div style="font-size:16px;font-weight:800;margin:4px 0;color:var(--cyan)">${esc(b.v)}</div>
+      <div style="font-size:12.5px;line-height:1.5">${esc(b.leitura)}</div>
+      <div style="font-size:10.5px;color:var(--mut);margin-top:6px">Fonte: ${esc(b.fonte)}</div></div>`).join('')}
+    </div></div>`;
+
+  h+=`<div class="card" style="margin-top:14px"><h3>🧾 Boletos <span class="cap">valor cheio = boleto · com desconto = pagando até o vencimento (10%)</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr><th>Mês</th><th class="num">Exames</th><th class="num">Requisições</th><th class="num">Boleto</th><th class="num">Com desconto</th><th class="num">Desconto</th><th>Vencimento</th><th class="num">% receita</th><th class="num">Custo/exame</th></tr></thead><tbody>
+    ${M.map(m=>`<tr><td>${m.rotulo}</td><td class="num">${N(m.exames)}</td><td class="num">${N(m.requisicoes)}</td><td class="num"><b>${R(m.boleto,2)}</b></td><td class="num">${R(m.com_desconto,2)}</td><td class="num">${R(m.desconto,2)}</td><td>${m.vencimento?m.vencimento.split('-').reverse().join('/'):'—'}</td><td class="num">${P(m.pct_receita,2)}</td><td class="num">${R(m.custo_medio_exame,2)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="font-size:11px;color:var(--mut);margin-top:8px">Seu preço = mediana do valor cobrado no HF em 2026 (>R$0) para o mesmo exame; na falta, Tabela de Preços Alpha mar/26. Sem preço: ${R(K.sem_preco_rs)} (T4 Total/Livre sem RIE, Vitamina D3 Calcitriol, Neosporose…). Receita = itemização HF do mês.</div></div>`;
+  wrap.innerHTML=h;
+
+  const busca=document.getElementById('apBusca');
+  if(busca) busca.addEventListener('input',()=>{const q=busca.value.toLowerCase(); document.querySelectorAll('#apTab tbody tr').forEach(tr=>{tr.style.display=tr.dataset.n.includes(q)?'':'none';});});
+  if(!window.Chart) return;
+  const tick={color:'#8aa2bd',font:{size:10}}, grid={color:'rgba(255,255,255,.05)'}, lab=M.map(m=>m.rotulo);
+  const cats=Object.keys(M[0].por_categoria), cor={'Sorologia':'#00D4FF','Biologia molecular (PCR)':'#A78BFA','Hormônios':'#FFB020','Bioquímica especial / outros':'#FF6AD5'};
+  _apoioCharts.push(new Chart(document.getElementById('apQueda'),{type:'bar',data:{labels:lab,datasets:[
+     ...cats.map(c=>({label:c,data:M.map(m=>m.por_categoria[c]),backgroundColor:cor[c]||'#8aa2bd',stack:'s',yAxisID:'y',order:2})),
+     {type:'line',label:'% do faturamento',data:M.map(m=>m.pct_receita),borderColor:'#00E5A0',backgroundColor:'#00E5A0',yAxisID:'y2',tension:.3,pointRadius:4,order:1}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:11}}},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='y2'?' '+P(c.raw,2)+' da receita':' '+c.dataset.label+': '+R(c.raw)}}},
+      scales:{x:{stacked:true,ticks:tick,grid},y:{stacked:true,ticks:{...tick,callback:v=>'R$ '+(v/1000)+'k'},grid},y2:{position:'right',ticks:{...tick,callback:v=>v+'%'},grid:{display:false},min:0}}}}));
+  _apoioCharts.push(new Chart(document.getElementById('apVol'),{type:'bar',data:{labels:lab,datasets:[
+     {label:'Exames enviados',data:M.map(m=>m.exames),backgroundColor:'rgba(0,212,255,.55)',yAxisID:'y'},
+     {type:'line',label:'Custo médio por exame',data:M.map(m=>m.custo_medio_exame),borderColor:'#FFB020',backgroundColor:'#FFB020',yAxisID:'y2',tension:.3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:10}}}},scales:{x:{ticks:tick,grid},y:{ticks:tick,grid},y2:{position:'right',ticks:{...tick,callback:v=>'R$ '+v},grid:{display:false}}}}}));
+  const pv=D.producao_vs_apoio||[]; let chProd=null;
+  const desenha=i=>{const x=pv[i]; if(!x) return; if(chProd){chProd.destroy();}
+    chProd=new Chart(document.getElementById('apProd'),{type:'bar',data:{labels:lab,datasets:[
+      {label:'Produzido na Alpha (HF)',data:x.producao,backgroundColor:'rgba(0,229,160,.6)'},
+      {label:'Enviado à Vet Lab',data:x.vetlab,backgroundColor:'rgba(255,176,32,.85)'}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:10}}}},scales:{x:{ticks:tick,grid},y:{ticks:tick,grid,beginAtZero:true}}}});
+    _apoioCharts.push(chProd);};
+  desenha(0); const sel=document.getElementById('apSel'); if(sel) sel.addEventListener('change',()=>desenha(+sel.value));
 }
