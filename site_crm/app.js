@@ -3289,6 +3289,38 @@ function renderTab(){
       const zeradas=dados.filter(d=>d.zero);
       if(zeradas.length) regras.push(`🚨 <b>${zeradas.map(d=>esc(d.x.nome)).join(", ")}</b>: comissão paga mas <b>0 exames</b> no HF. Confere o vínculo/código — ou a reconquista não converteu.`);
       if(comRS.length) regras.push(`🎫 Ticket médio da carteira = <b>${fmtBRL(tkGeral)}/exame</b>. Acima da média = exames caros (histopato/especializado); abaixo = rotina. Subir ticket > subir volume.`);
+      // 📡 RANKING DE AQUISIÇÃO — PÚBLICO (equipe): por nº de clientes e exames, SEM R$. Visível a todos.
+      const agrupaPub=(chave,corFn)=>{ const g={};
+        dados.forEach(d=>{ const k=(d.x[chave]||"").trim()||"(não informado)"; if(!g[k]) g[k]={nome:k,n:0,ex:0,cor:corFn(k)}; g[k].n++; g[k].ex+=(d.prodBase||d.prod||0); });
+        return Object.values(g).sort((a,b)=>b.n-a.n||b.ex-a.ex); };
+      const pCanal=agrupaPub("canal",corCanal), pOper=agrupaPub("operador",corFech);
+      const pOrig=(()=>{ const g={}; dados.forEach(d=>{ const nm=(d.x.origem||"").trim(); const info=nm?origemInfo(nm):{grupo:"",cor:"#9fb2cc"}; const k=nm||"(não informado)"; if(!g[k]) g[k]={nome:k,grupo:info.grupo,n:0,ex:0,cor:info.cor}; g[k].n++; g[k].ex+=(d.prodBase||d.prod||0); }); return Object.values(g).sort((a,b)=>b.n-a.n||b.ex-a.ex); })();
+      const totCli=dados.length||1;
+      const barraPub=arr=>{ const mx=arr.reduce((m,x)=>Math.max(m,x.n),0)||1; return arr.map(x=>`
+          <div style="margin:6px 0">
+            <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:2px">
+              <span style="font-weight:700;color:${x.cor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.nome)}${x.grupo?` <span class="t-mut" style="font-weight:500;font-size:10px">${x.grupo==='receptivo'?'📥':'⚡'}</span>`:''}</span>
+              <span style="white-space:nowrap;color:#eaf3ff;font-weight:700">${x.n} cli <span class="t-mut" style="font-weight:500;font-size:10.5px">· ${(x.n/totCli*100).toFixed(0)}%${x.ex?` · ${x.ex} ex`:''}</span></span>
+            </div>
+            <div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.max(3,Math.round(x.n/mx*100))}%;background:${x.cor};border-radius:5px"></div></div>
+          </div>`).join(""); };
+      const blocoPub=(ic,tit,arr,extra)=>`<div style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:11px;padding:11px 13px;background:rgba(255,255,255,.02)">
+          <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">${ic} ${tit}</div>
+          ${arr.length?barraPub(arr):'<div class="t-mut" style="font-size:12px">Sem dados — marque canal/origem/operador no cliente.</div>'}${extra||""}</div>`;
+      const oAt=pOrig.filter(x=>x.grupo==="ativo").reduce((s,x)=>s+x.n,0), oRe=pOrig.filter(x=>x.grupo==="receptivo").reduce((s,x)=>s+x.n,0), oT=(oAt+oRe)||1;
+      const origExtraPub=`<div style="display:flex;gap:6px;margin-top:9px">
+          <div style="flex:1;text-align:center;background:rgba(0,229,160,.10);border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:6px"><div style="font-size:10px;color:#00E5A0;font-weight:800">⚡ ATIVO</div><div style="font-size:14px;font-weight:800;color:#eaf3ff">${oAt}</div><div class="t-mut" style="font-size:10px">${(oAt/oT*100).toFixed(0)}%</div></div>
+          <div style="flex:1;text-align:center;background:rgba(0,212,255,.10);border:1px solid rgba(0,212,255,.4);border-radius:8px;padding:6px"><div style="font-size:10px;color:#00D4FF;font-weight:800">📥 RECEPTIVO</div><div style="font-size:14px;font-weight:800;color:#eaf3ff">${oRe}</div><div class="t-mut" style="font-size:10px">${(oRe/oT*100).toFixed(0)}%</div></div></div>`;
+      const temPub=dados.some(d=>d.x.canal||d.x.origem||d.x.operador);
+      const biAquisPublico=temPub?`<div style="border:1px solid rgba(0,212,255,.35);border-radius:14px;padding:14px 16px;margin:2px 0 14px;background:linear-gradient(180deg,rgba(0,212,255,.06),rgba(0,212,255,.01))">
+          <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px">📡 Ranking de aquisição — equipe</div>
+          <div class="t-mut" style="font-size:11px;margin-top:2px">De onde vêm os clientes e quem traz mais. Por <b>nº de clientes</b> e <b>exames</b> (sem valores).</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+            ${blocoPub("📡","Canal",pCanal)}
+            ${blocoPub("🎯","Origem do lead",pOrig,origExtraPub)}
+            ${blocoPub("🧑‍💼","Operador",pOper)}
+          </div>
+        </div>`:`<div class="proxhint" style="border-color:rgba(0,212,255,.3);color:#9fe6ff;margin:2px 0 14px;line-height:1.5">📡 O <b>ranking de aquisição</b> aparece aqui quando os clientes tiverem <b>canal / origem / operador</b> marcados (abra cada cliente e marque — vale retroativo).</div>`;
       let painel="";
       if(!ehDiretoria()){
         painel="";   // reps NÃO veem nada de R$ — nem que existe
@@ -3409,9 +3441,30 @@ function renderTab(){
           </div>`:"";
         // 📡 BI DE AQUISIÇÃO — por CANAL, ORIGEM (ativo×receptivo) e OPERADOR (quem fechou). R$ e % — base de comissão.
         const valNovo=d=>{ if(d.x.tipo==="divide") return cqmSum(d.x.cod); return d.rsv>0?d.rsv:0; };
-        const mesClinVal=d=>{ if(!mesAtual) return 0; const cod=String(d.x.cod);
+        const mesClinValYm=(d,ym)=>{ if(!ym) return 0; const cod=String(d.x.cod);
           const arr=(d.x.tipo==="divide")?((CLIN_CONQMES&&CLIN_CONQMES[cod])||[]):((CLIN_FATMES&&CLIN_FATMES[cod])||[]);
-          const m=arr.find(a=>a.ym===mesAtual); return m?(m.fat||0):0; };
+          const m=arr.find(a=>a.ym===ym); return m?(m.fat||0):0; };
+        const mesClinVal=d=>mesClinValYm(d,mesAtual);
+        // 📅 FECHAMENTO DO MÊS PASSADO — último mês JÁ fechado (vira sozinho na virada do mês). Base de comissão do mês.
+        const nowYm=(()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");})();
+        const mesFechado=[...mesesBI].reverse().find(m=>m<nowYm)||null;
+        const topMes=(chave,corFn)=>{ if(!mesFechado) return []; const g={};
+          dados.forEach(d=>{ const k=(d.x[chave]||"").trim(); if(!k) return; const v=mesClinValYm(d,mesFechado); if(v<=0) return; if(!g[k]) g[k]={nome:k,rs:0,n:0,cor:corFn(k)}; g[k].rs+=v; g[k].n++; });
+          return Object.values(g).sort((a,b)=>b.rs-a.rs); };
+        const fTot=mesFechado?dados.reduce((s,d)=>s+mesClinValYm(d,mesFechado),0):0;
+        const fCanal=topMes("canal",corCanal), fOper=topMes("operador",corFech), fOrig=topMes("origem",n=>origemInfo(n).cor);
+        const fChip=(x,suf)=>x?`<span style="display:inline-block;background:${x.cor}1e;border:1px solid ${x.cor}66;color:${x.cor};border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;margin:3px 5px 0 0">${esc(x.nome)} · ${fmtBRL(x.rs)}${suf?` · ${x.n} cli`:''}</span>`:'';
+        const cardFech=(mesFechado&&fTot>0)?`<div style="border:1px solid rgba(255,194,77,.5);border-radius:12px;padding:12px 14px;margin:8px 0 12px;background:linear-gradient(180deg,rgba(255,194,77,.10),rgba(255,194,77,.02))">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px">
+              <div style="font-size:12px;font-weight:800;color:#ffc266;text-transform:uppercase;letter-spacing:.4px">📅 Fechamento de ${mlab2(mesFechado)} <span class="t-mut" style="font-weight:500;text-transform:none">— mês fechado · base de comissão</span></div>
+              <div style="font-size:20px;font-weight:900;color:#ffd27a">${fmtBRL(fTot)}</div>
+            </div>
+            <div style="margin-top:8px;font-size:12px;color:#c9d4e0;line-height:1.7">
+              <div>📡 <b>Canal:</b> ${fCanal.length?fCanal.slice(0,3).map(x=>fChip(x)).join(""):'<span class="t-mut">—</span>'}</div>
+              <div style="margin-top:3px">🎯 <b>Origem:</b> ${fOrig.length?fOrig.slice(0,3).map(x=>fChip(x)).join(""):'<span class="t-mut">—</span>'}</div>
+              <div style="margin-top:3px">🧑‍💼 <b>Operador (comissão):</b> ${fOper.length?fOper.map(x=>fChip(x,true)).join(""):'<span class="t-mut">—</span>'}</div>
+            </div>
+          </div>`:"";
         const agrupa=(chave,corFn)=>{ const g={};
           dados.forEach(d=>{ const k=(d.x[chave]||"").trim()||"(não informado)"; if(!g[k]) g[k]={nome:k,n:0,rs:0,mes:0,cor:corFn(k)}; g[k].n++; g[k].rs+=valNovo(d); g[k].mes+=mesClinVal(d); });
           return Object.values(g).sort((a,b)=>b.rs-a.rs); };
@@ -3443,6 +3496,7 @@ function renderTab(){
         const biAquis=temAquis?`<div style="border:1px solid rgba(0,212,255,.4);border-radius:14px;padding:14px 16px;margin:8px 0 12px;background:linear-gradient(180deg,rgba(0,212,255,.08),rgba(0,212,255,.01))">
             <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px">📡 BI de Aquisição — canal · origem · operador</div>
             <div class="t-mut" style="font-size:11px;margin-top:2px">De onde vem o dinheiro novo e quem fecha. R$ = dinheiro novo desde o marco (base p/ comissão) · <b>mês</b> = o que entrou neste mês.</div>
+            ${cardFech}
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
               ${bloco("📡","Canal",gCanal)}
               ${bloco("🎯","Origem do lead",gOrig,origExtra)}
@@ -3526,6 +3580,7 @@ function renderTab(){
       c.innerHTML=`${subtabsClin}
         <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">${ehDiretoria()?"📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo — você não precisa pedir). E-mail completo toda <b>sexta 9h</b>.":"📊 <b>Evolução da carteira</b> — produção e ritmo de cada clínica (atualiza sozinho a cada ciclo)."}</div>
         ${c2Html}
+        ${ehDiretoria()?"":biAquisPublico}
         ${painel}
         ${conquistaHtml}
         ${mesaHtml}
