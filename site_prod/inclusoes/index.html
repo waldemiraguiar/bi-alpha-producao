@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=5">
+<link rel="stylesheet" href="inc.css?v=6">
 </head>
 <body>
 <header class="topo">
@@ -102,6 +102,8 @@
       <div class="linha"><input id="nReq" inputmode="numeric" required placeholder="ex.: 640112"><button type="button" class="btn-sec" id="btnBuscar">Buscar no HF</button></div>
     </label>
     <dl class="puxado" id="puxado" hidden></dl>
+    <label id="campoData">Data da amostra (se não achou no HF)<input id="nData" type="date"></label>
+    <p class="aviso-dia" id="avisoDia" hidden></p>
     <div class="grade2">
       <label>Pet<input id="nPet"></label>
       <label>Clínica<input id="nClinica"></label>
@@ -124,8 +126,10 @@
     </div>
     <fieldset class="opcoes">
       <legend>Cliente</legend>
-      <label class="op"><input type="radio" name="nCliente" value="sim" checked> Autorizou (se tiver amostra)</label>
-      <label class="op"><input type="radio" name="nCliente" value="nao"> Perguntou o preço — aguardando resposta</label>
+      <label class="op"><input type="radio" name="nCliente" value="autorizou" checked> Autorizou se tiver amostra</label>
+      <label class="op"><input type="radio" name="nCliente" value="quer_saber_amostra"> Ainda não autorizou, mas gostaria de saber se tem amostra</label>
+      <label class="op"><input type="radio" name="nCliente" value="perguntou_preco"> Perguntou o preço, mas não autorizou</label>
+      <label class="op"><input type="radio" name="nCliente" value="perguntou_ha_amostra"> Perguntou se ainda há amostra, mas ainda não autorizou</label>
     </fieldset>
     <label>Observação<input id="nObs"></label>
     <p class="erro" id="novaErro"></p>
@@ -145,6 +149,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=5"></script>
+<script src="inc.js?v=6"></script>
 </body>
 </html>
