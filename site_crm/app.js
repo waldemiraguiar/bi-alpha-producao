@@ -621,6 +621,26 @@ let AAA=[], AAA_TS=0, AAA_SETORES=[], AAA_PCT=80;   // clínicas Triplo A (top f
 async function loadAAA(){ try{ const r=await fetch("/api/crm-aaa", {cache:"no-store"}); if(r.ok){ const j=await r.json(); AAA=(j&&j.aaa)||[]; AAA_TS=(j&&j.ts)||0; AAA_SETORES=(j&&j.setores)||[]; AAA_PCT=(j&&j.pct)||80; } }catch(e){} }
 async function saveCart(item){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ syncCart((await r.json()).carteira); return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeCart(id){ try{ const r=await fetch(CART_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncCart((await r.json()).carteira); } }catch(e){} }
+/* ---- 📡 LISTAS DE CADASTRO: canal · origem do lead · operador (quem fechou) — editável, com cor p/ a chancela ---- */
+const LISTAS_API="/api/crm-listas";
+let LISTAS={fechadores:[{nome:"HEITOR",cor:"#00D4FF"},{nome:"LUCIANE",cor:"#ff6b9d"}],
+  canais:[{nome:"GOOGLE",cor:"#4285F4"},{nome:"PET LOVE",cor:"#ff6b9d"},{nome:"OUTROS PLANOS",cor:"#ffb020"},{nome:"INSTAGRAM",cor:"#C13584"},{nome:"FACEBOOK",cor:"#1877F2"},{nome:"VET DIAGNÓSTICO",cor:"#00E5A0"},{nome:"VISITA",cor:"#00D4FF"},{nome:"INDICAÇÃO",cor:"#9b8cff"}],
+  origens:[{nome:"PROSPECÇÃO",grupo:"ativo",cor:"#00E5A0"},{nome:"VISITA",grupo:"ativo",cor:"#34d399"},{nome:"INDICAÇÃO",grupo:"ativo",cor:"#a3e635"},{nome:"CALL CENTER",grupo:"receptivo",cor:"#00D4FF"},{nome:"SITE",grupo:"receptivo",cor:"#38bdf8"},{nome:"INSTAGRAM",grupo:"receptivo",cor:"#C13584"}]};
+async function loadListas(){ try{ const r=await fetch(LISTAS_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&(j.canais||j.origens||j.fechadores)) LISTAS={fechadores:j.fechadores||LISTAS.fechadores,canais:j.canais||LISTAS.canais,origens:j.origens||LISTAS.origens}; } }catch(e){} }
+async function saveListas(){ try{ const r=await fetch(LISTAS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"set",cfg:LISTAS,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão."); return false; } if(r.ok){ const j=await r.json(); if(j&&j.cfg) LISTAS=j.cfg; return true; } }catch(e){ alert("Sem internet."); } return false; }
+function corDe(lista,nome){ const f=(LISTAS[lista]||[]).find(x=>(x.nome||"").toUpperCase()===String(nome||"").toUpperCase()); return f?f.cor:"#9fb2cc"; }
+function corCanal(n){ return corDe("canais",n); }
+function corFech(n){ return corDe("fechadores",n); }
+function origemInfo(n){ const f=(LISTAS.origens||[]).find(x=>(x.nome||"").toUpperCase()===String(n||"").toUpperCase()); return f||{nome:n,grupo:"ativo",cor:"#9fb2cc"}; }
+/* Chancela colorida do cliente: 🧑‍💼 operador · 📡 canal · 🎯 origem (ativo/receptivo). Visível a TODOS (sem R$). */
+function chancela(x, mini){
+  const pill=(ic,txt,cor)=>`<span style="display:inline-flex;align-items:center;gap:3px;background:${cor}1e;border:1px solid ${cor}66;border-radius:20px;padding:${mini?'1px 8px':'2px 9px'};font-size:${mini?'10.5px':'11px'};font-weight:700;color:${cor};margin:3px 5px 0 0;white-space:nowrap">${ic} ${esc(txt)}</span>`;
+  let out="";
+  if(x.operador) out+=pill("🧑‍💼",x.operador,corFech(x.operador));
+  if(x.canal) out+=pill("📡",x.canal,corCanal(x.canal));
+  if(x.origem){ const o=origemInfo(x.origem); out+=pill(o.grupo==="receptivo"?"📥":"🎯",x.origem+(o.grupo?" ("+o.grupo+")":""),o.cor); }
+  return out?`<div style="margin-top:5px">${out}</div>`:"";
+}
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
 const AUTO_REL_NOTE='<span class="t-mut" style="font-size:11px">· 🔄 automático</span>';
 /* 🧠² CÉREBRO 2 — aprende o RITMO de envio de cada clínica (média/semana + cadência típica) e detecta
@@ -763,6 +783,7 @@ function matchClinicas(q, lim){ lim=lim||8; const qt=_clinToks(q), qn=_clinNorm(
   return scored.slice(0,lim).map(x=>x.c); }
 function openCarteira(tipo, id){
   const c=id?CARTEIRA.find(x=>x.id===id):null; let T=c?c.tipo:(tipo||"reconquistada"), P=c?c.porte:"";
+  let OP=c?(c.operador||""):"", CN=c?(c.canal||""):"", OR=c?(c.origem||""):"";
   document.getElementById("modalBody").innerHTML=`
     <div class="m-head"><div><div class="m-cli">${c?"✏️ Editar clínica":"➕ Adicionar clínica"}</div>
       <div class="t-mut" style="font-size:13px;margin-top:2px">digite o nome; eu acho no HF e vinculo (correlaciona a produção)</div></div>
@@ -776,7 +797,13 @@ function openCarteira(tipo, id){
     <div class="m-opts" id="caTipo"><button class="opt${T==="reconquistada"?" on":""}" data-t="reconquistada">♻️ Reconquistada</button><button class="opt${T==="nova"?" on":""}" data-t="nova">🆕 Nova</button><button class="opt${T==="divide"?" on":""}" data-t="divide">🔀 Divide material</button><button class="opt${T==="particular"?" on":""}" data-t="particular">🐾 Particular</button></div>
     <div class="m-lbl">Porte <span class="t-mut" style="font-weight:500">— ajuda a saber se manda muito ou pouco</span></div>
     <div class="m-opts" id="caPorte">${[["G","🐘 Grande"],["M","🐎 Médio"],["P","🐇 Pequeno"]].map(([v,l])=>`<button class="opt${P===v?" on":""}" data-p="${v}">${l}</button>`).join("")}</div>
-    <div class="m-lbl">📅 Marco zero — data da reconquista/entrada <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— a produção conta a partir daqui</span></div>
+    <div class="m-lbl" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">🧑‍💼 Operador <span class="t-mut" style="font-weight:500">— quem fechou o cliente</span> <button type="button" id="caCadListas" class="t-mut" style="margin-left:auto;background:transparent;border:1px solid var(--line);color:#9fe6ff;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">⚙️ cadastrar/editar listas</button></div>
+    <div class="m-opts" id="caOper">${LISTAS.fechadores.map(f=>`<button class="opt${OP===f.nome?" on":""}" data-op="${esc(f.nome)}" style="${OP===f.nome?`border-color:${f.cor};color:${f.cor}`:''}">${esc(f.nome)}</button>`).join("")||'<span class="t-mut" style="font-size:12px">nenhum cadastrado — toque ⚙️</span>'}</div>
+    <div class="m-lbl">📡 Canal <span class="t-mut" style="font-weight:500">— onde encontrou o cliente pra prospectar</span></div>
+    <div class="m-opts" id="caCanal">${LISTAS.canais.map(f=>`<button class="opt${CN===f.nome?" on":""}" data-cn="${esc(f.nome)}" style="${CN===f.nome?`border-color:${f.cor};color:${f.cor}`:''}">${esc(f.nome)}</button>`).join("")}</div>
+    <div class="m-lbl">🎯 Origem do lead <span class="t-mut" style="font-weight:500">— ativo (nós fomos atrás) × receptivo (o cliente veio)</span></div>
+    ${["ativo","receptivo"].map(g=>{ const its=LISTAS.origens.filter(o=>o.grupo===g); if(!its.length) return ""; return `<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;color:${g==='ativo'?'#00E5A0':'#00D4FF'};margin:6px 0 3px">${g==='ativo'?'⚡ ATIVO':'📥 RECEPTIVO'}</div><div class="m-opts" id="caOrig_${g}">${its.map(f=>`<button class="opt${OR===f.nome?" on":""}" data-or="${esc(f.nome)}" style="${OR===f.nome?`border-color:${f.cor};color:${f.cor}`:''}">${esc(f.nome)}</button>`).join("")}</div>`; }).join("")}
+    <div class="m-lbl">📅 Marco zero — data da reconquista/entrada <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— a produção conta a partir daqui · pode ser <b>retroativa</b> (data passada)</span></div>
     <input id="caRecData" type="date" class="m-date" style="width:100%" value="${c?esc(c.reconq_data||""):hojeISO()}">
     <div class="m-lbl">Motivo da perda anterior <span class="t-mut" style="font-weight:500">— por que tinha deixado de mandar (opcional)</span></div>
     <textarea id="caMotivo" class="m-ta" style="min-height:44px" placeholder="Ex.: vazamento de urina na cistocentese — reembolsamos e recuperamos">${c?esc(c.motivo_perda||""):""}</textarea>
@@ -798,13 +825,56 @@ function openCarteira(tipo, id){
   nomeEl.addEventListener("input", doSug);
   document.getElementById("caTipo").onclick=e=>{const b=e.target.closest("[data-t]");if(b){T=b.dataset.t;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));}};
   document.getElementById("caPorte").onclick=e=>{const b=e.target.closest("[data-p]");if(b){P=b.dataset.p;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));}};
+  // 🧑‍💼📡🎯 seletores de chancela (clicar de novo desmarca; origem: escolher num grupo limpa o outro)
+  const pintaSel=(cont,val)=>{ cont&&[...cont.children].forEach(x=>{ const on=x.dataset&&(x.dataset.op===val||x.dataset.cn===val||x.dataset.or===val); x.classList.toggle("on",!!on); }); };
+  const opEl=document.getElementById("caOper"); if(opEl) opEl.onclick=e=>{const b=e.target.closest("[data-op]");if(b){ OP=(OP===b.dataset.op)?"":b.dataset.op; pintaSel(opEl,OP); }};
+  const cnEl=document.getElementById("caCanal"); if(cnEl) cnEl.onclick=e=>{const b=e.target.closest("[data-cn]");if(b){ CN=(CN===b.dataset.cn)?"":b.dataset.cn; pintaSel(cnEl,CN); }};
+  ["ativo","receptivo"].forEach(g=>{ const el=document.getElementById("caOrig_"+g); if(el) el.onclick=e=>{const b=e.target.closest("[data-or]");if(b){ OR=(OR===b.dataset.or)?"":b.dataset.or; pintaSel(document.getElementById("caOrig_ativo"),OR); pintaSel(document.getElementById("caOrig_receptivo"),OR); }}; });
+  const cadBtn=document.getElementById("caCadListas"); if(cadBtn) cadBtn.onclick=()=>openListasCad(()=>openCarteira(tipo, id));
   document.getElementById("caSave").onclick=async()=>{
     const nome=nomeEl.value.trim(); if(!nome){ alert("Informe a clínica."); return; }
     const codsExtra=((document.getElementById("caCodsExtra")||{}).value||"").split(/[,\s]+/).map(s=>s.replace(/\D/g,"")).filter(Boolean);
-    const item={id:c?c.id:null, cod:document.getElementById("caCod").value, cods_extra:codsExtra, cidade:document.getElementById("caCidade").value, nome, tipo:T, porte:P, reconq_data:(document.getElementById("caRecData")||{}).value||"", motivo_perda:(document.getElementById("caMotivo")||{}).value.trim(), obs:document.getElementById("caObs").value.trim(), por:meuRep()||"equipe", ts:c?c.ts:Date.now()};
+    const item={id:c?c.id:null, cod:document.getElementById("caCod").value, cods_extra:codsExtra, cidade:document.getElementById("caCidade").value, nome, tipo:T, porte:P, operador:OP, canal:CN, origem:OR, reconq_data:(document.getElementById("caRecData")||{}).value||"", motivo_perda:(document.getElementById("caMotivo")||{}).value.trim(), obs:document.getElementById("caObs").value.trim(), por:meuRep()||"equipe", ts:c?c.ts:Date.now()};
     const btn=document.getElementById("caSave"); btn.disabled=true; btn.textContent="Salvando…";
     const ok=await saveCart(item); if(ok){ clinView=T; closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent=c?"Salvar alterações":"Salvar"; } };
   const del=document.getElementById("caDel"); if(del) del.onclick=async()=>{ if(confirm(`Remover "${c.nome}" da carteira?`)){ await removeCart(c.id); closeModal(); renderTab(); } };
+}
+/* ⚙️ CADASTRO das listas de chancela — canal · origem do lead · operador (quem fechou). Editável por todos, com cor. */
+function openListasCad(onClose){
+  const draft={fechadores:JSON.parse(JSON.stringify(LISTAS.fechadores||[])),canais:JSON.parse(JSON.stringify(LISTAS.canais||[])),origens:JSON.parse(JSON.stringify(LISTAS.origens||[]))};
+  const paletas=["#00E5A0","#00D4FF","#9fe6ff","#ffb020","#ff6b9d","#C13584","#4285F4","#1877F2","#9b8cff","#34d399","#a3e635","#38bdf8","#ff8a5b","#f472b6"];
+  const rerender=()=>{
+    const linha=(lista,it,i)=>`<div style="display:flex;align-items:center;gap:7px;margin:5px 0" data-row="${lista}:${i}">
+        <input type="color" value="${/^#[0-9a-fA-F]{6}$/.test(it.cor)?it.cor:'#9fb2cc'}" data-fld="cor" style="width:34px;height:30px;border:none;background:none;padding:0;cursor:pointer;flex:0 0 auto">
+        <input class="m-date" data-fld="nome" value="${esc(it.nome||"")}" placeholder="nome" style="flex:1;min-width:0">
+        ${lista==="origens"?`<select class="m-date" data-fld="grupo" style="width:112px;flex:0 0 auto"><option value="ativo"${it.grupo!=="receptivo"?" selected":""}>⚡ ativo</option><option value="receptivo"${it.grupo==="receptivo"?" selected":""}>📥 receptivo</option></select>`:""}
+        <button type="button" data-rm="${lista}:${i}" style="flex:0 0 auto;background:transparent;border:1px solid var(--mut);color:var(--mut);border-radius:7px;padding:5px 9px;font-size:13px;cursor:pointer">🗑️</button>
+      </div>`;
+    const secao=(tit,desc,lista,addLbl)=>`<div style="margin-top:12px"><div class="seclabel" style="margin:0 0 2px">${tit}</div><div class="t-mut" style="font-size:11px;margin-bottom:4px">${desc}</div>
+        <div id="lc_${lista}">${draft[lista].map((it,i)=>linha(lista,it,i)).join("")||'<div class="t-mut" style="font-size:12px">— vazio —</div>'}</div>
+        <button type="button" data-add="${lista}" class="checkinbtn" style="margin-top:4px;font-size:12.5px;padding:7px 12px">➕ ${addLbl}</button></div>`;
+    document.getElementById("modalBody").innerHTML=`
+      <div class="m-head"><div><div class="m-cli">⚙️ Cadastro — canais, origens e operadores</div>
+        <div class="t-mut" style="font-size:12.5px;margin-top:2px">Editável por todos. A <b>cor</b> vira a chancela colorida no relatório. Some/edite/adicione à vontade.</div></div>
+        <button class="m-x" id="mClose">✕</button></div>
+      ${secao("🧑‍💼 Operadores (quem fecha)","Aparecem no cadastro do cliente e no BI de comissão.","fechadores","novo operador")}
+      ${secao("📡 Canais (onde encontrou)","Onde o cliente foi encontrado pra prospectar.","canais","novo canal")}
+      ${secao("🎯 Origem do lead","Ativo = nós fomos atrás · Receptivo = o cliente veio até nós.","origens","nova origem")}
+      <button class="m-save" id="lcSave" style="margin-top:14px">💾 Salvar listas</button>`;
+    document.getElementById("mClose").onclick=()=>{ closeModal(); if(onClose) onClose(); };
+    const sync=()=>{ ["fechadores","canais","origens"].forEach(lista=>{ document.querySelectorAll(`#lc_${lista} [data-row]`).forEach(row=>{ const i=+row.dataset.row.split(":")[1]; if(!draft[lista][i]) return;
+        draft[lista][i].nome=row.querySelector('[data-fld="nome"]').value; draft[lista][i].cor=row.querySelector('[data-fld="cor"]').value;
+        const g=row.querySelector('[data-fld="grupo"]'); if(g) draft[lista][i].grupo=g.value; }); }); };
+    document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ sync(); const l=b.dataset.add; const cor=paletas[draft[l].length%paletas.length];
+      draft[l].push(l==="origens"?{nome:"",grupo:"ativo",cor}:{nome:"",cor}); rerender(); });
+    document.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{ sync(); const [l,i]=b.dataset.rm.split(":"); draft[l].splice(+i,1); rerender(); });
+    document.getElementById("lcSave").onclick=async()=>{ sync();
+      const limpo=l=>draft[l].filter(x=>(x.nome||"").trim());
+      LISTAS={fechadores:limpo("fechadores"),canais:limpo("canais"),origens:limpo("origens")};
+      const btn=document.getElementById("lcSave"); btn.disabled=true; btn.textContent="Salvando…";
+      const ok=await saveListas(); if(ok){ closeModal(); if(onClose) onClose(); else renderTab(); } else { btn.disabled=false; btn.textContent="💾 Salvar listas"; } };
+  };
+  document.getElementById("modal").style.display="flex"; rerender();
 }
 /* VISITA EM ANDAMENTO: check-in na CHEGADA (separado); feedback+check-out na SAÍDA */
 function visitaLoad(){ try{ return JSON.parse(localStorage.getItem("crm_visita")||"null"); }catch(e){ return null; } }
@@ -3108,7 +3178,7 @@ function renderTab(){
         <div class="rk" style="color:${tIco[1]}">${tIco[0]}</div>
         <div style="flex:1"><div class="nm">${esc(x.nome)} ${x.porte?`<span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${porteLbl[x.porte]}</span>`:""} ${vinc?'<span class="t-mut" style="font-size:11px">🔗 HF</span>':'<span class="pr" style="background:rgba(255,138,0,.18);color:#ffc266;font-size:11px">⚠️ pendente de vínculo</span>'}</div>
           <div class="ci">${x.cidade?"📍 "+esc(x.cidade)+" · ":""}${prodTxt}${ehDiretoria()?` · 💰 ${rsClin(x.cod, x.reconq_data)}`:""}</div>
-          ${marcoLinha}${perdaLinha}${detLinha}
+          ${marcoLinha}${perdaLinha}${chancela(x)}${detLinha}
           ${c2Linha}
           ${conqBox}${mesaBox}${cheioBox}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
@@ -3245,6 +3315,7 @@ function renderTab(){
                 <div style="text-align:right;white-space:nowrap;flex-shrink:0"><div style="font-size:19px;font-weight:800;color:#7effcf;line-height:1">${fmtBRL(d.rsv)}</div><div class="t-mut" style="font-size:10px;margin-top:1px">${d.desdeMarco?"desde a reconquista":"faturamento 12m"}${pctC?` · ${pctC}% da carteira`:""}</div></div>
               </div>
               <div style="margin-top:2px">${_pill(`📊 ${d.prodBase||0} exames`)}${_pill(`🎫 ${d.tk!=null?fmtBRL(d.tk):"—"}/exame`)}${(d.falta&&d.falta.length)?_pill(`🎯 ${d.falta.length} classe(s) na mesa`,'#ffb3c0'):""}</div>
+              ${chancela(d.x,true)}
               ${nm!=null?`<div style="font-size:11.5px;color:#ff8fa3;margin-top:4px">🎯 <b>na mesa (estimado): ${fmtBRL(nm)}</b> <span class="t-mut">— potencial das classes que ela NÃO te manda</span></div>`:""}
             </div><div class="mid"></div></div>`; };
         const rows=["reconquistada","nova","divide","particular"].map(tp=>{ const g=comRS.filter(d=>d.x.tipo===tp); if(!g.length) return "";
@@ -3336,8 +3407,51 @@ function renderTab(){
             ${mesTabela}
             <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5">📊 <b>De-para</b> — quanto do faturamento veio das frentes de conquista (dinheiro NOVO) desde o marco. A <b>conversão</b> conta só a <b>categoria nova</b> (o que já mandavam é dinheiro velho, não entra). O <b>mês a mês</b> mostra o que entrou em cada mês e quanto representa do faturamento daquele mês (o mês atual é parcial).</div>
           </div>`:"";
+        // 📡 BI DE AQUISIÇÃO — por CANAL, ORIGEM (ativo×receptivo) e OPERADOR (quem fechou). R$ e % — base de comissão.
+        const valNovo=d=>{ if(d.x.tipo==="divide") return cqmSum(d.x.cod); return d.rsv>0?d.rsv:0; };
+        const mesClinVal=d=>{ if(!mesAtual) return 0; const cod=String(d.x.cod);
+          const arr=(d.x.tipo==="divide")?((CLIN_CONQMES&&CLIN_CONQMES[cod])||[]):((CLIN_FATMES&&CLIN_FATMES[cod])||[]);
+          const m=arr.find(a=>a.ym===mesAtual); return m?(m.fat||0):0; };
+        const agrupa=(chave,corFn)=>{ const g={};
+          dados.forEach(d=>{ const k=(d.x[chave]||"").trim()||"(não informado)"; if(!g[k]) g[k]={nome:k,n:0,rs:0,mes:0,cor:corFn(k)}; g[k].n++; g[k].rs+=valNovo(d); g[k].mes+=mesClinVal(d); });
+          return Object.values(g).sort((a,b)=>b.rs-a.rs); };
+        const gCanal=agrupa("canal",corCanal), gOper=agrupa("operador",corFech);
+        const gOrig=(()=>{ const g={}; dados.forEach(d=>{ const nm=(d.x.origem||"").trim(); const info=nm?origemInfo(nm):{nome:"(não informado)",grupo:"",cor:"#9fb2cc"}; const k=nm||"(não informado)"; if(!g[k]) g[k]={nome:k,grupo:info.grupo,n:0,rs:0,mes:0,cor:info.cor}; g[k].n++; g[k].rs+=valNovo(d); g[k].mes+=mesClinVal(d); }); return Object.values(g).sort((a,b)=>b.rs-a.rs); })();
+        const grpTot=g=>({ativo:g.filter(x=>x.grupo==="ativo").reduce((s,x)=>s+x.rs,0),receptivo:g.filter(x=>x.grupo==="receptivo").reduce((s,x)=>s+x.rs,0)});
+        const maxRs=arr=>arr.reduce((m,x)=>Math.max(m,x.rs),0)||1;
+        const denom=conqTot||1;
+        const barra=(arr)=>{ const mx=maxRs(arr); return arr.map(x=>`
+            <div style="margin:6px 0">
+              <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:2px">
+                <span style="font-weight:700;color:${x.cor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.nome)}${x.grupo?` <span class="t-mut" style="font-weight:500;font-size:10px">${x.grupo==='receptivo'?'📥':'⚡'}</span>`:''}</span>
+                <span style="white-space:nowrap;color:#eaf3ff;font-weight:700">${fmtBRL(x.rs)} <span class="t-mut" style="font-weight:500;font-size:10.5px">· ${x.n}cli · ${(x.rs/denom*100).toFixed(0)}%${x.mes>0?` · mês ${fmtBRL(x.mes)}`:''}</span></span>
+              </div>
+              <div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.max(3,Math.round(x.rs/mx*100))}%;background:${x.cor};border-radius:5px"></div></div>
+            </div>`).join(""); };
+        const bloco=(ic,tit,arr,extra)=>`<div style="flex:1;min-width:230px;border:1px solid var(--line);border-radius:11px;padding:11px 13px;background:rgba(255,255,255,.02)">
+            <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">${ic} ${tit}</div>
+            ${arr.length?barra(arr):'<div class="t-mut" style="font-size:12px">Sem dados ainda — cadastre no cliente.</div>'}${extra||""}</div>`;
+        const ot=grpTot(gOrig), otTot=(ot.ativo+ot.receptivo)||1;
+        const origExtra=`<div style="display:flex;gap:6px;margin-top:9px">
+            <div style="flex:1;text-align:center;background:rgba(0,229,160,.10);border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:6px"><div style="font-size:10px;color:#00E5A0;font-weight:800">⚡ ATIVO</div><div style="font-size:13px;font-weight:800;color:#eaf3ff">${fmtBRL(ot.ativo)}</div><div class="t-mut" style="font-size:10px">${(ot.ativo/otTot*100).toFixed(0)}%</div></div>
+            <div style="flex:1;text-align:center;background:rgba(0,212,255,.10);border:1px solid rgba(0,212,255,.4);border-radius:8px;padding:6px"><div style="font-size:10px;color:#00D4FF;font-weight:800">📥 RECEPTIVO</div><div style="font-size:13px;font-weight:800;color:#eaf3ff">${fmtBRL(ot.receptivo)}</div><div class="t-mut" style="font-size:10px">${(ot.receptivo/otTot*100).toFixed(0)}%</div></div></div>`;
+        const temAquis=gCanal.length||gOrig.length||gOper.length;
+        const insightAq=(()=>{ const bC=gCanal[0], bO=gOper[0]; const parts=[];
+          if(bC&&bC.rs>0&&bC.nome!=="(não informado)") parts.push(`melhor canal: <b style="color:${bC.cor}">${esc(bC.nome)}</b> (${fmtBRL(bC.rs)})`);
+          if(bO&&bO.rs>0&&bO.nome!=="(não informado)") parts.push(`quem mais fechou R$: <b style="color:${bO.cor}">${esc(bO.nome)}</b> (${fmtBRL(bO.rs)} · ${bO.n} cli)`);
+          return parts.length?`<div style="margin-top:10px;background:rgba(0,212,255,.08);border-left:3px solid #00D4FF;border-radius:8px;padding:8px 11px;font-size:12.5px;color:#cdefff;line-height:1.5">🏅 ${parts.join(" · ")}</div>`:""; })();
+        const biAquis=temAquis?`<div style="border:1px solid rgba(0,212,255,.4);border-radius:14px;padding:14px 16px;margin:8px 0 12px;background:linear-gradient(180deg,rgba(0,212,255,.08),rgba(0,212,255,.01))">
+            <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px">📡 BI de Aquisição — canal · origem · operador</div>
+            <div class="t-mut" style="font-size:11px;margin-top:2px">De onde vem o dinheiro novo e quem fecha. R$ = dinheiro novo desde o marco (base p/ comissão) · <b>mês</b> = o que entrou neste mês.</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+              ${bloco("📡","Canal",gCanal)}
+              ${bloco("🎯","Origem do lead",gOrig,origExtra)}
+              ${bloco("🧑‍💼","Operador (comissão)",gOper)}
+            </div>${insightAq}
+          </div>`:`<div class="proxhint" style="border-color:rgba(0,212,255,.35);color:#9fe6ff;margin:8px 0 12px;line-height:1.5">📡 <b>BI de Aquisição</b> aparece aqui quando os clientes tiverem <b>canal / origem / operador</b> preenchidos. Abra cada cliente (inclusive os antigos, de forma <b>retroativa</b>) e marque a chancela.</div>`;
         painel=`
           ${biConq}
+          ${biAquis}
           <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}${bioLinha()}</div>
           <div class="seclabel" style="margin:12px 0 4px">💼 Carteira trabalhada <span class="t-mut" style="font-weight:500;font-size:11px">— só as clínicas que você reconquistou/trouxe (reconquista · novas · divide) desde o marco. <b style="color:#ffc266">NÃO é o faturamento do lab inteiro</b>${labFat?` (esse é ${fmtBRL(labFat)})`:''}.</span></div>
           <div class="kgrid">
@@ -3482,8 +3596,11 @@ function renderTab(){
       ${subtabsClin}
       ${clinView==='divide'?`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin-bottom:10px;line-height:1.55">🔀 <b>Clínicas que repartem material com o concorrente</b> — mandam só uma categoria (ex.: só histopatologia) e o resto vai pra outro lab. Cadastre com a <b>data que vamos começar a trabalhar</b> (marco zero); eu rastreio a produção e mostro o que ela <b>NÃO</b> te manda (deixando na mesa). Vira comissão quando abrir as outras categorias.</div>`:""}
       ${clinView==='particular'?`<div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin-bottom:10px;line-height:1.55">🐾 <b>Clientes particulares</b> — você marca na mão quais são (não tem marca automática confiável no HF). Mesma análise das outras: vínculo ao HF, produção 12m, ✅ o que manda × 🎯 o que deixa na mesa, marco zero e drill-down. Cadastre e trabalhe igual.</div>`:""}
-      <button class="checkinbtn" id="addCart" type="button" style="margin-bottom:6px">➕ Adicionar clínica ${VM.add}</button>
-      <div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Você digita o nome; eu acho no HF (${CL?CL+" clínicas":"aguardando o robô"}) e vinculo → puxo a produção. O input é seu.</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:6px">
+        <button class="checkinbtn" id="addCart" type="button" style="flex:1;min-width:180px;margin:0">➕ Adicionar clínica ${VM.add}</button>
+        <button class="checkinbtn" id="cadListas" type="button" style="flex:0 0 auto;margin:0;border-color:rgba(0,212,255,.35);color:#9fe6ff">⚙️ Canais / origens / operadores</button>
+      </div>
+      <div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Você digita o nome; eu acho no HF (${CL?CL+" clínicas":"aguardando o robô"}) e vinculo → puxo a produção. No cadastro marque <b>operador · canal · origem</b> (dá pra fazer <b>retroativo</b> abrindo um cliente já existente).</div>
       <div class="kgrid">
         ${kpi("g", lista.length, VM.kpi, "na carteira")}
         ${kpi("", arr.filter(x=>x.cod).length, "Vinculadas ao HF", "produção correlacionada")}
@@ -3509,6 +3626,7 @@ function renderTab(){
     document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; renderTab(); });
     document.querySelectorAll("#content [data-sow]").forEach(el=>el.onclick=()=>{ sowFilter=el.dataset.sow; renderTab(); });
     const ac=document.getElementById("addCart"); if(ac) ac.onclick=()=>openCarteira(clinView, null);
+    const cl=document.getElementById("cadListas"); if(cl) cl.onclick=()=>openListasCad();
     const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>abrirFinanceiro();
     document.querySelectorAll("#content [data-cart]").forEach(el=>el.onclick=()=>openCarteira(null, el.dataset.cart));
     document.querySelectorAll("#content [data-exames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openExames(el.dataset.exames, el.dataset.exnome); });
@@ -4148,7 +4266,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;

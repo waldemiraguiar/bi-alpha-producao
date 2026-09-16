@@ -38,6 +38,9 @@ export default async (req) => {
         porte: ["P", "M", "G"].includes(it.porte) ? it.porte : "",
         reconq_data: String(it.reconq_data || "").slice(0, 20),   // MARCO ZERO: data da reconquista/entrada — produção conta a partir daqui
         motivo_perda: String(it.motivo_perda || "").slice(0, 400), // por que tinha perdido antes (histórico)
+        operador: String(it.operador || "").slice(0, 40),         // 🧑‍💼 quem FECHOU o cliente (Heitor/Luciane…) — visível a todos, base de comissão
+        canal: String(it.canal || "").slice(0, 40),               // 📡 CANAL onde encontrou p/ prospectar (Google, Pet Love, Indicação…)
+        origem: String(it.origem || "").slice(0, 40),             // 🎯 ORIGEM DO LEAD (ativo: prospecção/visita/indicação · receptivo: call center/site/instagram)
         obs: String(it.obs || "").slice(0, 500),
         por: String(it.por || "equipe").slice(0, 40),
         ts: existing ? existing.ts : (it.ts || Date.now()),
