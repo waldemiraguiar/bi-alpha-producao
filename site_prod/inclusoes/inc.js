@@ -17,13 +17,14 @@
   }
   // escalonamento em MINUTOS parado na etapa: [amarelo rápido, vermelho+protocolo, vermelho+topo+som, explode]
   const ESCALA = [5, 10, 15, 30]
+  // ORDEM DO WAL (16/set): call center registra → técnica vê se tem amostra → escritório lança no HF →
+  // técnica faz e libera → escritório libera e encerra (e-mail)
   const ETAPAS = {
-    1: { nome: 'Cliente respondido', dono: 'cc', prazo: '10 min' },
-    2: { nome: 'Material chegou / lançado no HF', dono: 'esc', prazo: '10 min' },
-    3: { nome: 'Amostra suficiente?', dono: 'tec', prazo: '10 min' },
-    4: { nome: 'Exame liberado', dono: 'tec', prazo: 'por exame' },
-    5: { nome: 'Liberação final', dono: 'esc', prazo: '10 min' },
-    6: { nome: 'E-mail enviado', dono: 'esc', prazo: '10 min' },
+    1: { nome: 'Registrar e cliente autorizar', dono: 'cc', prazo: '10 min' },
+    2: { nome: 'Tem amostra?', dono: 'tec', prazo: '10 min' },
+    3: { nome: 'Lançar no HF', dono: 'esc', prazo: '10 min' },
+    4: { nome: 'Fazer e liberar o exame', dono: 'tec', prazo: 'por exame' },
+    5: { nome: 'Liberar e enviar e-mail', dono: 'esc', prazo: '10 min' },
   }
   // etapa 4 = tempo do exame. PROVISÓRIO até medir no HF (Wal autorizou medir).
   const PRAZO_EXAME_MIN = { hemato: 120, bioquimica: 240, urina_fezes: 240, pcr_soro: 4320, cito_histo: 7200, outros: 1440 }
@@ -33,7 +34,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
-  let chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
+  let suspeitas = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -71,6 +72,8 @@
         const { data } = await SB.from('inc_eventos').select('*').in('chamado_id', ids.slice(i, i + 300)).order('quando')
         eventos = eventos.concat(data || [])
       }
+      const sp = await SB.from('inc_suspeitas').select('*').eq('status', 'aberta').order('quando', { ascending: false }).range(0, 199)
+      suspeitas = sp.error ? [] : (sp.data || [])
       $('conexao').textContent = ''
     } catch (e) {
       $('conexao').textContent = /does not exist|42P01/.test(e.message || e.code || '') ? 'Banco ainda não criado (rodar o SQL). Abra com ?demo=1 para ver o exemplo.' : 'Sem conexão com o banco — tentando de novo…'
@@ -140,15 +143,14 @@
   }
   const ROTULO = { 's-a1': 'no prazo', 's-a2': 'atenção', 's-v1': 'estourou · protocolado', 's-v2': 'estourado', 's-x': 'EXPLODIU', 's-p': 'aguardando cliente' }
   function botoes(c) {
-    if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Cliente avisado (sem amostra)</button>`
+    if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Cliente avisado · encerrar</button>`
     const cancelar = `<button class="leve" data-acao="cancelar">Cancelar</button>`
     switch (c.etapa) {
       case 1: return `<button data-acao="cliente_autorizou">Cliente autorizou</button>${cancelar}`
-      case 2: return `<button data-acao="escritorio_ok">Material chegou · lançado no HF</button><button class="nao" data-acao="sem_amostra">Não veio material</button>${cancelar}`
-      case 3: return `<button data-acao="amostra_ok">Amostra suficiente</button><button class="nao" data-acao="sem_amostra">Não serve → recoleta</button>${cancelar}`
-      case 4: return `<button data-acao="exame_liberado">Exame liberado</button>${cancelar}`
-      case 5: return `<button data-acao="liberacao_final">Liberação final feita</button>`
-      case 6: return `<button data-acao="email_enviado">E-mail enviado · concluir</button>`
+      case 2: return `<button data-acao="amostra_ok">Tem amostra suficiente</button><button class="nao" data-acao="sem_amostra">Não tem amostra → avisar cliente</button>${cancelar}`
+      case 3: return `<button data-acao="escritorio_ok">Lançado no HF</button>${cancelar}`
+      case 4: return `<button data-acao="exame_liberado">Exame feito e liberado</button>${cancelar}`
+      case 5: return `<button data-acao="encerrar">Liberado e e-mail enviado · encerrar</button>`
     }
     return ''
   }
@@ -156,56 +158,134 @@
   // ── desenho ──
   function desenhar() {
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist'
+    const hist = setor === 'hist', todos = setor === 'todos'
     $('vQuadro').hidden = hist; $('vHist').hidden = !hist
+    desenharLegenda()
     if (hist) return desenharHistorico()
     const abertos = chamados.filter(c => c.status === 'aberto' || c.status === 'sem_amostra')
 
-    $('trilho').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
-      const s = SETORES[e.dono], q = abertos.filter(c => c.etapa === +n && c.status === 'aberto').length
-      return `<div class="etapa ${e.dono === setor ? 'minha' : ''}" style="--c:${s.cor}"><span class="dono">${n} · ${s.nome}</span><b>${e.nome}</b><span>prazo ${e.prazo} · <span class="qtd">${q}</span> aqui</span></div>`
+    // caminho da inclusão: 5 etapas, cor = dono, número = quantas estão ali (vermelho se alguma estourou)
+    $('fluxo').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
+      const s = SETORES[e.dono], aqui = abertos.filter(c => c.etapa === +n && c.status === 'aberto')
+      const ruins = aqui.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
+      return `<li class="${e.dono === setor ? 'minha' : ''}" style="--c:${s.cor}">
+        <div class="n"><i>${n}</i><span>${s.nome}</span></div>
+        <b>${e.nome}</b>
+        <small>prazo ${e.prazo}</small>
+        ${+n === 2 ? '<span class="volta">sem amostra ↩ volta ao call center</span>' : ''}
+        <span class="conta ${ruins ? 'ruim' : ''}">${aqui.length}</span>
+      </li>`
     }).join('')
+    $('btnNova').hidden = !(setor === 'cc' || todos)
 
-    const meus = setor === 'todos' ? abertos : abertos.filter(c => donoAtual(c) === setor)
-    const outros = setor === 'todos' ? [] : abertos.filter(c => donoAtual(c) !== setor)
+    $('corpoSetor').hidden = todos; $('kanban').hidden = !todos
+    if (todos) { desenharKanban(abertos); return explodir(abertos) }
+
+    const meus = abertos.filter(c => donoAtual(c) === setor)
+    const outros = abertos.filter(c => donoAtual(c) !== setor)
+    desenharSuspeitas()
     const s = SETORES[setor]
-    $('tituloVez').textContent = setor === 'todos' ? `Todas em andamento (${meus.length})` : `Sua vez — ${s.nome} (${meus.length})`
-    $('tituloVez').style.color = s ? s.cor : 'var(--texto)'
-    $('btnNova').hidden = !(setor === 'cc' || setor === 'todos')
+    $('tituloVez').textContent = `Sua vez — ${s.nome}`
+    $('tituloVez').style.color = s.cor
+    const est = meus.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
+    $('subVez').textContent = `${meus.length} esperando por você${est ? ` · ${est} fora do prazo` : ''}`
 
     const ordem = { 's-x': 0, 's-v2': 1, 's-v1': 2, 's-a2': 3, 's-a1': 4, 's-p': 5 }
     meus.sort((a, b) => ordem[estado(a)] - ordem[estado(b)] || T(a.etapa_desde) - T(b.etapa_desde))
-    $('cartoes').innerHTML = meus.length ? meus.map(c => {
-      const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[c.etapa]
-      const prazoTxt = c.pausado ? `aguardando cliente há ${fmt(m)}` : c.etapa === 4 ? `de ${fmt(PRAZO_EXAME_MIN[c.setor])} · ${ROTULO[st]}` : ROTULO[st]
-      return `<article class="cartao ${st}" data-id="${c.id}">
-        <div><span class="pet">${esc(c.pet || 'sem nome')}</span> <span class="req">${esc(c.req)}</span> ${c.status === 'sem_amostra' ? '<span class="selo">sem amostra — avisar cliente</span>' : ''}</div>
-        <div class="tempo">${c.pausado ? '⏸' : fmt(m)}<small>${prazoTxt}</small></div>
-        <div><div class="inc">+ ${esc(c.exame)} <span class="det">· ${NOME_SETOR[c.setor] || c.setor}</span></div><div class="det">${esc(c.clinica || '')} · etapa ${c.etapa}: ${e ? e.nome : ''} · aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}</div></div>
-        ${VALIDADE_H[c.setor] && c.amostra_entrada ? `<div class="amostra">amostra ${pct}% da validade (${VALIDADE_H[c.setor]} h) <span class="barra ${pct >= 80 ? 'alerta' : ''}"><i style="width:${pct}%"></i></span>${pct >= 80 ? '<b style="color:var(--vermelho)">vence logo</b>' : ''}</div>` : ''}
-        <div class="acao">${botoes(c)}</div>
-      </article>`
-    }).join('') : `<div class="vazio">Nada esperando por ${s ? s.nome.toLowerCase() : 'ninguém'} agora.</div>`
+    $('cartoes').innerHTML = meus.length ? meus.map(cartaoHTML).join('') : `<div class="vazio">Nada esperando por ${s.nome.toLowerCase()} agora.</div>`
 
-    $('outros').innerHTML = outros.length ? outros.map(c => {
-      const d = SETORES[donoAtual(c)]
-      return `<div style="--c:${d.cor}"><span class="ponto"></span><span><b>${esc(c.pet || '')}</b> ${esc(c.req)} · +${esc(c.exame)}<br><span class="quem">aguardando ${d.nome}</span></span><span class="t">${c.pausado ? 'pausado' : fmt(minutosNaEtapa(c))}</span></div>`
-    }).join('') : '<div class="vazio">—</div>'
+    // outros setores agrupados: fica claro QUEM está segurando
+    $('outros').innerHTML = ['cc', 'esc', 'tec'].filter(k => k !== setor).map(k => {
+      const d = SETORES[k], lst = outros.filter(c => donoAtual(c) === k)
+      return `<div class="grupo-setor" style="--c:${d.cor}"><div class="gs-cab"><span>${d.nome}</span><span>${lst.length}</span></div>
+        <div class="lista-outros">${lst.length ? lst.map(c => `<div class="mini ${estado(c)}"><span><b>${esc(c.pet || '')}</b> ${esc(c.req)} · +${esc(c.exame)}<br><span class="mudo">${ETAPAS[c.etapa]?.nome || ''}</span></span><span class="t">${c.pausado ? 'pausado' : fmt(minutosNaEtapa(c))}</span></div>`).join('') : '<div class="vazio">nada</div>'}</div></div>`
+    }).join('')
 
     const hoje = new Date().toDateString()
     const conc = chamados.filter(c => c.status === 'concluido' && new Date(T(c.concluido_em)).toDateString() === hoje)
     $('concluidas').innerHTML = conc.length ? conc.map(c => `<div style="--c:var(--ok)"><span class="ponto"></span><span><b>${esc(c.pet || '')}</b> ${esc(c.req)} · +${esc(c.exame)}</span><span class="t">${fmt((T(c.concluido_em) - T(c.criado_em)) / 60000)}</span></div>`).join('') : '<div class="vazio">Nenhuma ainda.</div>'
 
+    explodir(meus)
+  }
+  function cartaoHTML(c) {
+    const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[c.etapa], dono = SETORES[donoAtual(c)]
+    const prazoTxt = c.pausado ? `aguardando cliente` : c.etapa === 4 ? `prazo ${fmt(PRAZO_EXAME_MIN[c.setor])} · ${ROTULO[st]}` : ROTULO[st]
+    return `<article class="cartao ${st}" data-id="${c.id}">
+      <div class="topo-c"><span class="chip" style="--c:${dono.cor}">etapa ${c.etapa} · ${dono.nome}</span><span class="det">${e ? e.nome : ''}</span>${c.status === 'sem_amostra' ? '<span class="selo">sem amostra — avisar o cliente</span>' : ''}</div>
+      <div><span class="pet">${esc(c.pet || 'sem nome')}</span> <span class="req">${esc(c.req)}</span></div>
+      <div class="tempo">${c.pausado ? fmt(m) : fmt(m)}<small>${prazoTxt}</small></div>
+      <div><div class="inc">+ ${esc(c.exame)} <span class="det">· ${NOME_SETOR[c.setor] || c.setor}</span></div><div class="det">${esc(c.clinica || '')} · aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}${c.obs ? ' · ' + esc(c.obs) : ''}</div></div>
+      ${VALIDADE_H[c.setor] && c.amostra_entrada ? `<div class="amostra">amostra ${pct}% da validade (${VALIDADE_H[c.setor]} h) <span class="barra ${pct >= 80 ? 'alerta' : ''}"><i style="width:${pct}%"></i></span>${pct >= 80 ? '<b style="color:var(--vermelho)">vence logo</b>' : ''}</div>` : ''}
+      <div class="acao">${botoes(c)}</div>
+    </article>`
+  }
+  function desenharKanban(abertos) {
+    $('kanban').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
+      const s = SETORES[e.dono]
+      const lst = abertos.filter(c => (c.status === 'sem_amostra' ? 1 : c.etapa) === +n).sort((a, b) => T(a.etapa_desde) - T(b.etapa_desde))
+      return `<div class="coluna" style="--c:${s.cor}"><h3>${n}. ${e.nome}<span>${s.nome}</span></h3>
+        ${lst.map(c => `<div class="mini ${estado(c)}"><b>${esc(c.pet || '')}</b><span>${esc(c.req)} · +${esc(c.exame)}</span><span class="mudo">${esc(c.clinica || '')}</span><span class="t">${c.status === 'sem_amostra' ? 'SEM AMOSTRA · ' : ''}${c.pausado ? 'aguardando cliente ' : ''}${fmt(minutosNaEtapa(c))}</span></div>`).join('') || '<span class="mudo">—</span>'}</div>`
+    }).join('')
+  }
+  function explodir(lista) {
     // explosão: só para cartões DESTE setor (a TV de cada setor grita o que é dela)
-    const pior = meus.filter(c => estado(c) === 's-x' && !explodeCalado.has(c.id + ':' + c.etapa)).sort((a, b) => minutosNaEtapa(b) - minutosNaEtapa(a))[0]
+    const pior = lista.filter(c => estado(c) === 's-x' && !explodeCalado.has(c.id + ':' + c.etapa)).sort((a, b) => minutosNaEtapa(b) - minutosNaEtapa(a))[0]
     $('explode').hidden = !pior
     if (pior) {
       $('explodeTitulo').textContent = `PARADA HÁ ${fmt(minutosNaEtapa(pior))}`
-      $('explodeTexto').innerHTML = `<b>${esc(pior.pet || '')} ${esc(pior.req)}</b> · +${esc(pior.exame)} · ${ETAPAS[pior.etapa].nome}`
+      $('explodeTexto').innerHTML = `<b>${esc(pior.pet || '')} ${esc(pior.req)}</b> · +${esc(pior.exame)} · ${ETAPAS[pior.etapa].nome} · ${SETORES[donoAtual(pior)].nome}`
       $('explode').dataset.chave = pior.id + ':' + pior.etapa
       bip(3)
-    } else if (meus.some(c => estado(c) === 's-v2')) bip(1)
+    } else if (lista.some(c => estado(c) === 's-v2')) bip(1)
   }
+  // LEGENDA fixa (pedido do Wal): as regras sempre à vista para o colaborador
+  function desenharLegenda() {
+    const [a, b, c, d] = ESCALA
+    $('legenda').innerHTML = `<div class="tit">Como funciona</div>
+      <div class="linha1">
+        <span><i class="cor" style="--c:var(--cc)"></i><b>Call center</b> registra</span>
+        <span><i class="cor" style="--c:var(--tec)"></i><b>Área técnica</b> vê a amostra e faz o exame</span>
+        <span><i class="cor" style="--c:var(--esc)"></i><b>Escritório</b> lança no HF, libera e encerra</span>
+        <span>· o cartão só some quando o <b>e-mail é enviado</b></span>
+        <span>· sem amostra ↩ volta ao <b>call center</b> avisar o cliente</span>
+      </div>
+      <div class="linha2">
+        <span><i class="cor" style="--c:var(--amarelo)"></i><b>0–${a} min</b> amarelo devagar · <b>${a}–${b}</b> amarelo rápido</span>
+        <span><i class="cor" style="--c:var(--vermelho)"></i><b>${b} min</b> vermelho, fica registrado · <b>${c} min</b> sobe pro topo e apita · <b>${d} min</b> explode na tela</span>
+        <span><i class="cor" style="--c:var(--pausa)"></i><b>cinza</b> = esperando o cliente autorizar (relógio corre; após <b>${fmt(LEMBRETE_CLIENTE_MIN)}</b> volta a piscar para cobrar o cliente)</span>
+        <span>· etapa 4 usa o <b>prazo do exame</b> (hemato ${fmt(PRAZO_EXAME_MIN.hemato)}, bioq ${fmt(PRAZO_EXAME_MIN.bioquimica)}, PCR ${fmt(PRAZO_EXAME_MIN.pcr_soro)})</span>
+      </div>`
+  }
+
+  // ── contraprova: pedido de inclusão no WhatsApp sem cartão (o ouvinte lê os grupos das clínicas) ──
+  const SUSPEITA_MIN = 15
+  function desenharSuspeitas() {
+    const caixa = $('suspeitas')
+    const ver = setor === 'cc' || setor === 'todos'
+    // some sozinha se já abriram cartão dessa clínica depois do pedido (casa por palavra do nome do grupo)
+    const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const GEN = new Set(['alpha', 'labs', 'clinica', 'veterinaria', 'veterinario', 'consultorio', 'hospital', 'animal', 'centro'])
+    const palavras = t => norm(t).split(/[^a-z0-9]+/).filter(w => w.length >= 5 && !GEN.has(w))
+    const temCartao = x => { const pg = palavras(x.grupo); return chamados.some(c => T(c.criado_em) >= T(x.quando) - 30 * 60000 && palavras((c.clinica || '') + ' ' + (c.pet || '')).some(w => pg.includes(w))) }
+    const lista = suspeitas.filter(x => (agora() - T(x.quando)) / 60000 >= SUSPEITA_MIN && !temCartao(x))
+    caixa.hidden = !ver || !lista.length
+    if (caixa.hidden) return
+    caixa.innerHTML = `<h3>⚠ Possível pedido de inclusão no WhatsApp SEM cartão (${lista.length})</h3>` + lista.map(x => `
+      <div class="suspeita" data-id="${x.id}">
+        <div><b>${esc((x.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, ''))}</b> · ${hm(x.quando)} · há ${fmt((agora() - T(x.quando)) / 60000)}<br><span class="mudo">“${esc(x.texto)}”</span></div>
+        <div class="acao"><button data-sus="registrada">Já abri o cartão</button><button class="leve" data-sus="nao_e_inclusao">Não é inclusão</button></div>
+      </div>`).join('')
+  }
+  $('suspeitas').addEventListener('click', async ev => {
+    const b = ev.target.closest('button[data-sus]'); if (!b) return
+    if (!(await garantirLogin())) return
+    const id = +b.closest('.suspeita').dataset.id
+    try {
+      if (DEMO) suspeitas = suspeitas.filter(x => x.id !== id)
+      else await rpc('inc_suspeita_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_status: b.dataset.sus })
+      toast('Registrado'); await carregar(); desenhar()
+    } catch (e) { toast(e.message) }
+  })
 
   // ── histórico: dia / semana / mês ──
   function desenharHistorico() {
@@ -219,7 +299,7 @@
       const trechos = []
       for (let i = 0; i < evs.length; i++) {
         const e = evs[i], prox = evs[i + 1]
-        if (e.para == null || e.para > 6) continue
+        if (e.para == null || e.para > 5) continue
         const fim = prox ? T(prox.quando) : (c.status === 'aberto' || c.status === 'sem_amostra' ? agora() : T(c.concluido_em))
         const min = (fim - T(e.quando)) / 60000
         const lim = e.para === 4 ? PRAZO_EXAME_MIN[c.setor] : ESCALA[1]
@@ -349,13 +429,14 @@
       c('KIRA', '639871', 'Ureia', 'bioquimica', 2, 31),
       c('REX', '639800', 'Colesterol', 'bioquimica', 7, 0, { status: 'concluido', concluido_em: min(15), criado_em: min(200) }),
     ]
+    suspeitas = [{ id: 1, quando: min(22), grupo: 'Alpha - Clínica de exemplo', texto: 'Podem incluir fósforo no exame do Zeus por favor?' }]
     eventos = chamados.flatMap(x => [{ chamado_id: x.id, quando: x.criado_em, para: 1, acao: 'abriu' }, { chamado_id: x.id, quando: x.etapa_desde, para: x.etapa, acao: 'avancou' }])
   }
   function demoRpc(nome, a) {
     if (nome === 'inc_buscar_req') return { req: a.p_num, pet: 'THOR', especie: 'Canino', clinica: 'Clínica de exemplo', entrada: new Date(agora() - 6 * 3600e3).toISOString(), exames: ['Hemograma', 'ALT', 'Creatinina'] }
     if (nome === 'inc_abrir') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: a.p_autorizado ? 2 : 1, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: !a.p_autorizado, aberto_por: a.p_nome, amostra_entrada: a.p_entrada }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: x.etapa }); return x.id }
     if (nome === 'inc_acao') {
-      const x = chamados.find(y => y.id === a.p_id); const prox = { cliente_autorizou: 2, escritorio_ok: 3, amostra_ok: 4, exame_liberado: 5, liberacao_final: 6, email_enviado: 7, sem_amostra: 1, cliente_avisado: 8, cancelar: 8 }[a.p_acao]
+      const x = chamados.find(y => y.id === a.p_id); const prox = { cliente_autorizou: 2, amostra_ok: 3, sem_amostra: 1, escritorio_ok: 4, exame_liberado: 5, encerrar: 7, cliente_avisado: 8, cancelar: 8 }[a.p_acao]
       x.status = prox === 7 ? 'concluido' : prox === 8 ? 'cancelado' : a.p_acao === 'sem_amostra' ? 'sem_amostra' : 'aberto'
       x.etapa = Math.min(prox, 7); x.etapa_desde = new Date().toISOString(); x.pausado = false; if (prox >= 7) x.concluido_em = x.etapa_desde
       eventos.push({ chamado_id: x.id, quando: x.etapa_desde, para: prox, acao: a.p_acao }); return x.status
@@ -368,6 +449,7 @@
   setInterval(desenhar, 15000)                         // relógio dos cartões (sem ir ao banco)
   if (SB) {
     SB.channel('inc_quadro').on('postgres_changes', { event: '*', schema: 'public', table: 'inc_chamados' }, () => carregar().then(desenhar))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inc_suspeitas' }, () => carregar().then(desenhar))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inc_eventos' }, () => {}).subscribe()
     setInterval(() => carregar().then(desenhar), 5 * 60000)   // rede de segurança se o tempo real cair
   }

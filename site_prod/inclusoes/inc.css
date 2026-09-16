@@ -133,3 +133,52 @@ td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .etp.estourou{color:var(--vermelho)}
 
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--texto);color:var(--chao);padding:10px 16px;border-radius:8px;font-weight:700;z-index:60}
+
+/* ===== layout v2 (16/set) ===== */
+main{padding:14px 22px 150px}
+.fluxo-cab{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.fluxo{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,1fr);gap:0}
+.fluxo li{position:relative;background:var(--painel);padding:10px 16px 10px 26px;display:grid;gap:2px;min-width:0;border-top:5px solid var(--c);clip-path:polygon(0 0,calc(100% - 14px) 0,100% 50%,calc(100% - 14px) 100%,0 100%,14px 50%)}
+.fluxo li:first-child{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 50%,calc(100% - 14px) 100%,0 100%);padding-left:16px;border-radius:8px 0 0 8px}
+.fluxo li.minha{background:var(--painel2)}
+.fluxo .n{display:flex;align-items:center;gap:8px}
+.fluxo .n i{font-style:normal;font-family:var(--mono);font-weight:600;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:var(--chao);font-size:13px}
+.fluxo .n span{color:var(--c);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:11px}
+.fluxo b{font-family:var(--disp);font-size:19px;font-weight:600;line-height:1.1}
+.fluxo small{font-size:12px;color:var(--mudo)}
+.fluxo .conta{position:absolute;top:8px;right:22px;font-family:var(--mono);font-size:20px;font-weight:600}
+.fluxo .conta.ruim{color:var(--vermelho)}
+.fluxo .volta{font-size:11.5px;color:var(--vermelho)}
+@media (max-width:900px){.fluxo{grid-template-columns:1fr}.fluxo li,.fluxo li:first-child{clip-path:none;border-radius:6px;padding-left:16px;margin-bottom:4px}}
+
+.vez-cab{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.vez-cab h2{margin:0}
+.vez-sub{color:var(--mudo);font-size:14px}
+.cartao .topo-c{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:4px;color:var(--chao);background:var(--c)}
+.cartao .tempo{grid-row:2/span 2}
+.lateral{display:grid;gap:16px;align-content:start}
+.bloco-lat h3{font-size:19px;color:var(--mudo);margin-bottom:8px}
+.grupo-setor{margin-bottom:10px}
+.grupo-setor .gs-cab{display:flex;justify-content:space-between;color:var(--c);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px 2px}
+.grupo-setor .lista-outros>div{grid-template-columns:1fr auto}
+.suspeitas{background:#2a1418;border:1px solid var(--vermelho);border-radius:10px;padding:12px;display:grid;gap:10px}
+.suspeitas h3{color:var(--vermelho);font-size:19px;margin:0}
+.suspeita{display:grid;gap:6px;font-size:14px;border-top:1px solid #4a2229;padding-top:8px}
+
+.kanban{display:grid;grid-template-columns:repeat(5,minmax(200px,1fr));gap:10px;overflow-x:auto}
+.coluna{background:var(--painel);border-radius:10px;padding:10px;border-top:5px solid var(--c);display:grid;gap:8px;align-content:start;min-height:200px}
+.coluna h3{font-size:18px;display:flex;justify-content:space-between;gap:6px}
+.coluna h3 span{color:var(--c);font-size:11px;letter-spacing:.06em;text-transform:uppercase;align-self:center}
+.mini{--estado:var(--amarelo);background:var(--painel2);border-left:6px solid var(--estado);border-radius:6px;padding:7px 9px;display:grid;gap:1px;font-size:13px}
+.mini b{font-family:var(--disp);font-size:19px;font-weight:700}
+.mini .t{font-family:var(--mono);color:var(--estado);font-weight:600}
+
+.legenda{position:fixed;left:0;right:0;bottom:0;background:#0a0f11;border-top:1px solid var(--linha);padding:8px 22px;display:grid;grid-template-columns:auto 1fr;gap:6px 18px;font-size:12.5px;z-index:40}
+.legenda .tit{font-family:var(--disp);font-size:16px;font-weight:700;color:var(--mudo);letter-spacing:.06em;text-transform:uppercase;grid-row:1/span 2;align-self:center}
+.legenda .linha1,.legenda .linha2{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}
+.legenda .cor{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:5px;background:var(--c)}
+.legenda b{color:var(--texto)}
+body.tv .legenda{font-size:14px}
+body.tv main{padding-bottom:170px}
+@media (max-width:900px){.legenda{position:static;grid-template-columns:1fr}}

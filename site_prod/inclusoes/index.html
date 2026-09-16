@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=1">
+<link rel="stylesheet" href="inc.css?v=2">
 </head>
 <body>
 <header class="topo">
@@ -32,23 +32,24 @@
 
 <main id="app">
   <section id="vQuadro">
-    <div class="trilho" id="trilho"></div>
-    <div class="barra-acoes">
+    <div class="fluxo-cab">
+      <div class="eyebrow">Caminho de uma inclusão — cada cor é um setor</div>
       <button class="btn-principal" id="btnNova">+ Nova inclusão</button>
-      <span class="aviso-conexao" id="conexao"></span>
     </div>
-    <div class="corpo">
+    <ol class="fluxo" id="fluxo"></ol>
+    <span class="aviso-conexao" id="conexao"></span>
+    <div class="corpo" id="corpoSetor">
       <div class="vez">
-        <h2 id="tituloVez">Sua vez</h2>
+        <div class="vez-cab"><h2 id="tituloVez">Sua vez</h2><span class="vez-sub" id="subVez"></span></div>
         <div class="cartoes" id="cartoes"></div>
       </div>
-      <aside class="outros">
-        <h3>Aguardando outros setores</h3>
-        <div class="lista-outros" id="outros"></div>
-        <h3 class="mt">Concluídas hoje</h3>
-        <div class="lista-outros" id="concluidas"></div>
+      <aside class="lateral">
+        <div class="suspeitas" id="suspeitas" hidden></div>
+        <div class="bloco-lat"><h3>Aguardando outros setores</h3><div id="outros"></div></div>
+        <div class="bloco-lat"><h3>Concluídas hoje</h3><div class="lista-outros" id="concluidas"></div></div>
       </aside>
     </div>
+    <div class="kanban" id="kanban" hidden></div>
   </section>
 
   <section id="vHist" hidden>
@@ -61,6 +62,8 @@
     <div class="tabela"><table><thead><tr><th>Aberta</th><th>Req.</th><th>Pet · clínica</th><th>Exame</th><th>Status</th><th>Tempo por etapa</th><th>Total</th></tr></thead><tbody id="histLinhas"></tbody></table></div>
   </section>
 </main>
+
+<footer class="legenda" id="legenda"></footer>
 
 <div class="explode" id="explode" hidden>
   <div class="grande" id="explodeTitulo"></div>
@@ -129,6 +132,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=1"></script>
+<script src="inc.js?v=2"></script>
 </body>
 </html>
