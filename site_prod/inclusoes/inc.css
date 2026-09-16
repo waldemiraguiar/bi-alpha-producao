@@ -255,3 +255,31 @@ body.tv main{padding-bottom:90px}
 .hf{font-size:13px;color:var(--mudo);margin-top:3px}
 .hf.ok{color:var(--ok)}
 .hf.ruim{color:var(--vermelho);font-weight:700}
+
+.info{font-size:13.5px;margin-top:4px;color:var(--mudo)}
+.info.ruim{color:var(--vermelho)}
+.info.ok{color:var(--ok)}
+.info b{color:inherit}
+.so-setor{font-size:12px;color:var(--fraco);font-style:italic}
+.badge{display:inline-block;min-width:20px;padding:0 6px;margin-left:4px;border-radius:999px;background:var(--vermelho);color:#fff;font-family:var(--mono);font-size:13px}
+.suspeitas .leve{justify-self:start;background:transparent;color:var(--texto);border:1px solid var(--vermelho);border-radius:6px;padding:4px 10px}
+#vRast{display:grid;gap:14px}
+.rast-topo h2{font-size:30px}
+.rast-filtros{display:flex;gap:6px}
+.rast-filtros button{background:var(--painel);color:var(--mudo);border:1px solid var(--linha);border-radius:8px;padding:6px 12px}
+.rast-filtros button.on{background:var(--texto);color:var(--chao)}
+.rast-lista{display:grid;gap:8px}
+.rast{background:var(--painel);border-radius:10px;padding:10px 14px;border-left:5px solid var(--tec);display:grid;gap:4px}
+.rast.amo{border-left-color:var(--fraco)}
+.r-cab{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;font-size:14px}
+.r-tipo{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mudo)}
+.r-txt{font-size:15px}
+.st{font-size:12px;padding:1px 8px;border-radius:999px;background:var(--painel2);color:var(--mudo)}
+.st.ok{color:var(--ok)}
+.st.ruim{color:#fff;background:var(--vermelho)}
+.vermelho{color:var(--vermelho)}
+.setor-box{display:grid;gap:12px}
+.linha-botoes.col{flex-direction:column;align-items:stretch}
+.equipe-lista{display:grid;gap:6px;max-height:55vh;overflow:auto}
+.eq{display:flex!important;justify-content:space-between;align-items:center;gap:10px;color:var(--texto)!important;font-size:15px!important}
+.eq select{width:auto}

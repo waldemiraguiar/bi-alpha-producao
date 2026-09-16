@@ -28,6 +28,7 @@
     4: { nome: 'Lançar no HF', dono: 'esc', prazo: '10 min' },
     5: { nome: 'Exames feitos e digitados', dono: 'tec', prazo: 'por exame' },
     6: { nome: 'Liberar e enviar e-mail', dono: 'esc', prazo: '10 min' },
+    7: { nome: 'Avisar a clínica: laudo enviado', dono: 'cc', prazo: '10 min' },
   }
   const ETAPA_EXAME = 5
   const CLIENTE = {
@@ -40,7 +41,7 @@
   const PRAZO_EXAME_MIN = { hemato: 120, bioquimica: 240, urina_fezes: 240, pcr_soro: 4320, cito_histo: 7200, outros: 1440 }
   const VALIDADE_H = { hemato: 24, bioquimica: 168, urina_fezes: 24, pcr_soro: 168, cito_histo: null, outros: 168 }
   const NOME_SETOR = { hemato: 'Hematologia', bioquimica: 'Bioquímica', urina_fezes: 'Urina / Fezes', pcr_soro: 'PCR / Sorologia', cito_histo: 'Citologia / Histo', outros: 'Outros' }
-  const LEMBRETE_CLIENTE_MIN = 120      // aguardando cliente há mais que isso → volta a piscar para o atendimento ao cliente
+  const LEMBRETE_CLIENTE_MIN = 30       // Thailan 16/set: clínica informada e sem resposta há 30 min → alerta para cobrar de novo
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
@@ -71,7 +72,7 @@
     if (DEMO) { if (!chamados.length) demoDados(); return }
     try {
       const lim = new Date(agora() - 31 * 864e5).toISOString()
-      const abertos = await SB.from('inc_chamados').select('*').in('status', ['aberto', 'sem_amostra'])
+      const abertos = await SB.from('inc_chamados').select('*').in('status', ['aberto', 'sem_amostra', 'enviado'])
       const recentes = await SB.from('inc_chamados').select('*').gte('criado_em', lim).order('criado_em', { ascending: false }).range(0, 4999)
       if (abertos.error) throw abertos.error
       const mapa = new Map(); for (const c of [...(abertos.data || []), ...(recentes.data || [])]) mapa.set(c.id, c)
@@ -82,7 +83,7 @@
         const { data } = await SB.from('inc_eventos').select('*').in('chamado_id', ids.slice(i, i + 300)).order('quando')
         eventos = eventos.concat(data || [])
       }
-      const sp = await SB.from('inc_suspeitas').select('*').eq('status', 'aberta').order('quando', { ascending: false }).range(0, 199)
+      const sp = await SB.from('inc_suspeitas').select('*').gte('quando', new Date(agora() - 8 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
       suspeitas = sp.error ? [] : (sp.data || [])
       $('conexao').textContent = ''
     } catch (e) {
@@ -139,26 +140,70 @@
       const r = data && data[0]
       if (error || !r || !r.ok) { $('criarErro').textContent = (r && r.erro) || 'Não consegui criar. Tente de novo.'; return }
       sessao = { nome, senha: s1, ate: Date.now() + 12 * 3600e3 }
+      try { await rpc('inc_definir_setor', { p_nome: nome, p_senha: s1, p_setor: $('criarSetor').value }); sessao.setorInc = $('criarSetor').value } catch {}
       gravarLocal('inc_sessao', JSON.stringify(sessao)); gravarLocal('inc_ultimo_nome', nome)
-      $('dlgCriar').close(); desenharLogin(); toast(`Login criado. Bem-vindo, ${nome}`)
+      $('dlgCriar').close(); desenharLogin(); desenhar(); toast(`Login criado. Bem-vindo, ${nome}`)
       pedirLogin._res && pedirLogin._res(true)
     } catch (e) { $('criarErro').textContent = 'Sem conexão. Tente de novo.' }
     finally { $('criarOk').disabled = false }
   })
-  async function garantirLogin() { if (sessao && sessao.ate > Date.now()) return true; return pedirLogin() }
-  function desenharLogin() { $('btnLogin').textContent = sessao ? `${sessao.nome} · Sair` : 'Entrar' }
+  async function garantirLogin() {
+    if (!(sessao && sessao.ate > Date.now())) { if (!(await pedirLogin())) return false }
+    return garantirSetor()
+  }
+  // cada login mexe só no SEU setor (Thailan 16/set). Sem setor ainda → a pessoa escolhe uma vez; admin corrige.
+  async function garantirSetor() {
+    if (DEMO) { sessao.setorInc = 'admin'; desenharLogin(); return true }
+    if (!sessao.setorInc) {
+      try { sessao.setorInc = await rpc('inc_meu_setor', { p_nome: sessao.nome, p_senha: sessao.senha }) || '' } catch (e) { toast(e.message); return false }
+      gravarLocal('inc_sessao', JSON.stringify(sessao))
+    }
+    if (sessao.setorInc) { desenharLogin(); return true }
+    $('dlgSetor').showModal()
+    return new Promise(res => { garantirSetor._res = res })
+  }
+  document.querySelectorAll('#dlgSetor [data-set]').forEach(b => b.addEventListener('click', async () => {
+    try {
+      await rpc('inc_definir_setor', { p_nome: sessao.nome, p_senha: sessao.senha, p_setor: b.dataset.set })
+      sessao.setorInc = b.dataset.set; gravarLocal('inc_sessao', JSON.stringify(sessao))
+      $('dlgSetor').close(); desenharLogin(); desenhar(); toast(`Setor definido: ${SETORES[b.dataset.set].nome}`)
+      garantirSetor._res && garantirSetor._res(true)
+    } catch (e) { $('setorErro').textContent = e.message }
+  }))
+  function desenharLogin() {
+    const set = sessao && sessao.setorInc ? (sessao.setorInc === 'admin' ? ' (admin)' : ` (${SETORES[sessao.setorInc]?.nome.toLowerCase() || ''})`) : ''
+    $('btnLogin').textContent = sessao ? `${sessao.nome}${set} · Sair` : 'Entrar'
+    $('btnEquipe').hidden = !(sessao && sessao.setorInc === 'admin' && !DEMO)
+  }
+  // ── admin: setor de cada pessoa ──
+  $('btnEquipe').addEventListener('click', async () => {
+    try {
+      const lista = await rpc('inc_equipe_list', { p_nome: sessao.nome, p_senha: sessao.senha })
+      const opts = v => ['', 'cc', 'tec', 'esc', 'admin'].map(k => `<option value="${k}" ${k === (v || '') ? 'selected' : ''}>${k === '' ? '— sem setor —' : k === 'admin' ? 'Administrador (todos)' : SETORES[k].nome}</option>`).join('')
+      $('equipeLista').innerHTML = (lista || []).map(p => `<label class="eq"><span>${esc(p.nome)}</span><select data-nome="${esc(p.nome)}">${opts(p.setor)}</select></label>`).join('')
+      $('dlgEquipe').showModal()
+    } catch (e) { toast(e.message) }
+  })
+  $('equipeLista').addEventListener('change', async ev => {
+    const sel = ev.target.closest('select'); if (!sel || !sel.value) return
+    try { await rpc('inc_equipe_set', { p_nome: sessao.nome, p_senha: sessao.senha, p_alvo: sel.dataset.nome, p_setor: sel.value }); toast(`${sel.dataset.nome}: ${sel.options[sel.selectedIndex].text}`) } catch (e) { toast(e.message) }
+  })
   $('btnLogin').addEventListener('click', () => {
-    if (sessao) { sessao = null; gravarLocal('inc_sessao', null); desenharLogin(); toast('Saiu') } else pedirLogin()
+    if (sessao) { sessao = null; gravarLocal('inc_sessao', null); desenharLogin(); desenhar(); toast('Saiu') } else garantirLogin().then(() => desenhar())
   })
   document.querySelectorAll('dialog [data-fechar]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()))
 
   // ── estado visual de cada cartão ──
   function minutosNaEtapa(c) { return (agora() - T(c.etapa_desde)) / 60000 }
-  function donoAtual(c) { return c.status === 'sem_amostra' ? 'cc' : ETAPAS[c.etapa]?.dono }
+  function donoAtual(c) { return c.status === 'sem_amostra' || c.status === 'enviado' ? 'cc' : ETAPAS[c.etapa]?.dono }
+  const ativo = c => c.status === 'aberto' || c.status === 'sem_amostra' || c.status === 'enviado'
+  const etapaVisivel = c => c.status === 'sem_amostra' ? 1 : c.status === 'enviado' ? 7 : c.etapa
+  // última vez que a clínica foi informada (cada "Mensagem enviada" / "Cobrei de novo" reinicia a contagem)
+  function ultimoEvento(c, acao) { const ev = eventos.filter(e => e.chamado_id === c.id && e.acao === acao).sort((a, b) => T(b.quando) - T(a.quando))[0]; return ev || null }
   function estado(c) {
     if (c.hf_alerta) return 's-v2'
     const m = minutosNaEtapa(c)
-    if (c.pausado) return m >= LEMBRETE_CLIENTE_MIN ? 's-a2' : 's-p'
+    if (c.pausado) { const u = ultimoEvento(c, 'aguardando_clinica'); const mm = u ? (agora() - T(u.quando)) / 60000 : m; return mm >= LEMBRETE_CLIENTE_MIN ? 's-v1' : 's-p' }
     if (c.status === 'sem_amostra') return m >= ESCALA[1] ? 's-v1' : 's-a2'
     const vence = amostraPct(c) >= 80
     if (c.etapa === ETAPA_EXAME) {
@@ -177,11 +222,14 @@
   }
   const ROTULO = { 's-a1': 'no prazo', 's-a2': 'atenção', 's-v1': 'estourou · protocolado', 's-v2': 'estourado', 's-x': 'EXPLODIU', 's-p': 'aguardando cliente' }
   function botoes(c) {
+    const dono = donoAtual(c)
+    if (sessao && sessao.setorInc && sessao.setorInc !== 'admin' && sessao.setorInc !== dono) return `<span class="so-setor">ação de ${SETORES[dono].nome}</span>`
+    if (c.status === 'enviado') return `<button data-acao="avisou_envio">Clínica avisada do envio · concluir</button>`
     if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Clínica avisada · encerrar</button>`
     const cancelar = `<button class="leve" data-acao="cancelar">Cancelar</button>`
     switch (c.etapa) {
       case 2: return `<button data-acao="amostra_ok">Tem amostra suficiente</button><button class="nao" data-acao="sem_amostra">Não tem amostra → avisar clínica</button>${cancelar}`
-      case 3: return `<button data-acao="clinica_confirmou">${c.cliente_status === 'autorizou' ? 'Clínica avisada · seguir' : 'Clínica autorizou · seguir'}</button>${c.pausado ? '' : '<button class="leve" data-acao="aguardando_clinica">Mensagem enviada · aguardando clínica</button>'}<button class="nao" data-acao="clinica_desistiu">Clínica não quer · cancelar</button>`
+      case 3: return `<button data-acao="clinica_confirmou">${c.cliente_status === 'autorizou' ? 'Clínica avisada · seguir' : 'Clínica autorizou · seguir'}</button><button class="leve" data-acao="aguardando_clinica">${c.pausado ? 'Cobrei a clínica de novo' : 'Mensagem enviada · aguardando clínica'}</button><button class="nao" data-acao="clinica_desistiu">Clínica não quer · cancelar</button>`
       case 4: return `<button data-acao="escritorio_ok">${c.novo_numero ? 'Lançado no HF com NOVO número' : 'Lançado no HF'}</button>${cancelar}`
       case 5: return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${cancelar}`
       case 6: return `<button data-acao="encerrar">Liberado e e-mail enviado · encerrar</button>${cancelar}`
@@ -192,15 +240,17 @@
   // ── desenho ──
   function desenhar() {
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos'
-    $('vQuadro').hidden = hist; $('vHist').hidden = !hist
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast'
+    $('vQuadro').hidden = hist || rast; $('vHist').hidden = !hist; $('vRast').hidden = !rast
     desenharLegenda()
+    desenharRastreamento()
     if (hist) return desenharHistorico()
-    const abertos = chamados.filter(c => c.status === 'aberto' || c.status === 'sem_amostra')
+    if (rast) return
+    const abertos = chamados.filter(ativo)
 
     // caminho da inclusão: 5 etapas, cor = dono, número = quantas estão ali (vermelho se alguma estourou)
     $('fluxo').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
-      const s = SETORES[e.dono], aqui = abertos.filter(c => c.etapa === +n && c.status === 'aberto')
+      const s = SETORES[e.dono], aqui = abertos.filter(c => etapaVisivel(c) === +n)
       const ruins = aqui.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
       return `<li class="${e.dono === setor ? 'minha' : ''}" style="--c:${s.cor}">
         <span class="conta ${ruins ? 'ruim' : ''}">${aqui.length}</span>
@@ -239,22 +289,40 @@
     explodir(meus)
   }
   function cartaoHTML(c) {
-    const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[c.etapa]
+    const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[etapaVisivel(c)]
     const prazoTxt = c.pausado ? 'esperando a clínica' : c.status === 'sem_amostra' ? 'avisar o cliente' : c.etapa === ETAPA_EXAME ? `prazo ${fmt(PRAZO_EXAME_MIN[c.setor])}` : ROTULO[st]
     const amostra = VALIDADE_H[c.setor] && c.amostra_entrada && pct >= 50
       ? `<div class="amostra ${pct >= 80 ? 'alerta' : ''}">amostra ${pct}% da validade<span class="barra"><i style="width:${pct}%"></i></span></div>` : ''
     return `<article class="cartao ${st}" data-id="${c.id}" title="aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}${c.obs ? ' · ' + esc(c.obs) : ''}">
       <div class="c-esq">
-        <div class="c-etapa">${c.status === 'sem_amostra' ? '<span class="selo">sem amostra</span>' : `${c.etapa} · ${e ? e.nome : ''}`}${c.novo_numero ? ` <span class="selo novo">${c.novo_req ? 'novo nº ' + esc(c.novo_req) : '🆕 amostra de outro dia: novo nº + nova requisição'}</span>` : ''}</div>
+        <div class="c-etapa">${c.status === 'sem_amostra' ? '<span class="selo">sem amostra</span>' : `${etapaVisivel(c)} · ${e ? e.nome : ''}`}${c.novo_numero ? ` <span class="selo novo">${c.novo_req ? 'novo nº ' + esc(c.novo_req) : '🆕 amostra de outro dia: novo nº + nova requisição'}</span>` : ''}</div>
         <div class="c-pet">${esc(c.pet || 'sem nome')} <span class="req">${esc(c.req)}</span></div>
         <div class="c-exame">+ ${esc(c.exame)}</div>
         <div class="c-clin">${esc(c.clinica || '')} · ${NOME_SETOR[c.setor] || ''}${c.cliente_status && c.cliente_status !== 'autorizou' && c.etapa <= 3 ? ` · <b class="cli">cliente ${CLIENTE[c.cliente_status] || ''}</b>` : ''}</div>
+        ${infoExtra(c)}
         ${hfLinha(c)}
         ${amostra}
       </div>
       <div class="c-dir"><div class="tempo">${fmt(m)}</div><div class="rot">${prazoTxt}</div></div>
       <div class="acao">${botoes(c)}</div>
     </article>`
+  }
+  function infoExtra(c) {
+    const out = []
+    if (c.status === 'sem_amostra') {
+      const ev = ultimoEvento(c, 'sem_amostra')
+      out.push(`<div class="info ruim">🔬 Técnica: <b>${esc(ev?.obs || 'sem motivo escrito')}</b>${ev ? ` · ${esc(ev.por)} às ${hm(ev.quando)}` : ''} → avisar a clínica</div>`)
+    }
+    if (c.etapa === 3 && c.pausado && c.status === 'aberto') {
+      const ev = ultimoEvento(c, 'aguardando_clinica')
+      const mm = ev ? (agora() - T(ev.quando)) / 60000 : 0
+      out.push(`<div class="info ${mm >= LEMBRETE_CLIENTE_MIN ? 'ruim' : ''}">🕒 Clínica informada que HÁ amostra${ev ? ` às ${hm(ev.quando)} (${esc(ev.por)})` : ''} · aguardando autorização há ${fmt(mm)}${mm >= LEMBRETE_CLIENTE_MIN ? ' — <b>cobrar a clínica de novo</b>' : ''}</div>`)
+    }
+    if (c.status === 'enviado') {
+      const ev = ultimoEvento(c, 'encerrar')
+      out.push(`<div class="info ok">📧 Escritório liberou e enviou o e-mail${ev ? ` às ${hm(ev.quando)} (${esc(ev.por)})` : ''} → avisar a clínica</div>`)
+    }
+    return out.join('')
   }
   // FASE 2: o que o HF mostra sobre este cartão (conferência automática a cada 30 min)
   function hfLinha(c) {
@@ -266,7 +334,7 @@
   function desenharKanban(abertos) {
     $('kanban').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
       const s = SETORES[e.dono]
-      const lst = abertos.filter(c => (c.status === 'sem_amostra' ? 1 : c.etapa) === +n).sort((a, b) => T(a.etapa_desde) - T(b.etapa_desde))
+      const lst = abertos.filter(c => etapaVisivel(c) === +n).sort((a, b) => T(a.etapa_desde) - T(b.etapa_desde))
       return `<div class="coluna" style="--c:${s.cor}"><h3>${n}. ${e.nome}<span>${s.nome}</span></h3>
         ${lst.map(c => `<div class="mini ${estado(c)}"><b>${esc(c.pet || '')}</b><span>${esc(c.req)} · +${esc(c.exame)}</span><span class="mudo">${esc(c.clinica || '')}</span><span class="t">${c.status === 'sem_amostra' ? 'SEM AMOSTRA · ' : ''}${c.pausado ? 'aguardando cliente ' : ''}${fmt(minutosNaEtapa(c))}</span></div>`).join('') || '<span class="mudo">—</span>'}</div>`
     }).join('')
@@ -294,7 +362,7 @@
       <span><i class="pt" style="--c:var(--amarelo)"></i>até ${b} min</span>
       <span><i class="pt" style="--c:var(--vermelho)"></i>${b} min atrasado · ${c} apita · ${d} explode</span>
       <span><i class="pt" style="--c:var(--pausa)"></i>esperando a clínica (cobrar após ${fmt(LEMBRETE_CLIENTE_MIN)})</span>
-      <span class="mudo">· cartão só sai com o e-mail enviado</span>
+      <span class="mudo">· cartão só sai quando a clínica é avisada do envio</span>
       <span class="mudo">· 🔎 o sistema confere com o HF a cada 30 min</span>`
   }
 
@@ -302,21 +370,35 @@
   const SUSPEITA_MIN = 15
   function desenharSuspeitas() {
     const caixa = $('suspeitas')
-    const ver = setor === 'cc' || setor === 'todos'
-    // some sozinha se já abriram cartão dessa clínica depois do pedido (casa por palavra do nome do grupo)
-    const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    const GEN = new Set(['alpha', 'labs', 'clinica', 'veterinaria', 'veterinario', 'consultorio', 'hospital', 'animal', 'centro'])
-    const palavras = t => norm(t).split(/[^a-z0-9]+/).filter(w => w.length >= 5 && !GEN.has(w))
-    const temCartao = x => temCartaoPara(x)
-    const _antigo = x => { const pg = palavras(x.grupo); return chamados.some(c => T(c.criado_em) >= T(x.quando) - 30 * 60000 && palavras((c.clinica || '') + ' ' + (c.pet || '')).some(w => pg.includes(w))) }
-    const lista = suspeitas.filter(x => (agora() - T(x.quando)) / 60000 >= SUSPEITA_MIN && !temCartao(x))
-    caixa.hidden = !ver || !lista.length
+    const pend = pendentesInclusao()
+    caixa.hidden = !(setor === 'cc') || !pend.length
     if (caixa.hidden) return
-    caixa.innerHTML = `<h3>⚠ Possível pedido de inclusão no WhatsApp SEM cartão (${lista.length})</h3>` + lista.map(x => `
-      <div class="suspeita" data-id="${x.id}">
-        <div><b>${esc((x.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, ''))}</b> · ${hm(x.quando)} · há ${fmt((agora() - T(x.quando)) / 60000)}<br><span class="mudo">“${esc(x.texto)}”</span></div>
-        <div class="acao"><button data-sus="registrada">Já abri o cartão</button><button class="leve" data-sus="nao_e_inclusao">Não é inclusão / cliente desistiu</button></div>
-      </div>`).join('')
+    caixa.innerHTML = `<h3>⚠ ${pend.length} pedido${pend.length > 1 ? 's' : ''} de inclusão no WhatsApp sem cartão</h3><button class="leve" id="irRast">Ver em Rastreamento de Inclusões →</button>`
+    $('irRast').onclick = () => { setor = 'rast'; desenhar() }
+  }
+  const pendentesInclusao = () => suspeitas.filter(x => x.status === 'aberta' && (x.tipo || 'inclusao') === 'inclusao' && (agora() - T(x.quando)) / 60000 >= SUSPEITA_MIN && !temCartaoPara(x))
+  // ── aba RASTREAMENTO DE INCLUSÕES (pedido do Thailan): tudo que o sistema captou no WhatsApp ──
+  let periodoRast = 'dia'
+  function desenharRastreamento() {
+    const dias = periodoRast === 'dia' ? 0 : 7
+    const ini = new Date(); ini.setHours(0, 0, 0, 0); ini.setDate(ini.getDate() - dias)
+    const lista = suspeitas.filter(x => T(x.quando) >= ini.getTime()).sort((a, b) => T(b.quando) - T(a.quando))
+    const pend = pendentesInclusao().length
+    document.querySelectorAll('.rast-filtros button').forEach(b => b.classList.toggle('on', b.dataset.per === periodoRast))
+    $('rastResumo').innerHTML = `<div><b>${lista.filter(x => (x.tipo || 'inclusao') === 'inclusao').length}</b><span>🧪 pedidos de inclusão</span></div><div><b>${lista.filter(x => x.tipo === 'amostra').length}</b><span>🔬 mensagens falando de amostra</span></div><div><b class="${pend ? 'vermelho' : ''}">${pend}</b><span>sem cartão há +${SUSPEITA_MIN} min</span></div>`
+    $('rastLista').innerHTML = lista.length ? lista.map(x => {
+      const tipo = (x.tipo || 'inclusao') === 'inclusao'
+      const status = x.status === 'aberta' ? (tipo && pendentesInclusao().some(p => p.id === x.id) ? '<span class="st ruim">sem cartão</span>' : '<span class="st">aberta</span>')
+        : x.status === 'registrada' ? `<span class="st ok">tratada · ${esc(x.resolvido_por || '')} ${x.resolvido_em ? hm(x.resolvido_em) : ''}</span>`
+        : `<span class="st">não é inclusão · ${esc(x.resolvido_por || '')} ${x.resolvido_em ? hm(x.resolvido_em) : ''}</span>`
+      return `<div class="rast ${tipo ? 'inc' : 'amo'}" data-id="${x.id}">
+        <div class="r-cab"><span class="r-tipo">${tipo ? '🧪 Pedido de inclusão' : '🔬 Fala de amostra'}</span><b>${esc((x.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, ''))}</b><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)} · ${esc(x.autor || '')}</span>${status}</div>
+        <div class="r-txt">“${esc(x.texto)}”</div>
+        ${x.status === 'aberta' ? `<div class="acao"><button data-sus="registrada">${tipo ? 'Já abri o cartão' : 'Visto · tratado'}</button>${tipo ? '<button data-sus="abrir">Abrir cartão agora</button>' : ''}<button class="leve" data-sus="nao_e_inclusao">Não é inclusão / cliente desistiu</button></div>` : ''}
+      </div>`
+    }).join('') : '<div class="vazio">Nada captado no período.</div>'
+    const b = document.querySelector('#abas button[data-setor="rast"]')
+    if (b) b.innerHTML = `Rastreamento de Inclusões${pend ? ` <span class="badge">${pend}</span>` : ''}`
   }
   function temCartaoPara(x) {
     const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -325,14 +407,20 @@
     const pg = palavras(x.grupo)
     return chamados.some(c => T(c.criado_em) >= T(x.quando) - 30 * 60000 && palavras((c.clinica || '') + ' ' + (c.pet || '')).some(w => pg.includes(w)))
   }
-  $('suspeitas').addEventListener('click', async ev => {
+  $('rastLista').addEventListener('click', async ev => {
     const b = ev.target.closest('button[data-sus]'); if (!b) return
     if (!(await garantirLogin())) return
-    const id = +b.closest('.suspeita').dataset.id
+    const id = +b.closest('.rast').dataset.id
+    if (b.dataset.sus === 'abrir') {
+      const x = suspeitas.find(y => y.id === id)
+      setor = 'cc'; desenhar(); $('btnNova').click()
+      setTimeout(() => { $('nClinica').value = (x?.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').trim(); $('nObs').value = x ? `WhatsApp ${hm(x.quando)}: ${x.texto.slice(0, 80)}` : '' }, 150)
+      return
+    }
     // "Já abri o cartão" sem cartão de verdade = a omissão continua escondida (caso Bandeirantes 16/set) → confere antes
     if (b.dataset.sus === 'registrada') {
       const x = suspeitas.find(y => y.id === id)
-      if (x && !temCartaoPara(x)) {
+      if (x && (x.tipo || 'inclusao') === 'inclusao' && !temCartaoPara(x)) {
         if (!confirm('Não achei nenhum cartão dessa clínica aberto depois do pedido.\n\nOK = abrir o cartão agora\nCancelar = voltar')) return
         $('btnNova').click()
         setTimeout(() => { $('nClinica').value = (x.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').trim() }, 150)
@@ -340,7 +428,7 @@
       }
     }
     try {
-      if (DEMO) suspeitas = suspeitas.filter(x => x.id !== id)
+      if (DEMO) { const x = suspeitas.find(y => y.id === id); if (x) { x.status = b.dataset.sus; x.resolvido_por = 'DEMO'; x.resolvido_em = new Date().toISOString() } }
       else await rpc('inc_suspeita_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_status: b.dataset.sus })
       toast('Registrado'); await carregar(); desenhar()
     } catch (e) { toast(e.message) }
@@ -358,8 +446,8 @@
       const trechos = []
       for (let i = 0; i < evs.length; i++) {
         const e = evs[i], prox = evs[i + 1]
-        if (e.para == null || e.para > 6) continue
-        const fim = prox ? T(prox.quando) : (c.status === 'aberto' || c.status === 'sem_amostra' ? agora() : T(c.concluido_em))
+        if (e.para == null || e.para > 7) continue
+        const fim = prox ? T(prox.quando) : (ativo(c) ? agora() : T(c.concluido_em))
         const min = (fim - T(e.quando)) / 60000
         const lim = e.para === ETAPA_EXAME ? PRAZO_EXAME_MIN[c.setor] : ESCALA[1]
         const estourou = min > lim
@@ -413,7 +501,7 @@
       if (obs == null) return
     }
     if (acao === 'escritorio_ok' && card && card.novo_numero) {
-      obs = await pedirMotivo('Qual o NOVO número da amostra no HF?')
+      obs = await pedirMotivo('Qual o NOVO número da amostra no HF?', 'Número')
       if (obs == null) return
     }
     b.disabled = true
@@ -423,11 +511,12 @@
     } catch (e) {
       b.disabled = false
       if (/não conferem/.test(e.message)) { sessao = null; gravarLocal('inc_sessao', null); desenharLogin() }
+      if (/outro setor|defina o seu setor/.test(e.message)) { sessao.setorInc = ''; gravarLocal('inc_sessao', JSON.stringify(sessao)) }
       toast(e.message)
     }
   })
-  function pedirMotivo(titulo) {
-    $('motivoTitulo').textContent = titulo; $('motivoTexto').value = ''; $('motivoErro').textContent = ''
+  function pedirMotivo(titulo, rotulo = 'Motivo') {
+    $('motivoTitulo').textContent = titulo; $('motivoRotulo').textContent = rotulo; $('motivoTexto').value = ''; $('motivoErro').textContent = ''
     $('dlgMotivo').showModal()
     return new Promise(res => {
       const ok = e => { e.preventDefault(); const v = $('motivoTexto').value.trim(); if (!v) { $('motivoErro').textContent = 'Escreva o motivo.'; return } limpar(); $('dlgMotivo').close(); res(v) }
@@ -492,6 +581,7 @@
   // ── navegação / TV ──
   document.querySelectorAll('#abas button').forEach(b => b.addEventListener('click', () => { setor = b.dataset.setor; gravarLocal('inc_setor', setor); desenhar() }))
   document.querySelectorAll('.hist-filtros button').forEach(b => b.addEventListener('click', () => { periodo = b.dataset.per; desenhar() }))
+  document.querySelectorAll('.rast-filtros button').forEach(b => b.addEventListener('click', () => { periodoRast = b.dataset.per; desenhar() }))
   function modoTV(on) { document.body.classList.toggle('tv', on); $('btnTV').textContent = on ? 'Sair do modo TV' : 'Modo TV'; if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}) }
   $('btnTV').addEventListener('click', () => modoTV(!document.body.classList.contains('tv')))
   if (qs.get('tv') === '1') modoTV(true)
@@ -508,24 +598,30 @@
       c('MEL', '640087', 'Frutosamina', 'bioquimica', 2, 8),
       c('TOBY', '640005', 'SDMA', 'bioquimica', 5, 4),
       c('NINA', '640021', 'PCR Erliquiose', 'pcr_soro', 4, 1560),
-      c('LUNA', '640150', 'T4 total', 'bioquimica', 3, 22, { pausado: true, cliente_status: 'perguntou_preco' }),
+      c('LUNA', '640150', 'T4 total', 'bioquimica', 3, 45, { pausado: true, cliente_status: 'perguntou_preco' }),
+      c('PIPOCA', '640171', 'Lipase', 'bioquimica', 1, 5, { status: 'sem_amostra' }),
+      c('ZECA', '640133', 'Albumina', 'bioquimica', 7, 3, { status: 'enviado' }),
       c('FRED', '640099', 'Fósforo', 'bioquimica', 4, 6, { novo_numero: true, amostra_entrada: min(26 * 60) }),
       c('KIRA', '639871', 'Ureia', 'bioquimica', 2, 31),
       c('REX', '639800', 'Colesterol', 'bioquimica', 7, 0, { status: 'concluido', concluido_em: min(15), criado_em: min(200) }),
     ]
-    suspeitas = [{ id: 1, quando: min(22), grupo: 'Alpha - Clínica de exemplo', texto: 'Podem incluir fósforo no exame do Zeus por favor?' }]
+    suspeitas = [{ id: 1, status: 'aberta', tipo: 'inclusao', quando: min(22), grupo: 'Alpha - Pet Sorriso', autor: 'Dra. Ana', texto: 'Podem incluir fósforo no exame do Zeus por favor?' },
+      { id: 2, status: 'aberta', tipo: 'amostra', quando: min(9), grupo: 'Alpha - Vet Horizonte', autor: 'Recepção', texto: 'Ainda tem amostra da Mel? Queria ver uma coisa' },
+      { id: 3, status: 'registrada', tipo: 'inclusao', quando: min(95), grupo: 'Alpha - Bandeirantes', autor: 'Dra.', texto: 'Pode acrescentar fibrinogênio e colesterol', resolvido_por: 'DEMO', resolvido_em: min(80) }]
     eventos = chamados.flatMap(x => [{ chamado_id: x.id, quando: x.criado_em, para: 1, acao: 'abriu' }, { chamado_id: x.id, quando: x.etapa_desde, para: x.etapa, acao: 'avancou' }])
+    eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
   }
   function demoRpc(nome, a) {
     if (nome === 'inc_buscar_req') return { req: a.p_num, pet: 'THOR', especie: 'Canino', clinica: 'Clínica de exemplo', entrada: new Date(agora() - 6 * 3600e3).toISOString(), exames: ['Hemograma', 'ALT', 'Creatinina'] }
     if (nome === 'inc_abrir2') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: 2, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: false, aberto_por: a.p_nome, amostra_entrada: a.p_entrada, cliente_status: a.p_cliente, novo_numero: a.p_novo_numero }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: 2 }); return x.id }
     if (nome === 'inc_abrir') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: a.p_autorizado ? 2 : 1, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: !a.p_autorizado, aberto_por: a.p_nome, amostra_entrada: a.p_entrada }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: x.etapa }); return x.id }
     if (nome === 'inc_acao') {
-      const x = chamados.find(y => y.id === a.p_id); const prox = { amostra_ok: 3, sem_amostra: 1, aguardando_clinica: 3, clinica_confirmou: 4, clinica_desistiu: 8, escritorio_ok: 5, exames_digitados: 6, encerrar: 7, cliente_avisado: 8, cancelar: 8 }[a.p_acao]
-      x.status = prox === 7 ? 'concluido' : prox === 8 ? 'cancelado' : a.p_acao === 'sem_amostra' ? 'sem_amostra' : 'aberto'
-      x.etapa = Math.min(prox, 7); if (a.p_acao !== 'aguardando_clinica') x.etapa_desde = new Date().toISOString(); x.pausado = a.p_acao === 'aguardando_clinica'; if (prox >= 7) x.concluido_em = x.etapa_desde
+      const x = chamados.find(y => y.id === a.p_id); const prox = { amostra_ok: 3, sem_amostra: 1, aguardando_clinica: 3, clinica_confirmou: 4, clinica_desistiu: 8, escritorio_ok: 5, exames_digitados: 6, encerrar: 7, avisou_envio: 7, cliente_avisado: 8, cancelar: 8 }[a.p_acao]
+      x.status = a.p_acao === 'encerrar' ? 'enviado' : a.p_acao === 'avisou_envio' ? 'concluido' : prox === 8 ? 'cancelado' : a.p_acao === 'sem_amostra' ? 'sem_amostra' : 'aberto'
+      x.etapa = Math.min(prox, 7); if (a.p_acao !== 'aguardando_clinica') x.etapa_desde = new Date().toISOString(); x.pausado = a.p_acao === 'aguardando_clinica'
       if (a.p_acao === 'escritorio_ok' && x.novo_numero) x.novo_req = a.p_obs
-      eventos.push({ chamado_id: x.id, quando: x.etapa_desde, para: prox, acao: a.p_acao }); return x.status
+      if (x.status === 'concluido' || x.status === 'cancelado') x.concluido_em = x.etapa_desde
+      eventos.push({ chamado_id: x.id, quando: new Date().toISOString(), para: prox, acao: a.p_acao, obs: a.p_obs, por: 'DEMO' }); return x.status
     }
   }
 

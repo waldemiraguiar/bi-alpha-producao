@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=9">
+<link rel="stylesheet" href="inc.css?v=10">
 </head>
 <body>
 <header class="topo">
@@ -20,12 +20,14 @@
     <button data-setor="esc">Escritório</button>
     <button data-setor="tec">Área Técnica</button>
     <button data-setor="todos">Todos</button>
+    <button data-setor="rast">Rastreamento de Inclusões</button>
     <button data-setor="hist">Histórico</button>
   </nav>
   <div class="ferramentas">
     <span class="relogio" id="relogio">--:--</span>
     <button class="btn-sec" id="btnSom" title="Liberar o som do alarme nesta tela">🔈 Som</button>
     <button class="btn-sec" id="btnTV" title="Tela cheia para a TV">Modo TV</button>
+    <button class="btn-sec" id="btnEquipe" hidden>👥 Equipe</button>
     <button class="btn-login" id="btnLogin">Entrar</button>
   </div>
 </header>
@@ -50,6 +52,13 @@
       </aside>
     </div>
     <div class="kanban" id="kanban" hidden></div>
+  </section>
+
+  <section id="vRast" hidden>
+    <div class="rast-topo"><h2>Rastreamento de Inclusões</h2><p class="mudo">Tudo que o sistema captou nos grupos das clínicas: pedidos de inclusão e mensagens que falam de amostra. Captura em ~1 s.</p></div>
+    <div class="rast-filtros"><button data-per="dia" class="on">Hoje</button><button data-per="semana">7 dias</button></div>
+    <div class="numeros" id="rastResumo"></div>
+    <div class="rast-lista" id="rastLista"></div>
   </section>
 
   <section id="vHist" hidden>
@@ -90,6 +99,7 @@
     <label>Seu nome<input id="criarNome" required maxlength="40" placeholder="ex.: Fúlvio"></label>
     <label>Senha (números)<input id="criarSenha" type="password" inputmode="numeric" required minlength="4"></label>
     <label>Repita a senha<input id="criarSenha2" type="password" inputmode="numeric" required minlength="4"></label>
+    <label>Seu setor<select id="criarSetor"><option value="cc">Atendimento ao Cliente</option><option value="tec">Área Técnica</option><option value="esc">Escritório</option></select></label>
     <p class="erro" id="criarErro"></p>
     <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Voltar</button><button class="btn-principal" id="criarOk">Criar e entrar</button></div>
   </form>
@@ -140,15 +150,33 @@
 <dialog id="dlgMotivo">
   <form method="dialog" id="formMotivo">
     <h2 id="motivoTitulo">Motivo</h2>
-    <label>Escreva o motivo<input id="motivoTexto" required></label>
+    <label><span id="motivoRotulo">Motivo</span><input id="motivoTexto" required></label>
     <p class="erro" id="motivoErro"></p>
     <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Voltar</button><button class="btn-principal" id="motivoOk">Confirmar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgSetor">
+  <div class="setor-box">
+    <h2>Qual é o seu setor?</h2>
+    <p class="mudo" style="margin:0">Você só vai conseguir mexer nas etapas do seu setor. Se errar, o administrador corrige.</p>
+    <div class="linha-botoes col"><button class="btn-principal" data-set="cc">Atendimento ao Cliente</button><button class="btn-principal" data-set="tec">Área Técnica</button><button class="btn-principal" data-set="esc">Escritório</button></div>
+    <p class="erro" id="setorErro"></p>
+  </div>
+</dialog>
+
+<dialog id="dlgEquipe">
+  <form method="dialog">
+    <h2>Equipe · setor de cada pessoa</h2>
+    <p class="mudo" style="margin:0">Muda na hora. Administrador mexe em todos os setores.</p>
+    <div class="equipe-lista" id="equipeLista"></div>
+    <div class="linha-botoes"><button class="btn-principal">Fechar</button></div>
   </form>
 </dialog>
 
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=9"></script>
+<script src="inc.js?v=10"></script>
 </body>
 </html>
