@@ -11,7 +11,8 @@ DIAS = int(os.environ.get("DIAS", "10"))
 JANELA_REQ = int(os.environ.get("JANELA_REQ", "12000"))    # últimas requisições (≈ 2-3 semanas)
 JANELA_EXA = int(os.environ.get("JANELA_EXA", "40000"))    # últimas linhas de exame
 SB_URL = os.environ.get("SUPABASE_URL", "https://lrwjcdvporaivxvfuiwt.supabase.co").rstrip("/")
-SB_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+TOKEN = os.environ.get("HISTO_INTAKE_TOKEN", "")
+ANON = "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8"   # chave pública; quem autoriza a escrita é o token
 SRC = dict(host=os.environ["MYSQL_HOST"], user=os.environ["MYSQL_USER"], password=os.environ["MYSQL_PWD"],
            database=os.environ.get("MYSQL_DB", "bi_alpha"), connect_timeout=20, read_timeout=180, charset="utf8mb4")
 BRT = datetime.timezone(datetime.timedelta(hours=-3))
@@ -66,23 +67,23 @@ def ler():
     return reqs, exames
 
 
-def up(tab, rows, conf):
-    if not SB_KEY:
-        print("SEM SUPABASE_SERVICE_KEY — não enviei", tab)
+def enviar(reqs, exames):
+    """Grava pelo RPC inc_hf_upsert (validado pelo mesmo token do intake da Histotécnica) — o repo não tem service key."""
+    if not TOKEN:
+        print("SEM HISTO_INTAKE_TOKEN — não enviei")
         return
-    for i in range(0, len(rows), 1000):
-        b = rows[i:i + 1000]
-        req = urllib.request.Request(f"{SB_URL}/rest/v1/{tab}?on_conflict={conf}", data=json.dumps(b, default=str).encode(),
-                                     method="POST", headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}",
-                                                             "Content-Type": "application/json",
-                                                             "Prefer": "resolution=merge-duplicates,return=minimal"})
-        urllib.request.urlopen(req, timeout=90)
-        print(f"{tab}: +{len(b)}")
+    def rpc(p_req, p_exa):
+        body = json.dumps({"p_token": TOKEN, "p_req": p_req, "p_exames": p_exa}, default=str).encode()
+        r = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_hf_upsert", data=body, method="POST",
+                                   headers={"apikey": ANON, "Authorization": f"Bearer {ANON}", "Content-Type": "application/json"})
+        return json.loads(urllib.request.urlopen(r, timeout=120).read() or "null")
+    print("req:", rpc(reqs, []))
+    for i in range(0, len(exames), 3000):
+        print("exames:", rpc([], exames[i:i + 3000]))
 
 
 if __name__ == "__main__":
     r, e = ler()
     print("requisições:", len(r), "· exames:", len(e))
-    up("inc_hf_req", r, "numero")
-    up("inc_hf_exames", e, "id")
+    enviar(r, e)
     print("OK")
