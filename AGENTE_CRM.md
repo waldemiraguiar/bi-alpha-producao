@@ -4,7 +4,7 @@
 Foco: **movimentação de clientes para o time comercial — sem nenhum valor R$.**
 
 - **No ar:** https://agente-crm-matriz.netlify.app
-- **Senha do time CRM:** `***SENHA-REMOVIDA***` (gate AES próprio, separado de Produção/Financeiro)
+- **Senha do time CRM:** está no secret `CRM_PWD` do GitHub — nunca escrever aqui, o repositório é PÚBLICO (gate AES próprio, separado de Produção/Financeiro)
 - **Netlify Project ID:** `39c8214e-84ae-48dc-bed6-476fadda5205` (secret `CRM_SITE_ID`)
 
 ## Como funciona (mesma infra dos outros agentes)
@@ -62,4 +62,4 @@ Atualize o secret `CRM_PWD` e rode o workflow (Run workflow). O painel pedirá a
 
 ## Preview local
 `python3 -m http.server 4557 --directory site_crm` → abrir e usar a senha do gate.
-(Para regenerar o demo: `CRM_PWD='***SENHA-REMOVIDA***' python3 seed_demo_crm.py`.)
+(Para regenerar o demo: `CRM_PWD='<senha do time>' python3 seed_demo_crm.py`.)

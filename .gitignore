@@ -6,3 +6,6 @@ node_modules/
 site_prod/functions/package*.json
 site_prod/functions/secret.mjs
 site_prod/functions/admin.mjs
+
+# dados sigilosos da Pet Love: só cifrados (data_petlove.enc) — originais em ~/Claude BI Alpha/_privado_petlove
+data_petlove/

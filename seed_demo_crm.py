@@ -3,7 +3,7 @@
 funcionando. Usa o MESMO crm_from()/encrypt() do robô — então valida o pipeline.
 Em produção o GitHub Actions roda build_crm.py e substitui por dados reais.
 
-Uso: CRM_PWD='***SENHA-REMOVIDA***' python3 seed_demo_crm.py"""
+Uso: CRM_PWD='<senha do time CRM>' python3 seed_demo_crm.py"""
 import os, random, datetime
 from build_crm import crm_from, encrypt
 

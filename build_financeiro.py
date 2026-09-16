@@ -22,17 +22,22 @@ EX = "TabExameNumeroSolicitado"
 RQ = "`TabExameNumeroRequisiçao`"
 
 # ---- Receita EXTERNA Pet Love (não entra pelo HF) ----
-# O HF conta os exames Pet Love (volume correto) mas zera o VALOR. Aqui entram os R$
-# reais por competência (Contas Médicas + Recurso de Glosa). Atualizar mês a mês.
-PETLOVE = {
-    "2025-01": "REMOVIDO", "2025-02": "REMOVIDO", "2025-03": "REMOVIDO", "2025-04": "REMOVIDO",
-    "2025-05": "REMOVIDO", "2025-06": "REMOVIDO", "2025-07": "REMOVIDO", "2025-08": "REMOVIDO",
-    "2025-09": "REMOVIDO", "2025-10": "REMOVIDO", "2025-11": "REMOVIDO", "2025-12": "REMOVIDO",
-    "2026-01": "REMOVIDO", "2026-02": "REMOVIDO", "2026-03": "REMOVIDO", "2026-04": "REMOVIDO",
-    "2026-05": "REMOVIDO",   # real (Contas Médicas mai/26, Valor Repasse); antes estimado em 399k
-    # 2026-06 fica FORA do dict de propósito: mês parcial não entra na projeção/YTD.
-    # Produção parcial de jun (atend.) está em data_petlove/petlove_mensal.json p/ a coluna do quadro.
-}
+# O HF conta os exames Pet Love (volume correto) mas zera o VALOR. Os R$ reais da Pet Love (repasse por
+# competência, margem, projeção, estudo) ficam CIFRADOS em data_petlove.enc — este repositório é PÚBLICO
+# (Wal 16/set: "tirar os números da pasta"). Editar no Air em ~/Claude BI Alpha/_privado_petlove/dados/ e
+# rodar _privado_petlove/cifrar_petlove.py. Sem o arquivo/senha: Pet Love vazio, o build NÃO quebra.
+def _carregar_petlove():
+    try:
+        env = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_petlove.enc")))
+        k = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=base64.b64decode(env["salt"]),
+                       iterations=env["iter"]).derive(BI_PWD.encode())
+        return json.loads(AESGCM(k).decrypt(base64.b64decode(env["iv"]), base64.b64decode(env["ct"]), None))
+    except Exception as e:
+        print("⚠️ Pet Love cifrado não abriu:", e)
+        return {}
+_PLF = _carregar_petlove()
+PETLOVE = _PLF.get("petlove_repasse_mensal.json", {})   # mês parcial fica FORA (não entra na projeção/YTD)
+
 
 def lab_fat_since(marco, tries=5):
     """Faturamento TOTAL do lab (todas as clínicas) desde uma data (marco) — denominador do % de conquista do BI.
@@ -640,14 +645,13 @@ def build():
     # ---- Pet Love: MARGEM (reembolso PL vs nossa tabela varejo) + exames ----
     # Dados extraídos OFFLINE dos relatórios "Informações do Pagamento" (Contas Médicas)
     # e da Tabela de Preços Alpha Mar/2026. Atualizar rodando os extratores quando vierem
-    # novos relatórios. Ver data_petlove/.
+    # novos relatórios. Dados cifrados em data_petlove.enc.
     try:
-        PLDIR=os.path.join(ROOT,"data_petlove")
-        marg=json.load(open(os.path.join(PLDIR,"petlove_margem.json"),encoding="utf-8"))
-        plex=json.load(open(os.path.join(PLDIR,"petlove_exames.json"),encoding="utf-8"))
-        try: D["petlove"]["atend_mensal"]=json.load(open(os.path.join(PLDIR,"petlove_mensal.json"),encoding="utf-8"))
+        marg=_PLF["petlove_margem.json"]
+        plex=_PLF["petlove_exames.json"]
+        try: D["petlove"]["atend_mensal"]=_PLF["petlove_mensal.json"]
         except Exception: pass
-        try: D["petlove"]["proj_atual"]=json.load(open(os.path.join(PLDIR,"petlove_proj.json"),encoding="utf-8"))
+        try: D["petlove"]["proj_atual"]=_PLF["petlove_proj.json"]
         except Exception: pass
         mt=[r for r in marg if r.get("tabela")]
         rev_pl=sum(r["volume"]*r["petlove"] for r in mt)
@@ -672,8 +676,7 @@ def build():
 
     # ---------- ESTUDO Pet Love × Copa (aba admin) ----------
     try:
-        PLDIR2=os.path.join(ROOT,"data_petlove")
-        est=json.load(open(os.path.join(PLDIR2,"petlove_estudo.json"),encoding="utf-8"))
+        est=_PLF["petlove_estudo.json"]
         PCJOIN=(f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
                 f"JOIN TabCliente cl ON r.CodCliente=cl.CodCliente WHERE cl.Cliente LIKE 'Pet Carioca%%' ")
         # produção Pet Carioca mensal (volume) desde 2025
