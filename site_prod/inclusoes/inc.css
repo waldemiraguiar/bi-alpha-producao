@@ -246,3 +246,8 @@ body.tv main{padding-bottom:90px}
 .aviso-dia.outro{background:#3a2a0c;color:var(--amarelo)}
 .selo.novo{color:var(--amarelo);background:#3a2a0c}
 .cli{color:var(--amarelo);font-weight:700}
+
+.selo-modo{font-size:13px;font-weight:700;padding:6px 28px;letter-spacing:.03em}
+.selo-modo.demo{background:#f5c84b;color:#1a1400;font-size:15px}
+.selo-modo.demo a{color:#1a1400;margin-left:10px}
+.selo-modo.real{background:#0f2a1c;color:#6fe39a}

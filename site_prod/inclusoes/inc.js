@@ -519,6 +519,16 @@
     }
   }
 
+  // ── real × teste bem visível (pedido do Wal 16/set) ──
+  ;(function selo() {
+    const el = document.createElement('div')
+    el.className = DEMO ? 'selo-modo demo' : 'selo-modo real'
+    el.innerHTML = DEMO
+      ? '🧪 MODO DEMONSTRAÇÃO — tudo nesta tela é EXEMPLO inventado. Nada é gravado. <a href="?setor=' + setor + '">ir para o quadro real</a>'
+      : '● AO VIVO — inclusões reais da equipe'
+    document.body.prepend(el)
+  })()
+
   // ── liga ──
   desenharLogin()
   carregar().then(desenhar)
