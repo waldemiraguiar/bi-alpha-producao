@@ -11,13 +11,13 @@
 
   // ── CONFIGURAÇÃO (ajustável a pedido da equipe) ──
   const SETORES = {
-    cc: { nome: 'CALL CENTER', cor: 'var(--cc)' },
+    cc: { nome: 'ATENDIMENTO AO CLIENTE', cor: 'var(--cc)' },
     esc: { nome: 'ESCRITÓRIO', cor: 'var(--esc)' },
     tec: { nome: 'ÁREA TÉCNICA', cor: 'var(--tec)' },
   }
   // escalonamento em MINUTOS parado na etapa: [amarelo rápido, vermelho+protocolo, vermelho+topo+som, explode]
   const ESCALA = [5, 10, 15, 30]
-  // ORDEM DO WAL (16/set): call center registra → técnica vê se tem amostra → escritório lança no HF →
+  // ORDEM DO WAL (16/set): atendimento ao cliente registra → técnica vê se tem amostra → escritório lança no HF →
   // técnica faz e libera → escritório libera e encerra (e-mail)
   const ETAPAS = {
     1: { nome: 'Registrar e cliente autorizar', dono: 'cc', prazo: '10 min' },
@@ -30,7 +30,7 @@
   const PRAZO_EXAME_MIN = { hemato: 120, bioquimica: 240, urina_fezes: 240, pcr_soro: 4320, cito_histo: 7200, outros: 1440 }
   const VALIDADE_H = { hemato: 24, bioquimica: 168, urina_fezes: 24, pcr_soro: 168, cito_histo: null, outros: 168 }
   const NOME_SETOR = { hemato: 'Hematologia', bioquimica: 'Bioquímica', urina_fezes: 'Urina / Fezes', pcr_soro: 'PCR / Sorologia', cito_histo: 'Citologia / Histo', outros: 'Outros' }
-  const LEMBRETE_CLIENTE_MIN = 120      // aguardando cliente há mais que isso → volta a piscar para o call center
+  const LEMBRETE_CLIENTE_MIN = 120      // aguardando cliente há mais que isso → volta a piscar para o atendimento ao cliente
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
@@ -193,7 +193,7 @@
       const ruins = aqui.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
       return `<li class="${e.dono === setor ? 'minha' : ''}" style="--c:${s.cor}">
         <span class="conta ${ruins ? 'ruim' : ''}">${aqui.length}</span>
-        <div><span class="quem">${n} · ${s.nome}</span><b>${e.nome}</b><small>${e.prazo}${+n === 2 ? ' · sem amostra ↩ call center' : ''}</small></div>
+        <div><span class="quem">${n} · ${s.nome}</span><b>${e.nome}</b><small>${e.prazo}${+n === 2 ? ' · sem amostra ↩ atendimento' : ''}</small></div>
       </li>`
     }).join('')
     $('btnNova').hidden = !(setor === 'cc' || todos)
@@ -267,7 +267,7 @@
   function desenharLegenda() {
     const [a, b, c, d] = ESCALA
     $('legenda').innerHTML = `
-      <span><i class="pt" style="--c:var(--cc)"></i>Call center registra</span>
+      <span><i class="pt" style="--c:var(--cc)"></i>Atendimento ao Cliente registra</span>
       <span><i class="pt" style="--c:var(--tec)"></i>Técnica vê amostra e faz</span>
       <span><i class="pt" style="--c:var(--esc)"></i>Escritório lança, libera e encerra</span>
       <span class="sep"></span>
