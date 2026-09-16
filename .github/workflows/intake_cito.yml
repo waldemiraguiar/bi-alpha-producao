@@ -1,0 +1,34 @@
+name: Intake Citologia (HF)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # a cada 5 minutos (igual a histo)
+  workflow_dispatch:
+
+concurrency:
+  group: intake-cito
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependencias
+        run: pip install --quiet pymysql
+      - name: Importar citologia neoplasica do HF
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          HISTO_INTAKE_TOKEN: ${{ secrets.HISTO_INTAKE_TOKEN }}
+          CITO_MIN_ID: '935880'
+        run: python build_cito_intake.py
