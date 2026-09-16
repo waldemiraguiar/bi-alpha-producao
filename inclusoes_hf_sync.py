@@ -16,6 +16,9 @@ ANON = "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8"   # chave pública; quem
 SRC = dict(host=os.environ["MYSQL_HOST"], user=os.environ["MYSQL_USER"], password=os.environ["MYSQL_PWD"],
            database=os.environ.get("MYSQL_DB", "bi_alpha"), connect_timeout=20, read_timeout=180, charset="utf8mb4")
 BRT = datetime.timezone(datetime.timedelta(hours=-3))
+# ⛔ O HF grava hora do SERVIDOR em UTC (provado 16/09: Piter aberto 15h57 BRT → HF "18:59"; Pandora pedida
+# 15h27 → lançada "18:59"). Então as horas do HF são lidas como UTC, NÃO como Brasília.
+HF_TZ = datetime.timezone.utc
 
 
 def iso(d, hora=None):
@@ -23,12 +26,12 @@ def iso(d, hora=None):
     if not d:
         return None
     if isinstance(d, datetime.datetime):
-        return d.replace(tzinfo=BRT).isoformat()
+        return d.replace(tzinfo=HF_TZ).isoformat()
     h = (0, 0, 0)
     m = re.match(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", str(hora or ""))
     if m:
         h = (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
-    return datetime.datetime(d.year, d.month, d.day, *h, tzinfo=BRT).isoformat()
+    return datetime.datetime(d.year, d.month, d.day, *h, tzinfo=HF_TZ).isoformat()
 
 
 def entrada_maquina(txt):
@@ -36,7 +39,7 @@ def entrada_maquina(txt):
     m = re.match(r"(\d{4})-(\d{2})-(\d{2})\s*-\s*(\d{2}):(\d{2}):(\d{2})", str(txt or ""))
     if not m:
         return None
-    return datetime.datetime(*map(int, m.groups()), tzinfo=BRT).isoformat()
+    return datetime.datetime(*map(int, m.groups()), tzinfo=HF_TZ).isoformat()
 
 
 def ler():
@@ -48,9 +51,10 @@ def ler():
     c = con.cursor()
     c.execute("SELECT MAX(CodNumeroSequencialTela) FROM `TabExameNumeroRequisiçao`")
     topo_r = c.fetchone()[0] or 0
-    c.execute("SELECT NumeroSequencial, Cliente, Animal, Especie, DataEntrada, UsuarioHoraEntrada "
+    c.execute("SELECT NumeroSequencial, Cliente, Animal, Especie, DataEntrada, UsuarioHoraEntrada, DataTransmissao "
               "FROM `TabExameNumeroRequisiçao` WHERE CodNumeroSequencialTela > %s", (topo_r - JANELA_REQ,))
     reqs = [{"numero": str(r[0]), "cliente": r[1], "animal": r[2], "especie": r[3], "entrada": iso(r[4], r[5]),
+             "transmitido": r[6].isoformat() if r[6] else None,
              "atualizado": datetime.datetime.now(BRT).isoformat()}
             for r in c.fetchall() if r[0] and r[4] and r[4] >= ini]
     nums = {r["numero"] for r in reqs}
@@ -86,4 +90,10 @@ if __name__ == "__main__":
     r, e = ler()
     print("requisições:", len(r), "· exames:", len(e))
     enviar(r, e)
+    # Fase 2: confere os cartões do Quadro de Inclusões com o HF (avança sozinho / acusa divergência)
+    if TOKEN:
+        body = json.dumps({"p_token": TOKEN}).encode()
+        rq = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_conferir", data=body, method="POST",
+                                    headers={"apikey": ANON, "Authorization": f"Bearer {ANON}", "Content-Type": "application/json"})
+        print("conferência:", urllib.request.urlopen(rq, timeout=120).read().decode())
     print("OK")

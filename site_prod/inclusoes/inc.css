@@ -251,3 +251,7 @@ body.tv main{padding-bottom:90px}
 .selo-modo.demo{background:#f5c84b;color:#1a1400;font-size:15px}
 .selo-modo.demo a{color:#1a1400;margin-left:10px}
 .selo-modo.real{background:#0f2a1c;color:#6fe39a}
+
+.hf{font-size:13px;color:var(--mudo);margin-top:3px}
+.hf.ok{color:var(--ok)}
+.hf.ruim{color:var(--vermelho);font-weight:700}

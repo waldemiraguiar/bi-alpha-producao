@@ -156,6 +156,7 @@
   function minutosNaEtapa(c) { return (agora() - T(c.etapa_desde)) / 60000 }
   function donoAtual(c) { return c.status === 'sem_amostra' ? 'cc' : ETAPAS[c.etapa]?.dono }
   function estado(c) {
+    if (c.hf_alerta) return 's-v2'
     const m = minutosNaEtapa(c)
     if (c.pausado) return m >= LEMBRETE_CLIENTE_MIN ? 's-a2' : 's-p'
     if (c.status === 'sem_amostra') return m >= ESCALA[1] ? 's-v1' : 's-a2'
@@ -233,7 +234,7 @@
 
     const hoje = new Date().toDateString()
     const conc = chamados.filter(c => c.status === 'concluido' && new Date(T(c.concluido_em)).toDateString() === hoje)
-    $('concluidas').innerHTML = conc.length ? `<div class="linhas">${conc.map(c => `<div class="lin"><span>✓ <b>${esc(c.pet || '')}</b> +${esc(c.exame)}</span><span class="t">${fmt((T(c.concluido_em) - T(c.criado_em)) / 60000)}</span></div>`).join('')}</div>` : '<div class="lin mudo">nenhuma ainda</div>'
+    $('concluidas').innerHTML = conc.length ? `<div class="linhas">${conc.map(c => `<div class="lin ${c.hf_alerta ? 'atras' : ''}"><span>${c.hf_alerta ? '⚠ não está no HF · ' : ''}✓ <b>${esc(c.pet || '')}</b> +${esc(c.exame)}</span><span class="t">${fmt((T(c.concluido_em) - T(c.criado_em)) / 60000)}</span></div>`).join('')}</div>` : '<div class="lin mudo">nenhuma ainda</div>'
 
     explodir(meus)
   }
@@ -248,11 +249,19 @@
         <div class="c-pet">${esc(c.pet || 'sem nome')} <span class="req">${esc(c.req)}</span></div>
         <div class="c-exame">+ ${esc(c.exame)}</div>
         <div class="c-clin">${esc(c.clinica || '')} · ${NOME_SETOR[c.setor] || ''}${c.cliente_status && c.cliente_status !== 'autorizou' && c.etapa <= 3 ? ` · <b class="cli">cliente ${CLIENTE[c.cliente_status] || ''}</b>` : ''}</div>
+        ${hfLinha(c)}
         ${amostra}
       </div>
       <div class="c-dir"><div class="tempo">${fmt(m)}</div><div class="rot">${prazoTxt}</div></div>
       <div class="acao">${botoes(c)}</div>
     </article>`
+  }
+  // FASE 2: o que o HF mostra sobre este cartão (conferência automática a cada 30 min)
+  function hfLinha(c) {
+    if (c.hf_alerta) return `<div class="hf ruim">⚠ ${esc(c.hf_alerta)}</div>`
+    if (c.hf_lancado_em) return `<div class="hf ok">✅ HF: lançado por ${esc(c.hf_lancado_por || '?')} às ${hm(c.hf_lancado_em)}${c.hf_digitado ? ' · digitado' : ''}${c.hf_transmitido ? ' · transmitido ' + dataCurta(c.hf_transmitido + 'T12:00:00') : ''}</div>`
+    if (c.etapa >= 4 && c.hf_conferido_em) return `<div class="hf">🔎 ainda não apareceu no HF (conferido às ${hm(c.hf_conferido_em)})</div>`
+    return ''
   }
   function desenharKanban(abertos) {
     $('kanban').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
@@ -285,7 +294,8 @@
       <span><i class="pt" style="--c:var(--amarelo)"></i>até ${b} min</span>
       <span><i class="pt" style="--c:var(--vermelho)"></i>${b} min atrasado · ${c} apita · ${d} explode</span>
       <span><i class="pt" style="--c:var(--pausa)"></i>esperando a clínica (cobrar após ${fmt(LEMBRETE_CLIENTE_MIN)})</span>
-      <span class="mudo">· cartão só sai com o e-mail enviado</span>`
+      <span class="mudo">· cartão só sai com o e-mail enviado</span>
+      <span class="mudo">· 🔎 o sistema confere com o HF a cada 30 min</span>`
   }
 
   // ── contraprova: pedido de inclusão no WhatsApp sem cartão (o ouvinte lê os grupos das clínicas) ──
