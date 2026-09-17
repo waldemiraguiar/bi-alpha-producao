@@ -8,6 +8,11 @@ on:
     - cron: '5,35 10-23 * * *'   # 7h05–20h35 BRT
     - cron: '5 0 * * *'          # 21h05 BRT
   workflow_dispatch:
+  # 17/set: o GitHub PULOU os crons (só 4 execuções em 24 h; nenhuma de 01h43 a 11h45). O painel de produção roda
+  # de 10 em 10 min por dispatch confiável → pega carona: roda logo depois de cada execução dele (repo público, sem custo).
+  workflow_run:
+    workflows: ["Atualiza Painel de Produção"]
+    types: [completed]
 
 concurrency:
   group: inclusoes-hf
@@ -15,6 +20,8 @@ concurrency:
 
 jobs:
   sync:
+    # carona só das 7h às 21h BRT (10–00 UTC); cron e manual rodam sempre
+    if: github.event_name != 'workflow_run' || !(startsWith(github.event.workflow_run.created_at, '') && (contains(github.event.workflow_run.created_at, 'T01:') || contains(github.event.workflow_run.created_at, 'T02:') || contains(github.event.workflow_run.created_at, 'T03:') || contains(github.event.workflow_run.created_at, 'T04:') || contains(github.event.workflow_run.created_at, 'T05:') || contains(github.event.workflow_run.created_at, 'T06:') || contains(github.event.workflow_run.created_at, 'T07:') || contains(github.event.workflow_run.created_at, 'T08:') || contains(github.event.workflow_run.created_at, 'T09:')))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
