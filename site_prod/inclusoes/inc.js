@@ -385,6 +385,11 @@
     [/colesterol/i, 'colesterol'], [/triglic/i, 'triglicerídeos'], [/fibrinog/i, 'fibrinogênio'], [/\bggt\b/i, 'GGT'], [/\balt\b|\btgp\b/i, 'ALT'], [/\bast\b|\btgo\b/i, 'AST'],
     [/\bfa\b|fosfatase/i, 'FA'], [/bilirrub|bilibub/i, 'bilirrubinas'], [/lipase/i, 'lipase'], [/amilase/i, 'amilase'], [/\bck\b|cpk/i, 'CK'], [/reticul/i, 'reticulócitos'],
     [/4dx|snap/i, '4DX'], [/\bpcr\b/i, 'PCR'], [/sorolog/i, 'sorologia'], [/hemograma/i, 'hemograma'], [/urin[aá]lise|\beas\b|urina/i, 'urina'], [/cito/i, 'citologia'], [/histo/i, 'histopatologia'], [/cortisol/i, 'cortisol'], [/eletr[oó]litos/i, 'eletrólitos'], [/perfil/i, 'perfil']]
+  // Wal 17/set (foto): "Tem amostra na Pet Golden / para buscar / Tenho amostra" = AGENDAMENTO DE COLETA, não inclusão → não mostra
+  // (mesmo filtro do ouvinte; esconde também as que foram gravadas antes do filtro)
+  const COLETA_RX = /\b(busc\w*|colet\w*|envi\w*|reenvi\w*|rota|retir\w*|recolh\w*|pegar|motoboy|motoca|passar (aqui|a[ií]|l[aá]))\b/i
+  const SO_AVISO_RX = /^\W*((bom dia|boa tarde|boa noite|ol[aá]|oi)[\s,!.]*)*(tenho|tem|temos|t[oô] com|estou com|j[aá] tem|h[aá])\s+(\d+\s+)?amostras?\b[^?]*$/i
+  const ehColeta = t => COLETA_RX.test(t || '') || SO_AVISO_RX.test((t || '').trim())
   const examesDoTexto = t => EXAMES_IA.filter(([rx]) => rx.test(t || '')).map(([, n]) => n)
   const nomeClinica = g => (g || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').replace(/^[^A-Za-z0-9]+/, '').trim()
   function chipsIA(x) {
@@ -409,7 +414,7 @@
     const semCartao = inc.filter(x => pendIds.has(x.id))
     const agora_ = inc.filter(x => x.status === 'aberta' && !pendIds.has(x.id) && !temCartaoPara(x))
     const tratadas = inc.filter(x => !semCartao.includes(x) && !agora_.includes(x))
-    const amo = doPeriodo.filter(x => x.tipo === 'amostra').sort((a, b) => T(b.quando) - T(a.quando))
+    const amo = doPeriodo.filter(x => x.tipo === 'amostra' && !ehColeta(x.texto)).sort((a, b) => T(b.quando) - T(a.quando))
     document.querySelectorAll('.rast-filtros button').forEach(b => b.classList.toggle('on', b.dataset.per === periodoRast))
     $('rastResumo').innerHTML = `<div class="n-ruim"><b>${semCartao.length}</b><span>sem cartão há mais de ${SUSPEITA_MIN} min</span></div><div class="n-novo"><b>${agora_.length}</b><span>chegou agora (até ${SUSPEITA_MIN} min)</span></div><div class="n-ok"><b>${tratadas.length}</b><span>com cartão / tratado</span></div>`
     const minDesde = x => (agora() - T(x.quando)) / 60000
