@@ -96,4 +96,11 @@ if __name__ == "__main__":
         rq = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_conferir", data=body, method="POST",
                                     headers={"apikey": ANON, "Authorization": f"Bearer {ANON}", "Content-Type": "application/json"})
         print("conferência:", urllib.request.urlopen(rq, timeout=120).read().decode())
+        # IA: pedidos de inclusão do WhatsApp ainda sem requisição provável → tenta de novo com a cópia nova do HF
+        try:
+            rq = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_sugerir_pendentes", data=body, method="POST",
+                                        headers={"apikey": ANON, "Authorization": f"Bearer {ANON}", "Content-Type": "application/json"})
+            print("sugestões IA:", urllib.request.urlopen(rq, timeout=60).read().decode())
+        except Exception as ex:   # banco ainda sem a função (SQL 9 não rodado) — não derruba o sync
+            print("sugestões IA: pulado:", ex)
     print("OK")

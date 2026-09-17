@@ -379,26 +379,58 @@
   const pendentesInclusao = () => suspeitas.filter(x => x.status === 'aberta' && (x.tipo || 'inclusao') === 'inclusao' && (agora() - T(x.quando)) / 60000 >= SUSPEITA_MIN && !temCartaoPara(x))
   // ── aba RASTREAMENTO DE INCLUSÕES (pedido do Thailan): tudo que o sistema captou no WhatsApp ──
   let periodoRast = 'dia'
+  // ── 🤖 aba da IA (Wal 17/set: cor ROSA fixa = reconhecimento automático) ──
+  const EXAMES_IA = [[/f[oó]sforo/i, 'fósforo'], [/c[aá]lcio/i, 'cálcio'], [/s[oó]dio/i, 'sódio'], [/pot[aá]ssio/i, 'potássio'], [/ureia/i, 'ureia'], [/creatinina/i, 'creatinina'],
+    [/\bsdma\b/i, 'SDMA'], [/\bt4\b/i, 'T4'], [/frutosamina/i, 'frutosamina'], [/glicose/i, 'glicose'], [/albumina/i, 'albumina'], [/prote[ií]na/i, 'proteína'],
+    [/colesterol/i, 'colesterol'], [/triglic/i, 'triglicerídeos'], [/fibrinog/i, 'fibrinogênio'], [/\bggt\b/i, 'GGT'], [/\balt\b|\btgp\b/i, 'ALT'], [/\bast\b|\btgo\b/i, 'AST'],
+    [/\bfa\b|fosfatase/i, 'FA'], [/bilirrub|bilibub/i, 'bilirrubinas'], [/lipase/i, 'lipase'], [/amilase/i, 'amilase'], [/\bck\b|cpk/i, 'CK'], [/reticul/i, 'reticulócitos'],
+    [/4dx|snap/i, '4DX'], [/\bpcr\b/i, 'PCR'], [/sorolog/i, 'sorologia'], [/hemograma/i, 'hemograma'], [/urin[aá]lise|\beas\b|urina/i, 'urina'], [/cito/i, 'citologia'], [/histo/i, 'histopatologia'], [/cortisol/i, 'cortisol'], [/eletr[oó]litos/i, 'eletrólitos'], [/perfil/i, 'perfil']]
+  const examesDoTexto = t => EXAMES_IA.filter(([rx]) => rx.test(t || '')).map(([, n]) => n)
+  const nomeClinica = g => (g || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').replace(/^[^A-Za-z0-9]+/, '').trim()
+  function chipsIA(x) {
+    const ch = []
+    if (x.sug_req) {
+      ch.push(`<span class="chip-ia">pet <b>${esc(x.sug_pet || '')}</b></span>`)
+      ch.push(`<span class="chip-ia">requisição provável <b>${esc(x.sug_req)}</b> · entrou ${dataCurta(x.sug_entrada)} ${hm(x.sug_entrada)}</span>`)
+      if (x.sug_n === 1) ch.push(`<span class="chip-ia">⚠ confira a clínica: ${esc(x.sug_cliente || '')}</span>`)
+      if (x.sug_entrada && diaBR(x.sug_entrada) !== diaBR(x.quando)) ch.push('<span class="chip-ia">⚠ amostra de outro dia → novo nº</span>')
+    } else if (x.sug_n === 0) ch.push('<span class="chip-ia">requisição: <b>não achei</b> — perguntar à clínica</span>')
+    else ch.push('<span class="chip-ia">procurando a requisição…</span>')
+    const ex = examesDoTexto(x.texto)
+    if (ex.length) ch.push(`<span class="chip-ia">exame <b>${esc(ex.join(' + '))}</b></span>`)
+    return `<div class="ia-achou"><span class="ia-tag">🤖 A IA ACHOU:</span>${ch.join('')}</div>`
+  }
   function desenharRastreamento() {
     const dias = periodoRast === 'dia' ? 0 : 7
     const ini = new Date(); ini.setHours(0, 0, 0, 0); ini.setDate(ini.getDate() - dias)
-    const lista = suspeitas.filter(x => T(x.quando) >= ini.getTime()).sort((a, b) => T(b.quando) - T(a.quando))
-    const pend = pendentesInclusao().length
+    const doPeriodo = suspeitas.filter(x => T(x.quando) >= ini.getTime())
+    const pendIds = new Set(pendentesInclusao().map(p => p.id))
+    const inc = doPeriodo.filter(x => (x.tipo || 'inclusao') === 'inclusao')
+    const semCartao = inc.filter(x => pendIds.has(x.id))
+    const agora_ = inc.filter(x => x.status === 'aberta' && !pendIds.has(x.id) && !temCartaoPara(x))
+    const tratadas = inc.filter(x => !semCartao.includes(x) && !agora_.includes(x))
+    const amo = doPeriodo.filter(x => x.tipo === 'amostra').sort((a, b) => T(b.quando) - T(a.quando))
     document.querySelectorAll('.rast-filtros button').forEach(b => b.classList.toggle('on', b.dataset.per === periodoRast))
-    $('rastResumo').innerHTML = `<div><b>${lista.filter(x => (x.tipo || 'inclusao') === 'inclusao').length}</b><span>🧪 pedidos de inclusão</span></div><div><b>${lista.filter(x => x.tipo === 'amostra').length}</b><span>🔬 mensagens falando de amostra</span></div><div><b class="${pend ? 'vermelho' : ''}">${pend}</b><span>sem cartão há +${SUSPEITA_MIN} min</span></div>`
-    $('rastLista').innerHTML = lista.length ? lista.map(x => {
-      const tipo = (x.tipo || 'inclusao') === 'inclusao'
-      const status = x.status === 'aberta' ? (tipo && pendentesInclusao().some(p => p.id === x.id) ? '<span class="st ruim">sem cartão</span>' : '<span class="st">aberta</span>')
-        : x.status === 'registrada' ? `<span class="st ok">tratada · ${esc(x.resolvido_por || '')} ${x.resolvido_em ? hm(x.resolvido_em) : ''}</span>`
-        : `<span class="st">não é inclusão · ${esc(x.resolvido_por || '')} ${x.resolvido_em ? hm(x.resolvido_em) : ''}</span>`
-      return `<div class="rast ${tipo ? 'inc' : 'amo'}" data-id="${x.id}">
-        <div class="r-cab"><span class="r-tipo">${tipo ? '🧪 Pedido de inclusão' : '🔬 Fala de amostra'}</span><b>${esc((x.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, ''))}</b><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)} · ${esc(x.autor || '')}</span>${status}</div>
-        <div class="r-txt">“${esc(x.texto)}”</div>
-        ${x.status === 'aberta' ? `<div class="acao"><button data-sus="registrada">${tipo ? 'Já abri o cartão' : 'Visto · tratado'}</button>${tipo ? '<button data-sus="abrir">Abrir cartão agora</button>' : ''}<button class="leve" data-sus="nao_e_inclusao">Não é inclusão / cliente desistiu</button></div>` : ''}
+    $('rastResumo').innerHTML = `<div class="n-ruim"><b>${semCartao.length}</b><span>sem cartão há mais de ${SUSPEITA_MIN} min</span></div><div class="n-novo"><b>${agora_.length}</b><span>chegou agora (até ${SUSPEITA_MIN} min)</span></div><div class="n-ok"><b>${tratadas.length}</b><span>com cartão / tratado</span></div>`
+    const minDesde = x => (agora() - T(x.quando)) / 60000
+    const bloco = (x, cls) => {
+      const estado = cls === 'sem' ? 'SEM CARTÃO' : cls === 'novo' ? 'AGUARDANDO' : x.status === 'nao_e_inclusao' ? 'NÃO É INCLUSÃO' : 'COM CARTÃO'
+      const quem = x.resolvido_por ? ` · ${esc(x.resolvido_por)} ${x.resolvido_em ? hm(x.resolvido_em) : ''}` : ''
+      return `<div class="ia-item ${cls}" data-id="${x.id}">
+        <div class="ia-clin">${esc(nomeClinica(x.grupo))} <span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)} · ${esc(x.autor || '')}</span></div>
+        <div class="ia-msg">“${esc(x.texto)}”</div>
+        ${chipsIA(x)}
+        <div class="ia-lado"><div class="ia-tempo">${cls === 'ok' ? '✓' : fmt(minDesde(x))}</div><div class="ia-estado">${estado}${cls === 'ok' ? quem : ''}</div></div>
+        ${x.status === 'aberta' ? `<div class="acao"><button data-sus="abrir">Abrir cartão agora</button><button class="leve" data-sus="registrada">Já abri o cartão</button><button class="leve" data-sus="nao_e_inclusao">Não é inclusão / desistiu</button></div>` : ''}
       </div>`
-    }).join('') : '<div class="vazio">Nada captado no período.</div>'
+    }
+    const porIdade = (a, b) => T(a.quando) - T(b.quando)
+    $('rastLista').innerHTML = (inc.length ? [...semCartao.sort(porIdade).map(x => bloco(x, 'sem')), ...agora_.sort(porIdade).map(x => bloco(x, 'novo')), ...tratadas.sort((a, b) => T(b.quando) - T(a.quando)).map(x => bloco(x, 'ok'))].join('') : '<div class="vazio">Nenhum pedido de inclusão captado no período.</div>')
+      + `<h3 class="ia-sub">Perguntas sobre amostra (sem pedido de exame)</h3>`
+      + (amo.length ? amo.map(x => `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}" data-id="${x.id}"><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span><span><b>${esc(nomeClinica(x.grupo))}</b> “${esc(x.texto)}”</span>${x.status === 'aberta' ? '<span class="acao"><button class="leve" data-sus="registrada">Visto · tratado</button><button class="leve" data-sus="nao_e_inclusao">Ignorar</button></span>' : `<span class="mudo">tratado · ${esc(x.resolvido_por || '')}</span>`}</div>`).join('') : '<div class="vazio">Nenhuma no período.</div>')
     const b = document.querySelector('#abas button[data-setor="rast"]')
-    if (b) b.innerHTML = `Rastreamento de Inclusões${pend ? ` <span class="badge">${pend}</span>` : ''}`
+    const pend = semCartao.length
+    if (b) b.innerHTML = `🤖 Rastreamento de Inclusões${pend ? ` <span class="badge">${pend}</span>` : ''}`
   }
   function temCartaoPara(x) {
     const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -410,11 +442,15 @@
   $('rastLista').addEventListener('click', async ev => {
     const b = ev.target.closest('button[data-sus]'); if (!b) return
     if (!(await garantirLogin())) return
-    const id = +b.closest('.rast').dataset.id
+    const id = +b.closest('[data-id]').dataset.id
     if (b.dataset.sus === 'abrir') {
       const x = suspeitas.find(y => y.id === id)
       setor = 'cc'; desenhar(); $('btnNova').click()
-      setTimeout(() => { $('nClinica').value = (x?.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').trim(); $('nObs').value = x ? `WhatsApp ${hm(x.quando)}: ${x.texto.slice(0, 80)}` : '' }, 150)
+      setTimeout(() => {
+        $('nClinica').value = nomeClinica(x?.grupo); $('nObs').value = x ? `WhatsApp ${hm(x.quando)}: ${x.texto.slice(0, 80)}` : ''
+        if (x && examesDoTexto(x.texto).length) $('nExame').value = examesDoTexto(x.texto).join(' + ')
+        if (x && x.sug_req) { $('nReq').value = x.sug_req; buscarHF() }      // 🤖 sugestão da IA — a pessoa confere antes de salvar
+      }, 150)
       return
     }
     // "Já abri o cartão" sem cartão de verdade = a omissão continua escondida (caso Bandeirantes 16/set) → confere antes
@@ -605,7 +641,9 @@
       c('KIRA', '639871', 'Ureia', 'bioquimica', 2, 31),
       c('REX', '639800', 'Colesterol', 'bioquimica', 7, 0, { status: 'concluido', concluido_em: min(15), criado_em: min(200) }),
     ]
-    suspeitas = [{ id: 1, status: 'aberta', tipo: 'inclusao', quando: min(22), grupo: 'Alpha - Pet Sorriso', autor: 'Dra. Ana', texto: 'Podem incluir fósforo no exame do Zeus por favor?' },
+    suspeitas = [{ id: 1, status: 'aberta', tipo: 'inclusao', quando: min(22), grupo: 'Alpha - Pet Sorriso', autor: 'Dra. Ana', texto: 'Podem incluir fósforo e ureia no exame do Zeus por favor?', sug_req: '640912', sug_pet: 'ZEUS', sug_cliente: 'Pet Sorriso', sug_entrada: min(160), sug_n: 2 },
+      { id: 4, status: 'aberta', tipo: 'inclusao', quando: min(6), grupo: 'Alpha - Clínica Aurora', autor: 'Recepção', texto: 'Consegue adicionar SDMA na requisição da Nina?', sug_n: 0 },
+      { id: 5, status: 'aberta', tipo: 'inclusao', quando: min(31), grupo: 'Alpha - Vet Horizonte', autor: 'Dra. Lu', texto: 'Ainda tem sangue do Bob? Queria acrescentar T4', sug_req: '640877', sug_pet: 'BOB', sug_cliente: 'Vet Horizonte', sug_entrada: min(26 * 60), sug_n: 2 },
       { id: 2, status: 'aberta', tipo: 'amostra', quando: min(9), grupo: 'Alpha - Vet Horizonte', autor: 'Recepção', texto: 'Ainda tem amostra da Mel? Queria ver uma coisa' },
       { id: 3, status: 'registrada', tipo: 'inclusao', quando: min(95), grupo: 'Alpha - Bandeirantes', autor: 'Dra.', texto: 'Pode acrescentar fibrinogênio e colesterol', resolvido_por: 'DEMO', resolvido_em: min(80) }]
     eventos = chamados.flatMap(x => [{ chamado_id: x.id, quando: x.criado_em, para: 1, acao: 'abriu' }, { chamado_id: x.id, quando: x.etapa_desde, para: x.etapa, acao: 'avancou' }])
