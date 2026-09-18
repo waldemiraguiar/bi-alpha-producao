@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=45">
+<link rel="stylesheet" href="inc.css?v=46">
 </head>
 <body>
 <header class="topo">
@@ -20,6 +20,7 @@
     <button data-setor="esc">Escritório</button>
     <button data-setor="tec">Área Técnica</button>
     <button data-setor="todos">Todos</button>
+    <button data-setor="terremoto" class="aba-terremoto" hidden>🚨 TERREMOTO</button>
     <button data-setor="rast" class="aba-ia">🤖 Rastreamento de Inclusões</button>
     <button data-setor="coleta" class="aba-moto">🛵 Agendamentos</button>
     <button data-setor="rotas" class="aba-rota">🛵 BI Rotas</button>
@@ -94,6 +95,13 @@
     <div id="colPlacar"></div>
     <div class="bloco-bench" id="colPlacar"></div>
     <div class="bloco-bench" id="colHist"></div>
+  </section>
+
+  <section id="vTerremoto" hidden>
+    <div class="rast-topo"><h2><span class="selo-terremoto">🚨 TERREMOTO</span> Parar tudo e resolver</h2>
+      <p class="mudo">Só toca quando <b>uma promessa nossa com o cliente está quebrando</b>. Quando tocar: <b>para o que estiver fazendo</b>, clica em <b>Assumir</b> (seu nome aparece para todos) e só fecha escrevendo o que foi feito. Máximo de <b>3 por dia</b> — se passar disso, o critério está errado e quem conserta sou eu, não a equipe.</p></div>
+    <div id="terrLista" class="rast-lista"></div>
+    <div class="bloco-bench" id="terrHist"></div>
   </section>
 
   <section id="vHist" hidden>
@@ -212,6 +220,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=45"></script>
+<script src="inc.js?v=46"></script>
 </body>
 </html>

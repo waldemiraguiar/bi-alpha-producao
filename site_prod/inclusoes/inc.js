@@ -45,6 +45,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
+  let terremotos = []
   let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
@@ -93,6 +94,8 @@
       regras = rg.error ? [] : (rg.data || [])
       const cl = await SB.from('inc_coletas').select('*').gte('quando', new Date(agora() - 3 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 499)
       coletas = cl.error ? [] : (cl.data || [])
+      const tr = await SB.from('inc_terremotos').select('*').gte('aberto_em', new Date(agora() - 3 * 864e5).toISOString())
+      terremotos = tr.error ? [] : (tr.data || [])
       const sp = await SB.from('inc_suspeitas').select('*').gte('quando', new Date(agora() - 8 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
       suspeitas = sp.error ? [] : (sp.data || [])
       $('conexao').textContent = ''
@@ -296,15 +299,16 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps'
-    $('vQuadro').hidden = hist || rast || col || rot || npsv; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto'
+    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr
     desenharLegenda()
     desenharRastreamento()
     desenharColetas()
     desenharRotas()
     desenharNps()
+    try { desenharTerremoto() } catch {}
     if (hist) return desenharHistorico()
-    if (rast || col || rot || npsv) return
+    if (rast || col || rot || npsv || terr) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
     desenharRascunhos()
@@ -979,6 +983,57 @@
     desenharHistColeta(todas)
     placarColeta(todas)
   }
+  // ══ TERREMOTO (Wal 18/set): só toca quando uma PROMESSA COM O CLIENTE está quebrando. Teto de 3 por dia. ══
+  const TERR_TETO = 3
+  function terremotosAtivos() {
+    const casos = [], dia = new Date().toLocaleDateString('sv-SE')
+    for (const c of coletas) {
+      if (['descartada', 'coletada', 'entregue'].includes(c.status)) continue
+      const oque = EH_MATERIAL(c) ? 'entrega de material' : 'coleta'
+      // ① prometemos e a lista da rota já saiu sem essa clínica
+      if (c.status === 'agendada' && c.corte_em && T(c.corte_em) < agora()) {
+        casos.push({ tipo: 'sem_lista', c, motivo: `prometemos ${oque} e a lista da ${c.rota || 'rota'} saiu sem ${c.clinica}` })
+        continue
+      }
+      // ② entrou na lista e o motoboy não informou até o fim da rota
+      if (c.status === 'na_lista') {
+        const fim = fimDoTurno(c)
+        if (fim && agora() > fim) { casos.push({ tipo: 'motoboy_mudo', c, motivo: `${c.clinica} está na lista da ${c.na_lista_rota || ''} desde ${hm(c.na_lista_em)} e o motoboy não informou` }); continue }
+      }
+      // ③ o cliente pediu e ninguém respondeu em 1 hora
+      if (c.status === 'nova' && (agora() - T(c.quando)) / 60000 >= 60) {
+        casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt((agora() - T(c.quando)) / 60000)} e ninguém respondeu` })
+      }
+    }
+    return casos.map(x => ({ ...x, chave: `${x.tipo}:${x.c.id}:${dia}` }))
+      .map(x => ({ ...x, reg: terremotos.find(t => t.chave === x.chave) || null }))
+      .filter(x => !x.reg || !x.reg.resolvido_em)
+      .sort((a, b) => T(a.c.quando) - T(b.c.quando))
+  }
+  function desenharTerremoto() {
+    const ativos = terremotosAtivos()
+    const bt = document.querySelector('#abas button[data-setor="terremoto"]')
+    if (bt) { bt.hidden = !ativos.length && setor !== 'terremoto'; bt.innerHTML = `🚨 TERREMOTO${ativos.length ? ` <span class="badge">${ativos.length}</span>` : ''}`; bt.classList.toggle('tocando', !!ativos.length) }
+    document.body.classList.toggle('terremoto-on', !!ativos.length)
+    const el = $('terrLista'); if (!el) return
+    el.innerHTML = ativos.length ? ativos.map(x => {
+      const dono = x.reg && x.reg.assumido_por
+      return `<div class="terr-item ${dono ? 'assumido' : ''}" data-terr="${esc(x.chave)}" data-terr-col="${x.c.id}" data-terr-tipo="${x.tipo}">
+        <div class="terr-tit">${x.tipo === 'sem_lista' ? '📋 Prometido e fora da lista' : x.tipo === 'motoboy_mudo' ? '🛵 Motoboy não informou' : '⏳ Cliente esperando'}</div>
+        <div class="terr-motivo">${esc(x.motivo)}</div>
+        <div class="terr-msg">“${esc((x.c.texto || '').slice(0, 120))}” <span class="mudo">· ${dataCurta(x.c.quando)} ${hm(x.c.quando)}</span></div>
+        ${dono ? `<div class="terr-dono">🙋 <b>${esc(dono)}</b> assumiu às ${hm(x.reg.assumido_em)} — só fecha escrevendo o que foi feito</div>
+                  <div class="acao"><button data-terr-acao="resolver">✅ Resolvido — escrever o que fiz</button></div>`
+                : `<div class="acao"><button class="grande" data-terr-acao="assumir">🙋 EU ASSUMO</button></div>`}
+      </div>`
+    }).join('') : '<div class="vazio">✅ Nenhum terremoto agora. Quando tocar, para tudo.</div>'
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
+    const doDia = terremotos.filter(t => T(t.aberto_em) >= hoje0.getTime())
+    const passou = doDia.length > TERR_TETO
+    $('terrHist').innerHTML = `<h3>Hoje: ${doDia.length} terremoto${doDia.length === 1 ? '' : 's'} ${passou ? '<span class="fx cr">acima do teto de 3 — o critério vai ser revisto</span>' : '<span class="fx ex">dentro do teto de 3</span>'}</h3>` +
+      (doDia.length ? `<table class="tb"><thead><tr><th>Hora</th><th>Caso</th><th>Quem assumiu</th><th>O que foi feito</th><th class="num">Tempo até resolver</th></tr></thead><tbody>` +
+        doDia.map(t => `<tr><td>${hm(t.aberto_em)}</td><td>${esc(t.clinica || '')} <span class="mudo">${esc(t.motivo || '')}</span></td><td>${esc(t.assumido_por || '—')}</td><td>${esc(t.o_que_fez || '—')}</td><td class="num">${t.resolvido_em ? fmt((T(t.resolvido_em) - T(t.aberto_em)) / 60000) : 'em aberto'}</td></tr>`).join('') + '</tbody></table>' : '')
+  }
   // ── dia 5: placar do agendamento (mesma régua do placar das rotas) ──
   function placarColeta(todas) {
     const el = $('colPlacar'); if (!el) return
@@ -1155,6 +1210,27 @@
       } catch (e) { toast(e.message) }
       return
     }
+    const bt = ev.target.closest('button[data-terr-acao]')
+    if (bt) {
+      if (!(await garantirLogin())) return
+      const caixa = bt.closest('[data-terr]')
+      const chave = caixa.dataset.terr, id = +caixa.dataset.terrCol, tipo = caixa.dataset.terrTipo
+      const caso = terremotosAtivos().find(x => x.chave === chave)
+      try {
+        if (bt.dataset.terrAcao === 'assumir') {
+          await rpc('terremoto_assumir', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_tipo: tipo,
+            p_clinica: caso ? caso.c.clinica : null, p_cartao: id, p_motivo: caso ? caso.motivo : null })
+          toast('Você assumiu — a equipe está vendo seu nome')
+        } else {
+          const oque = (await pedirMotivo('O que foi feito?', 'Ex.: liguei na clínica e encaixei na rota 5 das 15h') || '').trim()
+          if (!oque) return
+          await rpc('terremoto_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_texto: oque })
+          toast('Terremoto encerrado')
+        }
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
+      return
+    }
     const b = ev.target.closest('button[data-col-acao]'); if (!b) return
     if (!(await garantirLogin())) return
     const id = +b.closest('[data-col]').dataset.col
@@ -1292,7 +1368,8 @@
       })
     } catch {}
   }
-  const SOM = { chegou: [[660, 0], [990, .18], [1320, .36]], ia: [[1320, 0], [1046, .16], [1320, .32], [1046, .48]] }
+  const SOM = { chegou: [[660, 0], [990, .18], [1320, .36]], ia: [[1320, 0], [1046, .16], [1320, .32], [1046, .48]],
+    terremoto: [[880, 0], [440, .25], [880, .5], [440, .75], [880, 1], [440, 1.25], [880, 1.5]] }
   const vistosPor = new Map(); let novos = new Map()   // por setor: o que já estava na tela · chave → quando apareceu (selo NOVO)
   function chaveDe(c) { return `c${c.id}:${c.status === 'sem_amostra' ? 'sa' : c.status === 'enviado' ? 'env' : c.etapa}` }
   function avisarNovidades() {
@@ -1304,6 +1381,7 @@
     if (!meu || meu === 'cc') for (const c of coletas.filter(COLETA_ABERTA)) agoraKeys.set('k' + c.id, c)
     if (!meu || meu === 'cc') for (const c of chamados.filter(x => x.status === 'rascunho')) agoraKeys.set('r' + c.id, c)
     if (!meu || meu === 'cc') for (const c of coletas) if (relogio(c).nivel === 'cobrar') agoraKeys.set('x' + c.id, c)
+    try { for (const t of terremotosAtivos()) agoraKeys.set('T:' + t.chave, t.c) } catch {}   // terremoto vale para TODO setor
     const vistos = vistosPor.get(setor)
     if (!vistos) { vistosPor.set(setor, new Set(agoraKeys.keys())); return }   // 1ª vez nesta aba: não apita com o que já estava lá
     const chegaram = [...agoraKeys.keys()].filter(k => !vistos.has(k))
@@ -1311,6 +1389,13 @@
     if (!chegaram.length) return
     const agoraMs = agora()
     chegaram.forEach(k => novos.set(k, agoraMs))
+    const terr = chegaram.filter(k => k.startsWith('T:'))
+    if (terr.length) {
+      const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
+      const noDia = terremotos.filter(t => T(t.aberto_em) >= hoje0.getTime()).length
+      if (noDia < TERR_TETO) tocar(SOM.terremoto)                 // passou do teto: continua na tela, mas para de apitar
+      toast(`🚨 TERREMOTO — ${terr.length > 1 ? `${terr.length} casos` : 'pare o que estiver fazendo'}`)
+    }
     const cobra = chegaram.filter(k => k[0] === 'x')
     if (cobra.length) { tocar(SOM.chegou); const c = agoraKeys.get(cobra[0]); toast(`⏰ ${c.clinica}: ${relogio(c).motivo}`) }
     const rasc = chegaram.filter(k => k[0] === 'r')
@@ -1462,6 +1547,8 @@
       { id: 4, quando: min(120), grupo: 'Alpha - Vet Prev', clinica: 'Vet Prev', autor: 'Dra.', texto: 'tem amostra para coletar', rota_sug: 'rota 4', turno_sug: 'tarde de hoje', status: 'agendada', rota: 'rota 4', turno: 'tarde', por: 'DEMO', agendada_em: min(115) },
       { id: 5, quando: min(190), grupo: 'Alpha - Su Vet', clinica: 'Su Vet', autor: 'Recepção', texto: 'podem buscar o material?', rota_sug: 'rota 5', turno_sug: 'tarde de hoje', status: 'na_lista', rota: 'rota 5', turno: 'tarde', por: 'DEMO', na_lista_em: min(150), na_lista_rota: 'rota 5' },
       { id: 6, quando: min(14), grupo: 'Alpha - Lillow petshop', clinica: 'Lillow petshop', autor: 'Dra. Paula', texto: 'Preciso de lâmina', rota_sug: 'rota 7', turno_sug: 'tarde de hoje', corte_em: new Date(agora() + 26 * 60000).toISOString(), status: 'nova', tipo: 'material', item: 'lâmina' },
+      { id: 8, quando: min(95), grupo: 'Alpha - Vet Sol', clinica: 'Vet Sol', autor: 'Recepção', texto: 'temos coleta', rota_sug: 'rota 3', turno_sug: 'tarde de hoje', status: 'nova' },
+      { id: 9, quando: min(300), grupo: 'Alpha - Pet Vida', clinica: 'Pet Vida', autor: 'Dra. Rita', texto: 'Podem buscar o material hoje?', rota_sug: 'rota 2', turno_sug: 'tarde de hoje', corte_em: new Date(agora() - 40 * 60000).toISOString(), status: 'agendada', rota: 'rota 2', turno: 'tarde', por: 'DEMO', agendada_em: min(280) },
       { id: 7, quando: min(240), grupo: 'Alpha - Nup Recreio', clinica: 'Nup Recreio', autor: 'Recepção', texto: 'Podem me mandar alguns tubos vermelhos???', rota_sug: 'rota 9', turno_sug: 'manhã de hoje', status: 'entregue', rota: 'rota 9', turno: 'manhã', por: 'DEMO', na_lista_em: min(200), na_lista_rota: 'rota 9', entregue_em: min(90), tipo: 'material', item: 'tubos' }]
     eventos = chamados.flatMap(x => [{ chamado_id: x.id, quando: x.criado_em, para: 1, acao: 'abriu' }, { chamado_id: x.id, quando: x.etapa_desde, para: x.etapa, acao: 'avancou' }])
     eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
