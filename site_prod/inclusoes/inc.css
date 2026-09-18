@@ -1,9 +1,10 @@
-/* Quadro de Inclusões — tela de sala de operação (escuro de propósito: TV na parede) */
+/* Quadro de Inclusões — painel CLARO de operação (Wal 18/set: "mais visual, mais cara de BI, mais clean") */
 :root{
-  --chao:#0d1316; --painel:#152024; --painel2:#1b292e; --linha:#26363b;
-  --texto:#e4ecea; --mudo:#8ea19e; --fraco:#5f716e;
-  --cc:#5aa9ff; --esc:#34d3b6; --tec:#b48cff; --ia:#ff5fd2; --ia-fundo:#2a1526;
-  --amarelo:#f5c84b; --vermelho:#ff4d5e; --pausa:#7c8a88; --ok:#9fd9a8;
+  --chao:#eef1f6; --painel:#ffffff; --painel2:#f4f7fb; --linha:#dfe4ec;
+  --texto:#111827; --mudo:#667085; --fraco:#98a2b3;
+  --cc:#2563eb; --esc:#0d9488; --tec:#7c3aed; --ia:#db2777; --ia-fundo:#fdf2f8;
+  --amarelo:#d97706; --vermelho:#dc2626; --pausa:#98a2b3; --ok:#16a34a;
+  --sombra:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
   --disp:"Barlow Condensed","Arial Narrow",sans-serif;
   --corpo:"Atkinson Hyperlegible",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,monospace;
@@ -94,7 +95,7 @@ body.tv .acao{display:none}
 .lista-outros .quem{color:var(--c);font-weight:700;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase}
 .lista-outros .t{font-family:var(--mono);color:var(--mudo)}
 
-.explode{position:fixed;inset:0;background:#260710;display:grid;place-content:center;text-align:center;gap:12px;padding:30px;z-index:50}
+.explode{position:fixed;inset:0;background:#fff1f2;display:grid;place-content:center;text-align:center;gap:12px;padding:30px;z-index:50}
 .explode .grande{font-family:var(--disp);font-size:72px;font-weight:700;color:var(--vermelho);line-height:1}
 .explode p{margin:0 auto;font-size:22px;max-width:40ch}
 .explode button{justify-self:center;font-family:var(--disp);font-size:22px;border:0;border-radius:8px;padding:8px 18px;background:var(--texto);color:var(--chao)}
@@ -162,7 +163,7 @@ main{padding:14px 22px 150px}
 .grupo-setor{margin-bottom:10px}
 .grupo-setor .gs-cab{display:flex;justify-content:space-between;color:var(--c);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px 2px}
 .grupo-setor .lista-outros>div{grid-template-columns:1fr auto}
-.suspeitas{background:#2a1418;border:1px solid var(--vermelho);border-radius:10px;padding:12px;display:grid;gap:10px}
+.suspeitas{background:#fef2f2;border:1px solid var(--vermelho);border-radius:10px;padding:12px;display:grid;gap:10px}
 .suspeitas h3{color:var(--vermelho);font-size:19px;margin:0}
 .suspeita{display:grid;gap:6px;font-size:14px;border-top:1px solid #4a2229;padding-top:8px}
 
@@ -174,7 +175,7 @@ main{padding:14px 22px 150px}
 .mini b{font-family:var(--disp);font-size:19px;font-weight:700}
 .mini .t{font-family:var(--mono);color:var(--estado);font-weight:600}
 
-.legenda{position:fixed;left:0;right:0;bottom:0;background:#0a0f11;border-top:1px solid var(--linha);padding:8px 22px;display:grid;grid-template-columns:auto 1fr;gap:6px 18px;font-size:12.5px;z-index:40}
+.legenda{position:fixed;left:0;right:0;bottom:0;background:var(--painel);border-top:1px solid var(--linha);padding:8px 22px;display:grid;grid-template-columns:auto 1fr;gap:6px 18px;font-size:12.5px;z-index:40}
 .legenda .tit{font-family:var(--disp);font-size:16px;font-weight:700;color:var(--mudo);letter-spacing:.06em;text-transform:uppercase;grid-row:1/span 2;align-self:center}
 .legenda .linha1,.legenda .linha2{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}
 .legenda .cor{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:5px;background:var(--c)}
@@ -184,7 +185,7 @@ body.tv main{padding-bottom:170px}
 @media (max-width:900px){.legenda{position:static;grid-template-columns:1fr}}
 
 /* ===== v3 · mais limpo (16/set) ===== */
-:root{--painel:#141d20;--painel2:#1a2528}
+:root{--painel:#ffffff;--painel2:#f4f7fb}
 main{gap:18px;padding:18px 28px 90px}
 .topo{padding:12px 28px}
 .eyebrow{display:none}
@@ -313,3 +314,43 @@ body.tv main{padding-bottom:90px}
 @media (max-width:700px){.ia-item{grid-template-columns:1fr}.ia-lado{grid-column:1;grid-row:auto;text-align:left}.ia-amo{grid-template-columns:1fr}}
 
 .selo-novo{position:absolute;top:-9px;right:12px;background:var(--amarelo);color:#1a1405;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.04em;border-radius:6px;padding:1px 9px}
+
+/* ── claro: relevo por borda e sombra, não por fundo ── */
+.cartao,.bloco-lat,.vazio,.etapa,.rast,.ia-item,.ia-amo,.numeros>div,.kpi,.kan-col{box-shadow:var(--sombra);border:1px solid var(--linha)}
+.cartao{border-left-width:8px;border-left-color:var(--estado)}
+.ia-item{border-left-width:8px;border-left-color:var(--e)}
+.rast{border-left-width:5px}
+.abas button{background:var(--painel)}
+.abas button.on{background:var(--texto);color:#fff}
+.abas button[data-setor="cc"].on,.abas button[data-setor="esc"].on,.abas button[data-setor="tec"].on{color:#fff}
+.abas button.aba-ia.on{color:#fff}
+.btn-principal{background:var(--cc);color:#fff}
+.btn-login{background:var(--painel);color:var(--texto)}
+.selo-novo{color:#fff}
+.chip-ia{background:var(--ia-fundo)}
+.fluxo li{box-shadow:var(--sombra)}
+.info.ruim{color:var(--vermelho)} .info.ok{color:var(--ok)}
+.selo-ia{color:#fff}
+/* KPIs do topo (BI) */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:var(--painel);border-radius:12px;padding:12px 14px;display:grid;gap:2px}
+.kpi b{font-family:var(--disp);font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi span{font-size:13px;color:var(--mudo)}
+.kpi.ruim b{color:var(--vermelho)} .kpi.bom b{color:var(--ok)} .kpi.ia b{color:var(--ia)}
+/* pisca só o que precisa: aba da IA com pendência e cartão atrasado */
+.badge{background:var(--vermelho)}
+@media (prefers-reduced-motion:no-preference){
+  .abas button.aba-ia .badge{animation:pulsaBadge 1.1s infinite}
+  .cartao.s-x,.cartao.s-v2{animation:pulsaBorda 1.2s infinite}
+}
+@keyframes pulsaBadge{50%{transform:scale(1.18);box-shadow:0 0 0 6px rgba(220,38,38,.18)}}
+@keyframes pulsaBorda{50%{border-left-color:transparent}}
+
+.legenda{box-shadow:0 -1px 2px rgba(16,24,40,.06)}
+.suspeitas{color:#991b1b}
+.suspeitas h3{color:#991b1b}
+
+.explode{color:#7f1d1d}
+.explode button{background:var(--vermelho);color:#fff}
+@keyframes alarme2{50%{background:#ffe4e6}}
+@media (prefers-reduced-motion:no-preference){.explode{animation:alarme2 .8s steps(2,jump-none) infinite}}

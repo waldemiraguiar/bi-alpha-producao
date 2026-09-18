@@ -195,6 +195,20 @@
 
   // ── estado visual de cada cartão ──
   function minutosNaEtapa(c) { return (agora() - T(c.etapa_desde)) / 60000 }
+  // números do topo (pedido do Wal 18/set: cara de BI)
+  function desenharKpis(abertos) {
+    const el = $('kpis'); if (!el) return
+    const atrasados = abertos.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
+    const feitas = chamados.filter(c => c.status === 'concluido' && T(c.concluido_em) >= hoje0.getTime())
+    const dur = feitas.map(c => (T(c.concluido_em) - T(c.criado_em)) / 60000).filter(m => m > 0)
+    const media = dur.length ? fmt(dur.reduce((a, b) => a + b, 0) / dur.length) : '—'
+    const iaPend = pendentesInclusao().length
+    el.innerHTML = `<div class="kpi"><b>${abertos.length}</b><span>inclusões andando agora</span></div>
+      <div class="kpi ${atrasados ? 'ruim' : ''}"><b>${atrasados}</b><span>atrasadas — passaram do prazo</span></div>
+      <div class="kpi ia"><b>${iaPend}</b><span>🤖 pedidos no WhatsApp sem cartão</span></div>
+      <div class="kpi bom"><b>${feitas.length}</b><span>concluídas hoje${dur.length ? ` · média ${media}` : ''}</span></div>`
+  }
   function donoAtual(c) { return c.status === 'sem_amostra' || c.status === 'enviado' ? 'cc' : ETAPAS[c.etapa]?.dono }
   const ativo = c => c.status === 'aberto' || c.status === 'sem_amostra' || c.status === 'enviado'
   const etapaVisivel = c => c.status === 'sem_amostra' ? 1 : c.status === 'enviado' ? 7 : c.etapa
@@ -248,6 +262,7 @@
     if (hist) return desenharHistorico()
     if (rast) return
     const abertos = chamados.filter(ativo)
+    desenharKpis(abertos)
 
     // caminho da inclusão: 5 etapas, cor = dono, número = quantas estão ali (vermelho se alguma estourou)
     $('fluxo').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
