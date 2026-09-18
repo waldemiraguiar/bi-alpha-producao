@@ -550,3 +550,13 @@ body.tv main{padding-bottom:90px}
 .pl-item i{font-style:normal;font-size:11.5px;color:var(--mudo)}
 .pl-item.bom{background:#f0fdf4;border-color:#bbf7d0} .pl-item.bom b{color:var(--ok)}
 .pl-item.ruim{background:#fff6f6;border-color:#fecaca} .pl-item.ruim b{color:var(--vermelho)}
+
+/* ⭐ NPS */
+.abas button.aba-nps{color:#b45309;border-color:#fde68a}
+.abas button.aba-nps.on{background:#b45309;color:#fff}
+#vNps{border-top:6px solid #f59e0b;padding-top:10px}
+.selo-nps{display:inline-block;background:#f59e0b;color:#3b2100;font-family:var(--disp);font-weight:700;font-size:.6em;letter-spacing:.04em;border-radius:6px;padding:1px 9px;vertical-align:.25em}
+#vNps .ia-item.ok{--e:var(--ok);opacity:1}
+#vNps .ia-item.corte{--e:var(--amarelo)}
+#vNps .ia-item.atras{--e:var(--vermelho);background:#fff6f6}
+#vNps .ia-tempo{font-size:34px}

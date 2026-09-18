@@ -45,7 +45,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
-  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
+  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -83,6 +83,10 @@
         const { data } = await SB.from('inc_eventos').select('*').in('chamado_id', ids.slice(i, i + 300)).order('quando')
         eventos = eventos.concat(data || [])
       }
+      const np = await SB.from('nps_respostas').select('*').gte('quando', new Date(agora() - 180 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
+      nps = np.error ? [] : (np.data || [])
+      const nc = await SB.from('nps_convites').select('*').gte('criado_em', new Date(agora() - 180 * 864e5).toISOString()).range(0, 999)
+      npsConvites = nc.error ? [] : (nc.data || [])
       const rv = await SB.from('rota_vivo').select('*').order('rota')
       rotasVivo = rv.error ? [] : (rv.data || [])
       const rg = await SB.from('inc_regras_clinica').select('*').eq('ativa', true)
@@ -292,14 +296,15 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas'
-    $('vQuadro').hidden = hist || rast || col || rot; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps'
+    $('vQuadro').hidden = hist || rast || col || rot || npsv; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv
     desenharLegenda()
     desenharRastreamento()
     desenharColetas()
     desenharRotas()
+    desenharNps()
     if (hist) return desenharHistorico()
-    if (rast || col || rot) return
+    if (rast || col || rot || npsv) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
     desenharRascunhos()
@@ -497,6 +502,50 @@
     if (b) b.innerHTML = `🤖 Rastreamento de Inclusões${abertos ? ` <span class="badge ${urgente ? '' : 'leve'}">${abertos}</span>` : ''}`
     if (b) b.classList.toggle('tem', !!abertos)
   }
+  // ── ⭐ NPS DO ATENDIMENTO ──
+  // NPS = % promotores (9-10) − % detratores (0-6). Neutros (7-8) não entram na conta. Régua clássica de mercado.
+  const NPS_META = { bom: 50, otimo: 70, resposta: 30, recuperar: 48 }   // % e horas
+  function desenharNps() {
+    if (!$('npsPainel')) return
+    const per = npsPeriodo === 30 ? 30 : npsPeriodo === 90 ? 90 : 9999
+    const ini = agora() - per * 864e5
+    const r = nps.filter(x => T(x.quando) >= ini)
+    const conv = npsConvites.filter(x => T(x.criado_em) >= ini)
+    const prom = r.filter(x => x.nota >= 9).length, neu = r.filter(x => x.nota >= 7 && x.nota <= 8).length, det = r.filter(x => x.nota <= 6).length
+    const score = r.length ? Math.round((prom / r.length) * 100 - (det / r.length) * 100) : null
+    const taxa = conv.length ? Math.round((r.length / conv.length) * 100) : null
+    const zona = score === null ? ['sem dados', ''] : score >= NPS_META.otimo ? ['🏆 Excelente (classe mundial)', 'ex'] : score >= NPS_META.bom ? ['👍 Bom', 'bom'] : score >= 0 ? ['⚠️ Precisa melhorar', 'at'] : ['🚨 Crítico', 'cr']
+    const abertos = r.filter(x => x.nota <= 6 && !x.tratado_em)
+    document.querySelectorAll('.nps-filtros button').forEach(b => b.classList.toggle('on', +b.dataset.per === npsPeriodo))
+    $('npsPainel').innerHTML = `
+      <div class="numeros kpis">
+        <div class="kpi"><b class="${zona[1] === 'ex' || zona[1] === 'bom' ? 'verde' : zona[1] === 'cr' ? 'vermelho' : ''}">${score === null ? '—' : score}</b><span>NPS ${zona[0]}</span></div>
+        <div class="kpi bom"><b>${prom}</b><span>promotores (9–10)</span></div>
+        <div class="kpi"><b>${neu}</b><span>neutros (7–8)</span></div>
+        <div class="kpi ${det ? 'ruim' : ''}"><b>${det}</b><span>detratores (0–6)</span></div>
+        <div class="kpi ${taxa !== null && taxa < NPS_META.resposta ? 'ruim' : ''}"><b>${taxa === null ? '—' : taxa + '%'}</b><span>responderam (${r.length}/${conv.length} convites)</span></div>
+        <div class="kpi ${abertos.length ? 'ruim' : 'bom'}"><b>${abertos.length}</b><span>detratores sem retorno</span></div>
+      </div>`
+    $('npsLista').innerHTML = r.length ? r.map(x => {
+      const cls = x.nota >= 9 ? 'ok' : x.nota >= 7 ? 'corte' : 'atras'
+      return `<div class="ia-item ${cls}" data-nps="${x.id}">
+        <div class="ia-clin">${esc(x.clinica || x.grupo || '')} <span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span></div>
+        ${x.comentario ? `<div class="ia-msg">“${esc(x.comentario)}”</div>` : '<div class="ia-msg mudo">sem comentário</div>'}
+        <div class="ia-lado"><div class="ia-tempo">${x.nota}</div><div class="ia-estado">${x.nota >= 9 ? 'PROMOTOR' : x.nota >= 7 ? 'NEUTRO' : 'DETRATOR'}</div></div>
+        ${x.nota <= 6 ? (x.tratado_em ? `<div class="feito-linha">✅ retorno feito por ${esc(x.tratado_por || '')} em ${dataCurta(x.tratado_em)} ${hm(x.tratado_em)}</div>`
+          : `<div class="acao"><button data-nps-tratar="${x.id}">✔ Falei com a clínica</button><span class="mudo">responder em até ${NPS_META.recuperar}h (regra de mercado)</span></div>`) : ''}
+      </div>`
+    }).join('') : '<div class="vazio">Nenhuma resposta ainda. Envie a pesquisa pelo cartão da coleta ou pelo botão acima.</div>'
+    const b = document.querySelector('#abas button[data-setor="nps"]')
+    if (b) { b.innerHTML = `⭐ NPS${abertos.length ? ` <span class="badge">${abertos.length}</span>` : ''}`; b.classList.toggle('tem', !!abertos.length) }
+  }
+  let npsPeriodo = 30
+  document.querySelectorAll('.nps-filtros button').forEach(b => b.addEventListener('click', () => { npsPeriodo = +b.dataset.per; desenharNps() }))
+  $('npsLista') && $('npsLista').addEventListener('click', async ev => {
+    const b = ev.target.closest('button[data-nps-tratar]'); if (!b) return
+    if (!(await garantirLogin())) return
+    try { await rpc('nps_tratar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +b.dataset.npsTratar }); toast('Retorno registrado'); await carregar(); desenhar() } catch (e) { toast(e.message) }
+  })
   // ── 🛵 BI DAS ROTAS AO VIVO (torre de controle dos motoboys) ──
   const SILENCIO_MIN = 45
   function desenharRotas() {
@@ -975,7 +1024,7 @@
     return `<div class="msg-box ${jaAvisou ? 'ok' : ''}">
       <div class="msg-cab">💬 <b>${t}</b> <span class="mudo">— mensagem pronta para a clínica${jaAvisou ? ` · avisado ${hm(c.avisado_em)} por ${esc(c.avisado_por || '')}` : ''}</span></div>
       <div class="msg-txt" data-msg="${c.id}">${esc(m)}</div>
-      <div class="acao"><button data-enviar="${c.id}" title="Envia agora no grupo de TESTE, identificando a clínica">📤 Enviar (grupo de teste)</button><button class="leve" data-copiar="${c.id}">📋 Copiar</button>${jaAvisou ? '' : `<button class="leve" data-avisei="${c.id}">✅ Avisei a clínica</button>`}</div>
+      <div class="acao"><button data-enviar="${c.id}" title="Envia agora no grupo de TESTE, identificando a clínica">📤 Enviar (grupo de teste)</button>${c.status === 'coletada' ? `<button class="leve" data-pesquisa="${c.id}" title="Gera o link da pesquisa de satisfação para esta clínica">⭐ Pesquisa de satisfação</button>` : ''}<button class="leve" data-copiar="${c.id}">📋 Copiar</button>${jaAvisou ? '' : `<button class="leve" data-avisei="${c.id}">✅ Avisei a clínica</button>`}</div>
     </div>`
   }
   const podeDesfazer = c => c.status !== 'na_lista' && (agora() - T(c.agendada_em || c.criado_em)) / 60000 <= 15
@@ -1010,6 +1059,20 @@
       try {
         await rpc('inc_envio_novo', { p_nome: sessao.nome, p_senha: sessao.senha, p_coleta: c.id, p_grupo: c.grupo, p_texto: txt })
         toast('Na fila — sai no grupo de teste em até 20 s')
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
+      return
+    }
+    const pq = ev.target.closest('button[data-pesquisa]')
+    if (pq) {
+      if (!(await garantirLogin())) return
+      const c = coletas.find(x => x.id === +pq.dataset.pesquisa)
+      try {
+        const cod = await rpc('nps_convite_novo', { p_nome: sessao.nome, p_senha: sessao.senha, p_grupo: c.grupo, p_clinica: c.clinica, p_motivo: 'coleta' })
+        const link = `${location.origin}/nps/?c=${cod}`
+        const txt = `⭐ *Como foi o nosso atendimento?*\nSua opinião leva 10 segundos e ajuda muito a equipe:\n${link}\n\n_Alpha Labs · Atendimento ao Cliente_`
+        try { await navigator.clipboard.writeText(txt) } catch {}
+        alert(`Pesquisa criada e copiada:\n\n${txt}`)
         await carregar(); desenhar()
       } catch (e) { toast(e.message) }
       return

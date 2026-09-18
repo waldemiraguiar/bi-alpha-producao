@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alpha Labs · como foi o nosso atendimento?</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Inter:wght@400;600&display=swap">
+<style>
+:root{--fundo:#eef1f6;--carta:#fff;--borda:#dfe4ec;--tinta:#111827;--mudo:#667085;--at:#2563eb;--ok:#16a34a;--amb:#d97706;--rub:#dc2626}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--tinta);font-family:"Inter",system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:20px}
+.cartao{background:var(--carta);border:1px solid var(--borda);border-radius:18px;box-shadow:0 2px 6px rgba(16,24,40,.08);padding:26px 22px;max-width:560px;width:100%;display:grid;gap:14px}
+h1{font-family:"Archivo",system-ui,sans-serif;font-size:24px;margin:0;line-height:1.2}
+p{margin:0;color:var(--mudo);font-size:15px}
+.notas{display:grid;grid-template-columns:repeat(11,1fr);gap:6px}
+.notas button{font:inherit;font-weight:700;font-size:16px;padding:12px 0;border-radius:10px;border:1px solid var(--borda);background:#f8fafc;cursor:pointer}
+.notas button:hover{border-color:var(--at)}
+.notas button.det{color:var(--rub)} .notas button.neu{color:var(--amb)} .notas button.pro{color:var(--ok)}
+.notas button.on{background:var(--at);border-color:var(--at);color:#fff}
+.reguas{display:flex;justify-content:space-between;font-size:12px;color:var(--mudo)}
+textarea{font:inherit;font-size:15px;border:1px solid var(--borda);border-radius:10px;padding:10px;min-height:80px;resize:vertical}
+.enviar{font:inherit;font-weight:700;font-size:16px;border:0;border-radius:12px;padding:13px;background:var(--at);color:#fff;cursor:pointer}
+.enviar[disabled]{background:#cbd5e1;cursor:default}
+.fim{display:grid;gap:8px;text-align:center;padding:12px 0}
+.fim b{font-family:"Archivo",system-ui,sans-serif;font-size:22px}
+.rod{font-size:12px;color:var(--mudo);text-align:center}
+</style>
+</head>
+<body>
+<main class="cartao" id="app">
+  <h1>Como foi o nosso atendimento?</h1>
+  <p id="sub">Sua resposta leva 10 segundos e ajuda a equipe da Alpha Labs a melhorar.</p>
+  <div>
+    <p style="margin-bottom:6px"><b>De 0 a 10, o quanto você indicaria a Alpha Labs para outro colega veterinário?</b></p>
+    <div class="notas" id="notas"></div>
+    <div class="reguas"><span>0 · não indicaria</span><span>10 · indicaria com certeza</span></div>
+  </div>
+  <textarea id="txt" placeholder="Quer contar o motivo? (opcional)"></textarea>
+  <button class="enviar" id="bt" disabled>Enviar resposta</button>
+  <div class="rod">Alpha Labs · Atendimento ao Cliente</div>
+</main>
+<script>
+const SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co', KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
+const cod = new URLSearchParams(location.search).get('c') || ''
+let nota = null
+const el = id => document.getElementById(id)
+el('notas').innerHTML = [...Array(11).keys()].map(n => `<button data-n="${n}" class="${n <= 6 ? 'det' : n <= 8 ? 'neu' : 'pro'}">${n}</button>`).join('')
+el('notas').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return
+  nota = +b.dataset.n
+  ;[...el('notas').children].forEach(x => x.classList.toggle('on', x === b))
+  el('bt').disabled = false
+})
+el('bt').addEventListener('click', async () => {
+  el('bt').disabled = true; el('bt').textContent = 'Enviando…'
+  try {
+    const r = await fetch(`${SB}/rest/v1/rpc/nps_responder`, {
+      method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_codigo: cod, p_nota: nota, p_comentario: el('txt').value }),
+    })
+    const ok = await r.json().catch(() => false)
+    el('app').innerHTML = ok
+      ? `<div class="fim"><b>Obrigado! 🐾</b><p>Sua resposta chegou para a equipe da Alpha Labs.${nota <= 6 ? ' Vamos entrar em contato para entender o que aconteceu.' : ''}</p></div><div class="rod">Alpha Labs · Atendimento ao Cliente</div>`
+      : `<div class="fim"><b>Este link já foi usado</b><p>Se quiser falar com a gente, é só chamar no WhatsApp.</p></div><div class="rod">Alpha Labs · Atendimento ao Cliente</div>`
+  } catch (e) {
+    el('bt').disabled = false; el('bt').textContent = 'Tentar de novo'
+  }
+})
+if (!cod) { el('sub').textContent = 'Link inválido — peça um novo à equipe da Alpha Labs.'; el('bt').disabled = true }
+</script>
+</body>
+</html>

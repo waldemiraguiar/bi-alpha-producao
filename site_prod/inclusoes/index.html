@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=42">
+<link rel="stylesheet" href="inc.css?v=43">
 </head>
 <body>
 <header class="topo">
@@ -23,6 +23,7 @@
     <button data-setor="rast" class="aba-ia">🤖 Rastreamento de Inclusões</button>
     <button data-setor="coleta" class="aba-moto">🛵 Agendamentos</button>
     <button data-setor="rotas" class="aba-rota">🛵 BI Rotas</button>
+    <button data-setor="nps" class="aba-nps">⭐ NPS</button>
     <button data-setor="hist">Histórico</button>
   </nav>
   <div class="ferramentas">
@@ -64,6 +65,13 @@
     <p class="mudo ajuda" id="rastAjuda"></p>
     <div class="numeros" id="rastResumo"></div>
     <div class="rast-lista" id="rastLista"></div>
+  </section>
+
+  <section id="vNps" hidden>
+    <div class="rast-topo"><h2><span class="selo-nps">⭐ SATISFAÇÃO</span> NPS do Atendimento</h2><p class="mudo">A clínica responde de 0 a 10 por um link. <b>NPS = % promotores (9–10) − % detratores (0–6)</b>; neutros (7–8) não entram na conta. Regras de mercado: acima de 50 é bom, acima de 70 é classe mundial, e todo detrator precisa de retorno em até 48 h.</p></div>
+    <div class="rast-filtros nps-filtros"><button data-per="30" class="on">30 dias</button><button data-per="90">90 dias</button><button data-per="9999">tudo</button></div>
+    <div id="npsPainel"></div>
+    <div class="rast-lista" id="npsLista"></div>
   </section>
 
   <section id="vRotas" hidden>
@@ -204,6 +212,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=42"></script>
+<script src="inc.js?v=43"></script>
 </body>
 </html>
