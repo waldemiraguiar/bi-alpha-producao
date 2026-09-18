@@ -855,6 +855,7 @@
   function relogio(c) {
     const min = (agora() - T(c.quando)) / 60000
     if (c.status === 'nova') {
+      if (c.respondido_em) return { nivel: 'ok', motivo: `respondido no WhatsApp ${hm(c.respondido_em)}${c.respondido_por ? ` por ${c.respondido_por}` : ''} — falta agendar aqui` }
       if (min >= PRAZO.agendar) return { nivel: 'cobrar', motivo: `pedido há ${fmt(min)} e ninguém agendou` }
       const fc = c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
       if (fc !== null && fc <= PRAZO.corteAviso) return { nivel: 'atencao', motivo: fc > 0 ? `a lista sai em ${fmt(fc)}` : 'a lista já saiu — precisa encaixar' }
@@ -957,7 +958,8 @@
         : c.status === 'coletada' ? `✅ coletado ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · ${c.coletada_qtd} ex`}`
         : c.status === 'na_lista' ? `📋 na lista da ${esc(c.na_lista_rota || '')} ${hm(c.na_lista_em)} · aguardando o motoboy`
         : c.status === 'agendada' ? `🕒 agendada por ${esc(c.por || '')} · ${esc(c.rota || '')} ${esc(c.turno || '')}`
-        : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}` : (m >= 20 ? 'SEM AGENDAR' : mat ? 'PEDIU MATERIAL' : 'NOVO PEDIDO')
+        : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}`
+        : c.respondido_em ? `💬 respondido no WhatsApp ${hm(c.respondido_em)}` : (m >= 20 ? 'SEM AGENDAR' : mat ? 'PEDIU MATERIAL' : 'NOVO PEDIDO')
       return `<div class="ia-item ${cls}" data-col="${c.id}">
         <div class="ia-clin">${mat ? '<span class="tag-mat">📦 ENTREGA DE MATERIAL</span> ' : ''}${esc(c.clinica || '')}${mat && c.item ? ` <span class="tag-item">${esc(c.item)}</span>` : ''} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
@@ -1000,9 +1002,9 @@
         const fim = fimDoTurno(c)
         if (fim && agora() > fim) { casos.push({ tipo: 'motoboy_mudo', c, motivo: `${c.clinica} está na lista da ${c.na_lista_rota || ''} desde ${hm(c.na_lista_em)} e o motoboy não informou` }); continue }
       }
-      // ③ o cliente pediu e ninguém respondeu em 1 hora
-      if (c.status === 'nova' && (agora() - T(c.quando)) / 60000 >= 60) {
-        casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt((agora() - T(c.quando)) / 60000)} e ninguém respondeu` })
+      // ③ o cliente pediu e ninguém respondeu NO WHATSAPP em 1 hora (responder no grupo já para o relógio — caso Barão de Lucena, 18/set)
+      if (c.status === 'nova' && !c.respondido_em && (agora() - T(c.quando)) / 60000 >= 60) {
+        casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt((agora() - T(c.quando)) / 60000)} e ninguém respondeu no WhatsApp` })
       }
     }
     return casos.map(x => ({ ...x, chave: `${x.tipo}:${x.c.id}:${dia}` }))
