@@ -70,7 +70,7 @@
     return all
   }
   async function carregar() {
-    if (DEMO) { if (!chamados.length) demoDados(); return }
+    if (DEMO) { if (!chamados.length) demoDados(); return }   // demo: dados em memória (inclusive os terremotos do ensaio)
     try {
       const lim = new Date(agora() - 31 * 864e5).toISOString()
       const abertos = await SB.from('inc_chamados').select('*').in('status', ['aberto', 'sem_amostra', 'enviado', 'rascunho'])
@@ -1145,6 +1145,28 @@
     const b = ev.target.closest('button[data-papel]'); if (!b) return
     papel = b.dataset.papel; desenharColetas()
   })
+  $('terrLista') && $('terrLista').addEventListener('click', async ev => {
+    const bt = ev.target.closest('button[data-terr-acao]'); if (!bt) return
+    {
+      if (!(await garantirLogin())) return
+      const caixa = bt.closest('[data-terr]')
+      const chave = caixa.dataset.terr, id = +caixa.dataset.terrCol, tipo = caixa.dataset.terrTipo
+      const caso = terremotosAtivos().find(x => x.chave === chave)
+      try {
+        if (bt.dataset.terrAcao === 'assumir') {
+          await rpc('terremoto_assumir', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_tipo: tipo,
+            p_clinica: caso ? caso.c.clinica : null, p_cartao: id, p_motivo: caso ? caso.motivo : null })
+          toast('Você assumiu — a equipe está vendo seu nome')
+        } else {
+          const oque = (await pedirMotivo('O que foi feito?', 'Ex.: liguei na clínica e encaixei na rota 5 das 15h') || '').trim()
+          if (!oque) return
+          await rpc('terremoto_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_texto: oque })
+          toast('Terremoto encerrado')
+        }
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
+    }
+  })
   $('colLista').addEventListener('change', ev => {
     const sel = ev.target.closest('select[data-campo="rota"]'); if (!sel) return
     const t = sel.closest('.escolha-linha').querySelector('select[data-campo="turno"]')
@@ -1205,27 +1227,6 @@
           if (reg.dataset.regra === 'rota_fixa' && !valor) { valor = (await pedirMotivo(`Qual rota sempre atende ${c.clinica}?`, 'Rota') || '').trim(); if (!valor) return }
           await rpc('inc_regra_clinica', { p_nome: sessao.nome, p_senha: sessao.senha, p_grupo: c.grupo, p_clinica: c.clinica, p_regra: reg.dataset.regra, p_valor: valor })
           toast('Aprendido ✓ a IA já vai usar essa regra')
-        }
-        await carregar(); desenhar()
-      } catch (e) { toast(e.message) }
-      return
-    }
-    const bt = ev.target.closest('button[data-terr-acao]')
-    if (bt) {
-      if (!(await garantirLogin())) return
-      const caixa = bt.closest('[data-terr]')
-      const chave = caixa.dataset.terr, id = +caixa.dataset.terrCol, tipo = caixa.dataset.terrTipo
-      const caso = terremotosAtivos().find(x => x.chave === chave)
-      try {
-        if (bt.dataset.terrAcao === 'assumir') {
-          await rpc('terremoto_assumir', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_tipo: tipo,
-            p_clinica: caso ? caso.c.clinica : null, p_cartao: id, p_motivo: caso ? caso.motivo : null })
-          toast('Você assumiu — a equipe está vendo seu nome')
-        } else {
-          const oque = (await pedirMotivo('O que foi feito?', 'Ex.: liguei na clínica e encaixei na rota 5 das 15h') || '').trim()
-          if (!oque) return
-          await rpc('terremoto_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_texto: oque })
-          toast('Terremoto encerrado')
         }
         await carregar(); desenhar()
       } catch (e) { toast(e.message) }
@@ -1554,6 +1555,18 @@
     eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
   }
   function demoRpc(nome, a) {
+    // ensaio do TERREMOTO: a equipe treina o gesto (assumir → resolver) sem tocar na operação
+    if (nome === 'terremoto_assumir') {
+      const t = terremotos.find(x => x.chave === a.p_chave)
+      if (t) { t.assumido_por = a.p_nome; t.assumido_em = new Date().toISOString() }
+      else terremotos.push({ chave: a.p_chave, tipo: a.p_tipo, clinica: a.p_clinica, cartao_id: a.p_cartao, motivo: a.p_motivo, aberto_em: new Date().toISOString(), assumido_por: a.p_nome, assumido_em: new Date().toISOString() })
+      return a.p_nome
+    }
+    if (nome === 'terremoto_resolver') {
+      const t = terremotos.find(x => x.chave === a.p_chave)
+      if (t) { t.resolvido_por = a.p_nome; t.resolvido_em = new Date().toISOString(); t.o_que_fez = a.p_texto }
+      return true
+    }
     if (nome === 'inc_coleta_acao') { const x = coletas.find(y => y.id === a.p_id); if (x) { x.status = a.p_acao === 'agendar' ? 'agendada' : 'descartada'; x.rota = a.p_rota; x.turno = a.p_turno; x.por = 'DEMO'; x.agendada_em = new Date().toISOString() } return x ? x.status : null }
     if (nome === 'inc_buscar_req') return { req: a.p_num, pet: 'THOR', especie: 'Canino', clinica: 'Clínica de exemplo', entrada: new Date(agora() - 6 * 3600e3).toISOString(), exames: ['Hemograma', 'ALT', 'Creatinina'] }
     if (nome === 'inc_abrir2') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: 2, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: false, aberto_por: a.p_nome, amostra_entrada: a.p_entrada, cliente_status: a.p_cliente, novo_numero: a.p_novo_numero }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: 2 }); return x.id }
