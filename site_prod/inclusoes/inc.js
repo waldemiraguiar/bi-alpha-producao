@@ -481,10 +481,12 @@
     const atrasada = r => { if (r.estado === 'finalizada' || !r.fim_previsto) return false; const agoraHM = new Date(agoraMs).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' }); return agoraHM > hm2(r.fim_previsto) }
     const muda = r => r.estado === 'em_rua' && min(r.ultima_conf) > SILENCIO_MIN
     const emRua = linhas.filter(r => r.estado === 'em_rua')
-    const total = linhas.reduce((a, r) => a + r.paradas, 0)
-    const infor = linhas.reduce((a, r) => a + r.informadas, 0)
+    const andando = linhas.filter(r => r.estado !== 'lista_postada')
+    const total = andando.reduce((a, r) => a + r.paradas, 0)
+    const infor = andando.reduce((a, r) => a + r.informadas, 0)
     const exames = linhas.reduce((a, r) => a + r.exames, 0)
-    const pend = linhas.reduce((a, r) => a + r.faltam + r.sem_numero, 0)
+    // só conta pendência de quem já saiu: lista recém-postada não é pendência
+    const pend = linhas.filter(r => r.estado !== 'lista_postada').reduce((a, r) => a + r.faltam + r.sem_numero, 0)
     $('rotasKpis').innerHTML = `<div class="kpi"><b>${emRua.length}</b><span>rotas na rua agora</span></div>
       <div class="kpi bom"><b>${infor}/${total}</b><span>paradas informadas hoje</span></div>
       <div class="kpi"><b>${exames}</b><span>exames coletados hoje</span></div>
