@@ -481,3 +481,9 @@ body.tv main{padding-bottom:90px}
 .rt-nome{font-family:var(--disp);font-size:17px;margin:0;color:var(--mudo);letter-spacing:.04em}
 .rt-turnos{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start}
 .tn-forte{font-family:var(--disp);font-size:18px;letter-spacing:.04em}
+
+#rotasKpis .kpi{text-align:left;cursor:pointer;font:inherit;border:1px solid var(--linha);position:relative}
+#rotasKpis .kpi[disabled]{cursor:default;opacity:1}
+#rotasKpis .kpi .lupa{display:block;font-style:normal;font-size:11px;color:var(--cc);margin-top:3px}
+#rotasKpis .kpi.sel{outline:2px solid var(--cc);outline-offset:1px}
+#rotasKpis .kpi.sel .lupa{color:var(--vermelho);font-weight:700}

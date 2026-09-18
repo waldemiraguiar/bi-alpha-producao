@@ -488,14 +488,21 @@
     const exames = linhas.reduce((a, r) => a + r.exames, 0)
     // só conta pendência de quem já saiu: lista recém-postada não é pendência
     const pend = linhas.filter(r => r.estado !== 'lista_postada').reduce((a, r) => a + r.faltam + r.sem_numero, 0)
-    $('rotasKpis').innerHTML = `<div class="kpi"><b>${emRua.length}</b><span>rotas na rua agora</span></div>
-      <div class="kpi bom"><b>${infor}/${total}</b><span>paradas informadas hoje</span></div>
-      <div class="kpi"><b>${exames}</b><span>exames coletados hoje</span></div>
-      <div class="kpi ${pend ? 'ruim' : ''}"><b>${pend}</b><span>pendências (sem info + sem nº)</span></div>
-      <div class="kpi ${linhas.filter(atrasada).length ? 'ruim' : ''}"><b>${linhas.filter(atrasada).length}</b><span>passaram do horário previsto</span></div>
-      <div class="kpi ${linhas.filter(muda).length ? 'ruim' : ''}"><b>${linhas.filter(muda).length}</b><span>sem dar notícia há +${SILENCIO_MIN} min</span></div>`
+    const ehAdmin = !!(sessao && sessao.setorInc === 'admin')
+    const kpi = (id, n, txt, cls) => `<button class="kpi ${cls || ''} ${filtroRota === id ? 'sel' : ''}" data-filtro="${id}" ${id === 'nada' ? 'disabled' : ''}><b>${n}</b><span>${txt}</span>${id !== 'nada' ? `<i class="lupa">${filtroRota === id ? 'mostrando só estes ✕' : 'clique para ver quais'}</i>` : ''}</button>`
+    $('rotasKpis').innerHTML = kpi('rua', emRua.length, 'rotas na rua agora') +
+      kpi('nada', `${infor}/${total}`, 'paradas informadas hoje', 'bom') +
+      (ehAdmin ? kpi('nada', exames, 'exames coletados hoje (só admin)') : '') +
+      kpi('pend', pend, 'pendências (sem info + sem nº)', pend ? 'ruim' : '') +
+      kpi('atraso', linhas.filter(atrasada).length, 'passaram do horário previsto', linhas.filter(atrasada).length ? 'ruim' : '') +
+      kpi('mudo', linhas.filter(muda).length, `sem dar notícia há +${SILENCIO_MIN} min`, linhas.filter(muda).length ? 'ruim' : '')
+    const filtrada = filtroRota === 'rua' ? linhas.filter(r => r.estado === 'em_rua')
+      : filtroRota === 'pend' ? linhas.filter(r => r.estado !== 'lista_postada' && (r.faltam || r.sem_numero))
+      : filtroRota === 'atraso' ? linhas.filter(atrasada)
+      : filtroRota === 'mudo' ? linhas.filter(muda) : linhas
+    if (filtroRota) filtrada.forEach(r => abertas.add(r.rota))
     const porRota = new Map()
-    for (const r of linhas) { if (!porRota.has(r.nome)) porRota.set(r.nome, []); porRota.get(r.nome).push(r) }
+    for (const r of filtrada) { if (!porRota.has(r.nome)) porRota.set(r.nome, []); porRota.get(r.nome).push(r) }
     const cartao = r => {
       const pct = v => r.paradas ? Math.round((v / r.paradas) * 100) : 0
       const st = r.estado === 'finalizada' ? ['✅ finalizada', 'ok'] : muda(r) ? ['🔇 sem notícia', 'ruim'] : atrasada(r) ? ['⏰ passou do horário', 'ruim'] : r.estado === 'em_rua' ? ['🛵 na rua', 'rua'] : ['📋 lista postada', 'lista']
@@ -515,7 +522,7 @@
       <section class="linha-rota">
         <h3 class="rt-nome">${esc(nome.toUpperCase())}</h3>
         <div class="rt-turnos">${turnos.map(cartao).join('')}</div>
-      </section>`).join('') : '<div class="vazio">Nenhuma rota aberta agora. A lista da manhã costuma ser postada a partir das 19h.</div>'
+      </section>`).join('') : `<div class="vazio">${filtroRota ? 'Nenhuma rota nessa situação agora. <b>Clique no número de novo para ver todas.</b>' : 'Nenhuma rota aberta agora. A lista da manhã costuma ser postada a partir das 19h.'}</div>`
     desenharPlacarRotas(linhas, atrasada)
     const okPrazo = linhas.filter(r => r.estado === 'finalizada' && !atrasada(r)).length
     const fin = linhas.filter(r => r.estado === 'finalizada').length
@@ -577,6 +584,7 @@
       <p class="mudo" style="font-size:12.5px;margin:0">Nota = informou todas as paradas (60) + fechou no horário (25) − sem número (15) − sem informação (20). Volume de exames entra só como comparação da rota <b>com ela mesma</b>, para não punir rota pequena.</p>`
   }
   const abertas = new Set()
+  let filtroRota = null
   function detalheRota(r) {
     const ps = Array.isArray(r.paradas_json) ? r.paradas_json : []
     if (!ps.length) return '<div class="det vazio-det">Sem detalhe das paradas ainda.</div>'
@@ -593,6 +601,12 @@
     return `<div class="det"><table class="tab-det"><thead><tr><th>hora</th><th>clínica</th><th class="num">exames</th><th class="num">intervalo</th></tr></thead><tbody>${linhas}</tbody></table>
       <div class="mudo det-pe">${ini ? `começou ${hm(new Date(ini).toISOString())} · ` : ''}✅ informou · 🟡 foi mas não mandou o nº · 🔴 não informou · ⚪️ ainda não chegou</div></div>`
   }
+  $('rotasKpis') && $('rotasKpis').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-filtro]'); if (!b || b.dataset.filtro === 'nada') return
+    filtroRota = filtroRota === b.dataset.filtro ? null : b.dataset.filtro
+    if (!filtroRota) abertas.clear()
+    desenharRotas()
+  })
   $('rotasLista') && $('rotasLista').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-abrir]'); if (!b) return
     const k = b.dataset.abrir
