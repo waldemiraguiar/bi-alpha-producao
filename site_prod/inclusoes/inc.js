@@ -709,21 +709,41 @@
   })
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
   // ── dia 2: mensagem pronta para o cliente, com a janela real da rota ──
+  // regra de mercado (iFood, Loggi, Uber): prometer FAIXA arredondada e curta — nunca minuto cravado, nunca mais de 3 h
+  const hLabel = min => { const h = Math.floor(min / 60), m = min % 60; return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h` }
   function janelaTexto(rota, turno) {
     const j = JANELAS[(rota || '').toLowerCase()]
     const k = /manh/i.test(turno || '') ? 'manhã' : /noite/i.test(turno || '') ? 'noite' : 'tarde'
     const x = j && j[k]
     const quando = /amanh/i.test(turno || '') ? 'amanhã' : 'hoje'
     const periodo = k === 'manhã' ? 'de manhã' : k === 'noite' ? 'no fim do dia' : 'à tarde'
-    return x ? `${quando} ${periodo}, entre ${x.de.slice(0, 5)} e ${x.ate.slice(0, 5)}` : `${quando} ${periodo}`
+    if (!x) return { quando: `${quando} ${periodo}`, faixa: '' }
+    const min = t => +t.slice(0, 2) * 60 + +t.slice(3, 5)
+    let ini = Math.floor(min(x.de) / 60) * 60                     // arredonda para a hora cheia
+    let fim = Math.ceil(min(x.ate) / 60) * 60
+    if (fim - ini > 180) fim = ini + 180                          // no máximo 3 horas de janela
+    if (fim - ini < 60) fim = ini + 60
+    return { quando: `${quando} ${periodo}`, faixa: `${hLabel(ini)} e ${hLabel(fim)}` }
   }
+  // mensagem curta, com título, dados em linha e assinatura (padrão de notificação de entrega)
+  const ASSINATURA = '_Alpha Labs · Atendimento ao Cliente_'
   function mensagemCliente(c) {
-    const clin = c.clinica || ''
-    if (c.status === 'nova') return { t: 'Recebi o pedido', m: `Oi! Recebemos o pedido de coleta${c.quando ? ` das ${hm(c.quando)}` : ''}. Já estou confirmando a rota e volto com o horário.` }
-    if (c.status === 'coletada') return { t: 'Coletamos', m: `Passamos aí às ${hm(c.coletada_em)}${c.coletada_qtd ? ` e recolhemos ${c.coletada_qtd} amostra${c.coletada_qtd > 1 ? 's' : ''}` : ''}. Qualquer coisa é só chamar. 🐾` }
-    const jt = janelaTexto(c.rota || c.rota_sug, c.turno || c.turno_sug)
-    if (/amanh/i.test(c.turno || c.turno_sug || '')) return { t: 'Fica para amanhã', m: `A lista de hoje dessa região já saiu, então agendamos a coleta para ${jt}. Se for urgente, me avise que tento encaixar.` }
-    return { t: 'Agendado', m: `Agendado! Nosso motoboy passa aí ${jt}. Assim que ele recolher, te confirmo por aqui.` }
+    if (c.status === 'nova') return { t: 'Recebi o pedido', m:
+      `👋 *Recebemos seu pedido de coleta*${c.quando ? ` — ${hm(c.quando)}` : ''}\n` +
+      `Estamos confirmando a rota e já voltamos com o horário. 😊\n\n${ASSINATURA}` }
+    if (c.status === 'coletada') return { t: 'Coletamos', m:
+      `✅ *Coleta realizada*\n` +
+      `🕒 ${hm(c.coletada_em)}${c.coletada_qtd ? `   📦 ${c.coletada_qtd} amostra${c.coletada_qtd > 1 ? 's' : ''} recolhida${c.coletada_qtd > 1 ? 's' : ''}` : ''}\n\n` +
+      `Obrigado pela parceria! Qualquer coisa, é só chamar. 🐾\n\n${ASSINATURA}` }
+    const j = janelaTexto(c.rota || c.rota_sug, c.turno || c.turno_sug)
+    if (/amanh/i.test(c.turno || c.turno_sug || '')) return { t: 'Fica para amanhã', m:
+      `📅 *Coleta agendada para amanhã*\n` +
+      `🛵 ${j.quando}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
+      `A lista de hoje dessa região já saiu. Se for urgente, me avise que tento encaixar. 🙏\n\n${ASSINATURA}` }
+    return { t: 'Agendado', m:
+      `✅ *Coleta agendada*\n` +
+      `🛵 ${j.quando}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
+      `Assim que o motoboy recolher, confirmamos por aqui. 😊\n\n${ASSINATURA}` }
   }
   const COLETA_ABERTA = c => c.status === 'nova'
   const COLETA_ANDANDO = c => ['nova', 'agendada', 'na_lista'].includes(c.status)

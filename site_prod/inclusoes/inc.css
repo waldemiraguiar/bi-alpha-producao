@@ -528,3 +528,5 @@ body.tv main{padding-bottom:90px}
 .msg-box.ok{background:#f0fdf4;border-color:#bbf7d0}
 .msg-cab{font-size:13px}
 .msg-txt{font-size:14.5px;background:var(--painel);border:1px solid var(--linha);border-radius:8px;padding:8px 10px}
+
+.msg-txt{white-space:pre-wrap}
