@@ -536,3 +536,17 @@ body.tv main{padding-bottom:90px}
 .acao-box h3{font-family:var(--disp);font-size:19px;margin:0;color:#991b1b}
 .acao-linha{font-size:14px}
 @media (prefers-reduced-motion:no-preference){.acao-box{animation:pulsaBorda 1.6s infinite}}
+
+/* papéis e placar do agendamento */
+.papeis-linha{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.papel-bt{font:inherit;font-weight:600;font-size:14px;border:1px solid var(--linha);background:var(--painel);color:var(--mudo);border-radius:999px;padding:7px 14px;cursor:pointer}
+.papel-bt.on{background:var(--moto);border-color:var(--moto);color:#fff}
+.papel-bt b{font-family:var(--mono);margin-left:4px}
+.papel-ajuda{font-size:12.5px}
+.placar-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.pl-item{background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:10px 12px;display:grid;gap:1px}
+.pl-item b{font-family:var(--disp);font-size:26px;line-height:1}
+.pl-item span{font-size:13px}
+.pl-item i{font-style:normal;font-size:11.5px;color:var(--mudo)}
+.pl-item.bom{background:#f0fdf4;border-color:#bbf7d0} .pl-item.bom b{color:var(--ok)}
+.pl-item.ruim{background:#fff6f6;border-color:#fecaca} .pl-item.ruim b{color:var(--vermelho)}

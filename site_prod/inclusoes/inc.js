@@ -783,6 +783,21 @@
     }
     return { nivel: 'ok', motivo: '' }
   }
+  // ── dia 4: cada papel tem a SUA fila ──
+  let papel = 'tudo'
+  const PAPEIS = {
+    tudo: { nome: 'Tudo', icone: '📋', ajuda: 'todos os pedidos do dia' },
+    radar: { nome: 'Radar', icone: '👁️', ajuda: 'confirmar rota e turno, e garantir que a clínica entre na lista' },
+    resolvedor: { nome: 'Resolvedor', icone: '💬', ajuda: 'falar com a clínica: avisar o horário e confirmar a coleta' },
+    qualidade: { nome: 'Qualidade · Dono do dia', icone: '🎯', ajuda: 'corrigir a IA, cobrar o que ficou para trás e fechar o dia' },
+  }
+  function daFila(c, p) {
+    const r = relogio(c)
+    if (p === 'radar') return c.status === 'nova' || (c.status === 'agendada' && r.nivel !== 'ok')
+    if (p === 'resolvedor') return !c.avisado_em && ['nova', 'agendada', 'coletada'].includes(c.status)
+    if (p === 'qualidade') return r.nivel === 'cobrar' || (c.rota && c.rota_sug && c.rota.trim().toLowerCase() !== c.rota_sug.trim().toLowerCase()) || (c.status === 'na_lista' && r.nivel !== 'ok')
+    return true
+  }
   const COLETA_ABERTA = c => c.status === 'nova'
   const COLETA_ANDANDO = c => ['nova', 'agendada', 'na_lista'].includes(c.status)
   let JANELAS = {}
@@ -800,14 +815,19 @@
   }
   const opcoesTurno = (rota, atual) => TURNOS.map(t => { const jj = janela(rota, t); return `<option value="${t}" ${t === atual ? 'selected' : ''}>${t}${jj ? ` · ${jj}` : ''}</option>` }).join('')
   function desenharColetas() {
-    const lista = coletas.slice().sort((a, b) => T(b.quando) - T(a.quando))
-    const novas = lista.filter(COLETA_ABERTA)
-    const agendadas = lista.filter(c => c.status === 'agendada')
-    const naLista = lista.filter(c => c.status === 'na_lista')
-    const coletadas = lista.filter(c => c.status === 'coletada')
+    const todas = coletas.slice().sort((a, b) => T(b.quando) - T(a.quando))
+    const lista = todas.filter(c => daFila(c, papel))
+    const novas = todas.filter(COLETA_ABERTA)
+    const agendadas = todas.filter(c => c.status === 'agendada')
+    const naLista = todas.filter(c => c.status === 'na_lista')
+    const coletadas = todas.filter(c => c.status === 'coletada')
     const atrasadas = novas.filter(c => (agora() - T(c.quando)) / 60000 >= 20).length
-    const cobrar = lista.filter(c => relogio(c).nivel === 'cobrar')
-    const atencao = lista.filter(c => relogio(c).nivel === 'atencao')
+    const cobrar = todas.filter(c => relogio(c).nivel === 'cobrar')
+    const atencao = todas.filter(c => relogio(c).nivel === 'atencao')
+    if ($('colPapeis')) $('colPapeis').innerHTML = Object.entries(PAPEIS).map(([k, p]) => {
+      const n = todas.filter(c => daFila(c, k)).length
+      return `<button class="papel-bt ${papel === k ? 'on' : ''}" data-papel="${k}" title="${esc(p.ajuda)}">${p.icone} ${p.nome}${n ? ` <b>${n}</b>` : ''}</button>`
+    }).join('') + `<span class="mudo papel-ajuda">${esc(PAPEIS[papel].ajuda)}</span>`
     if ($('colAcao')) {
       $('colAcao').hidden = !cobrar.length
       if (cobrar.length) $('colAcao').innerHTML = `<h3>⏰ ${cobrar.length} precisa${cobrar.length > 1 ? 'm' : ''} de ação agora</h3>` +
@@ -824,7 +844,7 @@
       <div class="kpi"><b>${agendadas.length}</b><span>agendadas, aguardando entrar na lista</span></div>
       <div class="kpi"><b>${naLista.length}</b><span>na lista, esperando o motoboy</span></div>
       <div class="kpi bom"><b>${coletadas.length}</b><span>✅ coleta confirmada pelo motoboy</span></div>
-      <div class="kpi ${lista.filter(c => c.avisado_em).length < lista.filter(c => c.status !== 'nova' && c.status !== 'descartada').length ? 'ruim' : 'bom'}"><b>${lista.filter(c => c.avisado_em).length}</b><span>💬 clínicas avisadas</span></div>`
+      <div class="kpi ${todas.filter(c => c.avisado_em).length < todas.filter(c => c.status !== 'nova' && c.status !== 'descartada').length ? 'ruim' : 'bom'}"><b>${todas.filter(c => c.avisado_em).length}</b><span>💬 clínicas avisadas</span></div>`
     const minutos = c => (agora() - T(c.quando)) / 60000
     const faltaCorte = c => c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
     const bloco = c => {
@@ -862,8 +882,38 @@
         ${linhaEnsina(c)}
       </div>`
     }
-    $('colLista').innerHTML = lista.length ? lista.map(bloco).join('') : '<div class="vazio">Nenhum pedido de coleta captado nos últimos 3 dias.</div>'
-    desenharHistColeta(lista)
+    $('colLista').innerHTML = lista.length ? lista.map(bloco).join('') : `<div class="vazio">${papel === 'tudo' ? 'Nenhum pedido de coleta captado nos últimos 3 dias.' : `✅ Nada na fila d${papel === 'radar' ? 'o Radar' : papel === 'resolvedor' ? 'o Resolvedor' : 'a Qualidade'} agora.`}</div>`
+    desenharHistColeta(todas)
+    placarColeta(todas)
+  }
+  // ── dia 5: placar do agendamento (mesma régua do placar das rotas) ──
+  function placarColeta(todas) {
+    const el = $('colPlacar'); if (!el) return
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
+    const dia = todas.filter(c => T(c.quando) >= hoje0.getTime() && c.status !== 'descartada')
+    if (!dia.length) { el.innerHTML = ''; return }
+    const med = arr => { if (!arr.length) return null; const a = arr.slice().sort((x, y) => x - y); return a[Math.floor(a.length / 2)] }
+    const agendou = dia.filter(c => c.agendada_em), entrou = dia.filter(c => c.na_lista_em)
+    const feita = dia.filter(c => c.coletada_em), avisou = dia.filter(c => c.avisado_em)
+    const tAgendar = med(agendou.map(c => (T(c.agendada_em) - T(c.quando)) / 60000))
+    const tColeta = med(feita.map(c => (T(c.coletada_em) - T(c.quando)) / 60000))
+    const pct = (a, b) => b ? Math.round((a / b) * 100) : null
+    const item = (rot, v, alvo, fmtv, menorMelhor) => {
+      const bom = v === null ? null : menorMelhor ? v <= alvo : v >= alvo
+      return `<div class="pl-item ${bom === null ? '' : bom ? 'bom' : 'ruim'}"><b>${v === null ? '—' : fmtv(v)}</b><span>${rot}</span><i>meta ${fmtv(alvo)}</i></div>`
+    }
+    const nota = Math.round((pct(agendou.length, dia.length) || 0) * 0.3 + (pct(entrou.length, dia.length) || 0) * 0.3 + (pct(feita.length, dia.length) || 0) * 0.25 + (pct(avisou.length, dia.length) || 0) * 0.15)
+    const faixa = nota >= 90 ? ['🏆 Excelente', 'ex'] : nota >= 75 ? ['👍 Bom', 'bom'] : nota >= 55 ? ['⚠️ Atenção', 'at'] : ['🚨 Precisa de ajuda', 'cr']
+    el.innerHTML = `<h3>🏆 Placar do agendamento — hoje <span class="fx ${faixa[1]}">${faixa[0]} · nota ${nota}</span></h3>
+      <div class="placar-grade">
+        ${item('pedidos que viraram agendamento', pct(agendou.length, dia.length), 95, v => v + '%', false)}
+        ${item('entraram na lista da rota', pct(entrou.length, dia.length), 95, v => v + '%', false)}
+        ${item('coleta confirmada pelo motoboy', pct(feita.length, dia.length), 90, v => v + '%', false)}
+        ${item('clínicas avisadas', pct(avisou.length, dia.length), 100, v => v + '%', false)}
+        ${item('tempo até agendar', tAgendar, 5, v => fmt(v), true)}
+        ${item('tempo do pedido até a coleta', tColeta, 240, v => fmt(v), true)}
+      </div>
+      <p class="mudo" style="font-size:12.5px;margin:0">${dia.length} pedidos hoje. Nota = agendou (30) + entrou na lista (30) + foi coletado (25) + clínica avisada (15). Metas: aceite em 5 min (praças de entrega), coleta em até 4 h e 95% de cumprimento (última milha).</p>`
   }
   // histórico + comparação com o mercado (benchmark de logística de coleta)
   const MERCADO = { aceite: 5, naLista: 60, agendados: 95, acerto: 85 }
@@ -935,6 +985,10 @@
     const txt = r.map(x => x.regra === 'rota_fixa' ? `📌 sempre ${esc(x.valor)}` : x.regra === 'so_manha' ? '🌅 só de manhã' : x.regra === 'so_tarde' ? '🌇 só à tarde' : '⛔ não atendemos')
     return `<div class="ia-achou"><span class="ia-tag">📚 A EQUIPE ENSINOU:</span>${txt.map(t => `<span class="chip-ia">${t}</span>`).join('')}<button class="mini-x" data-apagar-regra="${esc(c.grupo)}">apagar regra</button></div>`
   }
+  $('colPapeis') && $('colPapeis').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-papel]'); if (!b) return
+    papel = b.dataset.papel; desenharColetas()
+  })
   $('colLista').addEventListener('change', ev => {
     const sel = ev.target.closest('select[data-campo="rota"]'); if (!sel) return
     const t = sel.closest('.escolha-linha').querySelector('select[data-campo="turno"]')
