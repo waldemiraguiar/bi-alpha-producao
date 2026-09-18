@@ -474,3 +474,10 @@ body.tv main{padding-bottom:90px}
 .fx.ex{background:#dcfce7;color:#166534} .fx.bom{background:#e0f2fe;color:#075985}
 .fx.at{background:#fef3c7;color:#92400e} .fx.cr{background:#fee2e2;color:#991b1b}
 .tab-bench tr.p-cr td{background:#fff6f6}
+
+/* uma faixa por rota, com os turnos lado a lado */
+.rotas-grade{grid-template-columns:1fr;gap:14px}
+.linha-rota{display:grid;gap:6px}
+.rt-nome{font-family:var(--disp);font-size:17px;margin:0;color:var(--mudo);letter-spacing:.04em}
+.rt-turnos{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start}
+.tn-forte{font-family:var(--disp);font-size:18px;letter-spacing:.04em}

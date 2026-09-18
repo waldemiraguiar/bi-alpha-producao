@@ -493,21 +493,28 @@
       <div class="kpi ${pend ? 'ruim' : ''}"><b>${pend}</b><span>pendências (sem info + sem nº)</span></div>
       <div class="kpi ${linhas.filter(atrasada).length ? 'ruim' : ''}"><b>${linhas.filter(atrasada).length}</b><span>passaram do horário previsto</span></div>
       <div class="kpi ${linhas.filter(muda).length ? 'ruim' : ''}"><b>${linhas.filter(muda).length}</b><span>sem dar notícia há +${SILENCIO_MIN} min</span></div>`
-    $('rotasLista').innerHTML = linhas.length ? linhas.map(r => {
+    const porRota = new Map()
+    for (const r of linhas) { if (!porRota.has(r.nome)) porRota.set(r.nome, []); porRota.get(r.nome).push(r) }
+    const cartao = r => {
       const pct = v => r.paradas ? Math.round((v / r.paradas) * 100) : 0
       const st = r.estado === 'finalizada' ? ['✅ finalizada', 'ok'] : muda(r) ? ['🔇 sem notícia', 'ruim'] : atrasada(r) ? ['⏰ passou do horário', 'ruim'] : r.estado === 'em_rua' ? ['🛵 na rua', 'rua'] : ['📋 lista postada', 'lista']
       const ult = min(r.ultima_conf)
       return `<article class="rt ${st[1]}" data-rota="${esc(r.rota)}">
-        <header><b>${esc((r.nome || r.rota || '').toUpperCase())}</b><span class="tn">${esc(r.turno || '')}</span><span class="est ${st[1]}">${st[0]}</span></header>
+        <header><b class="tn-forte">${esc((r.turno || '').toUpperCase())}</b><span class="est ${st[1]}">${st[0]}</span></header>
         <div class="barra" title="${r.informadas} informadas · ${r.sem_numero} sem número · ${r.faltam} sem informação">
           <i style="width:${pct(r.informadas)}%" class="v"></i><i style="width:${pct(r.sem_numero)}%" class="a"></i><i style="width:${pct(r.faltam)}%" class="r"></i></div>
         <div class="nums"><b>${r.informadas}/${r.paradas}</b> informadas · <b>${r.exames}</b> exames${r.sem_numero ? ` · <b class="amb">${r.sem_numero}</b> sem nº` : ''}${r.faltam ? ` · <b class="rub">${r.faltam}</b> sem info` : ''}</div>
         <div class="pe">${r.estado === 'finalizada' ? `terminou ${hm(r.fechado_em)}` : ult === null ? 'ainda não começou' : `última notícia há ${fmt(ult)}`}${r.fim_previsto ? ` · previsto até <b>${hm2(r.fim_previsto)}</b>` : ''}${r.ritmo ? ` · ritmo <b>${r.ritmo}</b> paradas/h` : ''}${r.eta && r.estado !== 'finalizada' ? ` · deve terminar <b>${hm2(r.eta)}</b>${r.fim_medio ? ` <span class="${r.eta > r.fim_medio ? 'rub' : 'verde'}">(média ${hm2(r.fim_medio)})</span>` : ''}` : ''}</div>
         ${mini7(r)}
-        <button class="ver-mais" data-abrir="${esc(r.rota)}">${rotaAberta === r.rota ? '▾ fechar detalhe' : '▸ ver clínica por clínica'}</button>
-        ${rotaAberta === r.rota ? detalheRota(r) : ''}
+        <button class="ver-mais" data-abrir="${esc(r.rota)}">${abertas.has(r.rota) ? '▾ fechar detalhe' : '▸ ver clínica por clínica'}</button>
+        ${abertas.has(r.rota) ? detalheRota(r) : ''}
       </article>`
-    }).join('') : '<div class="vazio">Nenhuma rota aberta agora. A lista da manhã costuma ser postada a partir das 19h.</div>'
+    }
+    $('rotasLista').innerHTML = porRota.size ? [...porRota.entries()].map(([nome, turnos]) => `
+      <section class="linha-rota">
+        <h3 class="rt-nome">${esc(nome.toUpperCase())}</h3>
+        <div class="rt-turnos">${turnos.map(cartao).join('')}</div>
+      </section>`).join('') : '<div class="vazio">Nenhuma rota aberta agora. A lista da manhã costuma ser postada a partir das 19h.</div>'
     desenharPlacarRotas(linhas, atrasada)
     const okPrazo = linhas.filter(r => r.estado === 'finalizada' && !atrasada(r)).length
     const fin = linhas.filter(r => r.estado === 'finalizada').length
@@ -568,7 +575,7 @@
       ${baixo.length ? `<tr class="sep"><td colspan="5">PRECISAM DE AJUDA</td></tr>${baixo.map(linhaP).join('')}` : ''}</tbody></table>
       <p class="mudo" style="font-size:12.5px;margin:0">Nota = informou todas as paradas (60) + fechou no horário (25) − sem número (15) − sem informação (20). Volume de exames entra só como comparação da rota <b>com ela mesma</b>, para não punir rota pequena.</p>`
   }
-  let rotaAberta = null
+  const abertas = new Set()
   function detalheRota(r) {
     const ps = Array.isArray(r.paradas_json) ? r.paradas_json : []
     if (!ps.length) return '<div class="det vazio-det">Sem detalhe das paradas ainda.</div>'
@@ -587,7 +594,8 @@
   }
   $('rotasLista') && $('rotasLista').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-abrir]'); if (!b) return
-    rotaAberta = rotaAberta === b.dataset.abrir ? null : b.dataset.abrir
+    const k = b.dataset.abrir
+    abertas.has(k) ? abertas.delete(k) : abertas.add(k)
     desenharRotas()
   })
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
