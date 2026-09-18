@@ -369,3 +369,15 @@ body.tv main{padding-bottom:90px}
 #vColeta .chip-ia.quente{background:#fef2f2;border-color:#fecaca;color:#991b1b;font-weight:700}
 #vColeta .ia-tag{color:var(--moto)}
 @media (prefers-reduced-motion:no-preference){.abas button.aba-moto .badge{animation:pulsaBadge 1.1s infinite}}
+
+/* badge que chama atenção: âmbar piscando devagar = tem coisa lá · vermelho rápido = atrasado/perto do corte */
+.badge.leve{background:var(--amarelo)}
+.abas button.tem{border-color:currentColor;box-shadow:0 0 0 2px rgba(219,39,119,.12)}
+.abas button.aba-moto.tem{box-shadow:0 0 0 2px rgba(234,88,12,.14)}
+@media (prefers-reduced-motion:no-preference){
+  .abas button .badge{animation:pulsaBadge 1.1s infinite}
+  .abas button .badge.leve{animation:pulsaLeve 2s infinite}
+  .abas button.tem{animation:brilho 2.4s infinite}
+}
+@keyframes pulsaLeve{50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(217,119,6,.18)}}
+@keyframes brilho{50%{box-shadow:0 0 0 5px rgba(148,163,184,.18)}}

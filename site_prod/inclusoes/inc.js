@@ -454,8 +454,10 @@
       + `<h3 class="ia-sub">Perguntas sobre amostra (sem pedido de exame)</h3>`
       + (amo.length ? amo.map(x => `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}" data-id="${x.id}"><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span><span><b>${esc(nomeClinica(x.grupo))}</b> “${esc(x.texto)}”</span>${x.status === 'aberta' ? '<span class="acao"><button class="leve" data-sus="registrada">Visto · tratado</button><button class="leve" data-sus="nao_e_inclusao">Ignorar</button></span>' : `<span class="mudo">tratado · ${esc(x.resolvido_por || '')}</span>`}</div>`).join('') : '<div class="vazio">Nenhuma no período.</div>')
     const b = document.querySelector('#abas button[data-setor="rast"]')
-    const pend = semCartao.length
-    if (b) b.innerHTML = `🤖 Rastreamento de Inclusões${pend ? ` <span class="badge">${pend}</span>` : ''}`
+    const abertos = inc.filter(x => x.status === 'aberta').length + amo.filter(x => x.status === 'aberta').length
+    const urgente = semCartao.length
+    if (b) b.innerHTML = `🤖 Rastreamento de Inclusões${abertos ? ` <span class="badge ${urgente ? '' : 'leve'}">${abertos}</span>` : ''}`
+    if (b) b.classList.toggle('tem', !!abertos)
   }
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
   const COLETA_ABERTA = c => c.status === 'nova'
@@ -465,8 +467,11 @@
     const agendadas = lista.filter(c => c.status === 'agendada')
     const naLista = lista.filter(c => c.status === 'na_lista')
     const atrasadas = novas.filter(c => (agora() - T(c.quando)) / 60000 >= 20).length
+    const perto = novas.filter(c => c.corte_em && (T(c.corte_em) - agora()) / 60000 <= 30).length
     const b = document.querySelector('#abas button[data-setor="coleta"]')
-    if (b) b.innerHTML = `🛵 Agendamentos${novas.length ? ` <span class="badge">${novas.length}</span>` : ''}`
+    const esperando = novas.length + agendadas.length
+    if (b) b.innerHTML = `🛵 Agendamentos${esperando ? ` <span class="badge ${atrasadas || perto ? '' : 'leve'}">${esperando}</span>` : ''}`
+    if (b) b.classList.toggle('tem', !!esperando)
     if ($('colResumo')) $('colResumo').innerHTML = `<div class="kpi ${novas.length ? 'ia' : ''}"><b>${novas.length}</b><span>🤖 pedidos de coleta esperando</span></div>
       <div class="kpi ${atrasadas ? 'ruim' : ''}"><b>${atrasadas}</b><span>sem agendar há mais de 20 min</span></div>
       <div class="kpi"><b>${agendadas.length}</b><span>agendadas, aguardando entrar na lista</span></div>
