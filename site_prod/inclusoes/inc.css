@@ -428,3 +428,49 @@ body.tv main{padding-bottom:90px}
 .ensina-box[open] summary::before{content:'▾ '}
 .ensina-ajuda{font-size:12.5px;margin:6px 0 0}
 .escolha-linha select{min-width:170px}
+
+/* 🛵 BI das rotas ao vivo */
+.abas button.aba-rota{color:#0369a1;border-color:#bae6fd}
+.abas button.aba-rota.on{background:#0369a1;color:#fff}
+#vRotas{border-top:6px solid #0369a1;padding-top:10px}
+.selo-rota{display:inline-block;background:#0369a1;color:#fff;font-family:var(--disp);font-weight:700;font-size:.6em;letter-spacing:.04em;border-radius:6px;padding:1px 9px;vertical-align:.25em}
+.rotas-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.rt{background:var(--painel);border:1px solid var(--linha);border-radius:12px;box-shadow:var(--sombra);padding:10px 12px;display:grid;gap:6px;border-top:5px solid var(--cc)}
+.rt.ok{border-top-color:var(--ok)} .rt.rua{border-top-color:#0ea5e9} .rt.lista{border-top-color:var(--fraco)} .rt.ruim{border-top-color:var(--vermelho);background:#fff6f6}
+.rt header{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.rt header b{font-family:var(--disp);font-size:20px}
+.rt .tn{font-size:12px;color:var(--mudo);text-transform:uppercase;letter-spacing:.05em}
+.rt .est{margin-left:auto;font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--painel2);color:var(--mudo)}
+.rt .est.ok{background:#dcfce7;color:#166534} .rt .est.rua{background:#e0f2fe;color:#075985} .rt .est.ruim{background:#fee2e2;color:#991b1b}
+.barra{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--painel2)}
+.barra i{display:block;height:100%}
+.barra .v{background:var(--ok)} .barra .a{background:var(--amarelo)} .barra .r{background:var(--vermelho)}
+.rt .nums{font-size:14px}
+.rt .nums b{font-family:var(--mono)}
+.rt .pe{font-size:12.5px;color:var(--mudo)}
+.amb{color:var(--amarelo)} .rub{color:var(--vermelho)}
+@media (prefers-reduced-motion:no-preference){.rt.ruim{animation:cartaoAlerta 1.4s infinite}}
+
+.ver-mais{justify-self:start;background:transparent;border:0;color:var(--cc);font:inherit;font-size:12.5px;cursor:pointer;padding:0}
+.det{grid-column:1/-1;background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:8px;margin-top:4px}
+.tab-det{width:100%;border-collapse:collapse;font-size:13px}
+.tab-det th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mudo);text-align:left;padding:2px 6px}
+.tab-det td{padding:3px 6px;border-top:1px solid var(--linha)}
+.tab-det .h{font-family:var(--mono);color:var(--mudo)}
+.tab-det .num{text-align:right;font-family:var(--mono)}
+.tab-det .l-falta{background:#fef2f2} .tab-det .l-sem_numero{background:#fffbeb}
+.det-pe{font-size:11.5px;margin-top:4px}
+.vazio-det{font-size:12.5px;color:var(--mudo)}
+
+.mini7{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.mini7 .barras{display:flex;align-items:flex-end;gap:3px;height:28px}
+.mini7 i{display:block;width:8px;border-radius:2px 2px 0 0;background:#cbd5e1}
+.mini7 i.hoje{background:var(--cc)}
+.mini7 span{font-size:11.5px}
+.verde{color:var(--ok)}
+
+.tab-bench tr.sep td{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mudo);background:var(--painel2);padding:4px 8px}
+.fx{font-size:12px;font-weight:700;border-radius:999px;padding:1px 9px}
+.fx.ex{background:#dcfce7;color:#166534} .fx.bom{background:#e0f2fe;color:#075985}
+.fx.at{background:#fef3c7;color:#92400e} .fx.cr{background:#fee2e2;color:#991b1b}
+.tab-bench tr.p-cr td{background:#fff6f6}

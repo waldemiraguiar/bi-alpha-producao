@@ -45,7 +45,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
-  let suspeitas = [], coletas = [], regras = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
+  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -83,6 +83,8 @@
         const { data } = await SB.from('inc_eventos').select('*').in('chamado_id', ids.slice(i, i + 300)).order('quando')
         eventos = eventos.concat(data || [])
       }
+      const rv = await SB.from('rota_vivo').select('*').order('rota')
+      rotasVivo = rv.error ? [] : (rv.data || [])
       const rg = await SB.from('inc_regras_clinica').select('*').eq('ativa', true)
       regras = rg.error ? [] : (rg.data || [])
       const cl = await SB.from('inc_coletas').select('*').gte('quando', new Date(agora() - 3 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 499)
@@ -259,13 +261,14 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta'
-    $('vQuadro').hidden = hist || rast || col; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas'
+    $('vQuadro').hidden = hist || rast || col || rot; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot
     desenharLegenda()
     desenharRastreamento()
     desenharColetas()
+    desenharRotas()
     if (hist) return desenharHistorico()
-    if (rast || col) return
+    if (rast || col || rot) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
 
@@ -462,6 +465,127 @@
     if (b) b.innerHTML = `🤖 Rastreamento de Inclusões${abertos ? ` <span class="badge ${urgente ? '' : 'leve'}">${abertos}</span>` : ''}`
     if (b) b.classList.toggle('tem', !!abertos)
   }
+  // ── 🛵 BI DAS ROTAS AO VIVO (torre de controle dos motoboys) ──
+  const SILENCIO_MIN = 45
+  function desenharRotas() {
+    if (!$('rotasLista')) return
+    const agoraMs = agora()
+    const hojeIni = new Date(); hojeIni.setHours(0, 0, 0, 0)
+    const linhas = rotasVivo.filter(r => T(r.ciclo_aberto) >= hojeIni.getTime() - 20 * 3600e3)
+    const nOrd = r => { const m = /(\d+)/.exec(r.rota || ''); return /folguista/.test(r.rota) ? 100 + (m ? +m[1] : 0) : /angra/.test(r.rota) ? 90 : (m ? +m[1] : 50) }
+    linhas.sort((a, b) => nOrd(a) - nOrd(b))
+    const min = q => q ? (agoraMs - T(q)) / 60000 : null
+    const hm2 = h => (h || '').slice(0, 5)
+    const atrasada = r => { if (r.estado === 'finalizada' || !r.fim_previsto) return false; const agoraHM = new Date(agoraMs).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' }); return agoraHM > hm2(r.fim_previsto) }
+    const muda = r => r.estado === 'em_rua' && min(r.ultima_conf) > SILENCIO_MIN
+    const emRua = linhas.filter(r => r.estado === 'em_rua')
+    const total = linhas.reduce((a, r) => a + r.paradas, 0)
+    const infor = linhas.reduce((a, r) => a + r.informadas, 0)
+    const exames = linhas.reduce((a, r) => a + r.exames, 0)
+    const pend = linhas.reduce((a, r) => a + r.faltam + r.sem_numero, 0)
+    $('rotasKpis').innerHTML = `<div class="kpi"><b>${emRua.length}</b><span>rotas na rua agora</span></div>
+      <div class="kpi bom"><b>${infor}/${total}</b><span>paradas informadas hoje</span></div>
+      <div class="kpi"><b>${exames}</b><span>exames coletados hoje</span></div>
+      <div class="kpi ${pend ? 'ruim' : ''}"><b>${pend}</b><span>pendências (sem info + sem nº)</span></div>
+      <div class="kpi ${linhas.filter(atrasada).length ? 'ruim' : ''}"><b>${linhas.filter(atrasada).length}</b><span>passaram do horário previsto</span></div>
+      <div class="kpi ${linhas.filter(muda).length ? 'ruim' : ''}"><b>${linhas.filter(muda).length}</b><span>sem dar notícia há +${SILENCIO_MIN} min</span></div>`
+    $('rotasLista').innerHTML = linhas.length ? linhas.map(r => {
+      const pct = v => r.paradas ? Math.round((v / r.paradas) * 100) : 0
+      const st = r.estado === 'finalizada' ? ['✅ finalizada', 'ok'] : muda(r) ? ['🔇 sem notícia', 'ruim'] : atrasada(r) ? ['⏰ passou do horário', 'ruim'] : r.estado === 'em_rua' ? ['🛵 na rua', 'rua'] : ['📋 lista postada', 'lista']
+      const ult = min(r.ultima_conf)
+      return `<article class="rt ${st[1]}" data-rota="${esc(r.rota)}">
+        <header><b>${esc((r.rota || '').toUpperCase())}</b><span class="tn">${esc(r.turno || '')}</span><span class="est ${st[1]}">${st[0]}</span></header>
+        <div class="barra" title="${r.informadas} informadas · ${r.sem_numero} sem número · ${r.faltam} sem informação">
+          <i style="width:${pct(r.informadas)}%" class="v"></i><i style="width:${pct(r.sem_numero)}%" class="a"></i><i style="width:${pct(r.faltam)}%" class="r"></i></div>
+        <div class="nums"><b>${r.informadas}/${r.paradas}</b> informadas · <b>${r.exames}</b> exames${r.sem_numero ? ` · <b class="amb">${r.sem_numero}</b> sem nº` : ''}${r.faltam ? ` · <b class="rub">${r.faltam}</b> sem info` : ''}</div>
+        <div class="pe">${r.estado === 'finalizada' ? `terminou ${hm(r.fechado_em)}` : ult === null ? 'ainda não começou' : `última notícia há ${fmt(ult)}`}${r.fim_previsto ? ` · previsto até <b>${hm2(r.fim_previsto)}</b>` : ''}${r.ritmo ? ` · ritmo <b>${r.ritmo}</b> paradas/h` : ''}${r.eta && r.estado !== 'finalizada' ? ` · deve terminar <b>${hm2(r.eta)}</b>${r.fim_medio ? ` <span class="${r.eta > r.fim_medio ? 'rub' : 'verde'}">(média ${hm2(r.fim_medio)})</span>` : ''}` : ''}</div>
+        ${mini7(r)}
+        <button class="ver-mais" data-abrir="${esc(r.rota)}">${rotaAberta === r.rota ? '▾ fechar detalhe' : '▸ ver clínica por clínica'}</button>
+        ${rotaAberta === r.rota ? detalheRota(r) : ''}
+      </article>`
+    }).join('') : '<div class="vazio">Nenhuma rota aberta agora. A lista da manhã costuma ser postada a partir das 19h.</div>'
+    desenharPlacarRotas(linhas, atrasada)
+    const okPrazo = linhas.filter(r => r.estado === 'finalizada' && !atrasada(r)).length
+    const fin = linhas.filter(r => r.estado === 'finalizada').length
+    const pctInf = total ? Math.round((infor / total) * 100) : null
+    const pctPrazo = fin ? Math.round((okPrazo / fin) * 100) : null
+    const linha = (rot, v, alvo, txt) => `<tr><td>${rot}</td><td class="num"><b class="${v === null ? '' : v >= alvo ? 'verde' : 'vermelho'}">${v === null ? '—' : v + '%'}</b></td><td class="num mudo">${alvo}%</td><td>${txt}</td></tr>`
+    $('rotasBench').innerHTML = `<h3>Comparação com o mercado <span class="mudo">· hoje, ${linhas.length} turnos</span></h3>
+      <table class="tab-bench"><thead><tr><th>Indicador</th><th class="num">Alpha hoje</th><th class="num">Mercado</th><th>Referência</th></tr></thead><tbody>
+      ${linha('Paradas com informação do motoboy', pctInf, 98, 'conferência de entrega/coleta (Loggi, Correios): 98% dos pontos com baixa registrada')}
+      ${linha('Rotas fechadas dentro do horário previsto', pctPrazo, 95, 'OTIF de última milha (on time in full): 95%')}
+      </tbody></table>
+      <p class="mudo" style="font-size:12.5px;margin:0">Verde = dentro do padrão. O horário previsto vem do próprio histórico de cada rota (85% dos dias dos últimos 90).</p>`
+    const b = document.querySelector('#abas button[data-setor="rotas"]')
+    const alerta = linhas.filter(r => muda(r) || atrasada(r)).length
+    if (b) { b.innerHTML = `🛵 BI Rotas${alerta ? ` <span class="badge">${alerta}</span>` : ''}`; b.classList.toggle('tem', !!alerta) }
+  }
+  // mini gráfico dos últimos dias: exames por dia daquela rota/turno
+  function mini7(r) {
+    const h = Array.isArray(r.hist7) ? r.hist7.slice(-7) : []
+    if (h.length < 2) return ''
+    const max = Math.max(...h.map(d => d.exames || 0), r.exames || 0, 1)
+    const barras = h.map(d => `<i style="height:${Math.max(6, Math.round(((d.exames || 0) / max) * 26))}px" title="${d.dia}: ${d.exames || 0} exames · ${d.informadas}/${d.paradas} informadas"></i>`).join('')
+    const hoje = `<i class="hoje" style="height:${Math.max(6, Math.round(((r.exames || 0) / max) * 26))}px" title="hoje: ${r.exames} exames"></i>`
+    const dif = r.exames_media ? Math.round(((r.exames - r.exames_media) / r.exames_media) * 100) : null
+    return `<div class="mini7"><div class="barras">${barras}${hoje}</div><span class="mudo">últimos dias · hoje <b>${r.exames}</b> exames${dif !== null ? ` <b class="${dif >= 0 ? 'verde' : 'rub'}">${dif >= 0 ? '+' : ''}${dif}%</b> vs média ${r.exames_media}` : ''}${r.paradas_media ? ` · média ${r.paradas_media} paradas` : ''}</span></div>`
+  }
+  // 🏆 placar das rotas — nota por QUALIDADE (não por volume), padrão scorecard de última milha
+  function notaRota(r, atrasada) {
+    const info = r.paradas ? r.informadas / r.paradas : 1              // informou tudo?
+    const semN = r.paradas ? r.sem_numero / r.paradas : 0              // foi mas não mandou o nº
+    const falta = r.paradas ? r.faltam / r.paradas : 0                 // não informou
+    const prazo = r.estado === 'finalizada' ? (atrasada(r) ? 0 : 1) : (atrasada(r) ? 0 : 1)
+    const nota = Math.round((info * 60) + (prazo * 25) - (semN * 15) - (falta * 20) + 15)
+    return Math.max(0, Math.min(100, nota))
+  }
+  function desenharPlacarRotas(linhas, atrasada) {
+    const el = $('rotasPlacar'); if (!el) return
+    const com = linhas.filter(r => r.paradas > 0).map(r => ({ ...r, nota: notaRota(r, atrasada) })).sort((a, b) => b.nota - a.nota)
+    if (com.length < 2) { el.innerHTML = ''; return }
+    const faixa = n => n >= 90 ? ['🏆 Excelente', 'ex'] : n >= 75 ? ['👍 Bom', 'bom'] : n >= 55 ? ['⚠️ Atenção', 'at'] : ['🚨 Precisa de ajuda', 'cr']
+    const linhaP = r => {
+      const [rot, cls] = faixa(r.nota)
+      const pontos = []
+      if (r.faltam) pontos.push(`${r.faltam} sem informação`)
+      if (r.sem_numero) pontos.push(`${r.sem_numero} sem nº`)
+      if (atrasada(r)) pontos.push('passou do horário')
+      if (!pontos.length) pontos.push('informou tudo no prazo')
+      const vsMedia = r.exames_media ? Math.round(((r.exames - r.exames_media) / r.exames_media) * 100) : null
+      return `<tr class="p-${cls}"><td><b>${esc((r.rota || '').toUpperCase())}</b> <span class="mudo">${esc(r.turno || '')}</span></td>
+        <td class="num"><b>${r.nota}</b></td><td><span class="fx ${cls}">${rot}</span></td>
+        <td>${esc(pontos.join(' · '))}</td>
+        <td class="num mudo">${vsMedia === null ? '' : `${vsMedia >= 0 ? '+' : ''}${vsMedia}% vs a própria média`}</td></tr>`
+    }
+    const top = com.slice(0, 3), baixo = com.slice(-3).reverse().filter(r => !top.includes(r))
+    el.innerHTML = `<h3>🏆 Placar do dia <span class="mudo">· nota por qualidade da informação, não por volume</span></h3>
+      <table class="tab-bench"><thead><tr><th>Rota</th><th class="num">Nota</th><th>Faixa</th><th>Por quê</th><th class="num">Volume</th></tr></thead>
+      <tbody><tr class="sep"><td colspan="5">CAMPEÃS DE HOJE</td></tr>${top.map(linhaP).join('')}
+      ${baixo.length ? `<tr class="sep"><td colspan="5">PRECISAM DE AJUDA</td></tr>${baixo.map(linhaP).join('')}` : ''}</tbody></table>
+      <p class="mudo" style="font-size:12.5px;margin:0">Nota = informou todas as paradas (60) + fechou no horário (25) − sem número (15) − sem informação (20). Volume de exames entra só como comparação da rota <b>com ela mesma</b>, para não punir rota pequena.</p>`
+  }
+  let rotaAberta = null
+  function detalheRota(r) {
+    const ps = Array.isArray(r.paradas_json) ? r.paradas_json : []
+    if (!ps.length) return '<div class="det vazio-det">Sem detalhe das paradas ainda.</div>'
+    const ini = ps.map(p => T(p.hora)).filter(Boolean).sort()[0]
+    let anterior = null
+    const linhas = ps.map(p => {
+      const ic = p.estado === 'ok' ? '✅' : p.estado === 'sem_numero' ? '🟡' : p.estado === 'falta' ? '🔴' : '⚪️'
+      const gap = p.hora && anterior ? (T(p.hora) - anterior) / 60000 : null
+      if (p.hora) anterior = T(p.hora)
+      return `<tr class="l-${p.estado}"><td class="h">${p.hora ? hm(p.hora) : '—'}</td><td>${ic} ${esc(p.nome)}</td>
+        <td class="num">${p.qtd === null || p.qtd === undefined ? (p.estado === 'sem_numero' ? 'sem nº' : '—') : p.qtd + ' ex'}</td>
+        <td class="num mudo">${gap !== null ? '+' + fmt(gap) : ''}</td></tr>`
+    }).join('')
+    return `<div class="det"><table class="tab-det"><thead><tr><th>hora</th><th>clínica</th><th class="num">exames</th><th class="num">intervalo</th></tr></thead><tbody>${linhas}</tbody></table>
+      <div class="mudo det-pe">${ini ? `começou ${hm(new Date(ini).toISOString())} · ` : ''}✅ informou · 🟡 foi mas não mandou o nº · 🔴 não informou · ⚪️ ainda não chegou</div></div>`
+  }
+  $('rotasLista') && $('rotasLista').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-abrir]'); if (!b) return
+    rotaAberta = rotaAberta === b.dataset.abrir ? null : b.dataset.abrir
+    desenharRotas()
+  })
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
   const COLETA_ABERTA = c => c.status === 'nova'
   let JANELAS = {}

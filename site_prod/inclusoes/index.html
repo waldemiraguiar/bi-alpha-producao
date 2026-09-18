@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=22">
+<link rel="stylesheet" href="inc.css?v=25">
 </head>
 <body>
 <header class="topo">
@@ -22,6 +22,7 @@
     <button data-setor="todos">Todos</button>
     <button data-setor="rast" class="aba-ia">🤖 Rastreamento de Inclusões</button>
     <button data-setor="coleta" class="aba-moto">🛵 Agendamentos</button>
+    <button data-setor="rotas" class="aba-rota">🛵 BI Rotas</button>
     <button data-setor="hist">Histórico</button>
   </nav>
   <div class="ferramentas">
@@ -62,6 +63,14 @@
     <p class="mudo ajuda" id="rastAjuda"></p>
     <div class="numeros" id="rastResumo"></div>
     <div class="rast-lista" id="rastLista"></div>
+  </section>
+
+  <section id="vRotas" hidden>
+    <div class="rast-topo"><h2><span class="selo-rota">🛵 AO VIVO</span> BI das Rotas</h2><p class="mudo">Todas as rotas do dia em tempo real: quanto já foi informado, exames coletados, quem está em silêncio e quem passou do horário. Atualiza sozinho a cada minuto.</p></div>
+    <div class="numeros kpis" id="rotasKpis"></div>
+    <div class="rotas-grade" id="rotasLista"></div>
+    <div class="bloco-bench" id="rotasPlacar"></div>
+    <div class="bloco-bench" id="rotasBench"></div>
   </section>
 
   <section id="vColeta" hidden>
@@ -189,6 +198,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=22"></script>
+<script src="inc.js?v=25"></script>
 </body>
 </html>
