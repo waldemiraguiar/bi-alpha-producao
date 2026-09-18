@@ -1,0 +1,226 @@
+{
+ "rota 1": {
+  "manhã": {
+   "lista": "19:33",
+   "de": "10:51",
+   "ate": "12:55",
+   "dias_pct": 78
+  },
+  "tarde": {
+   "lista": "13:17",
+   "de": "15:47",
+   "ate": "18:49",
+   "dias_pct": 76
+  }
+ },
+ "rota 10": {
+  "manhã": {
+   "lista": "20:25",
+   "de": "10:00",
+   "ate": "12:33",
+   "dias_pct": 79
+  },
+  "tarde": {
+   "lista": "13:24",
+   "de": "14:28",
+   "ate": "17:38",
+   "dias_pct": 80
+  }
+ },
+ "rota 11": {
+  "manhã": {
+   "lista": "21:05",
+   "de": "09:27",
+   "ate": "12:57",
+   "dias_pct": 158
+  },
+  "tarde": {
+   "lista": "14:50",
+   "de": "15:16",
+   "ate": "17:28",
+   "dias_pct": 84
+  },
+  "noite": {
+   "lista": "19:06",
+   "de": "19:00",
+   "ate": "20:51",
+   "dias_pct": 23
+  }
+ },
+ "rota 13": {
+  "manhã": {
+   "lista": "20:09",
+   "de": "10:51",
+   "ate": "12:43",
+   "dias_pct": 36
+  },
+  "tarde": {
+   "lista": "14:46",
+   "de": "15:17",
+   "ate": "17:11",
+   "dias_pct": 52
+  }
+ },
+ "rota 2": {
+  "manhã": {
+   "lista": "19:28",
+   "de": "10:20",
+   "ate": "13:11",
+   "dias_pct": 77
+  },
+  "tarde": {
+   "lista": "13:45",
+   "de": "15:28",
+   "ate": "17:46",
+   "dias_pct": 72
+  }
+ },
+ "rota 3": {
+  "manhã": {
+   "lista": "19:27",
+   "de": "10:26",
+   "ate": "12:35",
+   "dias_pct": 79
+  },
+  "tarde": {
+   "lista": "12:58",
+   "de": "15:21",
+   "ate": "17:52",
+   "dias_pct": 69
+  }
+ },
+ "rota 4": {
+  "manhã": {
+   "lista": "19:32",
+   "de": "10:30",
+   "ate": "12:24",
+   "dias_pct": 81
+  },
+  "tarde": {
+   "lista": "13:09",
+   "de": "15:24",
+   "ate": "17:27",
+   "dias_pct": 78
+  }
+ },
+ "rota 5": {
+  "manhã": {
+   "lista": "19:32",
+   "de": "10:40",
+   "ate": "12:57",
+   "dias_pct": 81
+  },
+  "tarde": {
+   "lista": "13:18",
+   "de": "15:27",
+   "ate": "18:04",
+   "dias_pct": 77
+  }
+ },
+ "rota 6": {
+  "manhã": {
+   "lista": "19:45",
+   "de": "10:33",
+   "ate": "12:42",
+   "dias_pct": 82
+  },
+  "tarde": {
+   "lista": "13:16",
+   "de": "15:34",
+   "ate": "17:59",
+   "dias_pct": 76
+  }
+ },
+ "rota 7": {
+  "manhã": {
+   "lista": "19:33",
+   "de": "10:58",
+   "ate": "13:26",
+   "dias_pct": 62
+  },
+  "tarde": {
+   "lista": "13:46",
+   "de": "15:12",
+   "ate": "18:18",
+   "dias_pct": 58
+  }
+ },
+ "rota 8": {
+  "manhã": {
+   "lista": "19:37",
+   "de": "10:28",
+   "ate": "12:48",
+   "dias_pct": 81
+  },
+  "tarde": {
+   "lista": "13:34",
+   "de": "15:28",
+   "ate": "17:54",
+   "dias_pct": 82
+  }
+ },
+ "rota 9": {
+  "manhã": {
+   "lista": "20:15",
+   "de": "10:44",
+   "ate": "13:04",
+   "dias_pct": 74
+  },
+  "tarde": {
+   "lista": "13:26",
+   "de": "15:54",
+   "ate": "18:39",
+   "dias_pct": 69
+  }
+ },
+ "rota angra": {
+  "manhã": {
+   "lista": "19:33",
+   "de": "10:41",
+   "ate": "16:30",
+   "dias_pct": 64
+  }
+ },
+ "rota folguista 1": {
+  "manhã": {
+   "lista": "19:49",
+   "de": "10:03",
+   "ate": "12:31",
+   "dias_pct": 78
+  },
+  "tarde": {
+   "lista": "13:28",
+   "de": "15:06",
+   "ate": "17:55",
+   "dias_pct": 74
+  }
+ },
+ "rota folguista 3": {
+  "manhã": {
+   "lista": "19:33",
+   "de": "10:26",
+   "ate": "15:36",
+   "dias_pct": 16
+  },
+  "tarde": {
+   "lista": "14:34",
+   "de": "15:19",
+   "ate": "17:42",
+   "dias_pct": 19
+  }
+ },
+ "rota folguista 4": {
+  "manhã": {
+   "lista": "20:14",
+   "de": "10:25",
+   "ate": "13:34",
+   "dias_pct": 21
+  },
+  "tarde": {
+   "lista": "14:48",
+   "de": "15:26",
+   "ate": "18:53",
+   "dias_pct": 26
+  }
+ }
+}

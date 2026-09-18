@@ -343,7 +343,7 @@ body.tv main{padding-bottom:90px}
   .abas button.aba-ia .badge{animation:pulsaBadge 1.1s infinite}
   .cartao.s-x,.cartao.s-v2{animation:pulsaBorda 1.2s infinite}
 }
-@keyframes pulsaBadge{50%{transform:scale(1.18);box-shadow:0 0 0 6px rgba(220,38,38,.18)}}
+@keyframes pulsaBadge{0%,100%{transform:scale(1)}50%{transform:scale(1.45);box-shadow:0 0 0 10px rgba(220,38,38,.25)}}
 @keyframes pulsaBorda{50%{border-left-color:transparent}}
 
 .legenda{box-shadow:0 -1px 2px rgba(16,24,40,.06)}
@@ -379,8 +379,8 @@ body.tv main{padding-bottom:90px}
   .abas button .badge.leve{animation:pulsaLeve 2s infinite}
   .abas button.tem{animation:brilho 2.4s infinite}
 }
-@keyframes pulsaLeve{50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(217,119,6,.18)}}
-@keyframes brilho{50%{box-shadow:0 0 0 5px rgba(148,163,184,.18)}}
+@keyframes pulsaLeve{0%,100%{transform:scale(1)}50%{transform:scale(1.3);box-shadow:0 0 0 8px rgba(217,119,6,.28)}}
+@keyframes brilho{0%,100%{box-shadow:0 0 0 0 rgba(219,39,119,0)}50%{box-shadow:0 0 0 7px rgba(219,39,119,.22)}}
 
 .sombra-aviso{background:#f1f5f9;border:1px dashed #94a3b8;border-radius:10px;padding:9px 12px;font-size:13.5px;color:#334155}
 .bloco-bench{background:var(--painel);border:1px solid var(--linha);border-radius:12px;box-shadow:var(--sombra);padding:12px 14px;display:grid;gap:8px;margin-top:12px}
@@ -406,3 +406,16 @@ body.tv main{padding-bottom:90px}
 .escolha-linha select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--linha);border-radius:8px;background:var(--painel);color:var(--texto)}
 .escolha-linha button{font:inherit;font-weight:700;font-size:14px;border:0;border-radius:8px;padding:8px 14px;background:var(--cc);color:#fff;cursor:pointer}
 .cf-alta{color:var(--ok)} .cf-media{color:var(--amarelo)} .cf-baixa{color:var(--vermelho)}
+
+/* piscar forte: a aba com pendência chama atenção de longe (Wal 18/set) */
+@media (prefers-reduced-motion:no-preference){
+  .abas button.aba-ia.tem{animation:abaIA 1.1s infinite}
+  .abas button.aba-moto.tem{animation:abaMoto 1.1s infinite}
+  .ia-item.sem,.ia-item.atras{animation:cartaoAlerta 1.1s infinite}
+}
+@keyframes abaIA{0%,100%{background:var(--painel);color:var(--ia)}50%{background:var(--ia);color:#fff;box-shadow:0 0 0 6px rgba(219,39,119,.22)}}
+@keyframes abaMoto{0%,100%{background:var(--painel);color:var(--moto)}50%{background:var(--moto);color:#fff;box-shadow:0 0 0 6px rgba(234,88,12,.22)}}
+@keyframes cartaoAlerta{0%,100%{border-left-color:var(--e);background:var(--painel)}50%{border-left-color:transparent;background:#fff1f2}}
+/* resolvido = verde e sai da fila ativa */
+.ia-item.ok .ia-estado{color:var(--ok)}
+.ia-amo.ok{background:#f0fdf4;border-color:#bbf7d0;opacity:1}

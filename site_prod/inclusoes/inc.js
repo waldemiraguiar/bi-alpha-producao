@@ -464,9 +464,20 @@
   }
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
   const COLETA_ABERTA = c => c.status === 'nova'
+  let JANELAS = {}
+  fetch('turnos.json').then(r => r.json()).then(j => { JANELAS = j; desenhar() }).catch(() => {})
   const ROTAS = ['rota 1', 'rota 2', 'rota 3', 'rota 4', 'rota 5', 'rota 6', 'rota 7', 'rota 8', 'rota 9', 'rota 10', 'rota 11', 'rota 12', 'rota angra', 'rota folguista 1', 'rota folguista 2', 'rota folguista 3', 'rota folguista 4']
   const TURNOS = ['manhã de hoje', 'tarde de hoje', 'noite de hoje', 'manhã de amanhã', 'tarde de amanhã']
   const turnoParecido = t => TURNOS.find(x => (t || '').toLowerCase().startsWith(x.split(' ')[0])) || 'tarde de hoje'
+  // janela real daquele turno naquela rota (histórico de 90 dias): lista postada, motoboy de… até…
+  function janela(rota, turno) {
+    const j = JANELAS[(rota || '').toLowerCase()]
+    const k = /manh/i.test(turno) ? 'manhã' : /noite/i.test(turno) ? 'noite' : 'tarde'
+    const x = j && j[k]
+    if (!x) return ''
+    return `lista ${x.lista} · motoboy ${x.de}–${x.ate}`
+  }
+  const opcoesTurno = (rota, atual) => TURNOS.map(t => { const jj = janela(rota, t); return `<option value="${t}" ${t === atual ? 'selected' : ''}>${t}${jj ? ` · ${jj}` : ''}</option>` }).join('')
   function desenharColetas() {
     const lista = coletas.slice().sort((a, b) => T(b.quando) - T(a.quando))
     const novas = lista.filter(COLETA_ABERTA)
@@ -505,12 +516,12 @@
         ${regrasDaClinica(c)}
         ${COLETA_ABERTA(c) ? `<div class="escolha-linha">
           <label>Rota <select data-campo="rota">${['', ...ROTAS].map(r => `<option value="${r}" ${r === (c.rota_sug || '').toLowerCase() ? 'selected' : ''}>${r || '— escolher —'}</option>`).join('')}</select></label>
-          <label>Turno <select data-campo="turno">${TURNOS.map(t => `<option value="${t}" ${t === turnoParecido(c.turno_sug) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label>Turno <select data-campo="turno">${opcoesTurno(c.rota_sug, turnoParecido(c.turno_sug))}</select></label>
           <button data-col-acao="confirmar">✔ Confirmar agendamento</button>
         </div>
         <div class="acao"><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
-        <div class="acao ensina"><span class="mudo">Ensinar a IA:</span>${c.rota_sug ? `<button class="leve" data-regra="rota_fixa" data-valor="${esc(c.rota_sug)}">📌 Sempre ${esc(c.rota_sug)}</button>` : ''}<button class="leve" data-regra="rota_fixa" data-valor="">📌 Sempre outra rota…</button><button class="leve" data-regra="so_manha">🌅 Só de manhã</button><button class="leve" data-regra="so_tarde">🌇 Só à tarde</button><button class="leve" data-regra="nao_atende">⛔ Não atendemos mais</button></div>` :
-        (podeDesfazer(c) ? `<div class="acao"><button class="leve" data-col-acao="desfazer">↩️ Desfazer</button></div>` : '')}
+        ` : (podeDesfazer(c) ? `<div class="acao"><button class="leve" data-col-acao="desfazer">↩️ Desfazer</button></div>` : '')}
+        ${linhaEnsina(c)}
       </div>`
     }
     $('colLista').innerHTML = lista.length ? lista.map(bloco).join('') : '<div class="vazio">Nenhum pedido de coleta captado nos últimos 3 dias.</div>'
@@ -552,6 +563,17 @@
       </tbody></table>
       <p class="mudo" style="font-size:12.5px;margin:0">Padrões de referência: aceite do pedido em até 5 min (praças de entrega — iFood, Rappi), coleta atribuída a uma rota em até 1 h (Loggi, 99), 95% dos pedidos atendidos no dia (coleta domiciliar de laboratório) e 85% de acerto de roteirização automática antes de exigir revisão humana.</p>`
   }
+  // ensinar a IA — vale para qualquer cartão, inclusive depois de agendado
+  function linhaEnsina(c) {
+    const jaTem = regras.some(x => x.grupo === c.grupo && x.regra === 'rota_fixa')
+    const rotaAtual = c.rota || c.rota_sug || ''
+    return `<div class="acao ensina"><span class="mudo" title="Isso vira regra da clínica e vale para os próximos pedidos">📚 Ensinar a IA para <b>${esc(c.clinica || '')}</b>:</span>
+      ${rotaAtual && !jaTem ? `<button class="leve" data-regra="rota_fixa" data-valor="${esc(rotaAtual)}" title="Toda vez que essa clínica pedir coleta, a IA vai sugerir ${esc(rotaAtual)}">📌 É sempre ${esc(rotaAtual)}</button>` : ''}
+      <button class="leve" data-regra="rota_fixa" data-valor="" title="Escolher outra rota fixa para essa clínica">📌 ${jaTem ? 'Trocar a rota fixa' : 'É sempre outra rota…'}</button>
+      <button class="leve" data-regra="so_manha" title="Essa clínica só recebe o motoboy de manhã">🌅 Só de manhã</button>
+      <button class="leve" data-regra="so_tarde" title="Essa clínica só recebe o motoboy à tarde">🌇 Só à tarde</button>
+      <button class="leve" data-regra="nao_atende" title="Parar de abrir cartão para essa clínica">⛔ Não atendemos</button></div>`
+  }
   const podeDesfazer = c => c.status !== 'na_lista' && (agora() - T(c.agendada_em || c.criado_em)) / 60000 <= 15
   function regrasDaClinica(c) {
     const r = regras.filter(x => x.grupo === c.grupo)
@@ -559,6 +581,11 @@
     const txt = r.map(x => x.regra === 'rota_fixa' ? `📌 sempre ${esc(x.valor)}` : x.regra === 'so_manha' ? '🌅 só de manhã' : x.regra === 'so_tarde' ? '🌇 só à tarde' : '⛔ não atendemos')
     return `<div class="ia-achou"><span class="ia-tag">📚 A EQUIPE ENSINOU:</span>${txt.map(t => `<span class="chip-ia">${t}</span>`).join('')}<button class="mini-x" data-apagar-regra="${esc(c.grupo)}">apagar regra</button></div>`
   }
+  $('colLista').addEventListener('change', ev => {
+    const sel = ev.target.closest('select[data-campo="rota"]'); if (!sel) return
+    const t = sel.closest('.escolha-linha').querySelector('select[data-campo="turno"]')
+    t.innerHTML = opcoesTurno(sel.value, t.value)
+  })
   $('colLista').addEventListener('click', async ev => {
     const reg = ev.target.closest('button[data-regra]')
     const apg = ev.target.closest('button[data-apagar-regra]')
@@ -628,6 +655,10 @@
       return
     }
     // "Já abri o cartão" sem cartão de verdade = a omissão continua escondida (caso Bandeirantes 16/set) → confere antes
+    if (b.dataset.sus === 'registrada') {
+      const x = suspeitas.find(y => y.id === id)
+      if (!confirm(`Marcar como RESOLVIDO?\n\n"${(x?.texto || '').slice(0, 90)}"\n\nO item fica verde e vai para o histórico da aba.`)) return
+    }
     if (b.dataset.sus === 'nao_e_inclusao') {
       const x = suspeitas.find(y => y.id === id)
       if (!confirm(`Marcar como ERRO DA IA?\n\n"${(x?.texto || '').slice(0, 90)}"\n\nA IA vai parar de captar frases parecidas.`)) return
