@@ -299,16 +299,17 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto'
-    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama'
+    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan
     desenharLegenda()
     desenharRastreamento()
     desenharColetas()
     desenharRotas()
     desenharNps()
     try { desenharTerremoto() } catch {}
+    try { desenharPanorama() } catch {}
     if (hist) return desenharHistorico()
-    if (rast || col || rot || npsv || terr) return
+    if (rast || col || rot || npsv || terr || pan) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
     desenharRascunhos()
@@ -985,6 +986,63 @@
     desenharHistColeta(todas)
     placarColeta(todas)
   }
+  // ══ PANORAMA (Wal 18/set): uma tela só — o dia inteiro da operação, sem trocar de aba ══
+  function desenharPanorama() {
+    if (!$('panGrade')) return
+    const ir = a => `data-ir="${a}"`
+    // ① terremoto em cima de tudo
+    let ativos = []
+    try { ativos = terremotosAtivos() } catch {}
+    $('panTerr').innerHTML = ativos.length
+      ? `<div class="pan-terr" ${ir('terremoto')}><b>🚨 ${ativos.length} TERREMOTO${ativos.length > 1 ? 'S' : ''}</b>
+          <span>${ativos.slice(0, 2).map(x => esc(x.motivo)).join(' · ')}${ativos.length > 2 ? ` · +${ativos.length - 2}` : ''}</span>
+          <i>${ativos.filter(x => x.reg && x.reg.assumido_por).length ? `${ativos.filter(x => x.reg && x.reg.assumido_por).map(x => esc(x.reg.assumido_por)).join(', ')} assumiu` : 'ninguém assumiu ainda'}</i></div>`
+      : `<div class="pan-calmo">✅ Nenhum terremoto — operação sob controle</div>`
+    // ② rotas
+    const vivos = rotasVivo.filter(r => (r.rota || '').includes('·') && r.paradas)
+    const naRua = vivos.filter(r => r.estado !== 'finalizada'), fechadas = vivos.filter(r => r.estado === 'finalizada')
+    const par = vivos.reduce((a, r) => a + (r.paradas || 0), 0), inf = vivos.reduce((a, r) => a + (r.informadas || 0), 0)
+    const semInfo = vivos.reduce((a, r) => a + (r.faltam || 0), 0), semNum = vivos.reduce((a, r) => a + (r.sem_numero || 0), 0)
+    const piores = naRua.filter(r => r.paradas - r.informadas >= 3).sort((a, b) => (b.paradas - b.informadas) - (a.paradas - a.informadas)).slice(0, 3)
+    // ③ agendamento
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
+    const cDia = coletas.filter(c => T(c.quando) >= hoje0.getTime() && c.status !== 'descartada')
+    const esperando = cDia.filter(c => c.status === 'nova'), cobrando = cDia.filter(c => relogio(c).nivel === 'cobrar')
+    const naLista = cDia.filter(c => c.status === 'na_lista'), feitas = cDia.filter(c => c.status === 'coletada')
+    const mat = cDia.filter(EH_MATERIAL), matOk = mat.filter(c => c.status === 'entregue')
+    // ④ inclusões
+    const abertos = chamados.filter(ativo)
+    const atrasadas = abertos.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
+    const rasc = chamados.filter(c => c.status === 'rascunho').length
+    const feitasHoje = chamados.filter(c => c.status === 'concluido' && T(c.concluido_em) >= hoje0.getTime()).length
+    const card = (cor, titulo, itens, aba) => `<div class="pan-card" style="--c:${cor}" ${ir(aba)}>
+      <h3>${titulo}</h3><div class="pan-itens">${itens.map(([n, rot, cls]) => `<div class="pan-num ${cls || ''}"><b>${n}</b><span>${rot}</span></div>`).join('')}</div></div>`
+    $('panGrade').innerHTML =
+      card('var(--moto)', '🛵 Rotas de hoje', [
+        [naRua.length, 'na rua agora', naRua.length ? 'at' : ''],
+        [fechadas.length, 'já fecharam', 'ok'],
+        [par ? Math.round((inf / par) * 100) + '%' : '—', 'paradas informadas', par && inf / par < .9 ? 'at' : 'ok'],
+        [semInfo, 'sem informação', semInfo ? 'ruim' : 'ok'],
+        [semNum, 'sem nº de exames', semNum ? 'at' : 'ok'],
+      ], 'rotas') +
+      card('var(--cc)', '📋 Agendamentos', [
+        [esperando.length, 'pedidos esperando', esperando.length ? 'at' : 'ok'],
+        [cobrando.length, 'precisam de ação', cobrando.length ? 'ruim' : 'ok'],
+        [naLista.length, 'na lista da rota'],
+        [feitas.length, 'coleta confirmada', 'ok'],
+        [`${matOk.length}/${mat.length}`, '📦 material entregue', mat.length && matOk.length < mat.length ? 'at' : 'ok'],
+      ], 'coleta') +
+      card('var(--tec)', '🧪 Inclusões', [
+        [abertos.length, 'andando agora'],
+        [atrasadas, 'passaram do prazo', atrasadas ? 'ruim' : 'ok'],
+        [rasc, '🤖 rascunhos da IA', rasc ? 'ia' : ''],
+        [feitasHoje, 'concluídas hoje', 'ok'],
+      ], 'cc')
+    $('panRodape').innerHTML = piores.length
+      ? `<b>Precisa de cobrança agora:</b> ${piores.map(r => `${esc(r.rota)} <span class="mudo">${r.informadas}/${r.paradas}</span>`).join(' · ')}`
+      : `<b>Nenhuma rota pendurada.</b> <span class="mudo">Atualiza sozinho a cada minuto.</span>`
+  }
+
   // ══ TERREMOTO (Wal 18/set): só toca quando uma PROMESSA COM O CLIENTE está quebrando. Teto de 3 por dia. ══
   const TERR_TETO = 3
   function terremotosAtivos() {
@@ -1152,6 +1210,10 @@
   $('colPapeis') && $('colPapeis').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-papel]'); if (!b) return
     papel = b.dataset.papel; desenharColetas()
+  })
+  $('vPanorama') && $('vPanorama').addEventListener('click', ev => {
+    const alvo = ev.target.closest('[data-ir]'); if (!alvo) return
+    setor = alvo.dataset.ir; gravarLocal('inc_setor', setor); desenhar()
   })
   $('terrAlarme') && $('terrAlarme').addEventListener('click', async ev => {
     if (ev.target.closest('#btDisparar')) {

@@ -590,3 +590,21 @@ body.terremoto-on{animation:chaoTerremoto 1.6s ease-in-out infinite}
 .bt-alarme{font:inherit;font-weight:600;border:1px solid var(--linha);background:var(--painel);border-radius:999px;padding:4px 12px;cursor:pointer}
 .bt-alarme.on{border-color:var(--vermelho);color:var(--vermelho);background:#fff1f2}
 .bt-disparar{font:inherit;font-weight:800;border:0;background:var(--vermelho);color:#fff;border-radius:999px;padding:6px 16px;cursor:pointer;margin-right:6px}
+
+/* PANORAMA (Wal 18/set): o dia inteiro numa tela só — feito para a TV */
+.aba-pan{border-color:var(--texto)!important;font-weight:800}
+.pan-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:12px}
+.pan-card{background:var(--painel);border:1px solid var(--linha);border-top:6px solid var(--c);border-radius:14px;padding:14px 16px;box-shadow:var(--sombra);cursor:pointer}
+.pan-card:hover{border-color:var(--c)}
+.pan-card h3{font-family:var(--disp);font-size:20px;margin:0 0 10px;color:var(--c)}
+.pan-itens{display:grid;gap:8px}
+.pan-num{display:flex;align-items:baseline;gap:10px}
+.pan-num b{font-family:var(--disp);font-size:30px;line-height:1;min-width:62px;font-variant-numeric:tabular-nums}
+.pan-num span{font-size:14px;color:var(--mudo)}
+.pan-num.ok b{color:var(--ok)} .pan-num.at b{color:var(--amarelo)} .pan-num.ruim b{color:var(--vermelho)} .pan-num.ia b{color:var(--ia)}
+.pan-terr{background:var(--vermelho);color:#fff;border-radius:14px;padding:14px 18px;display:grid;gap:3px;cursor:pointer;animation:abaTerremoto 1s ease-in-out infinite}
+.pan-terr b{font-family:var(--disp);font-size:26px}
+.pan-terr span{font-size:15px} .pan-terr i{font-size:13px;opacity:.85}
+.pan-calmo{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:14px;padding:12px 18px;font-size:16px;font-weight:600}
+.pan-rodape{margin-top:12px;background:var(--painel);border:1px solid var(--linha);border-radius:12px;padding:10px 16px;font-size:14.5px}
+body.tv .pan-num b{font-size:40px} body.tv .pan-card h3{font-size:24px}
