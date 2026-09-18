@@ -467,7 +467,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',financeiro:'financeiro',socios:'socios',apoio:'apoio'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',socios:'socios',apoio:'apoio'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -478,6 +478,7 @@ function wireFTabs(){
     if(v==='estudo') drawEstudoChart();
     if(v==='financeiro') renderCustosFin();
     if(v==='custos') renderCustosIA();
+    if(v==='ccia') renderCustosCC();
     if(v==='apoio') renderApoio();
     if(v==='socios') renderSocios();
   });});
@@ -1976,4 +1977,100 @@ async function renderApoio(force){
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8aa2bd',font:{size:10}}}},scales:{x:{ticks:tick,grid},y:{ticks:tick,grid,beginAtZero:true}}}});
     _apoioCharts.push(chProd);};
   desenha(0); const sel=document.getElementById('apSel'); if(sel) sel.addEventListener('change',()=>desenha(+sel.value));
+}
+
+
+/* ── 🤖 Custos IA · Atendimento ao Cliente ────────────────────────────────
+   O ecossistema do Atendimento (ouvinte do WhatsApp, rotas, agendamento, inclusões)
+   NÃO usa IA paga: é regra + banco. Esta aba mostra o que ele custa de verdade,
+   quanto trabalho ele faz e quanto custaria fazer o mesmo comprando no mercado. */
+const CC_SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co';
+const CC_KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8';
+// valores mensais em R$ — conferir com o Wal; o que for 0 é porque já está pago em outra conta
+const CC_CUSTO = [
+  { item: 'IA paga (modelo de linguagem)', valor: 0, nota: 'nenhuma chamada paga: reconhecimento é regra + banco' },
+  { item: 'Banco do quadro (Supabase)', valor: 0, nota: 'projeto no plano gratuito; cabe no volume atual' },
+  { item: 'Site do quadro (Netlify)', valor: 0, nota: 'mesmo site do BI, sem custo adicional' },
+  { item: 'Automação (GitHub Actions)', valor: 0, nota: 'repositório público = minutos gratuitos' },
+  { item: 'Energia das 2 máquinas (Air + Mesa 4)', valor: 18, nota: '~10 W cada, 24 h · R$ 1,00/kWh' },
+  { item: 'Linha de WhatsApp do sistema', valor: 0, nota: 'linha comum, sem API paga' },
+];
+// referências de mercado (mensal, R$) para fazer o mesmo trabalho
+const CC_MERCADO = [
+  { item: 'Plataforma de atendimento por agente (Zendesk/Intercom)', valor: 1500, nota: '5 pessoas × ~US$55' },
+  { item: 'Fornecedor de chatbot/CRM de WhatsApp', valor: 1200, nota: 'faixa de mercado para 1 número + automações' },
+  { item: 'API oficial do WhatsApp (mensagens de serviço)', valor: 300, nota: '~R$0,10 por conversa iniciada' },
+  { item: 'IA por mensagem, se cada leitura fosse ao modelo', valor: 900, nota: '~3.000 msgs/dia × R$0,01' },
+];
+let _cciaOk = false;
+async function renderCustosCC(force){
+  const wrap = document.getElementById('cciaWrap'); if(!wrap) return;
+  if(_cciaOk && !force) return;
+  wrap.innerHTML = '<div class="card" style="margin-top:18px;color:var(--mut)">Carregando o uso do Atendimento…</div>';
+  const get = async (tab, q) => {
+    try{ const r = await fetch(`${CC_SB}/rest/v1/${tab}?${q}`, { headers:{ apikey: CC_KEY, Authorization:'Bearer '+CC_KEY, Prefer:'count=exact' } });
+      const n = Number((r.headers.get('content-range')||'0-0/0').split('/')[1]||0); const d = await r.json().catch(()=>[]); return { n, d };
+    }catch(e){ return { n:0, d:[] }; }
+  };
+  const d30 = new Date(Date.now()-30*864e5).toISOString();
+  const [uso, coletas, cartoes, envios, suspeitas] = await Promise.all([
+    get('cc_uso','select=dia,msgs,grupos&order=dia.desc&limit=30'),
+    get('inc_coletas',`select=id,status,quando&quando=gte.${d30}&limit=2000`),
+    get('inc_chamados',`select=id,criado_em&criado_em=gte.${d30}&limit=2000`),
+    get('inc_envios','select=id,tipo,status&limit=2000'),
+    get('inc_suspeitas',`select=id,tipo,quando&quando=gte.${d30}&limit=2000`),
+  ]);
+  _cciaOk = true;
+  const R = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const N = v => Number(v||0).toLocaleString('pt-BR');
+  const msgsDia = (uso.d[0]||{}).msgs || 0;
+  const msgsMes = uso.d.reduce((a,x)=>a+(x.msgs||0),0);
+  const grupos = (uso.d[0]||{}).grupos || 0;
+  const custoMes = CC_CUSTO.reduce((a,x)=>a+x.valor,0);
+  const mercadoMes = CC_MERCADO.reduce((a,x)=>a+x.valor,0);
+  const trabalho = coletas.n + cartoes.n + suspeitas.n;      // demandas tratadas em 30 dias
+  const porDemanda = trabalho ? custoMes/trabalho : null;
+  const cor = custoMes < 100 ? 'var(--green)' : custoMes < 500 ? 'var(--amber)' : 'var(--red)';
+  const linha = (x, tot) => `<tr><td>${esc(x.item)}</td><td style="text-align:right;font-variant-numeric:tabular-nums">${x.valor?R(x.valor):'<b style="color:var(--green)">R$ 0,00</b>'}</td><td style="color:var(--mut);font-size:12.5px">${esc(x.nota)}</td></tr>`;
+  wrap.innerHTML = `
+  <div class="card" style="margin-top:18px;border-color:${cor}">
+    <h3>🤖 Custo do Atendimento ao Cliente com IA <span class="cap">ouvinte do WhatsApp · rotas · agendamento · inclusões</span></h3>
+    <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:10px">
+      <div style="min-width:180px"><div class="acmp-l">Custo por mês</div><div class="acmp-v" style="color:${cor}">${R(custoMes)}</div><div class="acmp-s">sem nenhuma IA paga</div></div>
+      <div style="min-width:180px"><div class="acmp-l">Custo por demanda tratada</div><div class="acmp-v">${porDemanda==null?'—':R(porDemanda)}</div><div class="acmp-s">${N(trabalho)} demandas em 30 dias</div></div>
+      <div style="min-width:180px"><div class="acmp-l">Mensagens lidas (ontem/hoje)</div><div class="acmp-v">${N(msgsDia)}</div><div class="acmp-s">${N(grupos)} grupos vigiados · ${N(msgsMes)} no mês</div></div>
+      <div style="min-width:180px"><div class="acmp-l">Custaria no mercado</div><div class="acmp-v" style="color:var(--amber)">${R(mercadoMes)}</div><div class="acmp-s">economia de ${R(mercadoMes-custoMes)}/mês</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>O que paga a conta</h3>
+    <table class="tbl" style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Por mês</th><th style="text-align:left">Observação</th></tr></thead>
+      <tbody>${CC_CUSTO.map(linha).join('')}
+      <tr><td><b>Total</b></td><td style="text-align:right"><b>${R(custoMes)}</b></td><td></td></tr></tbody>
+    </table>
+    <div style="margin-top:10px;font-size:13px;color:var(--mut)">A leitura das mensagens é feita por <b>regra</b> (palavras e padrões), não por modelo de linguagem. Por isso o custo não cresce com o volume: ler 3.000 ou 30.000 mensagens por dia custa o mesmo.</div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>Quanto custaria comprar pronto</h3>
+    <table class="tbl" style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead><tr><th style="text-align:left">Alternativa de mercado</th><th style="text-align:right">Por mês</th><th style="text-align:left">Base do cálculo</th></tr></thead>
+      <tbody>${CC_MERCADO.map(linha).join('')}
+      <tr><td><b>Total</b></td><td style="text-align:right"><b>${R(mercadoMes)}</b></td><td></td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>O que o sistema fez (últimos 30 dias)</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:22px">
+      <div style="min-width:160px"><div class="acmp-l">Pedidos de coleta</div><div class="acmp-v">${N(coletas.n)}</div><div class="acmp-s">detectados no WhatsApp</div></div>
+      <div style="min-width:160px"><div class="acmp-l">Coletas confirmadas</div><div class="acmp-v">${N((coletas.d||[]).filter(x=>x.status==='coletada').length)}</div><div class="acmp-s">ciclo fechado sozinho</div></div>
+      <div style="min-width:160px"><div class="acmp-l">Cartões de inclusão</div><div class="acmp-v">${N(cartoes.n)}</div><div class="acmp-s">esteira das 7 etapas</div></div>
+      <div style="min-width:160px"><div class="acmp-l">Pedidos reconhecidos</div><div class="acmp-v">${N(suspeitas.n)}</div><div class="acmp-s">inclusão + perguntas de amostra</div></div>
+      <div style="min-width:160px"><div class="acmp-l">Mensagens enviadas</div><div class="acmp-v">${N(envios.n)}</div><div class="acmp-s">${N((envios.d||[]).filter(x=>x.tipo==='auto').length)} automáticas</div></div>
+    </div>
+    <div style="margin-top:10px;font-size:12.5px;color:var(--mut)">Fonte: banco do quadro (ao vivo) e uso publicado pelo ouvinte a cada 15 min. Valores de custo são fixos, definidos com o Wal — se algum mudar, é só corrigir na aba.</div>
+  </div>`;
 }
