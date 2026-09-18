@@ -72,7 +72,7 @@
     if (DEMO) { if (!chamados.length) demoDados(); return }
     try {
       const lim = new Date(agora() - 31 * 864e5).toISOString()
-      const abertos = await SB.from('inc_chamados').select('*').in('status', ['aberto', 'sem_amostra', 'enviado'])
+      const abertos = await SB.from('inc_chamados').select('*').in('status', ['aberto', 'sem_amostra', 'enviado', 'rascunho'])
       const recentes = await SB.from('inc_chamados').select('*').gte('criado_em', lim).order('criado_em', { ascending: false }).range(0, 4999)
       if (abertos.error) throw abertos.error
       const mapa = new Map(); for (const c of [...(abertos.data || []), ...(recentes.data || [])]) mapa.set(c.id, c)
@@ -215,6 +215,37 @@
       <div class="kpi ia"><b>${iaPend}</b><span>🤖 pedidos no WhatsApp sem cartão</span></div>
       <div class="kpi bom"><b>${feitas.length}</b><span>concluídas hoje${dur.length ? ` · média ${media}` : ''}</span></div>`
   }
+  // 🤖 rascunhos que a IA abriu sozinha a partir do WhatsApp — o Atendimento confere e confirma
+  function desenharRascunhos() {
+    const el = $('rascunhos'); if (!el) return
+    const lista = chamados.filter(c => c.status === 'rascunho').sort((a, b) => T(a.criado_em) - T(b.criado_em))
+    const mostrar = (setor === 'cc' || setor === 'todos') && lista.length
+    el.hidden = !mostrar
+    if (!mostrar) return
+    el.innerHTML = `<h3>🤖 ${lista.length} cartão${lista.length > 1 ? 'ões' : ''} que a IA abriu sozinha — confira e confirme</h3>` + lista.map(c => `
+      <div class="rasc" data-id="${c.id}">
+        <div class="rasc-msg">${esc(c.obs || '')}</div>
+        <div class="rasc-campos">
+          <label>Requisição <input data-campo="req" value="${esc(c.req || '')}" inputmode="numeric"></label>
+          <label>Pet <input data-campo="pet" value="${esc(c.pet || '')}"></label>
+          <label>Exame <input data-campo="exame" value="${esc(c.exame || '')}"></label>
+          <span class="rasc-clin">${esc(c.clinica || '')}${c.novo_numero ? ' · <b class="rosa">amostra de outro dia → novo nº</b>' : ''}</span>
+        </div>
+        <div class="acao"><button data-rasc="confirmar">✔ Confirmar e mandar para a Área Técnica</button><button class="nao" data-rasc="descartar">🚫 A IA errou — descartar</button></div>
+      </div>`).join('')
+  }
+  $('rascunhos') && $('rascunhos').addEventListener('click', async ev => {
+    const b = ev.target.closest('button[data-rasc]'); if (!b) return
+    if (!(await garantirLogin())) return
+    const cx = b.closest('.rasc'), id = +cx.dataset.id
+    const val = campo => cx.querySelector(`input[data-campo="${campo}"]`).value.trim()
+    try {
+      if (b.dataset.rasc === 'descartar' && !confirm('Descartar este cartão? A IA não deveria ter aberto.')) return
+      await rpc('inc_rascunho_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: b.dataset.rasc, p_req: val('req'), p_pet: val('pet'), p_exame: val('exame') })
+      toast(b.dataset.rasc === 'confirmar' ? 'Cartão confirmado — seguiu para a Área Técnica' : 'Rascunho descartado')
+      await carregar(); desenhar()
+    } catch (e) { toast(e.message) }
+  })
   function donoAtual(c) { return c.status === 'sem_amostra' || c.status === 'enviado' ? 'cc' : ETAPAS[c.etapa]?.dono }
   const ativo = c => c.status === 'aberto' || c.status === 'sem_amostra' || c.status === 'enviado'
   const etapaVisivel = c => c.status === 'sem_amostra' ? 1 : c.status === 'enviado' ? 7 : c.etapa
@@ -271,6 +302,7 @@
     if (rast || col || rot) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
+    desenharRascunhos()
 
     // caminho da inclusão: 5 etapas, cor = dono, número = quantas estão ali (vermelho se alguma estourou)
     $('fluxo').innerHTML = Object.entries(ETAPAS).map(([n, e]) => {
@@ -972,6 +1004,7 @@
     const sus = suspeitas.filter(x => x.status === 'aberta' && (x.tipo || 'inclusao') === 'inclusao' && !ehColeta(x.texto))
     for (const x of sus) if (!meu || meu === 'cc') agoraKeys.set('s' + x.id, x)
     if (!meu || meu === 'cc') for (const c of coletas.filter(COLETA_ABERTA)) agoraKeys.set('k' + c.id, c)
+    if (!meu || meu === 'cc') for (const c of chamados.filter(x => x.status === 'rascunho')) agoraKeys.set('r' + c.id, c)
     const vistos = vistosPor.get(setor)
     if (!vistos) { vistosPor.set(setor, new Set(agoraKeys.keys())); return }   // 1ª vez nesta aba: não apita com o que já estava lá
     const chegaram = [...agoraKeys.keys()].filter(k => !vistos.has(k))
@@ -979,6 +1012,8 @@
     if (!chegaram.length) return
     const agoraMs = agora()
     chegaram.forEach(k => novos.set(k, agoraMs))
+    const rasc = chegaram.filter(k => k[0] === 'r')
+    if (rasc.length) { tocar(SOM.ia); const c = agoraKeys.get(rasc[0]); toast(`🤖 A IA abriu ${rasc.length > 1 ? `${rasc.length} cartões` : `um cartão: ${c.pet || ''} ${c.req} · +${c.exame}`} — confira`) }
     const col = chegaram.filter(k => k[0] === 'k')
     if (col.length) { tocar(SOM.ia); const c = agoraKeys.get(col[0]); toast(`🛵 ${col.length > 1 ? `${col.length} pedidos de coleta` : `Pedido de coleta · ${c.clinica}`}${c.rota_sug ? ` → ${c.rota_sug}` : ''}`) }
     const ia = chegaram.filter(k => k[0] === 's')

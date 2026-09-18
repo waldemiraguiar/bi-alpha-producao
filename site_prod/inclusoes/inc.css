@@ -510,3 +510,13 @@ body.tv main{padding-bottom:90px}
 .matriz .cel .mini{font-size:11.5px;color:var(--mudo)}
 .matriz .det{margin:0 8px 8px}
 @media (prefers-reduced-motion:no-preference){.matriz td.c-cr{animation:cartaoAlerta 1.6s infinite}}
+
+/* 🤖 rascunhos abertos pela IA */
+.rascunhos{background:var(--ia-fundo);border:1px solid #fbcfe8;border-left:6px solid var(--ia);border-radius:12px;padding:12px 14px;display:grid;gap:10px}
+.rascunhos h3{font-family:var(--disp);font-size:19px;margin:0;color:#9d174d}
+.rasc{background:var(--painel);border:1px solid var(--linha);border-radius:10px;padding:10px 12px;display:grid;gap:8px}
+.rasc-msg{font-size:14px}
+.rasc-campos{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.rasc-campos label{display:grid;gap:2px;font-size:12px;color:var(--mudo)}
+.rasc-campos input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--linha);border-radius:8px;background:var(--painel);color:var(--texto);min-width:130px}
+.rasc-clin{font-size:13px;color:var(--mudo);align-self:center}
