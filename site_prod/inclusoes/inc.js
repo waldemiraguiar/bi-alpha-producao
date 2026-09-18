@@ -709,6 +709,7 @@
   })
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
   const COLETA_ABERTA = c => c.status === 'nova'
+  const COLETA_ANDANDO = c => ['nova', 'agendada', 'na_lista'].includes(c.status)
   let JANELAS = {}
   fetch('turnos.json').then(r => r.json()).then(j => { JANELAS = j; desenhar() }).catch(() => {})
   const ROTAS = ['rota 1', 'rota 2', 'rota 3', 'rota 4', 'rota 5', 'rota 6', 'rota 7', 'rota 8', 'rota 9', 'rota 10', 'rota 11', 'rota 12', 'rota angra', 'rota folguista 1', 'rota folguista 2', 'rota folguista 3', 'rota folguista 4']
@@ -728,6 +729,7 @@
     const novas = lista.filter(COLETA_ABERTA)
     const agendadas = lista.filter(c => c.status === 'agendada')
     const naLista = lista.filter(c => c.status === 'na_lista')
+    const coletadas = lista.filter(c => c.status === 'coletada')
     const atrasadas = novas.filter(c => (agora() - T(c.quando)) / 60000 >= 20).length
     const perto = novas.filter(c => c.corte_em && (T(c.corte_em) - agora()) / 60000 <= 30).length
     const b = document.querySelector('#abas button[data-setor="coleta"]')
@@ -737,12 +739,13 @@
     if ($('colResumo')) $('colResumo').innerHTML = `<div class="kpi ${novas.length ? 'ia' : ''}"><b>${novas.length}</b><span>🤖 pedidos de coleta esperando</span></div>
       <div class="kpi ${atrasadas ? 'ruim' : ''}"><b>${atrasadas}</b><span>sem agendar há mais de 20 min</span></div>
       <div class="kpi"><b>${agendadas.length}</b><span>agendadas, aguardando entrar na lista</span></div>
-      <div class="kpi bom"><b>${naLista.length}</b><span>já entraram na lista da rota</span></div>`
+      <div class="kpi"><b>${naLista.length}</b><span>na lista, esperando o motoboy</span></div>
+      <div class="kpi bom"><b>${coletadas.length}</b><span>✅ coleta confirmada pelo motoboy</span></div>`
     const minutos = c => (agora() - T(c.quando)) / 60000
     const faltaCorte = c => c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
     const bloco = c => {
       const m = minutos(c), fc = faltaCorte(c)
-      const cls = c.status === 'na_lista' ? 'ok' : c.status === 'agendada' ? 'ag' : m >= 20 ? 'atras' : fc !== null && fc <= 30 ? 'corte' : ''
+      const cls = c.status === 'coletada' ? 'ok' : c.status === 'na_lista' ? 'lista' : c.status === 'agendada' ? 'ag' : m >= 20 ? 'atras' : fc !== null && fc <= 30 ? 'corte' : ''
       const chips = []
       const conf = /confiança (alta|média|baixa)/.exec(c.fonte || '')
       const motivo = (c.fonte || '').replace(/^confiança \S+ · /, '')
@@ -750,14 +753,15 @@
       else chips.push('<span class="chip-ia">🤖 <b>não sei a rota dessa clínica</b> — escolha abaixo que eu aprendo</span>')
       if (fc !== null && c.status === 'nova') chips.push(`<span class="chip-ia ${fc <= 30 ? 'quente' : ''}">🛵 lista d${/manh/i.test(c.turno_sug || '') ? 'a manhã' : 'a tarde'} ${fc > 0 ? `sai em <b>${fmt(fc)}</b> (${hm(c.corte_em)})` : `<b>já saiu</b> (${hm(c.corte_em)})`}</span>`)
       if (c.status !== 'nova' && c.rota && c.rota_sug) chips.push(`<span class="chip-ia">${c.rota.trim().toLowerCase() === c.rota_sug.trim().toLowerCase() ? '✔ a IA acertou a rota' : `✏️ a equipe corrigiu: <b>${esc(c.rota)}</b> (a IA disse ${esc(c.rota_sug)}) — aprendido`}</span>`)
-      const est = c.status === 'na_lista' ? `✅ na lista da ${esc(c.na_lista_rota || '')} ${hm(c.na_lista_em)}`
+      const est = c.status === 'coletada' ? `✅ coletado ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · ${c.coletada_qtd} ex`}`
+        : c.status === 'na_lista' ? `📋 na lista da ${esc(c.na_lista_rota || '')} ${hm(c.na_lista_em)} · aguardando o motoboy`
         : c.status === 'agendada' ? `🕒 agendada por ${esc(c.por || '')} · ${esc(c.rota || '')} ${esc(c.turno || '')}`
         : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}` : (m >= 20 ? 'SEM AGENDAR' : 'NOVO PEDIDO')
       return `<div class="ia-item ${cls}" data-col="${c.id}">
         <div class="ia-clin">${esc(c.clinica || '')} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
         <div class="ia-achou">${chips.join('')}</div>
-        <div class="ia-lado"><div class="ia-tempo">${c.status === 'na_lista' ? '✓' : fmt(m)}</div><div class="ia-estado">${est}</div></div>
+        <div class="ia-lado"><div class="ia-tempo">${c.status === 'coletada' ? '✓' : c.status === 'na_lista' ? fmt(m) : fmt(m)}</div><div class="ia-estado">${est}</div></div>
         ${regrasDaClinica(c)}
         ${COLETA_ABERTA(c) ? `<div class="escolha-linha">
           <label>Rota <select data-campo="rota">${['', ...ROTAS].map(r => `<option value="${r}" ${r === (c.rota_sug || '').toLowerCase() ? 'selected' : ''}>${r || '— escolher —'}</option>`).join('')}</select></label>
@@ -765,7 +769,8 @@
           <button data-col-acao="confirmar">✔ Confirmar agendamento</button>
         </div>
         <div class="acao"><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
-        ` : `<div class="feito-linha">${c.status === 'na_lista' ? `✅ <b>Já entrou na lista da ${esc(c.na_lista_rota || '')}</b> às ${hm(c.na_lista_em)} — nada a fazer aqui.`
+        ` : `<div class="feito-linha">${c.status === 'coletada' ? `✅ <b>Coleta confirmada pelo motoboy</b> às ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · <b>${c.coletada_qtd} exames</b>`} — ciclo fechado.`
+            : c.status === 'na_lista' ? `📋 <b>Entrou na lista da ${esc(c.na_lista_rota || '')}</b> às ${hm(c.na_lista_em)} — esperando o motoboy passar.`
             : c.status === 'agendada' ? `🕒 <b>Agendada por ${esc(c.por || '')}</b> · ${esc(c.rota || '')} ${esc(c.turno || '')} — esperando entrar na lista da rota.`
             : `— descartada por ${esc(c.por || '')}`}${podeDesfazer(c) ? ' <button class="leve" data-col-acao="desfazer">↩️ Desfazer</button>' : ''}</div>`}
         ${linhaEnsina(c)}
@@ -779,8 +784,9 @@
   function desenharHistColeta(lista) {
     const el = $('colHist'); if (!el) return
     const tratadas = lista.filter(c => c.status !== 'nova')
-    const agendadas = lista.filter(c => ['agendada', 'na_lista', 'informada'].includes(c.status))
+    const agendadas = lista.filter(c => ['agendada', 'na_lista', 'informada', 'coletada'].includes(c.status))
     const naLista = lista.filter(c => c.na_lista_em)
+    const feitas = lista.filter(c => c.coletada_em)
     const mediana = arr => { if (!arr.length) return null; const a = arr.slice().sort((x, y) => x - y); return a[Math.floor(a.length / 2)] }
     const tAceite = mediana(agendadas.filter(c => c.agendada_em).map(c => (T(c.agendada_em) - T(c.quando)) / 60000))
     const tLista = mediana(naLista.map(c => (T(c.na_lista_em) - T(c.quando)) / 60000))
@@ -807,6 +813,8 @@
       ${linha('Tempo do pedido até entrar na lista', tLista, MERCADO.naLista, v => fmt(v))}
       ${linha('% dos pedidos que viraram agendamento', pctAgendado, MERCADO.agendados, v => v + '%', false)}
       ${linha('Acerto da IA na rota sugerida', acerto, MERCADO.acerto, v => v + '%', false)}
+      ${(() => { const t = mediana(feitas.map(c => (T(c.coletada_em) - T(c.quando)) / 60000)); return linha('Tempo do pedido até o motoboy coletar', t, 240, v => fmt(v)) })()}
+      ${(() => { const p = agendadas.length ? Math.round((feitas.length / agendadas.length) * 100) : null; return linha('Agendamentos que viraram coleta confirmada', p, 95, v => v + '%', false) })()}
       </tbody></table>
       <p class="mudo" style="font-size:12.5px;margin:0">Padrões de referência: aceite do pedido em até 5 min (praças de entrega — iFood, Rappi), coleta atribuída a uma rota em até 1 h (Loggi, 99), 95% dos pedidos atendidos no dia (coleta domiciliar de laboratório) e 85% de acerto de roteirização automática antes de exigir revisão humana.</p>`
   }

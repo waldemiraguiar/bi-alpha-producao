@@ -520,3 +520,5 @@ body.tv main{padding-bottom:90px}
 .rasc-campos label{display:grid;gap:2px;font-size:12px;color:var(--mudo)}
 .rasc-campos input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--linha);border-radius:8px;background:var(--painel);color:var(--texto);min-width:130px}
 .rasc-clin{font-size:13px;color:var(--mudo);align-self:center}
+
+#vColeta .ia-item.lista{--e:#0ea5e9}
