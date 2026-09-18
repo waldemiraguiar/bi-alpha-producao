@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=17">
+<link rel="stylesheet" href="inc.css?v=18">
 </head>
 <body>
 <header class="topo">
@@ -59,6 +59,7 @@
   <section id="vRast" hidden>
     <div class="rast-topo"><h2><span class="selo-ia">🤖 IA</span> Rastreamento de Inclusões</h2><p class="mudo">A IA lê os grupos das clínicas sozinha (~1 s), reconhece o pedido e sugere a requisição pela cópia do HF. <b class="rosa">Rosa = reconhecido pela IA — confira antes de abrir o cartão.</b> Nada é lançado no HF.</p></div>
     <div class="rast-filtros"><button data-per="dia" class="on">Hoje</button><button data-per="semana">7 dias</button></div>
+    <p class="mudo ajuda" id="rastAjuda"></p>
     <div class="numeros" id="rastResumo"></div>
     <div class="rast-lista" id="rastLista"></div>
   </section>
@@ -187,6 +188,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=17"></script>
+<script src="inc.js?v=18"></script>
 </body>
 </html>

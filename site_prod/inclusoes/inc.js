@@ -426,6 +426,7 @@
     return `<div class="ia-achou"><span class="ia-tag">🤖 A IA ACHOU:</span>${ch.join('')}</div>`
   }
   function desenharRastreamento() {
+    if ($('rastAjuda')) $('rastAjuda').innerHTML = '<b>✔ Já resolvi</b> = você tratou com a clínica, o item sai da lista. <b>🚫 A IA errou</b> = isso nem era pedido de inclusão; além de sair da lista, <b>a IA aprende e para de captar frases parecidas</b>.'
     const dias = periodoRast === 'dia' ? 0 : 7
     const ini = new Date(); ini.setHours(0, 0, 0, 0); ini.setDate(ini.getDate() - dias)
     const doPeriodo = suspeitas.filter(x => T(x.quando) >= ini.getTime())
@@ -446,13 +447,13 @@
         <div class="ia-msg">“${esc(x.texto)}”</div>
         ${chipsIA(x)}
         <div class="ia-lado"><div class="ia-tempo">${cls === 'ok' ? '✓' : fmt(minDesde(x))}</div><div class="ia-estado">${estado}${cls === 'ok' ? quem : ''}</div></div>
-        ${x.status === 'aberta' ? `<div class="acao"><button data-sus="abrir">Abrir cartão agora</button><button class="leve" data-sus="registrada">Já abri o cartão</button><button class="leve" data-sus="nao_e_inclusao">Não é inclusão / desistiu</button></div>` : ''}
+        ${x.status === 'aberta' ? `<div class="acao"><button data-sus="abrir">Abrir cartão agora</button><button class="leve" data-sus="registrada">Já abri o cartão</button><button class="nao" data-sus="nao_e_inclusao" title="A IA não deveria ter captado isso. Frases parecidas deixam de aparecer.">🚫 A IA errou — não é inclusão</button></div>` : ''}
       </div>`
     }
     const porIdade = (a, b) => T(a.quando) - T(b.quando)
     $('rastLista').innerHTML = (inc.length ? [...semCartao.sort(porIdade).map(x => bloco(x, 'sem')), ...agora_.sort(porIdade).map(x => bloco(x, 'novo')), ...tratadas.sort((a, b) => T(b.quando) - T(a.quando)).map(x => bloco(x, 'ok'))].join('') : '<div class="vazio">Nenhum pedido de inclusão captado no período.</div>')
       + `<h3 class="ia-sub">Perguntas sobre amostra (sem pedido de exame)</h3>`
-      + (amo.length ? amo.map(x => `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}" data-id="${x.id}"><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span><span><b>${esc(nomeClinica(x.grupo))}</b> “${esc(x.texto)}”</span>${x.status === 'aberta' ? '<span class="acao"><button class="leve" data-sus="registrada">Visto · tratado</button><button class="leve" data-sus="nao_e_inclusao">Ignorar</button></span>' : `<span class="mudo">tratado · ${esc(x.resolvido_por || '')}</span>`}</div>`).join('') : '<div class="vazio">Nenhuma no período.</div>')
+      + (amo.length ? amo.map(x => `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}" data-id="${x.id}"><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span><span><b>${esc(nomeClinica(x.grupo))}</b> “${esc(x.texto)}”</span>${x.status === 'aberta' ? '<span class="acao"><button class="leve" data-sus="registrada" title="Você já resolveu com a clínica. Some daqui.">✔ Já resolvi</button><button class="nao" data-sus="nao_e_inclusao" title="A IA não deveria ter captado isso. Frases parecidas deixam de aparecer.">🚫 A IA errou</button></span>' : `<span class="mudo">tratado · ${esc(x.resolvido_por || '')}</span>`}</div>`).join('') : '<div class="vazio">Nenhuma no período.</div>')
     const b = document.querySelector('#abas button[data-setor="rast"]')
     const abertos = inc.filter(x => x.status === 'aberta').length + amo.filter(x => x.status === 'aberta').length
     const urgente = semCartao.length
@@ -569,6 +570,10 @@
       return
     }
     // "Já abri o cartão" sem cartão de verdade = a omissão continua escondida (caso Bandeirantes 16/set) → confere antes
+    if (b.dataset.sus === 'nao_e_inclusao') {
+      const x = suspeitas.find(y => y.id === id)
+      if (!confirm(`Marcar como ERRO DA IA?\n\n"${(x?.texto || '').slice(0, 90)}"\n\nA IA vai parar de captar frases parecidas.`)) return
+    }
     if (b.dataset.sus === 'registrada') {
       const x = suspeitas.find(y => y.id === id)
       if (x && (x.tipo || 'inclusao') === 'inclusao' && !temCartaoPara(x)) {

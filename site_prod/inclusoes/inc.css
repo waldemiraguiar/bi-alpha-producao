@@ -390,3 +390,6 @@ body.tv main{padding-bottom:90px}
 .tab-bench td{padding:7px 8px;border-bottom:1px solid var(--linha)}
 .tab-bench .num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .tab-bench .verde{color:var(--ok)} .tab-bench .vermelho{color:var(--vermelho)}
+
+.ajuda{font-size:13px;background:var(--painel2);border:1px solid var(--linha);border-radius:8px;padding:8px 10px;margin:0}
+.acao button.nao{color:var(--vermelho);border-color:#fecaca;background:var(--painel)}
