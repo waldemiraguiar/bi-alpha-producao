@@ -471,7 +471,8 @@
     if (!$('rotasLista')) return
     const agoraMs = agora()
     const hojeIni = new Date(); hojeIni.setHours(0, 0, 0, 0)
-    const linhas = rotasVivo.filter(r => T(r.ciclo_aberto) >= hojeIni.getTime() - 20 * 3600e3 && / · /.test(r.rota || ''))
+    // ignora linha fantasma (formato antigo ou que o ouvinte parou de atualizar)
+    const linhas = rotasVivo.filter(r => T(r.ciclo_aberto) >= hojeIni.getTime() - 20 * 3600e3 && / · /.test(r.rota || '') && (agora() - T(r.atualizado)) / 60000 < 20)
       .map(r => ({ ...r, nome: (r.rota || '').split(' · ')[0] }))
     const nOrd = r => { const m = /(\d+)/.exec(r.nome || ''); return /folguista/.test(r.nome) ? 100 + (m ? +m[1] : 0) : /angra/.test(r.nome) ? 90 : (m ? +m[1] : 50) }
     const ordTurno = t => /manh/.test(t) ? 0 : /tarde/.test(t) ? 1 : 2
