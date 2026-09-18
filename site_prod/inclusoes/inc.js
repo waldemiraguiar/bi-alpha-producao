@@ -745,6 +745,44 @@
       `🛵 ${j.quando}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
       `Assim que o motoboy recolher, confirmamos por aqui. 😊\n\n${ASSINATURA}` }
   }
+  // ── dia 3: relógios. Cada cartão tem um prazo; passou, vira cobrança na tela ──
+  const PRAZO = { agendar: 20, corteAviso: 30, coletaFolga: 45 }   // minutos
+  function fimDoTurno(c) {
+    const j = JANELAS[(c.rota || c.rota_sug || '').toLowerCase()]
+    const k = /manh/i.test(c.turno || c.turno_sug || '') ? 'manhã' : /noite/i.test(c.turno || c.turno_sug || '') ? 'noite' : 'tarde'
+    const x = j && j[k]
+    if (!x) return null
+    const base = new Date(agora())
+    const [h, m] = x.ate.split(':').map(Number)
+    const d = new Date(base.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+    d.setHours(h, m + PRAZO.coletaFolga, 0, 0)
+    if (/amanh/i.test(c.turno || c.turno_sug || '')) d.setDate(d.getDate() + 1)   // turno de amanhã só vence amanhã
+    const off = new Date(base.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getTime() - base.getTime()
+    return d.getTime() - off
+  }
+  // devolve { nivel: 'ok'|'atencao'|'cobrar', motivo } — é o que faz o cartão piscar e entrar na fila de ação
+  function relogio(c) {
+    const min = (agora() - T(c.quando)) / 60000
+    if (c.status === 'nova') {
+      if (min >= PRAZO.agendar) return { nivel: 'cobrar', motivo: `pedido há ${fmt(min)} e ninguém agendou` }
+      const fc = c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
+      if (fc !== null && fc <= PRAZO.corteAviso) return { nivel: 'atencao', motivo: fc > 0 ? `a lista sai em ${fmt(fc)}` : 'a lista já saiu — precisa encaixar' }
+      return { nivel: 'ok', motivo: '' }
+    }
+    if (c.status === 'agendada') {
+      const fc = c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
+      if (fc !== null && fc < 0) return { nivel: 'cobrar', motivo: 'a lista da rota já saiu e essa clínica não entrou' }
+      if (fc !== null && fc <= PRAZO.corteAviso) return { nivel: 'atencao', motivo: `falta ${fmt(fc)} para a lista sair e ainda não entrou` }
+      return { nivel: 'ok', motivo: '' }
+    }
+    if (c.status === 'na_lista') {
+      if (T(c.na_lista_em) > agora() - 30 * 60000) return { nivel: 'ok', motivo: '' }   // acabou de entrar na lista
+      const fim = fimDoTurno(c)
+      if (fim && agora() > fim) return { nivel: 'cobrar', motivo: 'o turno acabou e o motoboy não informou essa clínica' }
+      return { nivel: 'ok', motivo: '' }
+    }
+    return { nivel: 'ok', motivo: '' }
+  }
   const COLETA_ABERTA = c => c.status === 'nova'
   const COLETA_ANDANDO = c => ['nova', 'agendada', 'na_lista'].includes(c.status)
   let JANELAS = {}
@@ -768,13 +806,21 @@
     const naLista = lista.filter(c => c.status === 'na_lista')
     const coletadas = lista.filter(c => c.status === 'coletada')
     const atrasadas = novas.filter(c => (agora() - T(c.quando)) / 60000 >= 20).length
-    const perto = novas.filter(c => c.corte_em && (T(c.corte_em) - agora()) / 60000 <= 30).length
+    const cobrar = lista.filter(c => relogio(c).nivel === 'cobrar')
+    const atencao = lista.filter(c => relogio(c).nivel === 'atencao')
+    if ($('colAcao')) {
+      $('colAcao').hidden = !cobrar.length
+      if (cobrar.length) $('colAcao').innerHTML = `<h3>⏰ ${cobrar.length} precisa${cobrar.length > 1 ? 'm' : ''} de ação agora</h3>` +
+        cobrar.map(c => `<div class="acao-linha"><b>${esc(c.clinica || '')}</b> <span class="mudo">${esc(relogio(c).motivo)}</span> <span class="mudo">· pedido ${hm(c.quando)}${c.rota || c.rota_sug ? ` · ${esc(c.rota || c.rota_sug)}` : ''}</span></div>`).join('')
+    }
+    const perto = atencao.length
     const b = document.querySelector('#abas button[data-setor="coleta"]')
     const esperando = novas.length + agendadas.length
     if (b) b.innerHTML = `🛵 Agendamentos${esperando ? ` <span class="badge ${atrasadas || perto ? '' : 'leve'}">${esperando}</span>` : ''}`
     if (b) b.classList.toggle('tem', !!esperando)
     if ($('colResumo')) $('colResumo').innerHTML = `<div class="kpi ${novas.length ? 'ia' : ''}"><b>${novas.length}</b><span>🤖 pedidos de coleta esperando</span></div>
-      <div class="kpi ${atrasadas ? 'ruim' : ''}"><b>${atrasadas}</b><span>sem agendar há mais de 20 min</span></div>
+      <div class="kpi ${cobrar.length ? 'ruim' : ''}"><b>${cobrar.length}</b><span>⏰ precisam de ação agora</span></div>
+      <div class="kpi ${atencao.length ? '' : ''}"><b>${atencao.length}</b><span>perto do corte da lista</span></div>
       <div class="kpi"><b>${agendadas.length}</b><span>agendadas, aguardando entrar na lista</span></div>
       <div class="kpi"><b>${naLista.length}</b><span>na lista, esperando o motoboy</span></div>
       <div class="kpi bom"><b>${coletadas.length}</b><span>✅ coleta confirmada pelo motoboy</span></div>
@@ -783,7 +829,8 @@
     const faltaCorte = c => c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
     const bloco = c => {
       const m = minutos(c), fc = faltaCorte(c)
-      const cls = c.status === 'coletada' ? 'ok' : c.status === 'na_lista' ? 'lista' : c.status === 'agendada' ? 'ag' : m >= 20 ? 'atras' : fc !== null && fc <= 30 ? 'corte' : ''
+      const rel = relogio(c)
+      const cls = c.status === 'coletada' ? 'ok' : rel.nivel === 'cobrar' ? 'atras' : rel.nivel === 'atencao' ? 'corte' : c.status === 'na_lista' ? 'lista' : c.status === 'agendada' ? 'ag' : ''
       const chips = []
       const conf = /confiança (alta|média|baixa)/.exec(c.fonte || '')
       const motivo = (c.fonte || '').replace(/^confiança \S+ · /, '')
@@ -798,7 +845,7 @@
       return `<div class="ia-item ${cls}" data-col="${c.id}">
         <div class="ia-clin">${esc(c.clinica || '')} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
-        <div class="ia-achou">${chips.join('')}</div>
+        <div class="ia-achou">${chips.join('')}${rel.motivo ? `<span class="chip-ia ${rel.nivel === 'cobrar' ? 'quente' : ''}">⏰ ${esc(rel.motivo)}</span>` : ''}</div>
         <div class="ia-lado"><div class="ia-tempo">${c.status === 'coletada' ? '✓' : c.status === 'na_lista' ? fmt(m) : fmt(m)}</div><div class="ia-estado">${est}</div></div>
         ${caixaMensagem(c)}
         ${regrasDaClinica(c)}
@@ -1087,6 +1134,7 @@
     for (const x of sus) if (!meu || meu === 'cc') agoraKeys.set('s' + x.id, x)
     if (!meu || meu === 'cc') for (const c of coletas.filter(COLETA_ABERTA)) agoraKeys.set('k' + c.id, c)
     if (!meu || meu === 'cc') for (const c of chamados.filter(x => x.status === 'rascunho')) agoraKeys.set('r' + c.id, c)
+    if (!meu || meu === 'cc') for (const c of coletas) if (relogio(c).nivel === 'cobrar') agoraKeys.set('x' + c.id, c)
     const vistos = vistosPor.get(setor)
     if (!vistos) { vistosPor.set(setor, new Set(agoraKeys.keys())); return }   // 1ª vez nesta aba: não apita com o que já estava lá
     const chegaram = [...agoraKeys.keys()].filter(k => !vistos.has(k))
@@ -1094,6 +1142,8 @@
     if (!chegaram.length) return
     const agoraMs = agora()
     chegaram.forEach(k => novos.set(k, agoraMs))
+    const cobra = chegaram.filter(k => k[0] === 'x')
+    if (cobra.length) { tocar(SOM.chegou); const c = agoraKeys.get(cobra[0]); toast(`⏰ ${c.clinica}: ${relogio(c).motivo}`) }
     const rasc = chegaram.filter(k => k[0] === 'r')
     if (rasc.length) { tocar(SOM.ia); const c = agoraKeys.get(rasc[0]); toast(`🤖 A IA abriu ${rasc.length > 1 ? `${rasc.length} cartões` : `um cartão: ${c.pet || ''} ${c.req} · +${c.exame}`} — confira`) }
     const col = chegaram.filter(k => k[0] === 'k')

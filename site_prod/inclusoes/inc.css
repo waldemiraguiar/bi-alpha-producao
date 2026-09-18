@@ -530,3 +530,9 @@ body.tv main{padding-bottom:90px}
 .msg-txt{font-size:14.5px;background:var(--painel);border:1px solid var(--linha);border-radius:8px;padding:8px 10px}
 
 .msg-txt{white-space:pre-wrap}
+
+/* ⏰ fila de ação imediata */
+.acao-box{background:#fff1f2;border:1px solid #fecaca;border-left:6px solid var(--vermelho);border-radius:12px;padding:10px 14px;display:grid;gap:6px}
+.acao-box h3{font-family:var(--disp);font-size:19px;margin:0;color:#991b1b}
+.acao-linha{font-size:14px}
+@media (prefers-reduced-motion:no-preference){.acao-box{animation:pulsaBorda 1.6s infinite}}
