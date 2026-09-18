@@ -381,3 +381,12 @@ body.tv main{padding-bottom:90px}
 }
 @keyframes pulsaLeve{50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(217,119,6,.18)}}
 @keyframes brilho{50%{box-shadow:0 0 0 5px rgba(148,163,184,.18)}}
+
+.sombra-aviso{background:#f1f5f9;border:1px dashed #94a3b8;border-radius:10px;padding:9px 12px;font-size:13.5px;color:#334155}
+.bloco-bench{background:var(--painel);border:1px solid var(--linha);border-radius:12px;box-shadow:var(--sombra);padding:12px 14px;display:grid;gap:8px;margin-top:12px}
+.bloco-bench h3{font-family:var(--disp);font-size:18px;margin:0}
+.tab-bench{width:100%;border-collapse:collapse;font-size:14px}
+.tab-bench th{text-align:left;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mudo);padding:4px 8px;border-bottom:1px solid var(--linha)}
+.tab-bench td{padding:7px 8px;border-bottom:1px solid var(--linha)}
+.tab-bench .num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tab-bench .verde{color:var(--ok)} .tab-bench .vermelho{color:var(--vermelho)}

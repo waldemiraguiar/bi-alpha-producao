@@ -486,6 +486,7 @@
       else chips.push('<span class="chip-ia">🤖 rota <b>a definir</b> — escolher na mão</span>')
       if (c.turno_sug) chips.push(`<span class="chip-ia">turno <b>${esc(c.turno_sug)}</b></span>`)
       if (fc !== null && c.status === 'nova') chips.push(`<span class="chip-ia ${fc <= 30 ? 'quente' : ''}">🛵 lista ${fc > 0 ? `sai em <b>${fmt(fc)}</b>` : '<b>já saiu</b>'}</span>`)
+      if (c.status !== 'nova' && c.rota && c.rota_sug) chips.push(`<span class="chip-ia">${c.rota.trim().toLowerCase() === c.rota_sug.trim().toLowerCase() ? '✔ a IA acertou a rota' : `✏️ a equipe corrigiu: <b>${esc(c.rota)}</b> (a IA disse ${esc(c.rota_sug)}) — aprendido`}</span>`)
       const est = c.status === 'na_lista' ? `✅ na lista da ${esc(c.na_lista_rota || '')} ${hm(c.na_lista_em)}`
         : c.status === 'agendada' ? `🕒 agendada por ${esc(c.por || '')} · ${esc(c.rota || '')} ${esc(c.turno || '')}`
         : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}` : (m >= 20 ? 'SEM AGENDAR' : 'NOVO PEDIDO')
@@ -494,10 +495,38 @@
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
         <div class="ia-achou">${chips.join('')}</div>
         <div class="ia-lado"><div class="ia-tempo">${c.status === 'na_lista' ? '✓' : fmt(m)}</div><div class="ia-estado">${est}</div></div>
-        ${COLETA_ABERTA(c) ? `<div class="acao">${c.rota_sug ? `<button data-col-acao="agendar" data-rota="${esc(c.rota_sug)}" data-turno="${esc(c.turno_sug || '')}">Agendar na ${esc(c.rota_sug)} · ${esc((c.turno_sug || '').split(' ')[0])}</button>` : ''}<button class="leve" data-col-acao="outra">Outra rota / turno</button><button class="leve" data-col-acao="descartar">Não é coleta</button></div>` : ''}
+        ${COLETA_ABERTA(c) ? `<div class="acao">${c.rota_sug ? `<button data-col-acao="agendar" data-rota="${esc(c.rota_sug)}" data-turno="${esc(c.turno_sug || '')}">✔ OK — agendar na ${esc(c.rota_sug)} · ${esc((c.turno_sug || '').split(' ')[0])}</button>` : ''}<button class="leve" data-col-acao="outra">✏️ ${c.rota_sug ? 'Ajustar rota / turno' : 'Escolher rota / turno'}</button><button class="leve" data-col-acao="descartar">Não é coleta</button></div>` : ''}
       </div>`
     }
     $('colLista').innerHTML = lista.length ? lista.map(bloco).join('') : '<div class="vazio">Nenhum pedido de coleta captado nos últimos 3 dias.</div>'
+    desenharHistColeta(lista)
+  }
+  // histórico + comparação com o mercado (benchmark de logística de coleta)
+  const MERCADO = { aceite: 5, naLista: 60, agendados: 95, acerto: 85 }
+  function desenharHistColeta(lista) {
+    const el = $('colHist'); if (!el) return
+    const tratadas = lista.filter(c => c.status !== 'nova')
+    const agendadas = lista.filter(c => ['agendada', 'na_lista', 'informada'].includes(c.status))
+    const naLista = lista.filter(c => c.na_lista_em)
+    const mediana = arr => { if (!arr.length) return null; const a = arr.slice().sort((x, y) => x - y); return a[Math.floor(a.length / 2)] }
+    const tAceite = mediana(agendadas.filter(c => c.agendada_em).map(c => (T(c.agendada_em) - T(c.quando)) / 60000))
+    const tLista = mediana(naLista.map(c => (T(c.na_lista_em) - T(c.quando)) / 60000))
+    const pctAgendado = lista.length ? Math.round((agendadas.length / lista.length) * 100) : null
+    const comSug = agendadas.filter(c => c.rota && c.rota_sug)
+    const acerto = comSug.length ? Math.round((comSug.filter(c => c.rota.trim().toLowerCase() === c.rota_sug.trim().toLowerCase()).length / comSug.length) * 100) : null
+    const linha = (rot, valor, alvo, fmtv, menorMelhor = true) => {
+      if (valor === null) return `<tr><td>${rot}</td><td class="num">—</td><td class="num mudo">${fmtv(alvo)}</td><td>sem dados ainda</td></tr>`
+      const bom = menorMelhor ? valor <= alvo : valor >= alvo
+      return `<tr><td>${rot}</td><td class="num"><b class="${bom ? 'verde' : 'vermelho'}">${fmtv(valor)}</b></td><td class="num mudo">${fmtv(alvo)}</td><td>${bom ? '✅ dentro do padrão' : '⚠️ acima do padrão de mercado'}</td></tr>`
+    }
+    el.innerHTML = `<h3>Histórico e comparação com o mercado <span class="mudo">· ${lista.length} pedidos nos últimos 3 dias</span></h3>
+      <table class="tab-bench"><thead><tr><th>Indicador</th><th class="num">Alpha</th><th class="num">Mercado</th><th>Situação</th></tr></thead><tbody>
+      ${linha('Tempo até o Atendimento agendar', tAceite, MERCADO.aceite, v => fmt(v))}
+      ${linha('Tempo do pedido até entrar na lista', tLista, MERCADO.naLista, v => fmt(v))}
+      ${linha('% dos pedidos que viraram agendamento', pctAgendado, MERCADO.agendados, v => v + '%', false)}
+      ${linha('Acerto da IA na rota sugerida', acerto, MERCADO.acerto, v => v + '%', false)}
+      </tbody></table>
+      <p class="mudo" style="font-size:12.5px;margin:0">Padrões de referência: aceite do pedido em até 5 min (praças de entrega — iFood, Rappi), coleta atribuída a uma rota em até 1 h (Loggi, 99), 95% dos pedidos atendidos no dia (coleta domiciliar de laboratório) e 85% de acerto de roteirização automática antes de exigir revisão humana.</p>`
   }
   $('colLista').addEventListener('click', async ev => {
     const b = ev.target.closest('button[data-col-acao]'); if (!b) return
