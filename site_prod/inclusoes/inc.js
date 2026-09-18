@@ -45,7 +45,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
-  let suspeitas = [], coletas = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
+  let suspeitas = [], coletas = [], regras = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -83,6 +83,8 @@
         const { data } = await SB.from('inc_eventos').select('*').in('chamado_id', ids.slice(i, i + 300)).order('quando')
         eventos = eventos.concat(data || [])
       }
+      const rg = await SB.from('inc_regras_clinica').select('*').eq('ativa', true)
+      regras = rg.error ? [] : (rg.data || [])
       const cl = await SB.from('inc_coletas').select('*').gte('quando', new Date(agora() - 3 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 499)
       coletas = cl.error ? [] : (cl.data || [])
       const sp = await SB.from('inc_suspeitas').select('*').gte('quando', new Date(agora() - 8 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
@@ -483,7 +485,7 @@
       const m = minutos(c), fc = faltaCorte(c)
       const cls = c.status === 'na_lista' ? 'ok' : c.status === 'agendada' ? 'ag' : m >= 20 ? 'atras' : fc !== null && fc <= 30 ? 'corte' : ''
       const chips = []
-      if (c.rota_sug) chips.push(`<span class="chip-ia">🤖 rota provável <b>${esc(c.rota_sug)}</b></span>`)
+      if (c.rota_sug) chips.push(`<span class="chip-ia">🤖 rota provável <b>${esc(c.rota_sug)}</b>${c.fonte ? ` <span class="mudo">· ${esc(c.fonte)}</span>` : ''}</span>`)
       else chips.push('<span class="chip-ia">🤖 rota <b>a definir</b> — escolher na mão</span>')
       if (c.turno_sug) chips.push(`<span class="chip-ia">turno <b>${esc(c.turno_sug)}</b></span>`)
       if (fc !== null && c.status === 'nova') chips.push(`<span class="chip-ia ${fc <= 30 ? 'quente' : ''}">🛵 lista ${fc > 0 ? `sai em <b>${fmt(fc)}</b>` : '<b>já saiu</b>'}</span>`)
@@ -496,7 +498,10 @@
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
         <div class="ia-achou">${chips.join('')}</div>
         <div class="ia-lado"><div class="ia-tempo">${c.status === 'na_lista' ? '✓' : fmt(m)}</div><div class="ia-estado">${est}</div></div>
-        ${COLETA_ABERTA(c) ? `<div class="acao">${c.rota_sug ? `<button data-col-acao="agendar" data-rota="${esc(c.rota_sug)}" data-turno="${esc(c.turno_sug || '')}">✔ OK — agendar na ${esc(c.rota_sug)} · ${esc((c.turno_sug || '').split(' ')[0])}</button>` : ''}<button class="leve" data-col-acao="outra">✏️ ${c.rota_sug ? 'Ajustar rota / turno' : 'Escolher rota / turno'}</button><button class="leve" data-col-acao="descartar">Não é coleta</button></div>` : ''}
+        ${regrasDaClinica(c)}
+        ${COLETA_ABERTA(c) ? `<div class="acao">${c.rota_sug ? `<button data-col-acao="agendar" data-rota="${esc(c.rota_sug)}" data-turno="${esc(c.turno_sug || '')}">✔ OK — agendar na ${esc(c.rota_sug)} · ${esc((c.turno_sug || '').split(' ')[0])}</button>` : ''}<button class="leve" data-col-acao="outra">✏️ ${c.rota_sug ? 'Ajustar rota / turno' : 'Escolher rota / turno'}</button><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
+        <div class="acao ensina"><span class="mudo">Ensinar a IA:</span>${c.rota_sug ? `<button class="leve" data-regra="rota_fixa" data-valor="${esc(c.rota_sug)}">📌 Sempre ${esc(c.rota_sug)}</button>` : ''}<button class="leve" data-regra="rota_fixa" data-valor="">📌 Sempre outra rota…</button><button class="leve" data-regra="so_manha">🌅 Só de manhã</button><button class="leve" data-regra="so_tarde">🌇 Só à tarde</button><button class="leve" data-regra="nao_atende">⛔ Não atendemos mais</button></div>` :
+        (podeDesfazer(c) ? `<div class="acao"><button class="leve" data-col-acao="desfazer">↩️ Desfazer</button></div>` : '')}
       </div>`
     }
     $('colLista').innerHTML = lista.length ? lista.map(bloco).join('') : '<div class="vazio">Nenhum pedido de coleta captado nos últimos 3 dias.</div>'
@@ -520,6 +525,15 @@
       const bom = menorMelhor ? valor <= alvo : valor >= alvo
       return `<tr><td>${rot}</td><td class="num"><b class="${bom ? 'verde' : 'vermelho'}">${fmtv(valor)}</b></td><td class="num mudo">${fmtv(alvo)}</td><td>${bom ? '✅ dentro do padrão' : '⚠️ acima do padrão de mercado'}</td></tr>`
     }
+    const ensinadas = regras.length
+    const corrigidas = agendadas.filter(c => c.rota && c.rota_sug && c.rota.trim().toLowerCase() !== c.rota_sug.trim().toLowerCase()).length
+    const errosIA = suspeitas.filter(x => x.status === 'nao_e_inclusao').length
+    $('colPlacar') && ($('colPlacar').innerHTML = `<div class="placar"><b>📚 Placar do treino da IA</b>
+      <span><b>${acerto === null ? '—' : acerto + '%'}</b> de acerto na rota</span>
+      <span><b>${corrigidas}</b> correções da equipe</span>
+      <span><b>${ensinadas}</b> regras fixas ensinadas</span>
+      <span><b>${errosIA}</b> frases marcadas como "a IA errou"</span>
+      <span class="mudo">cada clique de vocês entra no próximo palpite</span></div>`)
     el.innerHTML = `<h3>Histórico e comparação com o mercado <span class="mudo">· ${lista.length} pedidos nos últimos 3 dias</span></h3>
       <table class="tab-bench"><thead><tr><th>Indicador</th><th class="num">Alpha</th><th class="num">Mercado</th><th>Situação</th></tr></thead><tbody>
       ${linha('Tempo até o Atendimento agendar', tAceite, MERCADO.aceite, v => fmt(v))}
@@ -529,7 +543,34 @@
       </tbody></table>
       <p class="mudo" style="font-size:12.5px;margin:0">Padrões de referência: aceite do pedido em até 5 min (praças de entrega — iFood, Rappi), coleta atribuída a uma rota em até 1 h (Loggi, 99), 95% dos pedidos atendidos no dia (coleta domiciliar de laboratório) e 85% de acerto de roteirização automática antes de exigir revisão humana.</p>`
   }
+  const podeDesfazer = c => c.status !== 'na_lista' && (agora() - T(c.agendada_em || c.criado_em)) / 60000 <= 15
+  function regrasDaClinica(c) {
+    const r = regras.filter(x => x.grupo === c.grupo)
+    if (!r.length) return ''
+    const txt = r.map(x => x.regra === 'rota_fixa' ? `📌 sempre ${esc(x.valor)}` : x.regra === 'so_manha' ? '🌅 só de manhã' : x.regra === 'so_tarde' ? '🌇 só à tarde' : '⛔ não atendemos')
+    return `<div class="ia-achou"><span class="ia-tag">📚 A EQUIPE ENSINOU:</span>${txt.map(t => `<span class="chip-ia">${t}</span>`).join('')}<button class="mini-x" data-apagar-regra="${esc(c.grupo)}">apagar regra</button></div>`
+  }
   $('colLista').addEventListener('click', async ev => {
+    const reg = ev.target.closest('button[data-regra]')
+    const apg = ev.target.closest('button[data-apagar-regra]')
+    if (reg || apg) {
+      if (!(await garantirLogin())) return
+      const item = ev.target.closest('[data-col]'); const c = coletas.find(x => x.id === +item.dataset.col)
+      try {
+        if (apg) {
+          if (!confirm(`Apagar as regras ensinadas para ${c.clinica}?`)) return
+          for (const x of regras.filter(y => y.grupo === c.grupo)) await rpc('inc_regra_clinica', { p_nome: sessao.nome, p_senha: sessao.senha, p_grupo: c.grupo, p_clinica: c.clinica, p_regra: x.regra, p_valor: 'apagar' })
+          toast('Regras apagadas')
+        } else {
+          let valor = reg.dataset.valor ?? ''
+          if (reg.dataset.regra === 'rota_fixa' && !valor) { valor = (await pedirMotivo(`Qual rota sempre atende ${c.clinica}?`, 'Rota') || '').trim(); if (!valor) return }
+          await rpc('inc_regra_clinica', { p_nome: sessao.nome, p_senha: sessao.senha, p_grupo: c.grupo, p_clinica: c.clinica, p_regra: reg.dataset.regra, p_valor: valor })
+          toast('Aprendido ✓ a IA já vai usar essa regra')
+        }
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
+      return
+    }
     const b = ev.target.closest('button[data-col-acao]'); if (!b) return
     if (!(await garantirLogin())) return
     const id = +b.closest('[data-col]').dataset.col
@@ -542,7 +583,8 @@
         turno = (await pedirMotivo('Qual turno?', 'Turno (manhã / tarde / noite)') || '').trim()
         acao = 'agendar'
       }
-      if (acao === 'descartar') { if (!confirm('Marcar como "não é pedido de coleta"?')) return }
+      if (acao === 'desfazer') { await rpc('inc_coleta_desfazer', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id }); toast('Desfeito'); await carregar(); return desenhar() }
+      if (acao === 'descartar') { if (!confirm(`Marcar como ERRO DA IA?\n\n"${(c.texto || '').slice(0, 90)}"\n\nIsso não era pedido de coleta.`)) return }
       await rpc('inc_coleta_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: acao, p_rota: rota, p_turno: turno, p_obs: null })
       toast(acao === 'agendar' ? `Agendado: ${c.clinica} · ${rota} ${turno}` : 'Registrado')
       await carregar(); desenhar()
