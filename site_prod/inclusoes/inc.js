@@ -858,7 +858,7 @@
     return `<div class="msg-box ${jaAvisou ? 'ok' : ''}">
       <div class="msg-cab">💬 <b>${t}</b> <span class="mudo">— mensagem pronta para a clínica${jaAvisou ? ` · avisado ${hm(c.avisado_em)} por ${esc(c.avisado_por || '')}` : ''}</span></div>
       <div class="msg-txt" data-msg="${c.id}">${esc(m)}</div>
-      <div class="acao"><button class="leve" data-copiar="${c.id}">📋 Copiar</button>${jaAvisou ? '' : `<button class="leve" data-avisei="${c.id}">✅ Avisei a clínica</button>`}</div>
+      <div class="acao"><button data-enviar="${c.id}" title="Envia agora no grupo de TESTE, identificando a clínica">📤 Enviar (grupo de teste)</button><button class="leve" data-copiar="${c.id}">📋 Copiar</button>${jaAvisou ? '' : `<button class="leve" data-avisei="${c.id}">✅ Avisei a clínica</button>`}</div>
     </div>`
   }
   const podeDesfazer = c => c.status !== 'na_lista' && (agora() - T(c.agendada_em || c.criado_em)) / 60000 <= 15
@@ -878,6 +878,19 @@
     if (cop) {
       const txt = cop.closest('.msg-box').querySelector('.msg-txt').textContent
       try { await navigator.clipboard.writeText(txt); toast('Mensagem copiada — cole no WhatsApp da clínica') } catch { toast('Copie o texto da caixa acima') }
+      return
+    }
+    const env = ev.target.closest('button[data-enviar]')
+    if (env) {
+      if (!(await garantirLogin())) return
+      const c = coletas.find(x => x.id === +env.dataset.enviar)
+      const txt = env.closest('.msg-box').querySelector('.msg-txt').textContent
+      if (!confirm(`Enviar esta mensagem no GRUPO DE TESTE?\n\nClínica: ${c.clinica}\n\n"${txt}"\n\n(nada vai para o grupo da clínica)`)) return
+      try {
+        await rpc('inc_envio_novo', { p_nome: sessao.nome, p_senha: sessao.senha, p_coleta: c.id, p_grupo: c.grupo, p_texto: txt })
+        toast('Na fila — sai no grupo de teste em até 20 s')
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
       return
     }
     const av = ev.target.closest('button[data-avisei]')
