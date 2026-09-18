@@ -471,9 +471,11 @@
     if (!$('rotasLista')) return
     const agoraMs = agora()
     const hojeIni = new Date(); hojeIni.setHours(0, 0, 0, 0)
-    const linhas = rotasVivo.filter(r => T(r.ciclo_aberto) >= hojeIni.getTime() - 20 * 3600e3)
-    const nOrd = r => { const m = /(\d+)/.exec(r.rota || ''); return /folguista/.test(r.rota) ? 100 + (m ? +m[1] : 0) : /angra/.test(r.rota) ? 90 : (m ? +m[1] : 50) }
-    linhas.sort((a, b) => nOrd(a) - nOrd(b))
+    const linhas = rotasVivo.filter(r => T(r.ciclo_aberto) >= hojeIni.getTime() - 20 * 3600e3 && / · /.test(r.rota || ''))
+      .map(r => ({ ...r, nome: (r.rota || '').split(' · ')[0] }))
+    const nOrd = r => { const m = /(\d+)/.exec(r.nome || ''); return /folguista/.test(r.nome) ? 100 + (m ? +m[1] : 0) : /angra/.test(r.nome) ? 90 : (m ? +m[1] : 50) }
+    const ordTurno = t => /manh/.test(t) ? 0 : /tarde/.test(t) ? 1 : 2
+    linhas.sort((a, b) => nOrd(a) - nOrd(b) || ordTurno(a.turno) - ordTurno(b.turno))
     const min = q => q ? (agoraMs - T(q)) / 60000 : null
     const hm2 = h => (h || '').slice(0, 5)
     const atrasada = r => { if (r.estado === 'finalizada' || !r.fim_previsto) return false; const agoraHM = new Date(agoraMs).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' }); return agoraHM > hm2(r.fim_previsto) }
@@ -494,7 +496,7 @@
       const st = r.estado === 'finalizada' ? ['✅ finalizada', 'ok'] : muda(r) ? ['🔇 sem notícia', 'ruim'] : atrasada(r) ? ['⏰ passou do horário', 'ruim'] : r.estado === 'em_rua' ? ['🛵 na rua', 'rua'] : ['📋 lista postada', 'lista']
       const ult = min(r.ultima_conf)
       return `<article class="rt ${st[1]}" data-rota="${esc(r.rota)}">
-        <header><b>${esc((r.rota || '').toUpperCase())}</b><span class="tn">${esc(r.turno || '')}</span><span class="est ${st[1]}">${st[0]}</span></header>
+        <header><b>${esc((r.nome || r.rota || '').toUpperCase())}</b><span class="tn">${esc(r.turno || '')}</span><span class="est ${st[1]}">${st[0]}</span></header>
         <div class="barra" title="${r.informadas} informadas · ${r.sem_numero} sem número · ${r.faltam} sem informação">
           <i style="width:${pct(r.informadas)}%" class="v"></i><i style="width:${pct(r.sem_numero)}%" class="a"></i><i style="width:${pct(r.faltam)}%" class="r"></i></div>
         <div class="nums"><b>${r.informadas}/${r.paradas}</b> informadas · <b>${r.exames}</b> exames${r.sem_numero ? ` · <b class="amb">${r.sem_numero}</b> sem nº` : ''}${r.faltam ? ` · <b class="rub">${r.faltam}</b> sem info` : ''}</div>
@@ -552,7 +554,7 @@
       if (atrasada(r)) pontos.push('passou do horário')
       if (!pontos.length) pontos.push('informou tudo no prazo')
       const vsMedia = r.exames_media ? Math.round(((r.exames - r.exames_media) / r.exames_media) * 100) : null
-      return `<tr class="p-${cls}"><td><b>${esc((r.rota || '').toUpperCase())}</b> <span class="mudo">${esc(r.turno || '')}</span></td>
+      return `<tr class="p-${cls}"><td><b>${esc((r.nome || r.rota || '').toUpperCase())}</b> <span class="mudo">${esc(r.turno || '')}</span></td>
         <td class="num"><b>${r.nota}</b></td><td><span class="fx ${cls}">${rot}</span></td>
         <td>${esc(pontos.join(' · '))}</td>
         <td class="num mudo">${vsMedia === null ? '' : `${vsMedia >= 0 ? '+' : ''}${vsMedia}% vs a própria média`}</td></tr>`
