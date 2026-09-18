@@ -1009,10 +1009,12 @@
         casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt((agora() - T(c.quando)) / 60000)} e ninguém respondeu no WhatsApp` })
       }
     }
-    return casos.map(x => ({ ...x, chave: `${x.tipo}:${x.c.id}:${dia}` }))
+    const daTela = casos.map(x => ({ ...x, chave: `${x.tipo}:${x.c.id}:${dia}` }))
       .map(x => ({ ...x, reg: terremotos.find(t => t.chave === x.chave) || null }))
       .filter(x => !x.reg || !x.reg.resolvido_em)
-      .sort((a, b) => T(a.c.quando) - T(b.c.quando))
+    const doBanco = terremotos.filter(t => ['queixa', 'manual'].includes(t.tipo) && !t.resolvido_em && T(t.aberto_em) > agora() - 24 * 3600e3)
+      .map(t => ({ tipo: t.tipo, chave: t.chave, motivo: t.motivo || '', reg: t, c: { id: null, clinica: t.clinica || '', texto: '', quando: t.aberto_em } }))
+    return [...daTela, ...doBanco].sort((a, b) => T(a.c.quando) - T(b.c.quando))
   }
   function desenharTerremoto() {
     const ativos = terremotosAtivos()
@@ -1023,9 +1025,9 @@
     el.innerHTML = ativos.length ? ativos.map(x => {
       const dono = x.reg && x.reg.assumido_por
       return `<div class="terr-item ${dono ? 'assumido' : ''}" data-terr="${esc(x.chave)}" data-terr-col="${x.c.id}" data-terr-tipo="${x.tipo}">
-        <div class="terr-tit">${x.tipo === 'nao_foi' ? '🛵 Prometemos e o motoboy não foi' : x.tipo === 'motoboy_mudo' ? '🛵 Motoboy não informou' : x.tipo === 'queixa' ? '😠 Cliente cobrando' : '⏳ Cliente esperando'}</div>
+        <div class="terr-tit">${x.tipo === 'nao_foi' ? '🛵 Prometemos e o motoboy não foi' : x.tipo === 'motoboy_mudo' ? '🛵 Motoboy não informou' : x.tipo === 'queixa' ? '😠 Cliente cobrando' : x.tipo === 'manual' ? '📣 Chamado pela liderança' : '⏳ Cliente esperando'}</div>
         <div class="terr-motivo">${esc(x.motivo)}</div>
-        <div class="terr-msg">“${esc((x.c.texto || '').slice(0, 120))}” <span class="mudo">· ${dataCurta(x.c.quando)} ${hm(x.c.quando)}</span></div>
+        ${x.c.texto ? `<div class="terr-msg">“${esc(x.c.texto.slice(0, 120))}” <span class="mudo">· ${dataCurta(x.c.quando)} ${hm(x.c.quando)}</span></div>` : `<div class="terr-msg mudo">${dataCurta(x.c.quando)} ${hm(x.c.quando)}</div>`}
         ${dono ? `<div class="terr-dono">🙋 <b>${esc(dono)}</b> assumiu às ${hm(x.reg.assumido_em)} — só fecha escrevendo o que foi feito</div>
                   <div class="acao"><button data-terr-acao="resolver">✅ Resolvido — escrever o que fiz</button></div>`
                 : `<div class="acao"><button class="grande" data-terr-acao="assumir">🙋 EU ASSUMO</button></div>`}
@@ -1035,7 +1037,7 @@
     const doDia = terremotos.filter(t => T(t.aberto_em) >= hoje0.getTime())
     const passou = doDia.length > TERR_TETO
     const esc2 = k => `<button class="bt-alarme ${alarmeEscolhido === k ? 'on' : ''}" data-alarme="${k}">${ALARMES[k].nome}${alarmeEscolhido === k ? ' ✓' : ''}</button>`
-    if ($('terrAlarme')) $('terrAlarme').innerHTML = `<b>Alarme:</b> ${Object.keys(ALARMES).map(esc2).join('')} <span class="mudo">clique para ouvir e escolher · toca de novo a cada 25 s enquanto ninguém assumir</span>`
+    if ($('terrAlarme')) $('terrAlarme').innerHTML = `<button class="bt-disparar" id="btDisparar">🚨 Disparar terremoto</button> <b>Alarme:</b> ${Object.keys(ALARMES).map(esc2).join('')} <span class="mudo">clique para ouvir e escolher · toca de novo a cada 25 s enquanto ninguém assumir</span>`
     $('terrHist').innerHTML = `<h3>Hoje: ${doDia.length} terremoto${doDia.length === 1 ? '' : 's'} ${passou ? '<span class="fx cr">acima do teto de 3 — o critério vai ser revisto</span>' : '<span class="fx ex">dentro do teto de 3</span>'}</h3>` +
       (doDia.length ? `<table class="tb"><thead><tr><th>Hora</th><th>Caso</th><th>Quem assumiu</th><th>O que foi feito</th><th class="num">Tempo até resolver</th></tr></thead><tbody>` +
         doDia.map(t => `<tr><td>${hm(t.aberto_em)}</td><td>${esc(t.clinica || '')} <span class="mudo">${esc(t.motivo || '')}</span></td><td>${esc(t.assumido_por || '—')}</td><td>${esc(t.o_que_fez || '—')}</td><td class="num">${t.resolvido_em ? fmt((T(t.resolvido_em) - T(t.aberto_em)) / 60000) : 'em aberto'}</td></tr>`).join('') + '</tbody></table>' : '')
@@ -1151,7 +1153,15 @@
     const b = ev.target.closest('button[data-papel]'); if (!b) return
     papel = b.dataset.papel; desenharColetas()
   })
-  $('terrAlarme') && $('terrAlarme').addEventListener('click', ev => {
+  $('terrAlarme') && $('terrAlarme').addEventListener('click', async ev => {
+    if (ev.target.closest('#btDisparar')) {
+      if (!(await garantirLogin())) return
+      const motivo = (await pedirMotivo('Chamar a equipe: o que está acontecendo?', 'Ex.: clínica X ligou reclamando da coleta de ontem') || '').trim()
+      if (!motivo) return
+      try { await rpc('terremoto_manual', { p_nome: sessao.nome, p_senha: sessao.senha, p_motivo: motivo }); toast('🚨 Terremoto disparado — a equipe está sendo chamada'); await carregar(); desenhar() }
+      catch (e) { toast(e.message) }
+      return
+    }
     const b = ev.target.closest('button[data-alarme]'); if (!b) return
     alarmeEscolhido = b.dataset.alarme; gravarLocal('inc_alarme', alarmeEscolhido)
     somLiberado = true
