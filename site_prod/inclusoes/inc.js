@@ -992,15 +992,17 @@
     for (const c of coletas) {
       if (['descartada', 'coletada', 'entregue'].includes(c.status)) continue
       const oque = EH_MATERIAL(c) ? 'entrega de material' : 'coleta'
-      // ① prometemos e a lista da rota já saiu sem essa clínica
-      if (c.status === 'agendada' && c.corte_em && T(c.corte_em) < agora()) {
-        casos.push({ tipo: 'sem_lista', c, motivo: `prometemos ${oque} e a lista da ${c.rota || 'rota'} saiu sem ${c.clinica}` })
+      // ① prometemos e o turno acabou sem o motoboy ir
+      if (c.status === 'agendada') {
+        const fim = fimDoTurno(c)
+        if (fim && agora() > fim) { casos.push({ tipo: 'nao_foi', c, motivo: `prometemos ${oque} para ${c.clinica} (${c.rota || 'rota'} ${c.turno || ''}) e o turno acabou sem o motoboy ir` }) }
         continue
       }
       // ② entrou na lista e o motoboy não informou até o fim da rota
       if (c.status === 'na_lista') {
         const fim = fimDoTurno(c)
-        if (fim && agora() > fim) { casos.push({ tipo: 'motoboy_mudo', c, motivo: `${c.clinica} está na lista da ${c.na_lista_rota || ''} desde ${hm(c.na_lista_em)} e o motoboy não informou` }); continue }
+        if (fim && agora() > fim) { casos.push({ tipo: 'motoboy_mudo', c, motivo: `${c.clinica} está na lista da ${c.na_lista_rota || ''} desde ${hm(c.na_lista_em)} e o motoboy não informou` }) }
+        continue
       }
       // ③ o cliente pediu e ninguém respondeu NO WHATSAPP em 1 hora (responder no grupo já para o relógio — caso Barão de Lucena, 18/set)
       if (c.status === 'nova' && !c.respondido_em && (agora() - T(c.quando)) / 60000 >= 60) {
@@ -1021,7 +1023,7 @@
     el.innerHTML = ativos.length ? ativos.map(x => {
       const dono = x.reg && x.reg.assumido_por
       return `<div class="terr-item ${dono ? 'assumido' : ''}" data-terr="${esc(x.chave)}" data-terr-col="${x.c.id}" data-terr-tipo="${x.tipo}">
-        <div class="terr-tit">${x.tipo === 'sem_lista' ? '📋 Prometido e fora da lista' : x.tipo === 'motoboy_mudo' ? '🛵 Motoboy não informou' : '⏳ Cliente esperando'}</div>
+        <div class="terr-tit">${x.tipo === 'nao_foi' ? '🛵 Prometemos e o motoboy não foi' : x.tipo === 'motoboy_mudo' ? '🛵 Motoboy não informou' : x.tipo === 'queixa' ? '😠 Cliente cobrando' : '⏳ Cliente esperando'}</div>
         <div class="terr-motivo">${esc(x.motivo)}</div>
         <div class="terr-msg">“${esc((x.c.texto || '').slice(0, 120))}” <span class="mudo">· ${dataCurta(x.c.quando)} ${hm(x.c.quando)}</span></div>
         ${dono ? `<div class="terr-dono">🙋 <b>${esc(dono)}</b> assumiu às ${hm(x.reg.assumido_em)} — só fecha escrevendo o que foi feito</div>
@@ -1032,6 +1034,8 @@
     const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
     const doDia = terremotos.filter(t => T(t.aberto_em) >= hoje0.getTime())
     const passou = doDia.length > TERR_TETO
+    const esc2 = k => `<button class="bt-alarme ${alarmeEscolhido === k ? 'on' : ''}" data-alarme="${k}">${ALARMES[k].nome}${alarmeEscolhido === k ? ' ✓' : ''}</button>`
+    if ($('terrAlarme')) $('terrAlarme').innerHTML = `<b>Alarme:</b> ${Object.keys(ALARMES).map(esc2).join('')} <span class="mudo">clique para ouvir e escolher · toca de novo a cada 25 s enquanto ninguém assumir</span>`
     $('terrHist').innerHTML = `<h3>Hoje: ${doDia.length} terremoto${doDia.length === 1 ? '' : 's'} ${passou ? '<span class="fx cr">acima do teto de 3 — o critério vai ser revisto</span>' : '<span class="fx ex">dentro do teto de 3</span>'}</h3>` +
       (doDia.length ? `<table class="tb"><thead><tr><th>Hora</th><th>Caso</th><th>Quem assumiu</th><th>O que foi feito</th><th class="num">Tempo até resolver</th></tr></thead><tbody>` +
         doDia.map(t => `<tr><td>${hm(t.aberto_em)}</td><td>${esc(t.clinica || '')} <span class="mudo">${esc(t.motivo || '')}</span></td><td>${esc(t.assumido_por || '—')}</td><td>${esc(t.o_que_fez || '—')}</td><td class="num">${t.resolvido_em ? fmt((T(t.resolvido_em) - T(t.aberto_em)) / 60000) : 'em aberto'}</td></tr>`).join('') + '</tbody></table>' : '')
@@ -1146,6 +1150,13 @@
   $('colPapeis') && $('colPapeis').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-papel]'); if (!b) return
     papel = b.dataset.papel; desenharColetas()
+  })
+  $('terrAlarme') && $('terrAlarme').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-alarme]'); if (!b) return
+    alarmeEscolhido = b.dataset.alarme; gravarLocal('inc_alarme', alarmeEscolhido)
+    somLiberado = true
+    if (!tocarAlarme(alarmeEscolhido)) toast('Clique em 🔊 Som primeiro')
+    desenharTerremoto()
   })
   $('terrLista') && $('terrLista').addEventListener('click', async ev => {
     const bt = ev.target.closest('button[data-terr-acao]'); if (!bt) return
@@ -1371,8 +1382,45 @@
       })
     } catch {}
   }
-  const SOM = { chegou: [[660, 0], [990, .18], [1320, .36]], ia: [[1320, 0], [1046, .16], [1320, .32], [1046, .48]],
-    terremoto: [[880, 0], [440, .25], [880, .5], [440, .75], [880, 1], [440, 1.25], [880, 1.5]] }
+  const SOM = { chegou: [[660, 0], [990, .18], [1320, .36]], ia: [[1320, 0], [1046, .16], [1320, .32], [1046, .48]] }
+  // 3 modelos de alarme (Wal escolhe ouvindo na própria aba). Tudo gerado no navegador: sem arquivo, sem internet.
+  const ALARMES = {
+    sirene:  { nome: '🚨 Sirene', toca: c => { for (let i = 0; i < 4; i++) sweep(c, 520, 1100, i * .62, .58) } },
+    fabrica: { nome: '🏭 Fábrica (andon)', toca: c => { for (let i = 0; i < 6; i++) bipe(c, 740, i * .34, .16, 'square') } },
+    grave:   { nome: '📢 Buzina grave', toca: c => { bipe(c, 180, 0, .9, 'sawtooth'); bipe(c, 150, 1, 1.1, 'sawtooth') } },
+  }
+  function bipe(c, hz, t, dur, tipo) {
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = tipo || 'sine'; o.frequency.value = hz; o.connect(g); g.connect(c.destination)
+    const t0 = c.currentTime + t
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(.45, t0 + .03)
+    g.gain.setValueAtTime(.45, t0 + dur - .05); g.gain.linearRampToValueAtTime(.001, t0 + dur)
+    o.start(t0); o.stop(t0 + dur + .02)
+  }
+  function sweep(c, de, ate, t, dur) {
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'triangle'; o.connect(g); g.connect(c.destination)
+    const t0 = c.currentTime + t
+    o.frequency.setValueAtTime(de, t0); o.frequency.linearRampToValueAtTime(ate, t0 + dur * .5); o.frequency.linearRampToValueAtTime(de, t0 + dur)
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(.4, t0 + .05)
+    g.gain.setValueAtTime(.4, t0 + dur - .08); g.gain.linearRampToValueAtTime(.001, t0 + dur)
+    o.start(t0); o.stop(t0 + dur + .02)
+  }
+  let alarmeEscolhido = lerLocal('inc_alarme') || 'sirene'
+  function tocarAlarme(qual) {
+    if (!somLiberado) return false
+    try { ctx ||= new (window.AudioContext || window.webkitAudioContext)(); (ALARMES[qual || alarmeEscolhido] || ALARMES.sirene).toca(ctx); return true } catch { return false }
+  }
+  // enquanto houver terremoto SEM DONO, o alarme volta a cada 25 s — é o "para tudo"
+  let ultimoAlarme = 0
+  function insistirAlarme() {
+    let semDono = 0
+    try { semDono = terremotosAtivos().filter(x => !x.reg || !x.reg.assumido_por).length } catch { return }
+    if (!semDono) return
+    if (agora() - ultimoAlarme < 25000) return
+    ultimoAlarme = agora(); tocarAlarme()
+  }
+  setInterval(insistirAlarme, 5000)
   const vistosPor = new Map(); let novos = new Map()   // por setor: o que já estava na tela · chave → quando apareceu (selo NOVO)
   function chaveDe(c) { return `c${c.id}:${c.status === 'sem_amostra' ? 'sa' : c.status === 'enviado' ? 'env' : c.etapa}` }
   function avisarNovidades() {
@@ -1396,7 +1444,7 @@
     if (terr.length) {
       const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
       const noDia = terremotos.filter(t => T(t.aberto_em) >= hoje0.getTime()).length
-      if (noDia < TERR_TETO) tocar(SOM.terremoto)                 // passou do teto: continua na tela, mas para de apitar
+      if (noDia < TERR_TETO) { ultimoAlarme = agora(); tocarAlarme() }   // passou do teto: continua na tela, mas para de apitar
       toast(`🚨 TERREMOTO — ${terr.length > 1 ? `${terr.length} casos` : 'pare o que estiver fazendo'}`)
     }
     const cobra = chegaram.filter(k => k[0] === 'x')

@@ -585,3 +585,7 @@ body.terremoto-on{animation:chaoTerremoto 1.6s ease-in-out infinite}
 .terr-item .acao{margin-top:10px}
 .terr-item button.grande{font-size:16px;font-weight:800;padding:10px 20px;background:var(--vermelho);color:#fff;border:0;border-radius:10px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.aba-terremoto.tocando,body.terremoto-on{animation:none}}
+
+.terr-alarme{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13.5px;margin-bottom:10px}
+.bt-alarme{font:inherit;font-weight:600;border:1px solid var(--linha);background:var(--painel);border-radius:999px;padding:4px 12px;cursor:pointer}
+.bt-alarme.on{border-color:var(--vermelho);color:var(--vermelho);background:#fff1f2}
