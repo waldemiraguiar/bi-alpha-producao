@@ -239,6 +239,7 @@
 
   // ── desenho ──
   function desenhar() {
+    try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
     const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast'
     $('vQuadro').hidden = hist || rast; $('vHist').hidden = !hist; $('vRast').hidden = !rast
@@ -295,6 +296,7 @@
       ? `<div class="amostra ${pct >= 80 ? 'alerta' : ''}">amostra ${pct}% da validade<span class="barra"><i style="width:${pct}%"></i></span></div>` : ''
     return `<article class="cartao ${st}" data-id="${c.id}" title="aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}${c.obs ? ' · ' + esc(c.obs) : ''}">
       <div class="c-esq">
+        ${ehNovo(c) ? '<div class="selo-novo">🔔 NOVO</div>' : ''}
         <div class="c-etapa">${c.status === 'sem_amostra' ? '<span class="selo">sem amostra</span>' : `${etapaVisivel(c)} · ${e ? e.nome : ''}`}${c.novo_numero ? ` <span class="selo novo">${c.novo_req ? 'novo nº ' + esc(c.novo_req) : '🆕 amostra de outro dia: novo nº + nova requisição'}</span>` : ''}</div>
         <div class="c-pet">${esc(c.pet || 'sem nome')} <span class="req">${esc(c.req)}</span></div>
         <div class="c-exame">+ ${esc(c.exame)}</div>
@@ -527,6 +529,49 @@
       }
     } catch {}
   }
+  // Thailan/Wal 17/set: alerta SONORO quando chega coisa nova para o meu setor (e pedido de inclusão no WhatsApp)
+  function tocar(notas) {
+    if (!somLiberado) return
+    try {
+      ctx ||= new (window.AudioContext || window.webkitAudioContext)()
+      notas.forEach(([hz, t], i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain()
+        o.frequency.value = hz; o.type = 'sine'; o.connect(g); g.connect(ctx.destination)
+        const t0 = ctx.currentTime + t; g.gain.setValueAtTime(.3, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .28)
+        o.start(t0); o.stop(t0 + .3)
+      })
+    } catch {}
+  }
+  const SOM = { chegou: [[660, 0], [990, .18], [1320, .36]], ia: [[1320, 0], [1046, .16], [1320, .32], [1046, .48]] }
+  const vistosPor = new Map(); let novos = new Map()   // por setor: o que já estava na tela · chave → quando apareceu (selo NOVO)
+  function chaveDe(c) { return `c${c.id}:${c.status === 'sem_amostra' ? 'sa' : c.status === 'enviado' ? 'env' : c.etapa}` }
+  function avisarNovidades() {
+    const meu = setor === 'todos' || setor === 'hist' || setor === 'rast' ? null : setor
+    const agoraKeys = new Map()
+    for (const c of chamados.filter(ativo)) if (!meu || donoAtual(c) === meu) agoraKeys.set(chaveDe(c), c)
+    const sus = suspeitas.filter(x => x.status === 'aberta' && (x.tipo || 'inclusao') === 'inclusao' && !ehColeta(x.texto))
+    for (const x of sus) if (!meu || meu === 'cc') agoraKeys.set('s' + x.id, x)
+    const vistos = vistosPor.get(setor)
+    if (!vistos) { vistosPor.set(setor, new Set(agoraKeys.keys())); return }   // 1ª vez nesta aba: não apita com o que já estava lá
+    const chegaram = [...agoraKeys.keys()].filter(k => !vistos.has(k))
+    vistosPor.set(setor, new Set(agoraKeys.keys()))
+    if (!chegaram.length) return
+    const agoraMs = agora()
+    chegaram.forEach(k => novos.set(k, agoraMs))
+    const ia = chegaram.filter(k => k[0] === 's')
+    const cartoes = chegaram.filter(k => k[0] === 'c').map(k => agoraKeys.get(k))
+    if (ia.length) {
+      tocar(SOM.ia)
+      const x = agoraKeys.get(ia[0])
+      toast(`🤖 ${ia.length > 1 ? `${ia.length} pedidos de inclusão no WhatsApp` : `Pedido de inclusão no WhatsApp · ${nomeClinica(x.grupo)}`}`)
+    }
+    if (cartoes.length) {
+      tocar(SOM.chegou)
+      const c = cartoes[0]
+      toast(`🔔 Chegou para ${SETORES[donoAtual(c)].nome}: ${c.pet || ''} ${c.req} · +${c.exame}${cartoes.length > 1 ? ` (e mais ${cartoes.length - 1})` : ''}`)
+    }
+  }
+  const ehNovo = c => { const t = novos.get(chaveDe(c)); return t && agora() - t < 5 * 60000 }
   $('btnSom').addEventListener('click', () => { somLiberado = !somLiberado; $('btnSom').textContent = somLiberado ? '🔊 Som ligado' : '🔈 Som'; if (somLiberado) { ultimoBip = 0; bip(1) } })
   $('explodeFechar').addEventListener('click', () => { explodeCalado.add($('explode').dataset.chave); desenhar() })
 

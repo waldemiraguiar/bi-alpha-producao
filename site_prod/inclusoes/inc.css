@@ -54,7 +54,7 @@ main{padding:16px 22px 40px;display:grid;gap:16px}
 .vez h2{font-size:32px;margin-bottom:10px}
 .cartoes{display:grid;gap:10px}
 .vazio{color:var(--mudo);padding:14px;background:var(--painel);border-radius:10px}
-.cartao{--estado:var(--amarelo);background:var(--painel);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 14px;border-left:8px solid var(--estado)}
+.cartao{position:relative;--estado:var(--amarelo);background:var(--painel);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 14px;border-left:8px solid var(--estado)}
 .cartao .pet{font-family:var(--disp);font-size:27px;font-weight:700;line-height:1}
 .cartao .req{font-family:var(--mono);font-size:14px;color:var(--mudo)}
 .cartao .inc{font-size:16px}
@@ -311,3 +311,5 @@ body.tv main{padding-bottom:90px}
 .ia-amo{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:baseline;background:var(--painel);border-radius:10px;padding:8px 14px;font-size:14px}
 .ia-amo.ok{opacity:.6}
 @media (max-width:700px){.ia-item{grid-template-columns:1fr}.ia-lado{grid-column:1;grid-row:auto;text-align:left}.ia-amo{grid-template-columns:1fr}}
+
+.selo-novo{position:absolute;top:-9px;right:12px;background:var(--amarelo);color:#1a1405;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.04em;border-radius:6px;padding:1px 9px}
