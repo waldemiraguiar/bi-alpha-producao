@@ -787,6 +787,7 @@
   // mensagem curta, com título, dados em linha e assinatura (padrão de notificação de entrega)
   const ASSINATURA = '_Alpha Labs · Atendimento ao Cliente_'
   function mensagemCliente(c) {
+    if (EH_MATERIAL(c)) return mensagemMaterial(c)
     const quem = c.clinica ? `, ${c.clinica}` : ''
     if (c.status === 'nova') return { t: 'Recebi o pedido', m:
       `👋 *Recebemos seu pedido de coleta*\n` +
@@ -808,6 +809,28 @@
       `✅ *Coleta agendada*\n` +
       `🗓️ ${diaLabel(Date.now())} · 🛵 ${j.quando.replace(/^hoje /, '')}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
       `Assim que o motoboy recolher, confirmamos por aqui. 😊\n\n${ASSINATURA}` }
+  }
+  // Wal 18/set: quando a clínica pede LÂMINA/TUBO/KIT, quem se desloca é o mesmo motoboy — mas o texto é outro
+  function mensagemMaterial(c) {
+    const item = c.item ? ` (${c.item})` : ''
+    if (c.status === 'nova') return { t: 'Recebi o pedido', m:
+      `👋 *Recebemos seu pedido de material*${item}\n` +
+      `📅 ${diaLabel(c.quando)} · 🕒 ${horaLabel(c.quando)}\n` +
+      `Já estou vendo com a rota e volto com o dia da entrega. 😊\n\n${ASSINATURA}` }
+    if (c.status === 'entregue') return { t: 'Entregamos', m:
+      `📦 *Material entregue*${item}\n` +
+      `📅 ${diaLabel(c.entregue_em)} · 🕒 ${horaLabel(c.entregue_em)}\n\n` +
+      `Precisando de mais alguma coisa é só chamar por aqui${c.clinica ? `, ${c.clinica}` : ''}. 🐾\n\n${ASSINATURA}` }
+    const j = janelaTexto(c.rota || c.rota_sug, c.turno || c.turno_sug)
+    const amanha = new Date(Date.now() + 864e5)
+    if (/amanh/i.test(c.turno || c.turno_sug || '')) return { t: 'Fica para amanhã', m:
+      `📦 *Material a caminho*${item}\n` +
+      `🗓️ Amanhã, ${dataCurta(amanha)} · 🛵 ${j.quando.replace(/^amanhã /, '')}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
+      `A rota de hoje dessa região já saiu. Se for urgente, me avise que tento encaixar. 🙏\n\n${ASSINATURA}` }
+    return { t: 'A caminho', m:
+      `📦 *Material a caminho*${item}\n` +
+      `🗓️ ${diaLabel(Date.now())} · 🛵 ${j.quando.replace(/^hoje /, '')}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
+      `Assim que o motoboy deixar aí, confirmo por aqui. 😊\n\n${ASSINATURA}` }
   }
   // ── dia 3: relógios. Cada cartão tem um prazo; passou, vira cobrança na tela ──
   const PRAZO = { agendar: 20, corteAviso: 30, coletaFolga: 45 }   // minutos
@@ -839,6 +862,7 @@
       if (fc !== null && fc <= PRAZO.corteAviso) return { nivel: 'atencao', motivo: `falta ${fmt(fc)} para a lista sair e ainda não entrou` }
       return { nivel: 'ok', motivo: '' }
     }
+    if (c.status === 'entregue') return { nivel: 'ok', motivo: '' }
     if (c.status === 'na_lista') {
       if (T(c.na_lista_em) > agora() - 30 * 60000) return { nivel: 'ok', motivo: '' }   // acabou de entrar na lista
       const fim = fimDoTurno(c)
@@ -858,10 +882,11 @@
   function daFila(c, p) {
     const r = relogio(c)
     if (p === 'radar') return c.status === 'nova' || (c.status === 'agendada' && r.nivel !== 'ok')
-    if (p === 'resolvedor') return !c.avisado_em && ['nova', 'agendada', 'coletada'].includes(c.status)
+    if (p === 'resolvedor') return !c.avisado_em && ['nova', 'agendada', 'coletada', 'entregue'].includes(c.status)
     if (p === 'qualidade') return r.nivel === 'cobrar' || (c.rota && c.rota_sug && c.rota.trim().toLowerCase() !== c.rota_sug.trim().toLowerCase()) || (c.status === 'na_lista' && r.nivel !== 'ok')
     return true
   }
+  const EH_MATERIAL = c => c.tipo === 'material'
   const COLETA_ABERTA = c => c.status === 'nova'
   const COLETA_ANDANDO = c => ['nova', 'agendada', 'na_lista'].includes(c.status)
   let JANELAS = {}
@@ -908,13 +933,15 @@
       <div class="kpi"><b>${agendadas.length}</b><span>agendadas, aguardando entrar na lista</span></div>
       <div class="kpi"><b>${naLista.length}</b><span>na lista, esperando o motoboy</span></div>
       <div class="kpi bom"><b>${coletadas.length}</b><span>✅ coleta confirmada pelo motoboy</span></div>
+      <div class="kpi ${todas.filter(c => EH_MATERIAL(c) && c.status !== 'entregue' && c.status !== 'descartada').length ? 'mat' : ''}"><b>${todas.filter(EH_MATERIAL).length}</b><span>📦 pedidos de material (${todas.filter(c => EH_MATERIAL(c) && c.status === 'entregue').length} entregues)</span></div>
       <div class="kpi ${todas.filter(c => c.avisado_em).length < todas.filter(c => c.status !== 'nova' && c.status !== 'descartada').length ? 'ruim' : 'bom'}"><b>${todas.filter(c => c.avisado_em).length}</b><span>💬 clínicas avisadas</span></div>`
     const minutos = c => (agora() - T(c.quando)) / 60000
     const faltaCorte = c => c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
     const bloco = c => {
       const m = minutos(c), fc = faltaCorte(c)
       const rel = relogio(c)
-      const cls = c.status === 'coletada' ? 'ok' : rel.nivel === 'cobrar' ? 'atras' : rel.nivel === 'atencao' ? 'corte' : c.status === 'na_lista' ? 'lista' : c.status === 'agendada' ? 'ag' : ''
+      const mat = EH_MATERIAL(c)
+      const cls = (c.status === 'coletada' || c.status === 'entregue') ? 'ok' : rel.nivel === 'cobrar' ? 'atras' : rel.nivel === 'atencao' ? 'corte' : c.status === 'na_lista' ? 'lista' : c.status === 'agendada' ? 'ag' : ''
       const chips = []
       const conf = /confiança (alta|média|baixa)/.exec(c.fonte || '')
       const motivo = (c.fonte || '').replace(/^confiança \S+ · /, '')
@@ -922,12 +949,13 @@
       else chips.push('<span class="chip-ia">🤖 <b>não sei a rota dessa clínica</b> — escolha abaixo que eu aprendo</span>')
       if (fc !== null && c.status === 'nova') chips.push(`<span class="chip-ia ${fc <= 30 ? 'quente' : ''}">🛵 lista d${/manh/i.test(c.turno_sug || '') ? 'a manhã' : 'a tarde'} ${fc > 0 ? `sai em <b>${fmt(fc)}</b> (${hm(c.corte_em)})` : `<b>já saiu</b> (${hm(c.corte_em)})`}</span>`)
       if (c.status !== 'nova' && c.rota && c.rota_sug) chips.push(`<span class="chip-ia">${c.rota.trim().toLowerCase() === c.rota_sug.trim().toLowerCase() ? '✔ a IA acertou a rota' : `✏️ a equipe corrigiu: <b>${esc(c.rota)}</b> (a IA disse ${esc(c.rota_sug)}) — aprendido`}</span>`)
-      const est = c.status === 'coletada' ? `✅ coletado ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · ${c.coletada_qtd} ex`}`
+      const est = c.status === 'entregue' ? `📦 entregue ${hm(c.entregue_em)}`
+        : c.status === 'coletada' ? `✅ coletado ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · ${c.coletada_qtd} ex`}`
         : c.status === 'na_lista' ? `📋 na lista da ${esc(c.na_lista_rota || '')} ${hm(c.na_lista_em)} · aguardando o motoboy`
         : c.status === 'agendada' ? `🕒 agendada por ${esc(c.por || '')} · ${esc(c.rota || '')} ${esc(c.turno || '')}`
-        : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}` : (m >= 20 ? 'SEM AGENDAR' : 'NOVO PEDIDO')
+        : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}` : (m >= 20 ? 'SEM AGENDAR' : mat ? 'PEDIU MATERIAL' : 'NOVO PEDIDO')
       return `<div class="ia-item ${cls}" data-col="${c.id}">
-        <div class="ia-clin">${esc(c.clinica || '')} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
+        <div class="ia-clin">${mat ? '<span class="tag-mat">📦 ENTREGA DE MATERIAL</span> ' : ''}${esc(c.clinica || '')}${mat && c.item ? ` <span class="tag-item">${esc(c.item)}</span>` : ''} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
         <div class="ia-achou">${chips.join('')}${rel.motivo ? `<span class="chip-ia ${rel.nivel === 'cobrar' ? 'quente' : ''}">⏰ ${esc(rel.motivo)}</span>` : ''}</div>
         <div class="ia-lado"><div class="ia-tempo">${c.status === 'coletada' ? '✓' : c.status === 'na_lista' ? fmt(m) : fmt(m)}</div><div class="ia-estado">${est}</div></div>
@@ -936,11 +964,12 @@
         ${COLETA_ABERTA(c) ? `<div class="escolha-linha">
           <label>Rota <select data-campo="rota">${['', ...ROTAS].map(r => `<option value="${r}" ${r === (c.rota_sug || '').toLowerCase() ? 'selected' : ''}>${r || '— escolher —'}</option>`).join('')}</select></label>
           <label>Turno <select data-campo="turno">${opcoesTurno(c.rota_sug, turnoParecido(c.turno_sug))}</select></label>
-          <button data-col-acao="confirmar">✔ Confirmar agendamento</button>
+          <button data-col-acao="confirmar">✔ ${mat ? 'Confirmar entrega' : 'Confirmar agendamento'}</button>
         </div>
         <div class="acao"><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
-        ` : `<div class="feito-linha">${c.status === 'coletada' ? `✅ <b>Coleta confirmada pelo motoboy</b> às ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · <b>${c.coletada_qtd} exames</b>`} — ciclo fechado.`
-            : c.status === 'na_lista' ? `📋 <b>Entrou na lista da ${esc(c.na_lista_rota || '')}</b> às ${hm(c.na_lista_em)} — esperando o motoboy passar.`
+        ` : `<div class="feito-linha">${c.status === 'entregue' ? `📦 <b>Material entregue pelo motoboy</b> às ${hm(c.entregue_em)} — ciclo fechado.`
+            : c.status === 'coletada' ? `✅ <b>Coleta confirmada pelo motoboy</b> às ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · <b>${c.coletada_qtd} exames</b>`} — ciclo fechado.`
+            : c.status === 'na_lista' ? `📋 <b>Entrou na lista da ${esc(c.na_lista_rota || '')}</b> às ${hm(c.na_lista_em)} — esperando o motoboy ${mat ? 'deixar o material' : 'passar'}.`
             : c.status === 'agendada' ? `🕒 <b>Agendada por ${esc(c.por || '')}</b> · ${esc(c.rota || '')} ${esc(c.turno || '')} — esperando entrar na lista da rota.`
             : `— descartada por ${esc(c.por || '')}`}${podeDesfazer(c) ? ' <button class="leve" data-col-acao="desfazer">↩️ Desfazer</button>' : ''}</div>`}
         ${linhaEnsina(c)}
@@ -954,8 +983,10 @@
   function placarColeta(todas) {
     const el = $('colPlacar'); if (!el) return
     const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
-    const dia = todas.filter(c => T(c.quando) >= hoje0.getTime() && c.status !== 'descartada')
-    if (!dia.length) { el.innerHTML = ''; return }
+    const doDia = todas.filter(c => T(c.quando) >= hoje0.getTime() && c.status !== 'descartada')
+    const dia = doDia.filter(c => !EH_MATERIAL(c))                 // material tem outro fim (entregue), não entra na régua da coleta
+    const mat = doDia.filter(EH_MATERIAL)
+    if (!doDia.length) { el.innerHTML = ''; return }
     const med = arr => { if (!arr.length) return null; const a = arr.slice().sort((x, y) => x - y); return a[Math.floor(a.length / 2)] }
     const agendou = dia.filter(c => c.agendada_em), entrou = dia.filter(c => c.na_lista_em)
     const feita = dia.filter(c => c.coletada_em), avisou = dia.filter(c => c.avisado_em)
@@ -966,6 +997,11 @@
       const bom = v === null ? null : menorMelhor ? v <= alvo : v >= alvo
       return `<div class="pl-item ${bom === null ? '' : bom ? 'bom' : 'ruim'}"><b>${v === null ? '—' : fmtv(v)}</b><span>${rot}</span><i>meta ${fmtv(alvo)}</i></div>`
     }
+    if (!dia.length) {
+      el.innerHTML = `<h3>🏆 Placar do agendamento — hoje</h3><div class="placar-grade">
+        <div class="pl-item"><b>${mat.filter(c => c.status === 'entregue').length}/${mat.length}</b><span>📦 material entregue</span><i>meta 100%</i></div></div>`
+      return
+    }
     const nota = Math.round((pct(agendou.length, dia.length) || 0) * 0.3 + (pct(entrou.length, dia.length) || 0) * 0.3 + (pct(feita.length, dia.length) || 0) * 0.25 + (pct(avisou.length, dia.length) || 0) * 0.15)
     const faixa = nota >= 90 ? ['🏆 Excelente', 'ex'] : nota >= 75 ? ['👍 Bom', 'bom'] : nota >= 55 ? ['⚠️ Atenção', 'at'] : ['🚨 Precisa de ajuda', 'cr']
     el.innerHTML = `<h3>🏆 Placar do agendamento — hoje <span class="fx ${faixa[1]}">${faixa[0]} · nota ${nota}</span></h3>
@@ -973,6 +1009,7 @@
         ${item('pedidos que viraram agendamento', pct(agendou.length, dia.length), 95, v => v + '%', false)}
         ${item('entraram na lista da rota', pct(entrou.length, dia.length), 95, v => v + '%', false)}
         ${item('coleta confirmada pelo motoboy', pct(feita.length, dia.length), 90, v => v + '%', false)}
+        ${mat.length ? item('📦 material entregue', pct(mat.filter(c => c.status === 'entregue').length, mat.length), 100, v => v + '%', false) : ''}
         ${item('clínicas avisadas', pct(avisou.length, dia.length), 100, v => v + '%', false)}
         ${item('tempo até agendar', tAgendar, 5, v => fmt(v), true)}
         ${item('tempo do pedido até a coleta', tColeta, 240, v => fmt(v), true)}
@@ -1423,7 +1460,9 @@
       { id: 2, quando: min(7), grupo: 'Alpha - Pet Sorriso', clinica: 'Pet Sorriso', autor: 'Dra. Ana', texto: 'Pode mandar o motoboy buscar duas amostras?', rota_sug: 'rota 2', turno_sug: 'tarde de hoje', corte_em: new Date(agora() + 52 * 60000).toISOString(), status: 'nova' },
       { id: 3, quando: min(64), grupo: 'Alpha - Clínica Aurora', clinica: 'Clínica Aurora', autor: 'Recepção', texto: 'Temos material aqui, podem vir amanhã cedo', rota_sug: null, turno_sug: 'manhã de amanhã', corte_em: new Date(agora() + 5 * 3600e3).toISOString(), status: 'nova' },
       { id: 4, quando: min(120), grupo: 'Alpha - Vet Prev', clinica: 'Vet Prev', autor: 'Dra.', texto: 'tem amostra para coletar', rota_sug: 'rota 4', turno_sug: 'tarde de hoje', status: 'agendada', rota: 'rota 4', turno: 'tarde', por: 'DEMO', agendada_em: min(115) },
-      { id: 5, quando: min(190), grupo: 'Alpha - Su Vet', clinica: 'Su Vet', autor: 'Recepção', texto: 'podem buscar o material?', rota_sug: 'rota 5', turno_sug: 'tarde de hoje', status: 'na_lista', rota: 'rota 5', turno: 'tarde', por: 'DEMO', na_lista_em: min(150), na_lista_rota: 'rota 5' }]
+      { id: 5, quando: min(190), grupo: 'Alpha - Su Vet', clinica: 'Su Vet', autor: 'Recepção', texto: 'podem buscar o material?', rota_sug: 'rota 5', turno_sug: 'tarde de hoje', status: 'na_lista', rota: 'rota 5', turno: 'tarde', por: 'DEMO', na_lista_em: min(150), na_lista_rota: 'rota 5' },
+      { id: 6, quando: min(14), grupo: 'Alpha - Lillow petshop', clinica: 'Lillow petshop', autor: 'Dra. Paula', texto: 'Preciso de lâmina', rota_sug: 'rota 7', turno_sug: 'tarde de hoje', corte_em: new Date(agora() + 26 * 60000).toISOString(), status: 'nova', tipo: 'material', item: 'lâmina' },
+      { id: 7, quando: min(240), grupo: 'Alpha - Nup Recreio', clinica: 'Nup Recreio', autor: 'Recepção', texto: 'Podem me mandar alguns tubos vermelhos???', rota_sug: 'rota 9', turno_sug: 'manhã de hoje', status: 'entregue', rota: 'rota 9', turno: 'manhã', por: 'DEMO', na_lista_em: min(200), na_lista_rota: 'rota 9', entregue_em: min(90), tipo: 'material', item: 'tubos' }]
     eventos = chamados.flatMap(x => [{ chamado_id: x.id, quando: x.criado_em, para: 1, acao: 'abriu' }, { chamado_id: x.id, quando: x.etapa_desde, para: x.etapa, acao: 'avancou' }])
     eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
   }

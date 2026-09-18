@@ -560,3 +560,10 @@ body.tv main{padding-bottom:90px}
 #vNps .ia-item.corte{--e:var(--amarelo)}
 #vNps .ia-item.atras{--e:var(--vermelho);background:#fff6f6}
 #vNps .ia-tempo{font-size:34px}
+
+/* Wal 18/set: cartão de ENTREGA DE MATERIAL — a cor do motoboy, para não confundir com coleta */
+.tag-mat{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.05em;border-radius:999px;padding:1px 8px;background:#fff7ed;border:1px solid #fed7aa;color:var(--moto);vertical-align:1px}
+.tag-item{display:inline-block;font-size:11.5px;font-weight:600;border-radius:999px;padding:0 8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+.ia-item:has(.tag-mat){border-left:5px solid var(--moto)}
+.kpi.mat b{color:var(--moto)}
+.kpi.mat{border-color:#fed7aa;background:#fffaf5}
