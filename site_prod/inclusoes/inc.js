@@ -45,7 +45,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
-  let suspeitas = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
+  let suspeitas = [], coletas = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -83,6 +83,8 @@
         const { data } = await SB.from('inc_eventos').select('*').in('chamado_id', ids.slice(i, i + 300)).order('quando')
         eventos = eventos.concat(data || [])
       }
+      const cl = await SB.from('inc_coletas').select('*').gte('quando', new Date(agora() - 3 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 499)
+      coletas = cl.error ? [] : (cl.data || [])
       const sp = await SB.from('inc_suspeitas').select('*').gte('quando', new Date(agora() - 8 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
       suspeitas = sp.error ? [] : (sp.data || [])
       $('conexao').textContent = ''
@@ -255,12 +257,13 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast'
-    $('vQuadro').hidden = hist || rast; $('vHist').hidden = !hist; $('vRast').hidden = !rast
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta'
+    $('vQuadro').hidden = hist || rast || col; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col
     desenharLegenda()
     desenharRastreamento()
+    desenharColetas()
     if (hist) return desenharHistorico()
-    if (rast) return
+    if (rast || col) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
 
@@ -454,6 +457,62 @@
     const pend = semCartao.length
     if (b) b.innerHTML = `🤖 Rastreamento de Inclusões${pend ? ` <span class="badge">${pend}</span>` : ''}`
   }
+  // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
+  const COLETA_ABERTA = c => c.status === 'nova'
+  function desenharColetas() {
+    const lista = coletas.slice().sort((a, b) => T(b.quando) - T(a.quando))
+    const novas = lista.filter(COLETA_ABERTA)
+    const agendadas = lista.filter(c => c.status === 'agendada')
+    const naLista = lista.filter(c => c.status === 'na_lista')
+    const atrasadas = novas.filter(c => (agora() - T(c.quando)) / 60000 >= 20).length
+    const b = document.querySelector('#abas button[data-setor="coleta"]')
+    if (b) b.innerHTML = `🛵 Agendamentos${novas.length ? ` <span class="badge">${novas.length}</span>` : ''}`
+    if ($('colResumo')) $('colResumo').innerHTML = `<div class="kpi ${novas.length ? 'ia' : ''}"><b>${novas.length}</b><span>🤖 pedidos de coleta esperando</span></div>
+      <div class="kpi ${atrasadas ? 'ruim' : ''}"><b>${atrasadas}</b><span>sem agendar há mais de 20 min</span></div>
+      <div class="kpi"><b>${agendadas.length}</b><span>agendadas, aguardando entrar na lista</span></div>
+      <div class="kpi bom"><b>${naLista.length}</b><span>já entraram na lista da rota</span></div>`
+    const minutos = c => (agora() - T(c.quando)) / 60000
+    const faltaCorte = c => c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
+    const bloco = c => {
+      const m = minutos(c), fc = faltaCorte(c)
+      const cls = c.status === 'na_lista' ? 'ok' : c.status === 'agendada' ? 'ag' : m >= 20 ? 'atras' : fc !== null && fc <= 30 ? 'corte' : ''
+      const chips = []
+      if (c.rota_sug) chips.push(`<span class="chip-ia">🤖 rota provável <b>${esc(c.rota_sug)}</b></span>`)
+      else chips.push('<span class="chip-ia">🤖 rota <b>a definir</b> — escolher na mão</span>')
+      if (c.turno_sug) chips.push(`<span class="chip-ia">turno <b>${esc(c.turno_sug)}</b></span>`)
+      if (fc !== null && c.status === 'nova') chips.push(`<span class="chip-ia ${fc <= 30 ? 'quente' : ''}">🛵 lista ${fc > 0 ? `sai em <b>${fmt(fc)}</b>` : '<b>já saiu</b>'}</span>`)
+      const est = c.status === 'na_lista' ? `✅ na lista da ${esc(c.na_lista_rota || '')} ${hm(c.na_lista_em)}`
+        : c.status === 'agendada' ? `🕒 agendada por ${esc(c.por || '')} · ${esc(c.rota || '')} ${esc(c.turno || '')}`
+        : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}` : (m >= 20 ? 'SEM AGENDAR' : 'NOVO PEDIDO')
+      return `<div class="ia-item ${cls}" data-col="${c.id}">
+        <div class="ia-clin">${esc(c.clinica || '')} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
+        <div class="ia-msg">“${esc(c.texto || '')}”</div>
+        <div class="ia-achou">${chips.join('')}</div>
+        <div class="ia-lado"><div class="ia-tempo">${c.status === 'na_lista' ? '✓' : fmt(m)}</div><div class="ia-estado">${est}</div></div>
+        ${COLETA_ABERTA(c) ? `<div class="acao">${c.rota_sug ? `<button data-col-acao="agendar" data-rota="${esc(c.rota_sug)}" data-turno="${esc(c.turno_sug || '')}">Agendar na ${esc(c.rota_sug)} · ${esc((c.turno_sug || '').split(' ')[0])}</button>` : ''}<button class="leve" data-col-acao="outra">Outra rota / turno</button><button class="leve" data-col-acao="descartar">Não é coleta</button></div>` : ''}
+      </div>`
+    }
+    $('colLista').innerHTML = lista.length ? lista.map(bloco).join('') : '<div class="vazio">Nenhum pedido de coleta captado nos últimos 3 dias.</div>'
+  }
+  $('colLista').addEventListener('click', async ev => {
+    const b = ev.target.closest('button[data-col-acao]'); if (!b) return
+    if (!(await garantirLogin())) return
+    const id = +b.closest('[data-col]').dataset.col
+    const c = coletas.find(x => x.id === id)
+    let acao = b.dataset.colAcao, rota = b.dataset.rota || '', turno = b.dataset.turno || ''
+    try {
+      if (acao === 'outra') {
+        rota = (await pedirMotivo(`Em qual rota vai entrar? (${c.clinica})`, 'Rota') || '').trim()
+        if (!rota) return
+        turno = (await pedirMotivo('Qual turno?', 'Turno (manhã / tarde / noite)') || '').trim()
+        acao = 'agendar'
+      }
+      if (acao === 'descartar') { if (!confirm('Marcar como "não é pedido de coleta"?')) return }
+      await rpc('inc_coleta_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: acao, p_rota: rota, p_turno: turno, p_obs: null })
+      toast(acao === 'agendar' ? `Agendado: ${c.clinica} · ${rota} ${turno}` : 'Registrado')
+      await carregar(); desenhar()
+    } catch (e) { toast(e.message) }
+  })
   function temCartaoPara(x) {
     const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     const GEN = new Set(['alpha', 'labs', 'clinica', 'veterinaria', 'veterinario', 'consultorio', 'hospital', 'animal', 'centro'])
@@ -566,6 +625,7 @@
     for (const c of chamados.filter(ativo)) if (!meu || donoAtual(c) === meu) agoraKeys.set(chaveDe(c), c)
     const sus = suspeitas.filter(x => x.status === 'aberta' && (x.tipo || 'inclusao') === 'inclusao' && !ehColeta(x.texto))
     for (const x of sus) if (!meu || meu === 'cc') agoraKeys.set('s' + x.id, x)
+    if (!meu || meu === 'cc') for (const c of coletas.filter(COLETA_ABERTA)) agoraKeys.set('k' + c.id, c)
     const vistos = vistosPor.get(setor)
     if (!vistos) { vistosPor.set(setor, new Set(agoraKeys.keys())); return }   // 1ª vez nesta aba: não apita com o que já estava lá
     const chegaram = [...agoraKeys.keys()].filter(k => !vistos.has(k))
@@ -573,6 +633,8 @@
     if (!chegaram.length) return
     const agoraMs = agora()
     chegaram.forEach(k => novos.set(k, agoraMs))
+    const col = chegaram.filter(k => k[0] === 'k')
+    if (col.length) { tocar(SOM.ia); const c = agoraKeys.get(col[0]); toast(`🛵 ${col.length > 1 ? `${col.length} pedidos de coleta` : `Pedido de coleta · ${c.clinica}`}${c.rota_sug ? ` → ${c.rota_sug}` : ''}`) }
     const ia = chegaram.filter(k => k[0] === 's')
     const cartoes = chegaram.filter(k => k[0] === 'c').map(k => agoraKeys.get(k))
     if (ia.length) {
@@ -711,10 +773,17 @@
       { id: 5, status: 'aberta', tipo: 'inclusao', quando: min(31), grupo: 'Alpha - Vet Horizonte', autor: 'Dra. Lu', texto: 'Ainda tem sangue do Bob? Queria acrescentar T4', sug_req: '640877', sug_pet: 'BOB', sug_cliente: 'Vet Horizonte', sug_entrada: min(26 * 60), sug_n: 2 },
       { id: 2, status: 'aberta', tipo: 'amostra', quando: min(9), grupo: 'Alpha - Vet Horizonte', autor: 'Recepção', texto: 'Ainda tem amostra da Mel? Queria ver uma coisa' },
       { id: 3, status: 'registrada', tipo: 'inclusao', quando: min(95), grupo: 'Alpha - Bandeirantes', autor: 'Dra.', texto: 'Pode acrescentar fibrinogênio e colesterol', resolvido_por: 'DEMO', resolvido_em: min(80) }]
+    coletas = [
+      { id: 1, quando: min(22), grupo: 'Alpha - Vet Horizonte', clinica: 'Vet Horizonte', autor: 'Recepção', texto: 'Tenho amostra para buscar, dá para passar hoje?', rota_sug: 'rota 4', turno_sug: 'tarde de hoje', corte_em: new Date(agora() + 9 * 60000).toISOString(), status: 'nova' },
+      { id: 2, quando: min(7), grupo: 'Alpha - Pet Sorriso', clinica: 'Pet Sorriso', autor: 'Dra. Ana', texto: 'Pode mandar o motoboy buscar duas amostras?', rota_sug: 'rota 2', turno_sug: 'tarde de hoje', corte_em: new Date(agora() + 52 * 60000).toISOString(), status: 'nova' },
+      { id: 3, quando: min(64), grupo: 'Alpha - Clínica Aurora', clinica: 'Clínica Aurora', autor: 'Recepção', texto: 'Temos material aqui, podem vir amanhã cedo', rota_sug: null, turno_sug: 'manhã de amanhã', corte_em: new Date(agora() + 5 * 3600e3).toISOString(), status: 'nova' },
+      { id: 4, quando: min(120), grupo: 'Alpha - Vet Prev', clinica: 'Vet Prev', autor: 'Dra.', texto: 'tem amostra para coletar', rota_sug: 'rota 4', turno_sug: 'tarde de hoje', status: 'agendada', rota: 'rota 4', turno: 'tarde', por: 'DEMO', agendada_em: min(115) },
+      { id: 5, quando: min(190), grupo: 'Alpha - Su Vet', clinica: 'Su Vet', autor: 'Recepção', texto: 'podem buscar o material?', rota_sug: 'rota 5', turno_sug: 'tarde de hoje', status: 'na_lista', rota: 'rota 5', turno: 'tarde', por: 'DEMO', na_lista_em: min(150), na_lista_rota: 'rota 5' }]
     eventos = chamados.flatMap(x => [{ chamado_id: x.id, quando: x.criado_em, para: 1, acao: 'abriu' }, { chamado_id: x.id, quando: x.etapa_desde, para: x.etapa, acao: 'avancou' }])
     eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
   }
   function demoRpc(nome, a) {
+    if (nome === 'inc_coleta_acao') { const x = coletas.find(y => y.id === a.p_id); if (x) { x.status = a.p_acao === 'agendar' ? 'agendada' : 'descartada'; x.rota = a.p_rota; x.turno = a.p_turno; x.por = 'DEMO'; x.agendada_em = new Date().toISOString() } return x ? x.status : null }
     if (nome === 'inc_buscar_req') return { req: a.p_num, pet: 'THOR', especie: 'Canino', clinica: 'Clínica de exemplo', entrada: new Date(agora() - 6 * 3600e3).toISOString(), exames: ['Hemograma', 'ALT', 'Creatinina'] }
     if (nome === 'inc_abrir2') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: 2, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: false, aberto_por: a.p_nome, amostra_entrada: a.p_entrada, cliente_status: a.p_cliente, novo_numero: a.p_novo_numero }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: 2 }); return x.id }
     if (nome === 'inc_abrir') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: a.p_autorizado ? 2 : 1, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: !a.p_autorizado, aberto_por: a.p_nome, amostra_entrada: a.p_entrada }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: x.etapa }); return x.id }

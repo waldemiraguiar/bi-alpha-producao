@@ -2,7 +2,7 @@
 :root{
   --chao:#eef1f6; --painel:#ffffff; --painel2:#f4f7fb; --linha:#dfe4ec;
   --texto:#111827; --mudo:#667085; --fraco:#98a2b3;
-  --cc:#2563eb; --esc:#0d9488; --tec:#7c3aed; --ia:#db2777; --ia-fundo:#fdf2f8;
+  --cc:#2563eb; --esc:#0d9488; --tec:#7c3aed; --ia:#db2777; --ia-fundo:#fdf2f8; --moto:#ea580c; --moto-fundo:#fff7ed;
   --amarelo:#d97706; --vermelho:#dc2626; --pausa:#98a2b3; --ok:#16a34a;
   --sombra:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
   --disp:"Barlow Condensed","Arial Narrow",sans-serif;
@@ -354,3 +354,18 @@ body.tv main{padding-bottom:90px}
 .explode button{background:var(--vermelho);color:#fff}
 @keyframes alarme2{50%{background:#ffe4e6}}
 @media (prefers-reduced-motion:no-preference){.explode{animation:alarme2 .8s steps(2,jump-none) infinite}}
+
+/* 🛵 agendamentos de coleta */
+.abas button.aba-moto{color:var(--moto);border-color:#fed7aa}
+.abas button.aba-moto.on{background:var(--moto);color:#fff}
+#vColeta{border-top:6px solid var(--moto);padding-top:10px}
+.selo-moto{display:inline-block;background:var(--moto);color:#fff;font-family:var(--disp);font-weight:700;font-size:.6em;letter-spacing:.04em;border-radius:6px;padding:1px 9px;vertical-align:.25em}
+#vColeta .ia-item{--e:var(--moto)}
+#vColeta .ia-item.atras{--e:var(--vermelho);background:#fff6f6}
+#vColeta .ia-item.corte{--e:var(--amarelo)}
+#vColeta .ia-item.ag{--e:var(--cc)}
+#vColeta .ia-item.ok{--e:var(--ok);opacity:.72}
+#vColeta .chip-ia{background:var(--moto-fundo);border-color:#fed7aa;color:#9a3412}
+#vColeta .chip-ia.quente{background:#fef2f2;border-color:#fecaca;color:#991b1b;font-weight:700}
+#vColeta .ia-tag{color:var(--moto)}
+@media (prefers-reduced-motion:no-preference){.abas button.aba-moto .badge{animation:pulsaBadge 1.1s infinite}}
