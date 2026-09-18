@@ -419,3 +419,12 @@ body.tv main{padding-bottom:90px}
 /* resolvido = verde e sai da fila ativa */
 .ia-item.ok .ia-estado{color:var(--ok)}
 .ia-amo.ok{background:#f0fdf4;border-color:#bbf7d0;opacity:1}
+
+.feito-linha{grid-column:1/-1;background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:8px 10px;font-size:14px;margin-top:4px}
+.ensina-box{grid-column:1/-1;margin-top:6px;border-top:1px dashed var(--linha);padding-top:6px}
+.ensina-box summary{cursor:pointer;font-size:13px;color:var(--mudo);list-style:none}
+.ensina-box summary::-webkit-details-marker{display:none}
+.ensina-box summary::before{content:'▸ ';color:var(--mudo)}
+.ensina-box[open] summary::before{content:'▾ '}
+.ensina-ajuda{font-size:12.5px;margin:6px 0 0}
+.escolha-linha select{min-width:170px}

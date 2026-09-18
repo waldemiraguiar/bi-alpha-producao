@@ -520,7 +520,9 @@
           <button data-col-acao="confirmar">✔ Confirmar agendamento</button>
         </div>
         <div class="acao"><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
-        ` : (podeDesfazer(c) ? `<div class="acao"><button class="leve" data-col-acao="desfazer">↩️ Desfazer</button></div>` : '')}
+        ` : `<div class="feito-linha">${c.status === 'na_lista' ? `✅ <b>Já entrou na lista da ${esc(c.na_lista_rota || '')}</b> às ${hm(c.na_lista_em)} — nada a fazer aqui.`
+            : c.status === 'agendada' ? `🕒 <b>Agendada por ${esc(c.por || '')}</b> · ${esc(c.rota || '')} ${esc(c.turno || '')} — esperando entrar na lista da rota.`
+            : `— descartada por ${esc(c.por || '')}`}${podeDesfazer(c) ? ' <button class="leve" data-col-acao="desfazer">↩️ Desfazer</button>' : ''}</div>`}
         ${linhaEnsina(c)}
       </div>`
     }
@@ -567,12 +569,15 @@
   function linhaEnsina(c) {
     const jaTem = regras.some(x => x.grupo === c.grupo && x.regra === 'rota_fixa')
     const rotaAtual = c.rota || c.rota_sug || ''
-    return `<div class="acao ensina"><span class="mudo" title="Isso vira regra da clínica e vale para os próximos pedidos">📚 Ensinar a IA para <b>${esc(c.clinica || '')}</b>:</span>
-      ${rotaAtual && !jaTem ? `<button class="leve" data-regra="rota_fixa" data-valor="${esc(rotaAtual)}" title="Toda vez que essa clínica pedir coleta, a IA vai sugerir ${esc(rotaAtual)}">📌 É sempre ${esc(rotaAtual)}</button>` : ''}
-      <button class="leve" data-regra="rota_fixa" data-valor="" title="Escolher outra rota fixa para essa clínica">📌 ${jaTem ? 'Trocar a rota fixa' : 'É sempre outra rota…'}</button>
-      <button class="leve" data-regra="so_manha" title="Essa clínica só recebe o motoboy de manhã">🌅 Só de manhã</button>
-      <button class="leve" data-regra="so_tarde" title="Essa clínica só recebe o motoboy à tarde">🌇 Só à tarde</button>
-      <button class="leve" data-regra="nao_atende" title="Parar de abrir cartão para essa clínica">⛔ Não atendemos</button></div>`
+    const principal = rotaAtual && !jaTem
+      ? `<button class="leve" data-regra="rota_fixa" data-valor="${esc(rotaAtual)}">📌 Essa clínica é SEMPRE ${esc(rotaAtual)}</button>`
+      : `<button class="leve" data-regra="rota_fixa" data-valor="">📌 ${jaTem ? 'Trocar a rota fixa dessa clínica' : 'Dizer qual rota atende sempre essa clínica'}</button>`
+    return `<details class="ensina-box"><summary>📚 Ensinar a IA sobre <b>${esc(c.clinica || '')}</b> <span class="mudo">— vale para os próximos pedidos</span></summary>
+      <div class="acao ensina">${principal}
+        <button class="leve" data-regra="so_manha">🌅 Só recebe de manhã</button>
+        <button class="leve" data-regra="so_tarde">🌇 Só recebe à tarde</button>
+        <button class="leve" data-regra="nao_atende">⛔ Não é mais cliente</button></div>
+      <p class="mudo ensina-ajuda">Use quando a clínica tem regra própria: <b>só de manhã</b> ou <b>só à tarde</b> faz a IA parar de sugerir o turno errado; <b>não é mais cliente</b> faz a IA parar de abrir cartão para ela. Se não for o caso, ignore.</p></details>`
   }
   const podeDesfazer = c => c.status !== 'na_lista' && (agora() - T(c.agendada_em || c.criado_em)) / 60000 <= 15
   function regrasDaClinica(c) {
