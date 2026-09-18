@@ -529,15 +529,15 @@
         ${abertas.has(r.rota) ? detalheRota(r) : ''}
       </article>`
     }
-    if (turnoView === 'resumo' && !filtroRota) { $('rotasLista').innerHTML = tabelaResumo(linhas, atrasada, muda); return finalRotas(linhas, atrasada, total, infor) }
+    if (turnoView === 'resumo' && !filtroRota) { $('rotasLista').innerHTML = tabelaResumo(linhas, atrasada, muda); return finalRotas(linhas, atrasada, total, infor, linhas.filter(r => muda(r) || atrasada(r)).length) }
     $('rotasLista').innerHTML = porRota.size ? [...porRota.entries()].map(([nome, turnos]) => `
       <section class="linha-rota">
         <h3 class="rt-nome">${esc(nome.toUpperCase())}</h3>
         <div class="rt-turnos">${turnos.map(cartao).join('')}</div>
       </section>`).join('') : `<div class="vazio">${filtroRota ? 'Nenhuma rota nessa situação agora. <b>Clique no número de novo para ver todas.</b>' : 'Nenhuma rota aberta agora. A lista da manhã costuma ser postada a partir das 19h.'}</div>`
-    finalRotas(linhas, atrasada, total, infor)
+    finalRotas(linhas, atrasada, total, infor, linhas.filter(r => muda(r) || atrasada(r)).length)
   }
-  function finalRotas(linhas, atrasada, total, infor) {
+  function finalRotas(linhas, atrasada, total, infor, alertas) {
     desenharPlacarRotas(linhas, atrasada)
     const okPrazo = linhas.filter(r => r.estado === 'finalizada' && !atrasada(r)).length
     const fin = linhas.filter(r => r.estado === 'finalizada').length
@@ -551,7 +551,7 @@
       </tbody></table>
       <p class="mudo" style="font-size:12.5px;margin:0">Verde = dentro do padrão. O horário previsto vem do próprio histórico de cada rota (85% dos dias dos últimos 90).</p>`
     const b = document.querySelector('#abas button[data-setor="rotas"]')
-    const alerta = linhas.filter(r => muda(r) || atrasada(r)).length
+    const alerta = alertas
     if (b) { b.innerHTML = `🛵 BI Rotas${alerta ? ` <span class="badge">${alerta}</span>` : ''}`; b.classList.toggle('tem', !!alerta) }
   }
   // mini gráfico dos últimos dias: exames por dia daquela rota/turno
