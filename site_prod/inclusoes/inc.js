@@ -708,6 +708,23 @@
     desenharRotas()
   })
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
+  // ── dia 2: mensagem pronta para o cliente, com a janela real da rota ──
+  function janelaTexto(rota, turno) {
+    const j = JANELAS[(rota || '').toLowerCase()]
+    const k = /manh/i.test(turno || '') ? 'manhã' : /noite/i.test(turno || '') ? 'noite' : 'tarde'
+    const x = j && j[k]
+    const quando = /amanh/i.test(turno || '') ? 'amanhã' : 'hoje'
+    const periodo = k === 'manhã' ? 'de manhã' : k === 'noite' ? 'no fim do dia' : 'à tarde'
+    return x ? `${quando} ${periodo}, entre ${x.de.slice(0, 5)} e ${x.ate.slice(0, 5)}` : `${quando} ${periodo}`
+  }
+  function mensagemCliente(c) {
+    const clin = c.clinica || ''
+    if (c.status === 'nova') return { t: 'Recebi o pedido', m: `Oi! Recebemos o pedido de coleta${c.quando ? ` das ${hm(c.quando)}` : ''}. Já estou confirmando a rota e volto com o horário.` }
+    if (c.status === 'coletada') return { t: 'Coletamos', m: `Passamos aí às ${hm(c.coletada_em)}${c.coletada_qtd ? ` e recolhemos ${c.coletada_qtd} amostra${c.coletada_qtd > 1 ? 's' : ''}` : ''}. Qualquer coisa é só chamar. 🐾` }
+    const jt = janelaTexto(c.rota || c.rota_sug, c.turno || c.turno_sug)
+    if (/amanh/i.test(c.turno || c.turno_sug || '')) return { t: 'Fica para amanhã', m: `A lista de hoje dessa região já saiu, então agendamos a coleta para ${jt}. Se for urgente, me avise que tento encaixar.` }
+    return { t: 'Agendado', m: `Agendado! Nosso motoboy passa aí ${jt}. Assim que ele recolher, te confirmo por aqui.` }
+  }
   const COLETA_ABERTA = c => c.status === 'nova'
   const COLETA_ANDANDO = c => ['nova', 'agendada', 'na_lista'].includes(c.status)
   let JANELAS = {}
@@ -740,7 +757,8 @@
       <div class="kpi ${atrasadas ? 'ruim' : ''}"><b>${atrasadas}</b><span>sem agendar há mais de 20 min</span></div>
       <div class="kpi"><b>${agendadas.length}</b><span>agendadas, aguardando entrar na lista</span></div>
       <div class="kpi"><b>${naLista.length}</b><span>na lista, esperando o motoboy</span></div>
-      <div class="kpi bom"><b>${coletadas.length}</b><span>✅ coleta confirmada pelo motoboy</span></div>`
+      <div class="kpi bom"><b>${coletadas.length}</b><span>✅ coleta confirmada pelo motoboy</span></div>
+      <div class="kpi ${lista.filter(c => c.avisado_em).length < lista.filter(c => c.status !== 'nova' && c.status !== 'descartada').length ? 'ruim' : 'bom'}"><b>${lista.filter(c => c.avisado_em).length}</b><span>💬 clínicas avisadas</span></div>`
     const minutos = c => (agora() - T(c.quando)) / 60000
     const faltaCorte = c => c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
     const bloco = c => {
@@ -762,6 +780,7 @@
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
         <div class="ia-achou">${chips.join('')}</div>
         <div class="ia-lado"><div class="ia-tempo">${c.status === 'coletada' ? '✓' : c.status === 'na_lista' ? fmt(m) : fmt(m)}</div><div class="ia-estado">${est}</div></div>
+        ${caixaMensagem(c)}
         ${regrasDaClinica(c)}
         ${COLETA_ABERTA(c) ? `<div class="escolha-linha">
           <label>Rota <select data-campo="rota">${['', ...ROTAS].map(r => `<option value="${r}" ${r === (c.rota_sug || '').toLowerCase() ? 'selected' : ''}>${r || '— escolher —'}</option>`).join('')}</select></label>
@@ -832,6 +851,16 @@
         <button class="leve" data-regra="nao_atende">⛔ Não é mais cliente</button></div>
       <p class="mudo ensina-ajuda">Use quando a clínica tem regra própria: <b>só de manhã</b> ou <b>só à tarde</b> faz a IA parar de sugerir o turno errado; <b>não é mais cliente</b> faz a IA parar de abrir cartão para ela. Se não for o caso, ignore.</p></details>`
   }
+  function caixaMensagem(c) {
+    if (c.status === 'descartada') return ''
+    const { t, m } = mensagemCliente(c)
+    const jaAvisou = !!c.avisado_em
+    return `<div class="msg-box ${jaAvisou ? 'ok' : ''}">
+      <div class="msg-cab">💬 <b>${t}</b> <span class="mudo">— mensagem pronta para a clínica${jaAvisou ? ` · avisado ${hm(c.avisado_em)} por ${esc(c.avisado_por || '')}` : ''}</span></div>
+      <div class="msg-txt" data-msg="${c.id}">${esc(m)}</div>
+      <div class="acao"><button class="leve" data-copiar="${c.id}">📋 Copiar</button>${jaAvisou ? '' : `<button class="leve" data-avisei="${c.id}">✅ Avisei a clínica</button>`}</div>
+    </div>`
+  }
   const podeDesfazer = c => c.status !== 'na_lista' && (agora() - T(c.agendada_em || c.criado_em)) / 60000 <= 15
   function regrasDaClinica(c) {
     const r = regras.filter(x => x.grupo === c.grupo)
@@ -845,6 +874,18 @@
     t.innerHTML = opcoesTurno(sel.value, t.value)
   })
   $('colLista').addEventListener('click', async ev => {
+    const cop = ev.target.closest('button[data-copiar]')
+    if (cop) {
+      const txt = cop.closest('.msg-box').querySelector('.msg-txt').textContent
+      try { await navigator.clipboard.writeText(txt); toast('Mensagem copiada — cole no WhatsApp da clínica') } catch { toast('Copie o texto da caixa acima') }
+      return
+    }
+    const av = ev.target.closest('button[data-avisei]')
+    if (av) {
+      if (!(await garantirLogin())) return
+      try { await rpc('inc_coleta_avisado', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +av.dataset.avisei }); toast('Registrado: clínica avisada'); await carregar(); desenhar() } catch (e) { toast(e.message) }
+      return
+    }
     const reg = ev.target.closest('button[data-regra]')
     const apg = ev.target.closest('button[data-apagar-regra]')
     if (reg || apg) {
