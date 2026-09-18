@@ -759,7 +759,17 @@
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
   // ── dia 2: mensagem pronta para o cliente, com a janela real da rota ──
   // regra de mercado (iFood, Loggi, Uber): prometer FAIXA arredondada e curta — nunca minuto cravado, nunca mais de 3 h
-  const hLabel = min => { const h = Math.floor(min / 60), m = min % 60; return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h` }
+  const hLabel = min => { const h = Math.floor(min / 60), m = min % 60; return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}hrs` }
+  // Wal 18/set: a clínica precisa ver o DIA e o "hrs" do lado da hora
+  const diaLabel = q => {
+    const d = new Date(T(q)), hoje = new Date()
+    const dd = x => x.toLocaleDateString('sv-SE')
+    const amanha = new Date(hoje.getTime() + 864e5)
+    const sem = d.toLocaleDateString('pt-BR', { weekday: 'long' })
+    const nome = dd(d) === dd(hoje) ? 'Hoje' : dd(d) === dd(amanha) ? 'Amanhã' : sem[0].toUpperCase() + sem.slice(1)
+    return `${nome}, ${dataCurta(q)}`
+  }
+  const horaLabel = q => `${hm(q)}hrs`
   function janelaTexto(rota, turno) {
     const j = JANELAS[(rota || '').toLowerCase()]
     const k = /manh/i.test(turno || '') ? 'manhã' : /noite/i.test(turno || '') ? 'noite' : 'tarde'
@@ -777,21 +787,26 @@
   // mensagem curta, com título, dados em linha e assinatura (padrão de notificação de entrega)
   const ASSINATURA = '_Alpha Labs · Atendimento ao Cliente_'
   function mensagemCliente(c) {
+    const quem = c.clinica ? `, ${c.clinica}` : ''
     if (c.status === 'nova') return { t: 'Recebi o pedido', m:
-      `👋 *Recebemos seu pedido de coleta*${c.quando ? ` — ${hm(c.quando)}` : ''}\n` +
+      `👋 *Recebemos seu pedido de coleta*\n` +
+      `${c.quando ? `📅 ${diaLabel(c.quando)} · 🕒 ${horaLabel(c.quando)}\n` : ''}` +
       `Estamos confirmando a rota e já voltamos com o horário. 😊\n\n${ASSINATURA}` }
     if (c.status === 'coletada') return { t: 'Coletamos', m:
       `✅ *Coleta realizada*\n` +
-      `🕒 ${hm(c.coletada_em)}${c.coletada_qtd ? `   📦 ${c.coletada_qtd} amostra${c.coletada_qtd > 1 ? 's' : ''} recolhida${c.coletada_qtd > 1 ? 's' : ''}` : ''}\n\n` +
-      `Obrigado pela parceria! Qualquer coisa, é só chamar. 🐾\n\n${ASSINATURA}` }
+      `📅 ${diaLabel(c.coletada_em)} · 🕒 ${horaLabel(c.coletada_em)}\n` +
+      `${c.coletada_qtd ? `📦 ${c.coletada_qtd} amostra${c.coletada_qtd > 1 ? 's' : ''} recolhida${c.coletada_qtd > 1 ? 's' : ''}\n` : ''}` +
+      `🔬 O material já está a caminho do laboratório.\n\n` +
+      `Obrigado pela parceria${quem}! Qualquer coisa é só chamar por aqui. 🐾\n\n${ASSINATURA}` }
     const j = janelaTexto(c.rota || c.rota_sug, c.turno || c.turno_sug)
+    const amanha = new Date(Date.now() + 864e5)
     if (/amanh/i.test(c.turno || c.turno_sug || '')) return { t: 'Fica para amanhã', m:
-      `📅 *Coleta agendada para amanhã*\n` +
-      `🛵 ${j.quando}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
+      `📅 *Coleta agendada*\n` +
+      `🗓️ Amanhã, ${dataCurta(amanha)} · 🛵 ${j.quando.replace(/^amanhã /, '')}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
       `A lista de hoje dessa região já saiu. Se for urgente, me avise que tento encaixar. 🙏\n\n${ASSINATURA}` }
     return { t: 'Agendado', m:
       `✅ *Coleta agendada*\n` +
-      `🛵 ${j.quando}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
+      `🗓️ ${diaLabel(Date.now())} · 🛵 ${j.quando.replace(/^hoje /, '')}${j.faixa ? `, entre *${j.faixa}*` : ''}\n\n` +
       `Assim que o motoboy recolher, confirmamos por aqui. 😊\n\n${ASSINATURA}` }
   }
   // ── dia 3: relógios. Cada cartão tem um prazo; passou, vira cobrança na tela ──
