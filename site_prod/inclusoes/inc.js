@@ -495,12 +495,16 @@
       (ehAdmin ? kpi('nada', exames, 'exames coletados hoje (só admin)') : '') +
       kpi('pend', pend, 'pendências (sem info + sem nº)', pend ? 'ruim' : '') +
       kpi('atraso', linhas.filter(atrasada).length, 'passaram do horário previsto', linhas.filter(atrasada).length ? 'ruim' : '') +
-      kpi('mudo', linhas.filter(muda).length, `sem dar notícia há +${SILENCIO_MIN} min`, linhas.filter(muda).length ? 'ruim' : '')
+      kpi('mudo', linhas.filter(muda).length, `sem dar notícia há +${SILENCIO_MIN} min`, linhas.filter(muda).length ? 'ruim' : '') +
+      (() => { let t = 0, ok = 0; for (const r of linhas) for (const p of (r.paradas_json || [])) if (p.obrig) { t++; if (p.estado === 'ok') ok++ } ; return t ? kpi('obr', `${ok}/${t}`, 'clínicas obrigatórias atendidas', ok === t ? 'bom' : 'ruim') : '' })()
     const filtrada = filtroRota === 'rua' ? linhas.filter(r => r.estado === 'em_rua')
       : filtroRota === 'pend' ? linhas.filter(r => r.estado !== 'lista_postada' && (r.faltam || r.sem_numero))
       : filtroRota === 'atraso' ? linhas.filter(atrasada)
-      : filtroRota === 'mudo' ? linhas.filter(muda) : linhas
+      : filtroRota === 'mudo' ? linhas.filter(muda)
+      : filtroRota === 'obr' ? linhas.filter(r => (r.paradas_json || []).some(p => p.obrig && p.estado !== 'ok')) : linhas
     if (filtroRota) filtrada.forEach(r => abertas.add(r.rota))
+    const nomesFiltro = { rua: 'rotas na rua agora', pend: 'rotas com pendência', atraso: 'rotas que passaram do horário', mudo: `rotas sem notícia há +${SILENCIO_MIN} min`, obr: 'rotas com obrigatória em aberto' }
+    $('rotasFiltro').innerHTML = filtroRota ? `<button class="voltar" id="voltarRotas">← voltar para todas as rotas</button><span class="mudo">mostrando <b>${nomesFiltro[filtroRota]}</b> (${filtrada.length})</span>` : ''
     const porRota = new Map()
     for (const r of filtrada) { if (!porRota.has(r.nome)) porRota.set(r.nome, []); porRota.get(r.nome).push(r) }
     const cartao = r => {
@@ -511,6 +515,7 @@
         <header><b class="tn-forte">${esc((r.turno || '').toUpperCase())}</b><span class="est ${st[1]}">${st[0]}</span></header>
         <div class="barra" title="${r.informadas} informadas · ${r.sem_numero} sem número · ${r.faltam} sem informação">
           <i style="width:${pct(r.informadas)}%" class="v"></i><i style="width:${pct(r.sem_numero)}%" class="a"></i><i style="width:${pct(r.faltam)}%" class="r"></i></div>
+        ${extrasRota(r)}
         <div class="nums"><b>${r.informadas}/${r.paradas}</b> informadas · <b>${r.exames}</b> exames${r.sem_numero ? ` · <b class="amb">${r.sem_numero}</b> sem nº` : ''}${r.faltam ? ` · <b class="rub">${r.faltam}</b> sem info` : ''}</div>
         <div class="pe">${r.estado === 'finalizada' ? `terminou ${hm(r.fechado_em)}` : ult === null ? 'ainda não começou' : `última notícia há ${fmt(ult)}`}${r.fim_previsto ? ` · previsto até <b>${hm2(r.fim_previsto)}</b>` : ''}${r.ritmo ? ` · ritmo <b>${r.ritmo}</b> paradas/h` : ''}${r.eta && r.estado !== 'finalizada' ? ` · deve terminar <b>${hm2(r.eta)}</b>${r.fim_medio ? ` <span class="${r.eta > r.fim_medio ? 'rub' : 'verde'}">(média ${hm2(r.fim_medio)})</span>` : ''}` : ''}</div>
         ${mini7(r)}
@@ -583,6 +588,20 @@
       ${baixo.length ? `<tr class="sep"><td colspan="5">PRECISAM DE AJUDA</td></tr>${baixo.map(linhaP).join('')}` : ''}</tbody></table>
       <p class="mudo" style="font-size:12.5px;margin:0">Nota = informou todas as paradas (60) + fechou no horário (25) − sem número (15) − sem informação (20). Volume de exames entra só como comparação da rota <b>com ela mesma</b>, para não punir rota pequena.</p>`
   }
+  // indicadores extras por rota: obrigatórias cumpridas e maior intervalo entre paradas
+  function extrasRota(r) {
+    const ps = Array.isArray(r.paradas_json) ? r.paradas_json : []
+    const obr = ps.filter(p => p.obrig)
+    const obrOk = obr.filter(p => p.estado === 'ok').length
+    const horas = ps.map(p => T(p.hora)).filter(Boolean).sort((a, b) => a - b)
+    let maior = 0, ondeMaior = ''
+    for (let i = 1; i < horas.length; i++) if (horas[i] - horas[i - 1] > maior) { maior = horas[i] - horas[i - 1]; ondeMaior = hm(new Date(horas[i]).toISOString()) }
+    const chips = []
+    if (obr.length) chips.push(`<span class="mini-chip ${obrOk === obr.length ? 'ok' : 'ruim'}">obrigatórias ${obrOk}/${obr.length}</span>`)
+    if (maior > 25 * 60000) chips.push(`<span class="mini-chip">maior parada ${fmt(maior / 60000)} (até ${ondeMaior})</span>`)
+    if (r.primeira_conf) chips.push(`<span class="mini-chip">1ª clínica ${hm(r.primeira_conf)}</span>`)
+    return chips.length ? `<div class="chips-rt">${chips.join('')}</div>` : ''
+  }
   const abertas = new Set()
   let filtroRota = null
   function detalheRota(r) {
@@ -592,15 +611,21 @@
     let anterior = null
     const linhas = ps.map(p => {
       const ic = p.estado === 'ok' ? '✅' : p.estado === 'sem_numero' ? '🟡' : p.estado === 'falta' ? '🔴' : '⚪️'
+      const selo = p.obrig ? '<span class="obr">obrigatória</span>' : ''
       const gap = p.hora && anterior ? (T(p.hora) - anterior) / 60000 : null
       if (p.hora) anterior = T(p.hora)
-      return `<tr class="l-${p.estado}"><td class="h">${p.hora ? hm(p.hora) : '—'}</td><td>${ic} ${esc(p.nome)}</td>
+      return `<tr class="l-${p.estado}"><td class="h">${p.hora ? hm(p.hora) : '—'}</td><td>${ic} ${esc(p.nome)} ${selo}</td>
         <td class="num">${p.qtd === null || p.qtd === undefined ? (p.estado === 'sem_numero' ? 'sem nº' : '—') : p.qtd + ' ex'}</td>
         <td class="num mudo">${gap !== null ? '+' + fmt(gap) : ''}</td></tr>`
     }).join('')
     return `<div class="det"><table class="tab-det"><thead><tr><th>hora</th><th>clínica</th><th class="num">exames</th><th class="num">intervalo</th></tr></thead><tbody>${linhas}</tbody></table>
-      <div class="mudo det-pe">${ini ? `começou ${hm(new Date(ini).toISOString())} · ` : ''}✅ informou · 🟡 foi mas não mandou o nº · 🔴 não informou · ⚪️ ainda não chegou</div></div>`
+      <div class="mudo det-pe">${r.reconstruido ? '<b>só as pendências</b> (o detalhe completo aparece nos turnos a partir de agora) · ' : ini ? `começou ${hm(new Date(ini).toISOString())} · ` : ''}✅ informou · 🟡 foi mas não mandou o nº · 🔴 não informou · ⚪️ ainda não chegou · <b>obrigatória</b> = está na folha conferida pela equipe</div></div>`
   }
+  $('rotasFiltro') && $('rotasFiltro').addEventListener('click', ev => {
+    if (!ev.target.closest('#voltarRotas')) return
+    filtroRota = null; abertas.clear(); desenharRotas()
+  })
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && filtroRota) { filtroRota = null; abertas.clear(); desenharRotas() } })
   $('rotasKpis') && $('rotasKpis').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-filtro]'); if (!b || b.dataset.filtro === 'nada') return
     filtroRota = filtroRota === b.dataset.filtro ? null : b.dataset.filtro

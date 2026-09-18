@@ -487,3 +487,11 @@ body.tv main{padding-bottom:90px}
 #rotasKpis .kpi .lupa{display:block;font-style:normal;font-size:11px;color:var(--cc);margin-top:3px}
 #rotasKpis .kpi.sel{outline:2px solid var(--cc);outline-offset:1px}
 #rotasKpis .kpi.sel .lupa{color:var(--vermelho);font-weight:700}
+
+.filtro-linha{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.filtro-linha .voltar{font:inherit;font-weight:700;font-size:14px;border:1px solid var(--cc);background:var(--painel);color:var(--cc);border-radius:9px;padding:6px 12px;cursor:pointer}
+.chips-rt{display:flex;flex-wrap:wrap;gap:5px}
+.mini-chip{font-size:11.5px;border-radius:999px;padding:1px 8px;background:var(--painel2);border:1px solid var(--linha);color:var(--mudo)}
+.mini-chip.ok{background:#dcfce7;border-color:#bbf7d0;color:#166534}
+.mini-chip.ruim{background:#fee2e2;border-color:#fecaca;color:#991b1b}
+.obr{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:0 5px}
