@@ -464,6 +464,9 @@
   }
   // ── 🛵 AGENDAMENTOS DE COLETA (passo 1) ──
   const COLETA_ABERTA = c => c.status === 'nova'
+  const ROTAS = ['rota 1', 'rota 2', 'rota 3', 'rota 4', 'rota 5', 'rota 6', 'rota 7', 'rota 8', 'rota 9', 'rota 10', 'rota 11', 'rota 12', 'rota angra', 'rota folguista 1', 'rota folguista 2', 'rota folguista 3', 'rota folguista 4']
+  const TURNOS = ['manhã de hoje', 'tarde de hoje', 'noite de hoje', 'manhã de amanhã', 'tarde de amanhã']
+  const turnoParecido = t => TURNOS.find(x => (t || '').toLowerCase().startsWith(x.split(' ')[0])) || 'tarde de hoje'
   function desenharColetas() {
     const lista = coletas.slice().sort((a, b) => T(b.quando) - T(a.quando))
     const novas = lista.filter(COLETA_ABERTA)
@@ -485,10 +488,11 @@
       const m = minutos(c), fc = faltaCorte(c)
       const cls = c.status === 'na_lista' ? 'ok' : c.status === 'agendada' ? 'ag' : m >= 20 ? 'atras' : fc !== null && fc <= 30 ? 'corte' : ''
       const chips = []
-      if (c.rota_sug) chips.push(`<span class="chip-ia">🤖 rota provável <b>${esc(c.rota_sug)}</b>${c.fonte ? ` <span class="mudo">· ${esc(c.fonte)}</span>` : ''}</span>`)
-      else chips.push('<span class="chip-ia">🤖 rota <b>a definir</b> — escolher na mão</span>')
-      if (c.turno_sug) chips.push(`<span class="chip-ia">turno <b>${esc(c.turno_sug)}</b></span>`)
-      if (fc !== null && c.status === 'nova') chips.push(`<span class="chip-ia ${fc <= 30 ? 'quente' : ''}">🛵 lista ${fc > 0 ? `sai em <b>${fmt(fc)}</b>` : '<b>já saiu</b>'}</span>`)
+      const conf = /confiança (alta|média|baixa)/.exec(c.fonte || '')
+      const motivo = (c.fonte || '').replace(/^confiança \S+ · /, '')
+      if (c.rota_sug) chips.push(`<span class="chip-ia">🤖 palpite: <b>${esc(c.rota_sug)}</b>${conf ? ` <b class="cf-${conf[1] === 'média' ? 'media' : conf[1]}">confiança ${conf[1]}</b>` : ''}${motivo ? ` <span class="mudo">· porque ${esc(motivo)}</span>` : ''}</span>`)
+      else chips.push('<span class="chip-ia">🤖 <b>não sei a rota dessa clínica</b> — escolha abaixo que eu aprendo</span>')
+      if (fc !== null && c.status === 'nova') chips.push(`<span class="chip-ia ${fc <= 30 ? 'quente' : ''}">🛵 lista d${/manh/i.test(c.turno_sug || '') ? 'a manhã' : 'a tarde'} ${fc > 0 ? `sai em <b>${fmt(fc)}</b> (${hm(c.corte_em)})` : `<b>já saiu</b> (${hm(c.corte_em)})`}</span>`)
       if (c.status !== 'nova' && c.rota && c.rota_sug) chips.push(`<span class="chip-ia">${c.rota.trim().toLowerCase() === c.rota_sug.trim().toLowerCase() ? '✔ a IA acertou a rota' : `✏️ a equipe corrigiu: <b>${esc(c.rota)}</b> (a IA disse ${esc(c.rota_sug)}) — aprendido`}</span>`)
       const est = c.status === 'na_lista' ? `✅ na lista da ${esc(c.na_lista_rota || '')} ${hm(c.na_lista_em)}`
         : c.status === 'agendada' ? `🕒 agendada por ${esc(c.por || '')} · ${esc(c.rota || '')} ${esc(c.turno || '')}`
@@ -499,7 +503,12 @@
         <div class="ia-achou">${chips.join('')}</div>
         <div class="ia-lado"><div class="ia-tempo">${c.status === 'na_lista' ? '✓' : fmt(m)}</div><div class="ia-estado">${est}</div></div>
         ${regrasDaClinica(c)}
-        ${COLETA_ABERTA(c) ? `<div class="acao">${c.rota_sug ? `<button data-col-acao="agendar" data-rota="${esc(c.rota_sug)}" data-turno="${esc(c.turno_sug || '')}">✔ OK — agendar na ${esc(c.rota_sug)} · ${esc((c.turno_sug || '').split(' ')[0])}</button>` : ''}<button class="leve" data-col-acao="outra">✏️ ${c.rota_sug ? 'Ajustar rota / turno' : 'Escolher rota / turno'}</button><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
+        ${COLETA_ABERTA(c) ? `<div class="escolha-linha">
+          <label>Rota <select data-campo="rota">${['', ...ROTAS].map(r => `<option value="${r}" ${r === (c.rota_sug || '').toLowerCase() ? 'selected' : ''}>${r || '— escolher —'}</option>`).join('')}</select></label>
+          <label>Turno <select data-campo="turno">${TURNOS.map(t => `<option value="${t}" ${t === turnoParecido(c.turno_sug) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+          <button data-col-acao="confirmar">✔ Confirmar agendamento</button>
+        </div>
+        <div class="acao"><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
         <div class="acao ensina"><span class="mudo">Ensinar a IA:</span>${c.rota_sug ? `<button class="leve" data-regra="rota_fixa" data-valor="${esc(c.rota_sug)}">📌 Sempre ${esc(c.rota_sug)}</button>` : ''}<button class="leve" data-regra="rota_fixa" data-valor="">📌 Sempre outra rota…</button><button class="leve" data-regra="so_manha">🌅 Só de manhã</button><button class="leve" data-regra="so_tarde">🌇 Só à tarde</button><button class="leve" data-regra="nao_atende">⛔ Não atendemos mais</button></div>` :
         (podeDesfazer(c) ? `<div class="acao"><button class="leve" data-col-acao="desfazer">↩️ Desfazer</button></div>` : '')}
       </div>`
@@ -576,6 +585,13 @@
     const id = +b.closest('[data-col]').dataset.col
     const c = coletas.find(x => x.id === id)
     let acao = b.dataset.colAcao, rota = b.dataset.rota || '', turno = b.dataset.turno || ''
+    if (acao === 'confirmar') {
+      const linha = b.closest('[data-col]')
+      rota = linha.querySelector('select[data-campo="rota"]').value
+      turno = linha.querySelector('select[data-campo="turno"]').value
+      if (!rota) { toast('Escolha a rota na caixinha'); return }
+      acao = 'agendar'
+    }
     try {
       if (acao === 'outra') {
         rota = (await pedirMotivo(`Em qual rota vai entrar? (${c.clinica})`, 'Rota') || '').trim()
