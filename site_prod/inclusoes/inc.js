@@ -48,7 +48,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
-  let terremotos = []
+  let terremotos = [], conferencia = []
   let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
@@ -103,6 +103,8 @@
       regras = rg.error ? [] : (rg.data || [])
       const cl = await SB.from('inc_coletas').select('*').gte('quando', new Date(agora() - 3 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 499)
       coletas = cl.error ? [] : (cl.data || [])
+      const cf = await SB.from('inc_conferencia').select('*').gte('dia', new Date(agora() - 2 * 864e5).toISOString().slice(0, 10)).order('criado_em', { ascending: false })
+      conferencia = cf.error ? [] : (cf.data || [])
       const tr = await SB.from('inc_terremotos').select('*').gte('aberto_em', new Date(agora() - 3 * 864e5).toISOString())
       terremotos = tr.error ? [] : (tr.data || [])
       const sp = await SB.from('inc_suspeitas').select('*').gte('quando', new Date(agora() - 8 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
@@ -315,8 +317,8 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama'
-    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere'
+    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan || conf; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf
     desenharLegenda()
     try { desenharAbasSetor() } catch {}
     desenharRastreamento()
@@ -325,8 +327,9 @@
     desenharNps()
     try { desenharTerremoto() } catch {}
     try { desenharPanorama() } catch {}
+    try { desenharConferencia() } catch {}
     if (hist) return desenharHistorico()
-    if (rast || col || rot || npsv || terr || pan) return
+    if (rast || col || rot || npsv || terr || pan || conf) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
     desenharRascunhos()
@@ -1043,6 +1046,42 @@
     }
   }
 
+  // ══ CONFERÊNCIA (Wal 19/set): "e a chance de você estar errado e eu perder agendamento?" ══
+  const ROT_CONF = {
+    sem_cartao_resposta: ['🔴 A equipe respondeu e eu não vi', 'Alguém respondeu "agendado" nesse grupo e eu não criei cartão. Falha minha.'],
+    sem_cartao_lista: ['🔴 Entrou na lista e eu não vi', 'A clínica foi postada na lista da rota e eu não tenho cartão. Falha minha.'],
+    sorteio: ['🎲 Sorteado para conferir', 'Abra o grupo e veja se tem pedido que ninguém tratou.'],
+  }
+  function desenharConferencia() {
+    if (!$('confLista')) return
+    const hoje = new Date().toLocaleDateString('sv-SE')
+    const doDia = conferencia.filter(c => c.dia === hoje)
+    const div = doDia.filter(c => c.tipo !== 'sorteio')
+    const sort = doDia.filter(c => c.tipo === 'sorteio')
+    const abertas = div.filter(c => !c.tratado_em)
+    const b = document.querySelector('#abas button[data-setor="confere"]')
+    if (b) { b.innerHTML = `🔍 Conferência${abertas.length ? ` <span class="badge">${abertas.length}</span>` : ''}`; b.classList.toggle('tem', !!abertas.length) }
+    const achados = doDia.filter(c => c.achou && c.achou.trim() && c.achou !== 'nada')
+    $('confResumo').innerHTML = `<div class="kpi ${abertas.length ? 'ruim' : 'bom'}"><b>${abertas.length}</b><span>divergências para conferir</span></div>
+      <div class="kpi"><b>${sort.filter(c => c.tratado_em).length}/${sort.length}</b><span>🎲 grupos sorteados conferidos</span></div>
+      <div class="kpi ${achados.length ? 'ruim' : 'bom'}"><b>${achados.length}</b><span>pedidos que escaparam de todos</span></div>
+      <div class="kpi bom"><b>${div.filter(c => c.tratado_em).length}</b><span>já tratadas hoje</span></div>`
+    const item = c => {
+      const [rot, ajuda] = ROT_CONF[c.tipo] || [c.tipo, '']
+      return `<div class="conf-item ${c.tratado_em ? 'ok' : ''}" data-conf="${esc(c.chave)}">
+        <div class="conf-tit">${rot} <span class="mudo">${esc(ajuda)}</span></div>
+        <div class="conf-clin"><b>${esc(c.clinica || c.grupo || '')}</b> <span class="mudo">${c.quando ? hm(c.quando) : ''}</span></div>
+        ${c.texto ? `<div class="conf-msg">“${esc(c.texto)}”</div>` : ''}
+        ${c.tratado_em
+          ? `<div class="conf-feito">✔ ${esc(c.tratado_por || '')} às ${hm(c.tratado_em)}${c.achou && c.achou !== 'nada' ? ` — <b>${esc(c.achou)}</b>` : ' — nada pendente'}</div>`
+          : `<div class="acao"><button data-conf-acao="nada">✔ Conferi, nada pendente</button><button class="nao" data-conf-acao="achou">⚠️ Achei pedido não tratado</button></div>`}
+      </div>`
+    }
+    $('confLista').innerHTML = div.length ? div.map(item).join('') : '<div class="vazio">✅ Nenhuma divergência hoje — o que a equipe fez e o que eu fiz bateram.</div>'
+    $('confSorteio').innerHTML = `<h3>🎲 Sorteio do turno <span class="mudo">· abra cada grupo e veja se ficou pedido sem tratar</span></h3>` +
+      (sort.length ? `<div class="rast-lista">${sort.map(item).join('')}</div>` : '<div class="vazio">Ainda sem sorteio neste turno.</div>')
+  }
+
   // ══ PANORAMA (Wal 18/set): uma tela só — o dia inteiro da operação, sem trocar de aba ══
   function desenharPanorama() {
     if (!$('panGrade')) return
@@ -1287,6 +1326,18 @@
     somLiberado = true
     if (!tocarAlarme(alarmeEscolhido)) toast('Clique em 🔊 Som primeiro')
     desenharTerremoto()
+  })
+  document.addEventListener('click', async ev => {
+    const b = ev.target.closest('button[data-conf-acao]'); if (!b) return
+    if (!(await garantirLogin())) return
+    const chave = b.closest('[data-conf]').dataset.conf
+    let achou = 'nada'
+    if (b.dataset.confAcao === 'achou') {
+      achou = (await pedirMotivo('O que você achou que ninguém tratou?', 'Ex.: Vet Sol pediu coleta às 9h40 e ninguém respondeu') || '').trim()
+      if (!achou) return
+    }
+    try { await rpc('conferencia_tratar', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_achou: achou }); toast(achou === 'nada' ? 'Conferido' : 'Registrado — vou corrigir isso'); await carregar(); desenhar() }
+    catch (e) { toast(e.message) }
   })
   $('terrLista') && $('terrLista').addEventListener('click', async ev => {
     const bt = ev.target.closest('button[data-terr-acao]'); if (!bt) return
