@@ -1062,10 +1062,20 @@
     const b = document.querySelector('#abas button[data-setor="confere"]')
     if (b) { b.innerHTML = `🔍 Conferência${abertas.length ? ` <span class="badge">${abertas.length}</span>` : ''}`; b.classList.toggle('tem', !!abertas.length) }
     const achados = doDia.filter(c => c.achou && c.achou.trim() && c.achou !== 'nada')
-    $('confResumo').innerHTML = `<div class="kpi ${abertas.length ? 'ruim' : 'bom'}"><b>${abertas.length}</b><span>divergências para conferir</span></div>
-      <div class="kpi"><b>${sort.filter(c => c.tratado_em).length}/${sort.length}</b><span>🎲 grupos sorteados conferidos</span></div>
-      <div class="kpi ${achados.length ? 'ruim' : 'bom'}"><b>${achados.length}</b><span>pedidos que escaparam de todos</span></div>
-      <div class="kpi bom"><b>${div.filter(c => c.tratado_em).length}</b><span>já tratadas hoje</span></div>`
+    // ⭐ O NÚMERO QUE DECIDE (Wal 19/set): de tudo que existiu, quanto eu vi?
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
+    const meus = coletas.filter(c => T(c.quando) >= hoje0.getTime() && c.status !== 'descartada').length
+    const perdi = div.length + achados.length
+    const existiu = meus + perdi
+    const cobertura = existiu ? Math.round((meus / existiu) * 100) : null
+    const falsos = coletas.filter(c => T(c.quando) >= hoje0.getTime() && c.status === 'descartada').length
+    const pctFalso = meus + falsos ? Math.round((falsos / (meus + falsos)) * 100) : 0
+    const faixa = cobertura === null ? ['—', ''] : cobertura >= 95 ? ['🏆 pode liberar', 'ex'] : cobertura >= 85 ? ['⚠️ quase', 'at'] : ['🚨 ainda não', 'cr']
+    $('confResumo').innerHTML = `<div class="kpi ${cobertura === null ? '' : cobertura >= 95 ? 'bom' : 'ruim'}" style="grid-column:span 2">
+        <b>${cobertura === null ? '—' : cobertura + '%'}</b><span><b>dos pedidos de hoje eu vi</b> (${meus} de ${existiu}) · meta 95% <span class="fx ${faixa[1]}">${faixa[0]}</span></span></div>
+      <div class="kpi ${perdi ? 'ruim' : 'bom'}"><b>${perdi}</b><span>pedidos que eu PERDI hoje</span></div>
+      <div class="kpi ${pctFalso > 5 ? 'ruim' : 'bom'}"><b>${pctFalso}%</b><span>cartões que não eram pedido</span></div>
+      <div class="kpi"><b>${sort.filter(c => c.tratado_em).length}/${sort.length}</b><span>🎲 sorteio conferido</span></div>`
     const item = c => {
       const [rot, ajuda] = ROT_CONF[c.tipo] || [c.tipo, '']
       return `<div class="conf-item ${c.tratado_em ? 'ok' : ''}" data-conf="${esc(c.chave)}">
@@ -1077,7 +1087,8 @@
           : `<div class="acao"><button data-conf-acao="nada">✔ Conferi, nada pendente</button><button class="nao" data-conf-acao="achou">⚠️ Achei pedido não tratado</button></div>`}
       </div>`
     }
-    $('confLista').innerHTML = div.length ? div.map(item).join('') : '<div class="vazio">✅ Nenhuma divergência hoje — o que a equipe fez e o que eu fiz bateram.</div>'
+    $('confLista').innerHTML = (div.length ? div.map(item).join('') : '<div class="vazio">✅ Nada escapou hoje — tudo que a equipe tratou eu também vi.</div>')
+      + (achados.length ? `<div class="conf-achados"><h3>⚠️ ${achados.length} pedido(s) que escaparam de TODOS (achados no sorteio)</h3>${achados.map(c => `<div>• <b>${esc(c.clinica || '')}</b> — ${esc(c.achou)} <span class="mudo">(${esc(c.tratado_por || '')})</span></div>`).join('')}</div>` : '')
     $('confSorteio').innerHTML = `<h3>🎲 Sorteio do turno <span class="mudo">· abra cada grupo e veja se ficou pedido sem tratar</span></h3>` +
       (sort.length ? `<div class="rast-lista">${sort.map(item).join('')}</div>` : '<div class="vazio">Ainda sem sorteio neste turno.</div>')
   }

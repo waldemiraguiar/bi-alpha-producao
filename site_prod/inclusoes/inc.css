@@ -637,3 +637,5 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .conf-clin{font-size:15px;margin-top:2px}
 .conf-msg{font-size:13.5px;color:var(--mudo);background:var(--painel2);border-radius:8px;padding:6px 10px;margin-top:5px}
 .conf-feito{font-size:13.5px;color:var(--ok);margin-top:5px}
+.conf-achados{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 14px;margin-top:10px;font-size:14px}
+.conf-achados h3{margin:0 0 6px;font-size:15px;color:#9a3412}
