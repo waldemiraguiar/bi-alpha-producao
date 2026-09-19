@@ -48,7 +48,7 @@
 
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
-  let terremotos = [], conferencia = []
+  let terremotos = [], conferencia = [], heranca = []
   let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
@@ -103,6 +103,8 @@
       regras = rg.error ? [] : (rg.data || [])
       const cl = await SB.from('inc_coletas').select('*').gte('quando', new Date(agora() - 3 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 499)
       coletas = cl.error ? [] : (cl.data || [])
+      const hr = await SB.from('inc_heranca').select('*').gte('dia', new Date(agora() - 2 * 864e5).toISOString().slice(0, 10)).order('quando')
+      heranca = hr.error ? [] : (hr.data || [])
       const cf = await SB.from('inc_conferencia').select('*').gte('dia', new Date(agora() - 2 * 864e5).toISOString().slice(0, 10)).order('criado_em', { ascending: false })
       conferencia = cf.error ? [] : (cf.data || [])
       const tr = await SB.from('inc_terremotos').select('*').gte('aberto_em', new Date(agora() - 3 * 864e5).toISOString())
@@ -323,6 +325,7 @@
     try { desenharAbasSetor() } catch {}
     desenharRastreamento()
     desenharColetas()
+    try { desenharHeranca() } catch {}
     desenharRotas()
     desenharNps()
     try { desenharTerremoto() } catch {}
@@ -1046,6 +1049,36 @@
     }
   }
 
+  // ══ HERANÇA DA NOITE (Wal 19/set): o plantão acolhe das 22h às 9h, mas quem resolve é o Atendimento às 8h ══
+  function estadoHeranca(h) {
+    if (h.tratado_em) return { cls: 'ok', txt: `✔ ${esc(h.tratado_por || '')} — ${esc(h.virou || 'tratado')}` }
+    const c = coletas.find(c => c.grupo === h.grupo && T(c.quando) >= T(h.quando) - 12 * 3600e3)
+    if (c && (c.status === 'coletada' || c.status === 'entregue')) return { cls: 'ok', txt: '✅ já foi coletada' }
+    if (c && c.status === 'na_lista') return { cls: 'ok', txt: `📋 entrou na lista da ${esc(c.na_lista_rota || 'rota')}` }
+    if (c && c.status === 'agendada') return { cls: 'and', txt: `🕒 agendada para ${esc(c.rota || '')}` }
+    if (c) return { cls: 'and', txt: '🟡 virou cartão, falta agendar' }
+    return { cls: 'falta', txt: '🔴 ninguém tratou ainda' }
+  }
+  function desenharHeranca() {
+    const el = $('colHeranca'); if (!el) return
+    const hoje = new Date().toLocaleDateString('sv-SE')
+    const lista = heranca.filter(h => h.dia === hoje)
+    if (!lista.length) { el.innerHTML = ''; return }
+    const pendentes = lista.filter(h => estadoHeranca(h).cls === 'falta')
+    el.innerHTML = `<div class="heranca ${pendentes.length ? 'tem' : ''}">
+      <h3>🌙 Herança da noite <span class="mudo">— clínicas que o plantão atendeu das 22h às 9h. O plantão acolhe; <b>quem resolve é o Atendimento</b>.</span></h3>
+      ${pendentes.length ? `<div class="her-aviso">⚠️ <b>${pendentes.length} ainda sem tratamento</b> — depois das 10h isso vira terremoto.</div>` : ''}
+      <div class="her-itens">${lista.map(h => {
+        const e = estadoHeranca(h)
+        return `<div class="her-item ${e.cls}" data-her="${esc(h.chave)}">
+          <div><b>${esc(h.clinica || '')}</b> <span class="mudo">${hm(h.quando)} · ${esc(h.quem || '')}</span></div>
+          ${h.texto ? `<div class="her-msg">“${esc(h.texto)}”</div>` : ''}
+          <div class="her-estado">${e.txt}</div>
+          ${h.tratado_em ? '' : `<div class="acao"><button data-her-acao="tratado">✔ Tratei</button><button class="leve" data-her-acao="nada">— Não precisava de nada</button></div>`}
+        </div>`
+      }).join('')}</div></div>`
+  }
+
   // ══ CONFERÊNCIA (Wal 19/set): "e a chance de você estar errado e eu perder agendamento?" ══
   const ROT_CONF = {
     sem_cartao_resposta: ['🔴 A equipe respondeu e eu não vi', 'Alguém respondeu "agendado" nesse grupo e eu não criei cartão. Falha minha.'],
@@ -1175,7 +1208,15 @@
         casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt(minutosUteis(c.quando))} de expediente e ninguém respondeu no WhatsApp` })
       }
     }
-    const daTela = casos.map(x => ({ ...x, chave: `${x.tipo}:${x.c.id}:${dia}` }))
+    // ④ herança da noite não tratada depois das 10h (Wal 19/set)
+    if (new Date().getHours() >= 10) {
+      for (const h of heranca.filter(h => h.dia === dia && !h.tratado_em)) {
+        if (estadoHeranca(h).cls !== 'falta') continue
+        casos.push({ tipo: 'heranca', c: { id: null, clinica: h.clinica, texto: h.texto, quando: h.quando },
+          motivo: `${h.clinica} foi atendida pelo plantão (${h.quem}) às ${hm(h.quando)} e ninguém do Atendimento tratou até agora` })
+      }
+    }
+    const daTela = casos.map(x => ({ ...x, chave: `${x.tipo}:${x.c.id || (x.c.clinica || '').slice(0, 20)}:${dia}` }))
       .map(x => ({ ...x, reg: terremotos.find(t => t.chave === x.chave) || null }))
       .filter(x => !x.reg || !x.reg.resolvido_em)
     const doBanco = terremotos.filter(t => ['queixa', 'manual'].includes(t.tipo) && !t.resolvido_em && T(t.aberto_em) > agora() - 24 * 3600e3)
@@ -1191,7 +1232,7 @@
     el.innerHTML = ativos.length ? ativos.map(x => {
       const dono = x.reg && x.reg.assumido_por
       return `<div class="terr-item ${dono ? 'assumido' : ''}" data-terr="${esc(x.chave)}" data-terr-col="${x.c.id}" data-terr-tipo="${x.tipo}">
-        <div class="terr-tit">${x.tipo === 'nao_foi' ? '🛵 Prometemos e o motoboy não foi' : x.tipo === 'motoboy_mudo' ? '🛵 Motoboy não informou' : x.tipo === 'queixa' ? '😠 Cliente cobrando' : x.tipo === 'manual' ? '📣 Chamado pela liderança' : '⏳ Cliente esperando'}</div>
+        <div class="terr-tit">${x.tipo === 'nao_foi' ? '🛵 Prometemos e o motoboy não foi' : x.tipo === 'motoboy_mudo' ? '🛵 Motoboy não informou' : x.tipo === 'queixa' ? '😠 Cliente cobrando' : x.tipo === 'heranca' ? '🌙 Herança da noite sem tratamento' : x.tipo === 'manual' ? '📣 Chamado pela liderança' : '⏳ Cliente esperando'}</div>
         <div class="terr-motivo">${esc(x.motivo)}</div>
         ${x.c.texto ? `<div class="terr-msg">“${esc(x.c.texto.slice(0, 120))}” <span class="mudo">· ${dataCurta(x.c.quando)} ${hm(x.c.quando)}</span></div>` : `<div class="terr-msg mudo">${dataCurta(x.c.quando)} ${hm(x.c.quando)}</div>`}
         ${dono ? `<div class="terr-dono">🙋 <b>${esc(dono)}</b> assumiu às ${hm(x.reg.assumido_em)} — só fecha escrevendo o que foi feito</div>
@@ -1322,6 +1363,15 @@
   $('vPanorama') && $('vPanorama').addEventListener('click', ev => {
     const alvo = ev.target.closest('[data-ir]'); if (!alvo) return
     setor = alvo.dataset.ir; gravarLocal('inc_setor', setor); desenhar()
+  })
+  $('colHeranca') && $('colHeranca').addEventListener('click', async ev => {
+    const b = ev.target.closest('button[data-her-acao]'); if (!b) return
+    if (!(await garantirLogin())) return
+    const chave = b.closest('[data-her]').dataset.her
+    let virou = 'tratado pelo Atendimento'
+    if (b.dataset.herAcao === 'nada') virou = 'não precisava de nada'
+    try { await rpc('heranca_tratar', { p_nome: sessao.nome, p_senha: sessao.senha, p_chave: chave, p_virou: virou }); toast('Registrado'); await carregar(); desenhar() }
+    catch (e) { toast(e.message) }
   })
   $('terrAlarme') && $('terrAlarme').addEventListener('click', async ev => {
     if (ev.target.closest('#btDisparar')) {
