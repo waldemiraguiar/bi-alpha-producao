@@ -653,3 +653,5 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .her-estado{font-size:13.5px;font-weight:600;margin-top:2px}
 .her-item.falta .her-estado{color:var(--vermelho)}
 .her-item.ok .her-estado{color:var(--ok)}
+.escolha-linha button.publicar{background:var(--moto);color:#fff}
+.escolha-linha button.publicar:hover{filter:brightness(1.08)}

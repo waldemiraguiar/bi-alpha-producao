@@ -105,6 +105,8 @@
       coletas = cl.error ? [] : (cl.data || [])
       const hr = await SB.from('inc_heranca').select('*').gte('dia', new Date(agora() - 2 * 864e5).toISOString().slice(0, 10)).order('quando')
       heranca = hr.error ? [] : (hr.data || [])
+      const ev = await SB.from('inc_envios').select('coleta_id,tipo,status,rota,erro').gte('criado_em', new Date(agora() - 2 * 864e5).toISOString())
+      envios = ev.error ? [] : (ev.data || [])
       const cf = await SB.from('inc_conferencia').select('*').gte('dia', new Date(agora() - 2 * 864e5).toISOString().slice(0, 10)).order('criado_em', { ascending: false })
       conferencia = cf.error ? [] : (cf.data || [])
       const tr = await SB.from('inc_terremotos').select('*').gte('aberto_em', new Date(agora() - 3 * 864e5).toISOString())
@@ -942,6 +944,8 @@
     return true
   }
   const EH_MATERIAL = c => c.tipo === 'material'
+  let envios = []
+  const publicada = c => envios.some(e => e.coleta_id === c.id && e.tipo === 'rota' && e.status === 'enviado')
   const COLETA_ABERTA = c => c.status === 'nova'
   const COLETA_ANDANDO = c => ['nova', 'agendada', 'na_lista'].includes(c.status)
   let JANELAS = {}
@@ -1021,12 +1025,13 @@
           <label>Rota <select data-campo="rota">${['', ...ROTAS].map(r => `<option value="${r}" ${r === (c.rota_sug || '').toLowerCase() ? 'selected' : ''}>${r || '— escolher —'}</option>`).join('')}</select></label>
           <label>Turno <select data-campo="turno">${opcoesTurno(c.rota_sug, turnoParecido(c.turno_sug))}</select></label>
           <button data-col-acao="confirmar">✔ ${mat ? 'Confirmar entrega' : 'Confirmar agendamento'}</button>
+          <button class="publicar" data-col-acao="publicar" title="O sistema posta a clínica na lista do grupo da rota, com o endereço que já foi usado antes">📤 Confirmar e publicar na rota</button>
         </div>
         <div class="acao"><button class="nao" data-col-acao="descartar" title="A IA não deveria ter captado isso">🚫 A IA errou</button></div>
         ` : `<div class="feito-linha">${c.status === 'entregue' ? `📦 <b>Material entregue pelo motoboy</b> às ${hm(c.entregue_em)} — ciclo fechado.`
             : c.status === 'coletada' ? `✅ <b>Coleta confirmada pelo motoboy</b> às ${hm(c.coletada_em)}${c.coletada_qtd === null || c.coletada_qtd === undefined ? '' : ` · <b>${c.coletada_qtd} exames</b>`} — ciclo fechado.`
             : c.status === 'na_lista' ? `📋 <b>Entrou na lista da ${esc(c.na_lista_rota || '')}</b> às ${hm(c.na_lista_em)} — esperando o motoboy ${mat ? 'deixar o material' : 'passar'}.`
-            : c.status === 'agendada' ? `🕒 <b>Agendada por ${esc(c.por || '')}</b> · ${esc(c.rota || '')} ${esc(c.turno || '')} — esperando entrar na lista da rota.`
+            : c.status === 'agendada' ? `🕒 <b>Agendada por ${esc(c.por || '')}</b> · ${esc(c.rota || '')} ${esc(c.turno || '')} — ${publicada(c) ? '<b>já publicada na lista da rota pelo sistema</b>' : 'esperando entrar na lista da rota'}.`
             : `— descartada por ${esc(c.por || '')}`}${podeDesfazer(c) ? ' <button class="leve" data-col-acao="desfazer">↩️ Desfazer</button>' : ''}</div>`}
         ${linhaEnsina(c)}
       </div>`
@@ -1059,8 +1064,11 @@
     if (c) return { cls: 'and', txt: '🟡 virou cartão, falta agendar' }
     return { cls: 'falta', txt: '🔴 ninguém tratou ainda' }
   }
+  // Wal 19/set: "esconde a herança por enquanto, uma coisa de cada vez" — continua REGISTRANDO, só não aparece
+  const MOSTRAR_HERANCA = false
   function desenharHeranca() {
     const el = $('colHeranca'); if (!el) return
+    if (!MOSTRAR_HERANCA) { el.innerHTML = ''; return }
     const hoje = new Date().toLocaleDateString('sv-SE')
     const lista = heranca.filter(h => h.dia === hoje)
     if (!lista.length) { el.innerHTML = ''; return }
@@ -1209,7 +1217,7 @@
       }
     }
     // ④ herança da noite não tratada depois das 10h (Wal 19/set)
-    if (new Date().getHours() >= 10) {
+    if (MOSTRAR_HERANCA && new Date().getHours() >= 10) {
       for (const h of heranca.filter(h => h.dia === dia && !h.tratado_em)) {
         if (estadoHeranca(h).cls !== 'falta') continue
         casos.push({ tipo: 'heranca', c: { id: null, clinica: h.clinica, texto: h.texto, quando: h.quando },
@@ -1492,6 +1500,19 @@
     const id = +b.closest('[data-col]').dataset.col
     const c = coletas.find(x => x.id === id)
     let acao = b.dataset.colAcao, rota = b.dataset.rota || '', turno = b.dataset.turno || ''
+    if (acao === 'publicar') {
+      const linha = b.closest('[data-col]')
+      const r = linha.querySelector('select[data-campo="rota"]').value
+      const tn = linha.querySelector('select[data-campo="turno"]').value
+      if (!r) { toast('Escolha a rota na caixinha'); return }
+      try {
+        await rpc('inc_coleta_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: 'agendar', p_rota: r, p_turno: tn, p_obs: null })
+        const res = await rpc('inc_publicar_rota', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_rota: r })
+        toast(res === 'ja_publicado' ? 'Essa clínica já foi publicada na rota' : `Publicando na ${r} — sai em instantes`)
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
+      return
+    }
     if (acao === 'confirmar') {
       const linha = b.closest('[data-col]')
       rota = linha.querySelector('select[data-campo="rota"]').value
