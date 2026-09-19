@@ -1867,7 +1867,7 @@ async function renderApoio(force){
   let h=`<div class="card" style="margin-top:18px">
     <h3>🧪 Laboratório de apoio · Vet Lab <span class="cap">${esc(D.apoio)} · ${esc(D.periodo)} · atualizado ${esc(D.gerado)}</span></h3>
     <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:10px">
-      ${kpi('Boleto de janeiro → agosto', R(K.jan)+' → '+R(K.ago), 'queda de <b style="color:var(--green)">'+P(Math.abs(K.queda_jan_ago_pct))+'</b>', 'var(--ink)')}
+      ${kpi('Boleto de janeiro → '+esc(K.ultimo_rotulo||'ago/26'), R(K.jan)+' → '+R(K.ago), 'queda de <b style="color:var(--green)">'+P(Math.abs(K.queda_jan_ago_pct))+'</b>', 'var(--ink)')}
       ${kpi('Média 1º tri → média jul–ago', R(K.media_q1)+' → '+R(K.media_jul_ago), 'queda de '+P(Math.abs(K.queda_q1_pct))+' por mês')}
       ${kpi('Peso na receita da matriz', P(K.pct_receita_jan)+' → '+P(K.pct_receita_ago), 'boleto ÷ faturamento HF do mês', 'var(--green)')}
       ${kpi('Custo evitado / ano', R(K.economia_anual_ritmo_ago_vs_q1), 'ritmo de agosto × 1º trimestre (antes do reagente interno)', 'var(--green)')}
@@ -1876,6 +1876,7 @@ async function renderApoio(force){
     </div>
     <div style="margin-top:14px;font-size:13.5px;line-height:1.65;background:linear-gradient(90deg,rgba(0,229,160,.08),transparent);border-left:3px solid var(--green);padding:10px 14px;border-radius:6px">
       <b>🧠 Interpretação</b><br>${(D.texto||[]).map(t=>'• '+esc(t)).join('<br>')}</div></div>`;
+  if(D.aviso_parcial) h+=`<div class="card" style="margin-top:12px;border-left:3px solid var(--amber);background:rgba(255,176,32,.07)"><b style="color:var(--amber)">${esc(D.aviso_parcial)}</b></div>`;
 
   // ★ QUEDA EM % PISCANDO (Wal 16/set): tem que chamar atenção
   if(!document.getElementById('apPiscaCSS')){ const st=document.createElement('style'); st.id='apPiscaCSS';
@@ -1886,7 +1887,7 @@ async function renderApoio(force){
     .apBox{border:2px solid #00E5A0;border-radius:14px;padding:12px 18px;animation:apBorda 1.1s ease-in-out infinite;background:rgba(0,229,160,.07);text-align:center;flex:1;min-width:210px}
     .apChip{border-radius:10px;padding:6px 4px;text-align:center;flex:1;min-width:64px;background:rgba(255,255,255,.03);border:1px solid var(--line)}`;
     document.head.appendChild(st); }
-  const pv0=M[0].boleto, pico=Math.max(...M.map(m=>m.boleto)), ult=M[M.length-1];
+  const MF=M.filter(m=>!m.parcial), pv0=MF[0].boleto, pico=Math.max(...MF.map(m=>m.boleto)), ult=MF[MF.length-1];
   const qJan=(ult.boleto/pv0-1)*100, qPico=(ult.boleto/pico-1)*100, qTri=K.queda_q1_pct;
   const seta=v=>v<0?'▼':'▲', corq=v=>v<0?'#00E5A0':'#FF5470';
   const big=(v,rot)=>`<div class="apBox" style="border-color:${corq(v)}"><div class="apBig apPisca" style="color:${corq(v)}">${seta(v)} ${P(Math.abs(v))}</div><div style="margin-top:6px;font-size:13px;font-weight:700">${rot}</div></div>`;
@@ -1894,10 +1895,11 @@ async function renderApoio(force){
     <div style="display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 14px">
       ${big(qJan,'janeiro → '+ult.rotulo.split('/')[0]+' ('+R(pv0)+' → '+R(ult.boleto)+')')}
       ${big(qTri,'média 1º trimestre → média jul–ago')}
-      ${big(qPico,'pico de '+M.find(m=>m.boleto===pico).rotulo.split('/')[0]+' → '+ult.rotulo.split('/')[0]+' ('+R(pico)+' → '+R(ult.boleto)+')')}
+      ${big(qPico,'pico de '+MF.find(m=>m.boleto===pico).rotulo.split('/')[0]+' → '+ult.rotulo.split('/')[0]+' ('+R(pico)+' → '+R(ult.boleto)+')')}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-      ${M.map((m,i)=>{const vj=(m.boleto/pv0-1)*100, va=i?(m.boleto/M[i-1].boleto-1)*100:null;
+      ${M.map((m,i)=>{if(m.parcial) return `<div class="apChip" style="border-color:var(--amber)"><div style="font-size:11px;color:var(--mut)">${m.rotulo.split('/')[0]}</div><div style="font-size:14px;font-weight:800;color:var(--amber);padding:3px 0">em aberto</div><div style="font-size:10.5px;color:var(--mut)">${R(m.boleto)}</div></div>`;
+        const ant=M.filter((x,j)=>j<i&&!x.parcial), vj=(m.boleto/pv0-1)*100, va=ant.length?(m.boleto/ant[ant.length-1].boleto-1)*100:null;
         return `<div class="apChip"><div style="font-size:11px;color:var(--mut)">${m.rotulo.split('/')[0]}</div>
           <div class="${i&&vj<0?'apPisca':''}" style="font-size:20px;font-weight:900;color:${i?corq(vj):'var(--mut)'}">${i?seta(vj)+' '+P(Math.abs(vj),0):'base'}</div>
           <div style="font-size:10.5px;color:${va==null?'var(--mut)':corq(va)}">${va==null?'&nbsp;':'mês ant. '+(va<0?'−':'+')+P(Math.abs(va),0)}</div></div>`;}).join('')}
@@ -1917,7 +1919,7 @@ async function renderApoio(force){
     </tbody></table></div><div style="font-size:11px;color:var(--mut);margin-top:6px">Acima de 100% = a Vet Lab fatura em itens separados o que o HF registra como um só (ex.: Ácidos Biliares basal + pós-prandial).</div></div>`;
 
   // ainda envia em agosto
-  h+=`<div class="card" style="margin-top:14px"><h3>📋 O que ainda enviamos (fatura de agosto) <span class="cap">ordenado por R$ · custo Vet Lab com desconto × seu preço praticado</span></h3>
+  h+=`<div class="card" style="margin-top:14px"><h3>📋 O que ainda enviamos (fatura de ${esc((K.parcial_rotulo||K.ultimo_rotulo||'ago/26').replace('*',''))}) <span class="cap">ordenado por R$ · custo Vet Lab com desconto × seu preço praticado</span></h3>
     <div style="overflow-x:auto"><table class="atab"><thead><tr><th>Exame</th><th>Área</th><th class="num">Ago (qtd)</th><th class="num">Ago R$ cheio</th><th class="num">Custo Vet Lab</th><th class="num">Seu preço</th><th class="num">Margem</th><th class="num">Custo ÷ preço</th><th>Jan→Ago</th></tr></thead><tbody>
     ${(D.ainda_envia_ago||[]).map(e=>{const cp=e.custo_sobre_preco; const cc=cp==null?'var(--mut)':cp>=75?'var(--red)':cp>=65?'var(--amber)':'var(--green)';
       return `<tr><td>${esc(e.exame)}</td><td style="color:var(--mut);font-size:12px">${esc(e.categoria)}</td><td class="num">${e.ago}</td><td class="num">${R(e.ago_rs)}</td><td class="num">${R(e.custo,2)}</td><td class="num">${e.meu_preco?R(e.meu_preco,2):'<span title="sem preço identificado" style="color:var(--amber)">?</span>'}</td><td class="num">${P(e.margem_pct)}</td><td class="num" style="color:${cc}">${P(cp)}</td><td>${spark(e.por_mes,'var(--amber)')}</td></tr>`;}).join('')}
@@ -2103,8 +2105,8 @@ async function renderApoioT(force){
   let h=`<div class="card" style="margin-top:18px">
     <h3>🧪 Laboratório de apoio · TECSA <span class="cap">${esc(D.apoio)} · ${esc(D.periodo)} · atualizado ${esc(D.gerado)}</span></h3>
     <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:10px">
-      ${kpi('Pago à TECSA em 8 meses', R(K.total_custo), N(K.total_itens)+' exames · '+K.exames_distintos+' tipos · boleto '+R(K.total_boleto)+' + IR retido '+R(K.total_ir))}
-      ${kpi('Janeiro → agosto', R(K.jan)+' → '+R(K.ago), 'variação de <b style="color:var(--green)">'+P(K.queda_jan_ago_pct)+'</b>','var(--ink)')}
+      ${kpi('Pago à TECSA ('+esc(K.primeiro_rotulo)+'→'+esc(K.ultimo_rotulo)+')', R(K.total_custo), N(K.total_itens)+' exames · '+K.exames_distintos+' tipos · boleto '+R(K.total_boleto)+' + IR retido '+R(K.total_ir))}
+      ${kpi('Janeiro → '+esc(K.ultimo_rotulo), R(K.jan)+' → '+R(K.ago), 'variação de <b style="color:var(--green)">'+P(K.queda_jan_ago_pct)+'</b>','var(--ink)')}
       ${kpi('Peso na receita da matriz', P(K.pct_receita_jan,2)+' → '+P(K.pct_receita_ago,2), 'custo ÷ faturamento HF do mês','var(--green)')}
       ${kpi('Os dois apoios juntos', R(CK.total), 'Vet Lab '+R(CK.vetlab)+' + TECSA '+R(CK.tecsa)+' · TECSA = '+P(CK.tecsa_pct)+' do apoio','var(--cyan)')}
       ${kpi('Custo médio por exame', R(K.custo_medio_item,2), 'na Vet Lab o ticket é bem menor — aqui vai o exame caro e raro')}
@@ -2112,6 +2114,7 @@ async function renderApoioT(force){
     </div>
     <div style="margin-top:14px;font-size:13.5px;line-height:1.65;background:linear-gradient(90deg,rgba(0,212,255,.08),transparent);border-left:3px solid var(--cyan);padding:10px 14px;border-radius:6px">
       <b>🧠 Interpretação</b><br>${(D.texto||[]).map(t=>'• '+esc(t)).join('<br>')}</div></div>`;
+  if(D.aviso_parcial) h+=`<div class="card" style="margin-top:12px;border-left:3px solid var(--amber);background:rgba(255,176,32,.07)"><b style="color:var(--amber)">${esc(D.aviso_parcial)}</b></div>`;
 
   if(!document.getElementById('apPiscaCSS')){ const st=document.createElement('style'); st.id='apPiscaCSS';
     st.textContent=`@keyframes apPisca{0%,100%{opacity:1;transform:scale(1);text-shadow:0 0 18px rgba(0,229,160,.9)}50%{opacity:.25;transform:scale(.94);text-shadow:none}}
@@ -2127,12 +2130,13 @@ async function renderApoioT(force){
   const big=(v,rot)=>`<div class="apBox" style="border-color:${corq(v)}"><div class="apBig apPisca" style="color:${corq(v)}">${seta(v)} ${P(Math.abs(v))}</div><div style="margin-top:6px;font-size:13px;font-weight:700">${rot}</div></div>`;
   h+=`<div class="card" style="margin-top:14px"><h3>🏦 Apoio total da Alpha, mês a mês <span class="cap">Vet Lab + TECSA · linha = % do faturamento do mês · % no topo = variação contra JANEIRO</span></h3>
     <div style="display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 14px">
-      ${big(CK.queda_pct,'apoio total: janeiro → agosto ('+R(CK.jan)+' → '+R(CK.ago)+')')}
-      ${big(K.queda_jan_ago_pct,'só TECSA: janeiro → agosto ('+R(K.jan)+' → '+R(K.ago)+')')}
+      ${big(CK.queda_pct,'apoio total: janeiro → '+esc(CK.ultimo_rotulo)+' ('+R(CK.jan)+' → '+R(CK.ago)+')')}
+      ${big(K.queda_jan_ago_pct,'só TECSA: janeiro → '+esc(K.ultimo_rotulo)+' ('+R(K.jan)+' → '+R(K.ago)+')')}
       <div class="apBox" style="border-color:#00D4FF"><div class="apBig apPisca" style="color:#00D4FF">${R(CK.economia_anual)}</div><div style="margin-top:6px;font-size:13px;font-weight:700">custo evitado por ano<br><span style="font-weight:400;color:var(--mut)">ritmo de jul–ago × 1º trimestre, somando os dois apoios</span></div></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-      ${C.map((m,i)=>{const vj=(m.total/C[0].total-1)*100, va=i?(m.total/C[i-1].total-1)*100:null;
+      ${C.map((m,i)=>{if(m.parcial) return `<div class="apChip" style="border-color:var(--amber)"><div style="font-size:11px;color:var(--mut)">${m.rotulo.split('/')[0]}</div><div style="font-size:14px;font-weight:800;color:var(--amber);padding:3px 0">em aberto</div><div style="font-size:10.5px;color:var(--mut)">${R(m.total)}</div></div>`;
+        const ant=C.filter((x,j)=>j<i&&!x.parcial), vj=(m.total/C[0].total-1)*100, va=ant.length?(m.total/ant[ant.length-1].total-1)*100:null;
         return `<div class="apChip"><div style="font-size:11px;color:var(--mut)">${m.rotulo.split('/')[0]}</div>
           <div class="${i&&vj<0?'apPisca':''}" style="font-size:20px;font-weight:900;color:${i?corq(vj):'var(--mut)'}">${i?seta(vj)+' '+P(Math.abs(vj),0):'base'}</div>
           <div style="font-size:10.5px;color:${va==null?'var(--mut)':corq(va)}">${va==null?'&nbsp;':'mês ant. '+(va<0?'−':'+')+P(Math.abs(va),0)}</div></div>`;}).join('')}
@@ -2154,10 +2158,49 @@ async function renderApoioT(force){
     </tbody></table></div>
     <div style="font-size:11px;color:var(--mut);margin-top:6px">Custo Vet Lab = mediana do valor com desconto (10% pagando até o vencimento). Custo TECSA = valor da fatura. O nome do exame é casado por semelhança — confira antes de mudar a rota do material.</div></div>`;
 
+  // ---- COMPARADOR DOS DOIS APOIOS (pedido do Wal 19/set): ranking do que ele mais pede, preço dos dois ----
+  const CP=D.comparador||[], CR=D.comparador_resumo||{};
+  h+=`<div class="card" style="margin-top:14px"><h3>🔁 Comparador dos dois apoios <span class="cap">ranking pelos exames que a Alpha MAIS PEDE · preço da Vet Lab e da TECSA lado a lado · quando a TECSA nunca fez, vale a tabela 2026 deles (${N(CR.tabela_tecsa_itens)} exames)</span></h3>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;margin:8px 0 12px">
+      ${kpi('Exames na lista', N(CR.exames), N(CR.nos_dois)+' com preço dos DOIS lados')}
+      ${kpi('Vet Lab mais barata', N(CR.vetlab_mais_barata)+' exames', 'manter nela', 'var(--amber)')}
+      ${kpi('TECSA mais barata', N(CR.tecsa_mais_barata)+' exames', 'candidatos a mudar de apoio', 'var(--cyan)')}
+      ${kpi('Se cada um fosse ao mais barato', R(CR.economia_periodo), 'no período jan→ago, com o mesmo volume', 'var(--green)')}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <input id="cpBusca" placeholder="Buscar exame…" style="background:var(--navy2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 9px;width:240px;max-width:100%">
+      <label style="font-size:12px;color:var(--mut)"><input type="checkbox" id="cpDois"> só os que os dois fazem</label>
+      <label style="font-size:12px;color:var(--mut)"><input type="checkbox" id="cpApoio"> só o que vai para apoio hoje</label>
+      <label style="font-size:12px;color:var(--mut)"><input type="checkbox" id="cpTec"> só onde a TECSA é mais barata</label>
+    </div>
+    <div style="overflow-x:auto;max-height:620px;overflow-y:auto"><table class="atab" id="cpTab"><thead><tr>
+      <th>#</th><th>Exame (nome no HF)</th><th class="num">Pedidos<br>no ano</th><th>Vai hoje para</th>
+      <th class="num">Vet Lab</th><th class="num">TECSA</th><th class="num">Diferença</th><th>Mais barato</th>
+      <th class="num">Economia<br>no período</th><th class="num">Preço Alpha</th><th class="num">Margem<br>Vet Lab</th><th class="num">Margem<br>TECSA</th><th>Confere?</th></tr></thead><tbody>
+    ${CP.map(l=>{
+      const nome=l.exame_hf||l.exame_vetlab||l.exame_tecsa||'—';
+      const cor=l.mais_barato==='TECSA'?'var(--cyan)':l.mais_barato==='Vet Lab'?'var(--amber)':'var(--mut)';
+      const bad=l.confianca==='confira';
+      return `<tr data-n="${esc((nome+' '+(l.exame_vetlab||'')+' '+(l.exame_tecsa||'')).toLowerCase())}" data-dois="${l.custo_vetlab&&l.custo_tecsa?1:0}" data-apoio="${l.qtd_apoio?1:0}" data-tec="${l.mais_barato==='TECSA'?1:0}">
+        <td style="color:var(--mut)">${l.rank}</td>
+        <td>${esc(nome)}<div style="font-size:10px;color:var(--mut)">${l.exame_vetlab?'Vet Lab: '+esc(l.exame_vetlab):''}${l.exame_vetlab&&l.exame_tecsa?' · ':''}${l.exame_tecsa?'TECSA: '+esc(l.exame_tecsa):''}</div></td>
+        <td class="num">${N(l.volume_hf)}</td>
+        <td style="font-size:11.5px;color:${l.onde==='não foi ao apoio'?'var(--mut)':'var(--ink)'}">${esc(l.onde)}${l.qtd_apoio?` <span style="color:var(--mut)">(${N(l.qtd_apoio)})</span>`:''}</td>
+        <td class="num">${l.custo_vetlab?R(l.custo_vetlab,2):'<span style="color:var(--mut)">não faz</span>'}</td>
+        <td class="num">${l.custo_tecsa?R(l.custo_tecsa,2)+`<div style="font-size:9.5px;color:var(--mut)">${esc(l.fonte_tecsa||'')}</div>`:'<span style="color:var(--mut)">sem preço</span>'}</td>
+        <td class="num">${l.diferenca==null?'—':R(Math.abs(l.diferenca),2)+(l.diferenca_pct!=null?`<div style="font-size:9.5px;color:var(--mut)">${P(Math.abs(l.diferenca_pct),0)}</div>`:'')}</td>
+        <td style="color:${cor};white-space:nowrap"><b>${esc(l.mais_barato||'—')}</b></td>
+        <td class="num" style="color:${l.economia_periodo?'var(--green)':'var(--mut)'}">${l.economia_periodo?R(l.economia_periodo):'—'}</td>
+        <td class="num">${l.preco_alpha?R(l.preco_alpha,2):'—'}</td>
+        <td class="num">${P(l.margem_vetlab)}</td><td class="num">${P(l.margem_tecsa)}</td>
+        <td style="font-size:11px;color:${bad?'var(--amber)':'var(--mut)'}">${l.confianca?(bad?'⚠ conferir nome':'ok'):''}</td></tr>`;}).join('')}
+    </tbody></table></div>
+    <div style="font-size:11px;color:var(--mut);margin-top:6px">"Pedidos no ano" = quantas vezes o exame apareceu na conta da Alpha em 2026 (itemização do HF), mesmo quando é feito em casa — serve para ordenar pelo que mais pesa. Vet Lab = mediana cobrada com desconto; TECSA = valor da fatura ou, quando nunca foi enviado, o preço da tabela 2026. Os nomes são casados por semelhança; "⚠ conferir nome" marca os pares em que não tenho certeza.</div></div>`;
+
   // ---- de-para completo ----
   h+=`<div class="card" style="margin-top:14px"><h3>🔁 De-para de tudo <span class="cap">exame na fatura da TECSA → tabela TECSA 2026 (${N(K.tabela_tecsa_itens)} exames) → nome no HF → preço da Alpha → margem · Pareto: ${K.exames_para_80pct} exames = 80% do gasto, top 10 = ${P(K.top10_pct)}</span></h3>
     <div style="margin:4px 0 8px"><input id="apTBusca" placeholder="Buscar exame…" style="background:var(--navy2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 9px;width:260px;max-width:100%"></div>
-    <div style="overflow-x:auto;max-height:560px;overflow-y:auto"><table class="atab" id="apTTab"><thead><tr><th>#</th><th>Exame na TECSA</th><th>Status</th><th class="num">Qtd</th><th class="num">Custo un.</th><th class="num">Total</th><th class="num">Tabela TECSA</th><th>Nome no HF</th><th class="num">Preço Alpha</th><th class="num">Margem</th><th class="num">Custo ÷ preço</th><th>Jan→Ago</th></tr></thead><tbody>
+    <div style="overflow-x:auto;max-height:560px;overflow-y:auto"><table class="atab" id="apTTab"><thead><tr><th>#</th><th>Exame na TECSA</th><th>Status</th><th class="num">Qtd</th><th class="num">Custo un.</th><th class="num">Total</th><th class="num">Tabela TECSA</th><th>Nome no HF</th><th class="num">Preço Alpha</th><th class="num">Margem</th><th class="num">Custo ÷ preço</th><th>${esc(M[0].rotulo.split('/')[0])}→${esc(M[M.length-1].rotulo.split('/')[0].replace('*',''))}</th></tr></thead><tbody>
     ${D.depara.map((d,i)=>{const cp=d.custo_sobre_preco, cc=cp==null?'var(--mut)':cp>=75?'var(--red)':cp>=65?'var(--amber)':'var(--green)';
       return `<tr data-n="${esc((d.exame_tecsa+' '+(d.exame_hf||'')).toLowerCase())}"><td style="color:var(--mut)">${i+1}</td>
       <td>${esc(d.exame_tecsa)}<div style="font-size:10.5px;color:var(--mut)">cód. ${esc(d.codigo)} · ${esc(d.categoria)}</div></td>
@@ -2171,8 +2214,8 @@ async function renderApoioT(force){
     <div style="font-size:11px;color:var(--mut);margin-top:6px">Preço da Alpha = mediana do valor cobrado no HF em 2026 (acima de R$ 0) para o exame equivalente. Sem preço identificado: ${R(K.sem_preco_rs)} do gasto — em geral painéis que a Alpha vende separados por agente. ${P(100-K.ligados_hf_pct)} dos itens não achei a requisição no HF (a fatura da TECSA não traz o número).</div></div>`;
 
   // ---- ainda envia + conferência ----
-  h+=`<div class="card" style="margin-top:14px"><h3>📋 O que ainda foi para a TECSA em agosto <span class="cap">ordenado por R$ do período</span></h3>
-    <div style="overflow-x:auto"><table class="atab"><thead><tr><th>Exame</th><th>Área</th><th class="num">Ago (qtd)</th><th class="num">Custo un.</th><th class="num">Preço Alpha</th><th class="num">Margem</th><th>Jan→Ago</th></tr></thead><tbody>
+  h+=`<div class="card" style="margin-top:14px"><h3>📋 O que ainda foi para a TECSA em ${esc(K.parcial_rotulo||K.ultimo_rotulo)} <span class="cap">ordenado por R$ do período${K.parcial_rotulo?' · '+esc(K.parcial_rotulo)+' é mês em andamento':''}</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr><th>Exame</th><th>Área</th><th class="num">${esc((K.parcial_rotulo||K.ultimo_rotulo).replace('*',''))} (qtd)</th><th class="num">Custo un.</th><th class="num">Preço Alpha</th><th class="num">Margem</th><th>${esc(M[0].rotulo.split('/')[0])}→${esc(M[M.length-1].rotulo.split('/')[0].replace('*',''))}</th></tr></thead><tbody>
     ${D.ainda_envia.map(d=>`<tr><td>${esc(d.exame_tecsa)}</td><td style="color:var(--mut);font-size:12px">${esc(d.categoria)}</td><td class="num">${N(d.por_mes[d.por_mes.length-1])}</td><td class="num">${R(d.custo_unit,2)}</td><td class="num">${d.preco_alpha?R(d.preco_alpha,2):'—'}</td><td class="num">${P(d.margem_pct)}</td><td>${spark(d.por_mes,'var(--amber)')}</td></tr>`).join('')}
     </tbody></table></div></div>`;
 
@@ -2192,6 +2235,12 @@ async function renderApoioT(force){
     </div></div>`;
   wrap.innerHTML=h;
 
+  const cpF=()=>{const q=(document.getElementById('cpBusca')||{}).value||'', d2=document.getElementById('cpDois').checked,
+      ap=document.getElementById('cpApoio').checked, tc=document.getElementById('cpTec').checked;
+    document.querySelectorAll('#cpTab tbody tr').forEach(tr=>{
+      const ok=tr.dataset.n.includes(q.toLowerCase()) && (!d2||tr.dataset.dois==='1') && (!ap||tr.dataset.apoio==='1') && (!tc||tr.dataset.tec==='1');
+      tr.style.display=ok?'':'none';});};
+  ['cpBusca','cpDois','cpApoio','cpTec'].forEach(id=>{const el=document.getElementById(id); if(el) el.addEventListener(el.type==='checkbox'?'change':'input',cpF);});
   const busca=document.getElementById('apTBusca');
   if(busca) busca.addEventListener('input',()=>{const q=busca.value.toLowerCase(); document.querySelectorAll('#apTTab tbody tr').forEach(tr=>{tr.style.display=tr.dataset.n.includes(q)?'':'none';});});
   if(!window.Chart) return;
@@ -2208,7 +2257,7 @@ async function renderApoioT(force){
     plugins:[{id:'apTPct',afterDatasetsDraw(ch){
       const ctx=ch.ctx, meta=ch.getDatasetMeta(1), on=(Math.floor(Date.now()/550)%2)===0;
       ctx.save(); ctx.textAlign='center'; ctx.font='800 13px system-ui';
-      C.forEach((m,i)=>{ if(!i) return; const v=(m.total/C[0].total-1)*100, el=meta.data[i]; if(!el) return;
+      C.forEach((m,i)=>{ if(!i||m.parcial) return; const v=(m.total/C[0].total-1)*100, el=meta.data[i]; if(!el) return;
         ctx.globalAlpha=on?1:.35; ctx.fillStyle=v<0?'#00E5A0':'#FF5470';
         ctx.fillText((v<0?'▼ ':'▲ ')+Math.abs(v).toFixed(0)+'%', el.x, el.y-8); });
       ctx.restore(); }}]});
