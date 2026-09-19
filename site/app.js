@@ -152,13 +152,14 @@ async function decryptDashboard(pwd){
     e.preventDefault(); err.textContent=''; btn.disabled=true; btn.textContent='Verificando…';
     const usr=(document.getElementById('gateUser')||{}).value||'';
     try{
-      if(usr.trim()) await entrarComUsuario(usr.trim(), pwd.value);
-      else await enter(pwd.value);                       // sem usuário = modo antigo (só a senha do painel)
+      if(!usr.trim()) throw new Error('Informe o usuário.');
+      await entrarComUsuario(usr.trim(), pwd.value);     // só entra com usuário e senha próprios
     }
     catch(ex){
       const m=String(ex.message||'');
-      err.textContent = /não encontrado/.test(m) ? 'Dados indisponíveis. Tente recarregar.'
-        : /tentativas/.test(m) ? m : /sessão/.test(m) ? m : (usr.trim()? 'Usuário ou senha inválidos.' : 'Senha incorreta.');
+      err.textContent = /Informe o usuário/.test(m) ? m
+        : /não encontrado/.test(m) ? 'Dados indisponíveis. Tente recarregar.'
+        : /tentativas/.test(m) ? m : /sessão/.test(m) ? m : 'Usuário ou senha inválidos.';
       btn.disabled=false; btn.textContent='Entrar'; pwd.select();
     }
   });

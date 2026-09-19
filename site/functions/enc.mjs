@@ -22,17 +22,11 @@ export default async (req) => {
   if (req.method === "OPTIONS") return new Response("", { headers: cors });
 
   if (req.method === "GET") {
-    // 19/set/2026: o arquivo cifrado NÃO é mais baixável por quem só tem o link.
-    // Precisa de sessão válida (login individual) ou da senha mestre (scripts locais).
-    // Enquanto não houver nenhum usuário cadastrado, segue aberto para não derrubar o painel.
+    // 19/set/2026: o arquivo cifrado só sai com SESSÃO de usuário (login individual).
+    // Link sozinho, senha antiga do painel ou senha mestre não baixam nada.
     const auth = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    let liberado = !!confereToken(auth) || (SECRET && req.headers.get("x-pwd") === SECRET);
-    if (!liberado) {
-      try {
-        const { blobs } = await getStore("bi-auth").list();
-        liberado = !blobs || blobs.length === 0;          // ainda sem usuários = fase de migração
-      } catch (e) { liberado = true; }
-    }
+    const liberado = !!confereToken(auth);                // SÓ com sessão de usuário (19/set/2026)
+    // a senha mestre continua valendo para PUBLICAR (POST), nunca para baixar.
     if (!liberado) return new Response(JSON.stringify({ erro: "sessao necessaria" }), { status: 401, headers: { ...cors, "content-type": "application/json" } });
     const v = await store.get(key, { type: "text", consistency: "strong" });
     if (!v) return new Response("", { status: 404, headers: cors });
