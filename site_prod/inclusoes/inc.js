@@ -10,6 +10,9 @@
   const SB = !DEMO && window.supabase && window.supabase.createClient ? window.supabase.createClient(URL_SB, KEY, { realtime: { params: { eventsPerSecond: 5 } } }) : null
 
   // ── CONFIGURAÇÃO (ajustável a pedido da equipe) ──
+  // Thailan 18/set: dois acréscimos da mesma clínica podem ser de setores diferentes — cada um sinaliza o seu
+  const SETOR_EXAME = { hemato: 'Hematologia', bioquimica: 'Bioquímica', urina_fezes: 'Urina/Fezes', pcr_soro: 'PCR/Sorologia', cito_histo: 'Citologia/Histo', outros: 'Outros' }
+  const SETOR_ICONE = { hemato: '🩸', bioquimica: '🧪', urina_fezes: '🧫', pcr_soro: '🦠', cito_histo: '🔬', outros: '📋' }
   const SETORES = {
     cc: { nome: 'ATENDIMENTO AO CLIENTE', cor: 'var(--cc)' },
     esc: { nome: 'ESCRITÓRIO', cor: 'var(--esc)' },
@@ -289,7 +292,14 @@
       case 2: return `<button data-acao="amostra_ok">Tem amostra suficiente</button><button class="nao" data-acao="sem_amostra">Não tem amostra → avisar clínica</button>${cancelar}`
       case 3: return `<button data-acao="clinica_confirmou">${c.cliente_status === 'autorizou' ? 'Clínica avisada · seguir' : 'Clínica autorizou · seguir'}</button><button class="leve" data-acao="aguardando_clinica">${c.pausado ? 'Cobrei a clínica de novo' : 'Mensagem enviada · aguardando clínica'}</button><button class="nao" data-acao="clinica_desistiu">Clínica não quer · cancelar</button>`
       case 4: return `<button data-acao="escritorio_ok">${c.novo_numero ? 'Lançado no HF com NOVO número' : 'Lançado no HF'}</button>${cancelar}`
-      case 5: return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${cancelar}`
+      case 5: {
+        const lista = (c.setores || c.setor || '').split(',').map(x => x.trim()).filter(Boolean)
+        if (lista.length < 2) return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${cancelar}`
+        const ok = (c.setores_ok || '').split(',').map(x => x.trim()).filter(Boolean)
+        return lista.map(k => ok.includes(k)
+          ? `<button class="setor-ok" disabled>✅ ${esc(SETOR_EXAME[k] || k)} pronto</button>`
+          : `<button data-setor-pronto="${esc(k)}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k] || k)} — marcar pronto</button>`).join('') + cancelar
+      }
       case 6: return `<button data-acao="encerrar">Liberado e e-mail enviado · encerrar</button>${cancelar}`
     }
     return cancelar
@@ -857,6 +867,11 @@
   function relogio(c) {
     const min = (agora() - T(c.quando)) / 60000
     if (c.status === 'nova') {
+      if (c.para_dia) {                                          // a clínica pediu para outro dia (Thailan 18/set)
+        const dia = new Date(c.para_dia + 'T12:00:00')
+        const falta = Math.round((dia - agora()) / 864e5)
+        if (falta >= 1) return { nivel: 'ok', motivo: `a clínica pediu para ${dia.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} (${esc(c.para_dia_como || '')}) — faltam ${falta} dia${falta > 1 ? 's' : ''}` }
+      }
       if (c.respondido_em) return { nivel: 'ok', motivo: `respondido no WhatsApp ${hm(c.respondido_em)}${c.respondido_por ? ` por ${c.respondido_por}` : ''} — falta agendar aqui` }
       if (min >= PRAZO.agendar) return { nivel: 'cobrar', motivo: `pedido há ${fmt(min)} e ninguém agendou` }
       const fc = c.corte_em ? (T(c.corte_em) - agora()) / 60000 : null
@@ -963,7 +978,7 @@
         : c.status === 'descartada' ? `— descartada por ${esc(c.por || '')}`
         : c.respondido_em ? `💬 respondido no WhatsApp ${hm(c.respondido_em)}` : (m >= 20 ? 'SEM AGENDAR' : mat ? 'PEDIU MATERIAL' : 'NOVO PEDIDO')
       return `<div class="ia-item ${cls}" data-col="${c.id}">
-        <div class="ia-clin">${mat ? '<span class="tag-mat">📦 ENTREGA DE MATERIAL</span> ' : ''}${esc(c.clinica || '')}${mat && c.item ? ` <span class="tag-item">${esc(c.item)}</span>` : ''} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
+        <div class="ia-clin">${c.para_dia ? `<span class="tag-dia">📅 PARA ${new Date(c.para_dia + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span> ` : c.para_dia_como ? '<span class="tag-dia">📅 OUTRO DIA — CONFIRA</span> ' : ''}${mat ? '<span class="tag-mat">📦 ENTREGA DE MATERIAL</span> ' : ''}${esc(c.clinica || '')}${mat && c.item ? ` <span class="tag-item">${esc(c.item)}</span>` : ''} <span class="mudo">${dataCurta(c.quando)} ${hm(c.quando)} · ${esc(c.autor || '')}</span></div>
         <div class="ia-msg">“${esc(c.texto || '')}”</div>
         <div class="ia-achou">${chips.join('')}${rel.motivo ? `<span class="chip-ia ${rel.nivel === 'cobrar' ? 'quente' : ''}">⏰ ${esc(rel.motivo)}</span>` : ''}</div>
         <div class="ia-lado"><div class="ia-tempo">${c.status === 'coletada' ? '✓' : c.status === 'na_lista' ? fmt(m) : fmt(m)}</div><div class="ia-estado">${est}</div></div>
@@ -1078,6 +1093,7 @@
         continue
       }
       // ③ o cliente pediu e ninguém respondeu NO WHATSAPP em 1 hora (responder no grupo já para o relógio — caso Barão de Lucena, 18/set)
+      if (c.para_dia && new Date(c.para_dia + 'T12:00:00') > agora()) continue      // é para outro dia: não é terremoto
       if (c.status === 'nova' && !c.respondido_em && (agora() - T(c.quando)) / 60000 >= 60) {
         casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt((agora() - T(c.quando)) / 60000)} e ninguém respondeu no WhatsApp` })
       }
@@ -1559,6 +1575,17 @@
 
   // ── ações ──
   $('cartoes').addEventListener('click', async ev => {
+    const bs = ev.target.closest('button[data-setor-pronto]')
+    if (bs) {
+      if (!(await garantirLogin())) return
+      const id = +bs.closest('[data-id]').dataset.id
+      try {
+        const r = await rpc('inc_setor_pronto', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_setor: bs.dataset.setorPronto })
+        toast(r === 'completo' ? 'Todos os setores prontos — seguiu para o Escritório' : 'Marcado. Ainda falta o outro setor.')
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
+      return
+    }
     const b = ev.target.closest('button[data-acao]'); if (!b) return
     const id = +b.closest('.cartao').dataset.id, acao = b.dataset.acao
     if (!(await garantirLogin())) return
@@ -1599,6 +1626,7 @@
   // REGRA (Thailan 16/set): amostra de HOJE segue com o mesmo número; de dia anterior ganha NOVO número e precisa de
   // nova requisição para liberar o laudo. "Hoje" = data do calendário (fuso de Brasília).
   const diaBR = q => new Date(T(q)).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+  let outraClinica = null                      // null = ainda não respondeu · false = mesma clínica · true = outra
   const outroDia = q => !!q && diaBR(q) < diaBR(new Date().toISOString())
   function avisoDia() {
     const q = entradaHF || ($('nData').value ? new Date($('nData').value + 'T12:00:00').toISOString() : null)
@@ -1613,11 +1641,23 @@
   $('btnNova').addEventListener('click', async () => {
     if (!(await garantirLogin())) return
     $('formNova').reset(); $('puxado').hidden = true; $('novaErro').textContent = ''; entradaHF = null
+    outraClinica = null; if ($('qualClinica')) $('qualClinica').hidden = true
     $('nData').value = diaBR(new Date().toISOString()); $('campoData').hidden = false; avisoDia()
     $('dlgNova').showModal(); $('nReq').focus()
   })
   $('btnBuscar').addEventListener('click', buscarHF)
   $('nData').addEventListener('change', avisoDia)
+  $('qualClinica') && $('qualClinica').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-qc]'); if (!b) return
+    outraClinica = b.dataset.qc === 'outra'
+    document.querySelectorAll('#qualClinica .qc').forEach(x => x.classList.toggle('on', x === b))
+    const av = $('qualClinicaAviso'); av.hidden = false
+    av.className = 'qc-aviso ' + (outraClinica ? 'outro' : 'hoje')
+    av.innerHTML = outraClinica
+      ? '🔀 Outra clínica usando esta amostra: a inclusão vai ganhar <b>NOVO número</b> e precisa de <b>novo cadastro + nova requisição</b>. Confirme a clínica no campo acima.'
+      : '✅ Mesma clínica: segue com o mesmo número.'
+    if (outraClinica) { $('nClinica').value = ''; $('nClinica').focus() }
+  })
   $('nReq').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarHF() } })
   async function buscarHF() {
     const n = $('nReq').value.replace(/\D/g, ''); if (!n) return
@@ -1629,6 +1669,14 @@
       $('nPet').value = r.pet || ''; $('nClinica').value = r.clinica || ''; entradaHF = r.entrada || null
       $('puxado').innerHTML = `<dt>Pet</dt><dd>${esc(r.pet || '')} · ${esc(r.especie || '')}</dd><dt>Clínica</dt><dd>${esc(r.clinica || '')}</dd><dt>Entrada</dt><dd>${r.entrada ? dataCurta(r.entrada) + ' ' + hm(r.entrada) : '—'}</dd><dt>Já tem</dt><dd>${(r.exames || []).map(esc).join(' · ') || '—'}</dd>`
       $('puxado').hidden = false
+      // Thailan 18/set: a acréscimo pode ser de OUTRA clínica usando a mesma amostra → aí precisa de número e cadastro novos
+      outraClinica = null
+      if ($('qualClinica')) {
+        $('qualClinica').hidden = false
+        $('qualClinicaNome').textContent = r.clinica ? `Requisição cadastrada em: ${r.clinica}` : ''
+        $('qualClinicaAviso').hidden = true
+        document.querySelectorAll('#qualClinica .qc').forEach(b => b.classList.remove('on'))
+      }
       $('campoData').hidden = !!entradaHF; avisoDia()
     } catch (e) { $('novaErro').textContent = e.message }
   }
@@ -1636,12 +1684,20 @@
     ev.preventDefault()
     const cliente = document.querySelector('input[name="nCliente"]:checked').value
     const entrada = entradaHF || ($('nData').value ? new Date($('nData').value + 'T12:00:00').toISOString() : null)
+    if (!$('qualClinica').hidden && outraClinica === null) { $('novaErro').textContent = 'Diga se a amostra é da mesma clínica da requisição ou de outra.'; return }
     const args = { p_nome: sessao.nome, p_senha: sessao.senha, p_req: $('nReq').value, p_pet: $('nPet').value.trim(), p_clinica: $('nClinica').value.trim(),
       p_exame: $('nExame').value.trim(), p_setor: $('nSetor').value, p_origem: $('nOrigem').value, p_cliente: cliente, p_entrada: entrada,
-      p_novo_numero: outroDia(entrada), p_obs: $('nObs').value.trim() || null }
+      p_novo_numero: outroDia(entrada) || outraClinica === true, p_obs: [$('nObs').value.trim(), outraClinica === true ? 'AMOSTRA DE OUTRA CLÍNICA — novo cadastro + nova requisição' : ''].filter(Boolean).join(' · ') || null }
     if (!args.p_exame) { $('novaErro').textContent = 'Informe o exame a incluir.'; return }
     $('novaOk').disabled = true
-    try { await rpc('inc_abrir2', args); $('dlgNova').close(); toast('Inclusão aberta'); await carregar(); desenhar() }
+    const setor2 = $('nSetor2') ? $('nSetor2').value : ''
+    try {
+      const id = await rpc('inc_abrir2', args)
+      if (setor2 && setor2 !== args.p_setor && id) {           // exames de dois setores: cada um marca o seu na etapa 5
+        try { await rpc('inc_setores_set', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_setores: `${args.p_setor},${setor2}` }) } catch {}
+      }
+      $('dlgNova').close(); toast(setor2 && setor2 !== args.p_setor ? 'Inclusão aberta para 2 setores' : 'Inclusão aberta'); await carregar(); desenhar()
+    }
     catch (e) { $('novaErro').textContent = e.message }
     finally { $('novaOk').disabled = false }
   })
@@ -1670,6 +1726,7 @@
       c('PIPOCA', '640171', 'Lipase', 'bioquimica', 1, 5, { status: 'sem_amostra' }),
       c('ZECA', '640133', 'Albumina', 'bioquimica', 7, 3, { status: 'enviado' }),
       c('FRED', '640099', 'Fósforo', 'bioquimica', 4, 6, { novo_numero: true, amostra_entrada: min(26 * 60) }),
+      c('PETZIUS', '641702', 'Diro AG + Knoff', 'pcr_soro', 5, 12, { setores: 'pcr_soro,hemato', setores_ok: 'pcr_soro' }),
       c('KIRA', '639871', 'Ureia', 'bioquimica', 2, 31),
       c('REX', '639800', 'Colesterol', 'bioquimica', 7, 0, { status: 'concluido', concluido_em: min(15), criado_em: min(200) }),
     ]

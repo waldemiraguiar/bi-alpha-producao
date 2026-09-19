@@ -616,3 +616,14 @@ body.tv .pan-num b{font-size:40px} body.tv .pan-card h3{font-size:24px}
 .acao button.cancelar{background:var(--painel);color:var(--mudo);box-shadow:inset 0 0 0 1px var(--linha)}
 .acao button.cancelar:hover{color:var(--texto);box-shadow:inset 0 0 0 1px var(--mudo)}
 @media (prefers-reduced-motion:reduce){#abas button.tem-atrasado{animation:none}}
+.tag-dia{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.05em;border-radius:999px;padding:1px 8px;background:#eff6ff;border:1px solid #bfdbfe;color:var(--cc);vertical-align:1px}
+
+/* Thailan 18/set: a amostra pode ser de outra clínica — perguntar antes de seguir */
+.qual-clinica{background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:10px 12px;display:grid;gap:6px;margin:8px 0}
+.qc-bts{display:flex;gap:8px;flex-wrap:wrap}
+button.qc{font:inherit;font-weight:600;border:1px solid var(--linha);background:var(--painel);border-radius:999px;padding:5px 14px;cursor:pointer}
+button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
+.qc-aviso{font-size:13.5px;border-radius:8px;padding:7px 10px}
+.qc-aviso.hoje{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.qc-aviso.outro{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+.acao button.setor-ok{background:#dcfce7;color:#166534;box-shadow:inset 0 0 0 1px #bbf7d0;opacity:1}

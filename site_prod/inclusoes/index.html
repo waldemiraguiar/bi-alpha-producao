@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=52">
+<link rel="stylesheet" href="inc.css?v=53">
 </head>
 <body>
 <header class="topo">
@@ -163,6 +163,15 @@
       <div class="linha"><input id="nReq" inputmode="numeric" required placeholder="ex.: 640112"><button type="button" class="btn-sec" id="btnBuscar">Buscar no HF</button></div>
     </label>
     <dl class="puxado" id="puxado" hidden></dl>
+    <div class="qual-clinica" id="qualClinica" hidden>
+      <b>A amostra é da mesma clínica da requisição?</b>
+      <span class="mudo" id="qualClinicaNome"></span>
+      <div class="qc-bts">
+        <button type="button" class="qc" data-qc="mesma">✅ Sim, mesma clínica</button>
+        <button type="button" class="qc" data-qc="outra">🔀 Não, é de outra clínica</button>
+      </div>
+      <div class="qc-aviso" id="qualClinicaAviso" hidden></div>
+    </div>
     <label id="campoData">Data da amostra (se não achou no HF)<input id="nData" type="date"></label>
     <p class="aviso-dia" id="avisoDia" hidden></p>
     <div class="grade2">
@@ -175,6 +184,17 @@
         <select id="nSetor">
           <option value="hemato">Hematologia</option>
           <option value="bioquimica" selected>Bioquímica</option>
+          <option value="urina_fezes">Urina / Fezes</option>
+          <option value="pcr_soro">PCR / Sorologia</option>
+          <option value="cito_histo">Citologia / Histopatologia</option>
+          <option value="outros">Outros</option>
+        </select>
+      </label>
+      <label>2º setor <span class="mudo">(quando o pedido tem exames de dois setores)</span>
+        <select id="nSetor2">
+          <option value="">— só um setor —</option>
+          <option value="hemato">Hematologia</option>
+          <option value="bioquimica">Bioquímica</option>
           <option value="urina_fezes">Urina / Fezes</option>
           <option value="pcr_soro">PCR / Sorologia</option>
           <option value="cito_histo">Citologia / Histopatologia</option>
@@ -228,6 +248,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=52"></script>
+<script src="inc.js?v=53"></script>
 </body>
 </html>
