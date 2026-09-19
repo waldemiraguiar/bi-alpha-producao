@@ -93,6 +93,12 @@
       npsConvites = nc.error ? [] : (nc.data || [])
       const rv = await SB.from('rota_vivo').select('*').order('rota')
       rotasVivo = rv.error ? [] : (rv.data || [])
+      // 19/set: linha que o ouvinte parou de publicar (ex.: o turno foi reclassificado de noite para manhã)
+      // fica encalhada no banco. Vale só o que foi publicado no último ciclo de escrita.
+      if (rotasVivo.length) {
+        const maisNova = Math.max(...rotasVivo.map(r => T(r.atualizado) || 0))
+        if (maisNova) rotasVivo = rotasVivo.filter(r => (T(r.atualizado) || 0) > maisNova - 5 * 60000)
+      }
       const rg = await SB.from('inc_regras_clinica').select('*').eq('ativa', true)
       regras = rg.error ? [] : (rg.data || [])
       const cl = await SB.from('inc_coletas').select('*').gte('quando', new Date(agora() - 3 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 499)
