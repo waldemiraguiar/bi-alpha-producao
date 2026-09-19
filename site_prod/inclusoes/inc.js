@@ -1093,7 +1093,41 @@
     sem_cartao_lista: ['🔴 Entrou na lista e eu não vi', 'A clínica foi postada na lista da rota e eu não tenho cartão. Falha minha.'],
     sorteio: ['🎲 Sorteado para conferir', 'Abra o grupo e veja se tem pedido que ninguém tratou.'],
   }
+  // ⭐ JORNADA: as 5 etapas do pedido, com onde ele quebra (Wal 19/set)
+  function desenharJornada() {
+    const el = $('confJornada'); if (!el) return
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
+    const c = coletas.filter(x => T(x.quando) >= hoje0.getTime() && x.status !== 'descartada')
+    if (!c.length) { el.innerHTML = ''; return }
+    const resp = c.filter(x => x.respondido_em || x.agendada_em || x.por)
+    const lista = c.filter(x => x.na_lista_em || ['coletada', 'entregue'].includes(x.status))
+    const feito = c.filter(x => ['coletada', 'entregue'].includes(x.status))
+    const avisado = c.filter(x => x.avisado_em)
+    const med = a => { if (!a.length) return null; const b = a.slice().sort((x, y) => x - y); return b[Math.floor(b.length / 2)] }
+    const etapa = (n, rot, lst, base, tempos, quebra) => {
+      const p = base.length ? Math.round(lst.length / base.length * 100) : 0
+      const cls = p >= 90 ? 'ok' : p >= 60 ? 'at' : 'ruim'
+      const t = med(tempos)
+      return `<div class="jor-etapa ${cls}">
+        <div class="jor-n">${n}</div>
+        <div class="jor-txt"><b>${rot}</b>${t != null ? ` <span class="mudo">· mediana ${fmt(t)}</span>` : ''}</div>
+        <div class="jor-barra"><i style="width:${p}%"></i></div>
+        <div class="jor-num">${lst.length}<span>${p}%</span></div>
+        ${quebra && quebra.length ? `<div class="jor-quebra">🔴 <b>${quebra.length} parou aqui</b>: ${quebra.slice(0, 3).map(x => esc(x.clinica || '')).join(' · ')}${quebra.length > 3 ? ` +${quebra.length - 3}` : ''}</div>` : ''}
+      </div>`
+    }
+    el.innerHTML = `<h3>🧭 A jornada de hoje <span class="mudo">— onde o pedido quebra</span></h3>
+      <div class="jor">
+        ${etapa(1, 'pedido reconhecido', c, c, [], [])}
+        ${etapa(2, 'o Atendimento respondeu', resp, c, resp.map(x => (T(x.respondido_em || x.agendada_em) - T(x.quando)) / 60000).filter(x => x > 0), c.filter(x => !resp.includes(x)))}
+        ${etapa(3, 'postado na lista da rota', lista, c, lista.map(x => (T(x.na_lista_em) - T(x.quando)) / 60000).filter(x => x > 0), resp.filter(x => !lista.includes(x)))}
+        ${etapa(4, 'motoboy passou e informou', feito, c, feito.map(x => (T(x.coletada_em) - T(x.na_lista_em || x.quando)) / 60000).filter(x => x > 0), lista.filter(x => !feito.includes(x)))}
+        ${etapa(5, 'cliente avisado', avisado, c, [], [])}
+      </div>`
+  }
+
   function desenharConferencia() {
+    try { desenharJornada() } catch {}
     if (!$('confLista')) return
     const hoje = new Date().toLocaleDateString('sv-SE')
     const doDia = conferencia.filter(c => c.dia === hoje)

@@ -655,3 +655,17 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .her-item.ok .her-estado{color:var(--ok)}
 .escolha-linha button.publicar{background:var(--moto);color:#fff}
 .escolha-linha button.publicar:hover{filter:brightness(1.08)}
+
+/* JORNADA (Wal 19/set): as 5 etapas e onde quebra */
+.jor{display:grid;gap:10px;margin-top:8px}
+.jor-etapa{display:grid;grid-template-columns:34px 1fr 160px 90px;gap:10px;align-items:center;background:var(--painel);border:1px solid var(--linha);border-radius:10px;padding:9px 12px}
+.jor-n{width:30px;height:30px;border-radius:50%;background:var(--cc);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px}
+.jor-txt{font-size:14.5px}
+.jor-barra{background:var(--painel2);border-radius:999px;height:12px;overflow:hidden}
+.jor-barra i{display:block;height:100%;background:var(--ok)}
+.jor-etapa.at .jor-barra i{background:var(--amarelo)} .jor-etapa.ruim .jor-barra i{background:var(--vermelho)}
+.jor-etapa.at .jor-n{background:var(--amarelo)} .jor-etapa.ruim .jor-n{background:var(--vermelho)}
+.jor-num{font-family:var(--disp);font-size:26px;text-align:right}
+.jor-num span{display:block;font-size:12.5px;color:var(--mudo);font-family:var(--corpo,inherit)}
+.jor-quebra{grid-column:1/-1;font-size:13px;background:#fff1f2;border:1px solid #fecaca;border-radius:8px;padding:5px 9px;color:#9a1c1c}
+@media(max-width:700px){.jor-etapa{grid-template-columns:30px 1fr 70px}.jor-barra{display:none}}
