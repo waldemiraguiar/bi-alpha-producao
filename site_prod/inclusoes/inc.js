@@ -1268,7 +1268,8 @@
   function desenharTerremoto() {
     const ativos = terremotosAtivos()
     const bt = document.querySelector('#abas button[data-setor="terremoto"]')
-    if (bt) { bt.hidden = !ativos.length && setor !== 'terremoto'; bt.innerHTML = `🚨 TERREMOTO${ativos.length ? ` <span class="badge">${ativos.length}</span>` : ''}`; bt.classList.toggle('tocando', !!ativos.length) }
+    // Wal 19/set: a aba fica SEMPRE visível — apagada quando está tudo calmo, vermelha piscando quando toca
+    if (bt) { bt.hidden = false; bt.innerHTML = `🚨 TERREMOTO${ativos.length ? ` <span class="badge">${ativos.length}</span>` : ''}`; bt.classList.toggle('tocando', !!ativos.length); bt.classList.toggle('calmo', !ativos.length) }
     document.body.classList.toggle('terremoto-on', !!ativos.length)
     const el = $('terrLista'); if (!el) return
     el.innerHTML = ativos.length ? ativos.map(x => {
