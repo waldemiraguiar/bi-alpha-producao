@@ -1989,18 +1989,23 @@ const CC_KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8';
 // valores mensais em R$ — conferir com o Wal; o que for 0 é porque já está pago em outra conta
 const CC_CUSTO = [
   { item: 'IA paga (modelo de linguagem)', valor: 0, nota: 'nenhuma chamada paga: reconhecimento é regra + banco' },
-  { item: 'Banco do quadro (Supabase)', valor: 0, nota: 'projeto no plano gratuito; cabe no volume atual' },
+  { item: 'Transcrição dos áudios das clínicas', valor: 0, nota: '~39 áudios/dia transcritos LOCAL no Air (modelo próprio) · na nuvem seria ~R$20/mês' },
+  { item: 'Banco do quadro (Supabase)', valor: 0, nota: 'mesmo projeto da frota · 114 linhas do Atendimento hoje: cabe folgado' },
   { item: 'Site do quadro (Netlify)', valor: 0, nota: 'mesmo site do BI, sem custo adicional' },
   { item: 'Automação (GitHub Actions)', valor: 0, nota: 'repositório público = minutos gratuitos' },
-  { item: 'Energia das 2 máquinas (Air + Mesa 4)', valor: 18, nota: '~10 W cada, 24 h · R$ 1,00/kWh' },
+  { item: 'Energia: Mesa 4 (principal, 24 h)', valor: 11, nota: 'Mac mini ~15 W · R$ 1,00/kWh' },
+  { item: 'Energia: Air (reserva + transcrição)', valor: 7, nota: '~10 W, já ficava ligado' },
   { item: 'Linha de WhatsApp do sistema', valor: 0, nota: 'linha comum, sem API paga' },
+  { item: 'Conferência humana (pente-fino)', valor: 0, nota: '3 × 10 min/dia em rodízio, dentro do expediente — sem hora extra' },
 ];
 // referências de mercado (mensal, R$) para fazer o mesmo trabalho
 const CC_MERCADO = [
   { item: 'Plataforma de atendimento por agente (Zendesk/Intercom)', valor: 1500, nota: '5 pessoas × ~US$55' },
   { item: 'Fornecedor de chatbot/CRM de WhatsApp', valor: 1200, nota: 'faixa de mercado para 1 número + automações' },
   { item: 'API oficial do WhatsApp (mensagens de serviço)', valor: 300, nota: '~R$0,10 por conversa iniciada' },
-  { item: 'IA por mensagem, se cada leitura fosse ao modelo', valor: 900, nota: '~3.000 msgs/dia × R$0,01' },
+  { item: 'IA por mensagem, se cada leitura fosse ao modelo', valor: 900, nota: '~2.600 msgs/dia × R$0,01' },
+  { item: 'Transcrição de áudio na nuvem', valor: 20, nota: '~39 áudios/dia × ~30 s · hoje fazemos local por R$ 0' },
+  { item: 'Rastreamento de entregas (Onfleet e similares)', valor: 700, nota: '~US$130/mês na faixa de 17 rotas' },
 ];
 let _cciaOk = false;
 async function renderCustosCC(force){
