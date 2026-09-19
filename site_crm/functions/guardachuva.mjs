@@ -9,7 +9,10 @@ import { SECRET } from "./secret.mjs";
 
 const SUPA_URL = "https://lrwjcdvporaivxvfuiwt.supabase.co";
 const ANON = "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8";
-const TOKEN = process.env.HISTO_TOKEN || "756544b63f3d524e0c9fb9942c10bb5cba66ead67139efab";
+// 19/set: o token estava escrito aqui dentro, num repositorio PUBLICO. Trocado e removido.
+// Agora vem SO da variavel de ambiente HISTO_TOKEN (Netlify). Sem ela, a funcao recusa a escrita
+// em vez de cair num valor de reserva — falhar barulhento e melhor que rodar com segredo no codigo.
+const TOKEN = process.env.HISTO_TOKEN || "";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
