@@ -175,7 +175,12 @@ async function decryptDashboard(pwd){
     try{ gbio.textContent='👆 Toque o Touch ID…';
       const seg = await BIO.unlock();          // Touch ID → PRF → credencial decifrada em memória
       if(seg.indexOf('\n')>0){ const [u,s]=seg.split('\n'); await entrarComUsuario(u,s); }
-      else await enter(seg);                    // modo antigo (só a senha do painel)
+      else {                                    // digital gravada no formato antigo (só a senha do painel)
+        try{ BIO.disable(); }catch(_){}
+        gbio.style.display='none';
+        err.textContent='Sua digital era do formato antigo. Entre com usuário e senha e ative a digital de novo.';
+        return;
+      }
     }catch(e){ console.warn(e); gbio.textContent='👆 Entrar com digital';
       if(!/não está ativo/.test(e.message||'')) err.textContent='Touch ID cancelado — toque de novo ou use a senha.'; }
   }
@@ -278,7 +283,8 @@ async function decryptDashboard(pwd){
     const guardar = (usr.trim() && sen) ? (usr.trim()+'\n'+sen) : pw;
     try{ bset.textContent='👆 Toque p/ ativar…';
       await BIO.register(guardar);                   // cria passkey + cifra a senha com a chave do Touch ID
-      bset.textContent='✅ Digital ativa neste Mac'; setTimeout(()=>{ bset.style.display='none'; }, 1800);
+      bset.textContent='✅ Digital ativa neste Mac';
+      try{ localStorage.setItem('bi_bio_v','2'); }catch(_){} setTimeout(()=>{ bset.style.display='none'; }, 1800);
     }catch(e){ console.warn(e); bset.textContent='👆 Proteger com digital'; alert('Touch ID: '+(e.message||e)); }
   };
 
