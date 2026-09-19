@@ -855,7 +855,28 @@
       `Assim que o motoboy deixar aí, confirmo por aqui. 😊\n\n${ASSINATURA}` }
   }
   // ── dia 3: relógios. Cada cartão tem um prazo; passou, vira cobrança na tela ──
-  const PRAZO = { agendar: 20, corteAviso: 30, coletaFolga: 45 }   // minutos
+  const PRAZO = { agendar: 20, corteAviso: 30, coletaFolga: 45, vermelho: 45, terremoto: 60 }   // minutos ÚTEIS
+  // Wal 19/set: o Atendimento trabalha das 8h às 22h. O relógio do cliente NÃO corre fora disso —
+  // pedido das 20h50 virava terremoto às 22h, com a equipe em casa (aconteceu em 18/set).
+  const EXPEDIENTE = { de: 8, ate: 22 }
+  function minutosUteis(de, ate = agora()) {
+    let ini = new Date(T(de)), fim = new Date(ate)
+    if (!(ini < fim)) return 0
+    let total = 0
+    while (ini < fim) {
+      const abre = new Date(ini); abre.setHours(EXPEDIENTE.de, 0, 0, 0)
+      const fecha = new Date(ini); fecha.setHours(EXPEDIENTE.ate, 0, 0, 0)
+      if (ini < abre) ini = abre                                   // chegou de madrugada: começa a contar às 8h
+      if (ini >= fecha) {                                          // chegou depois das 22h: pula para as 8h do dia seguinte
+        ini = new Date(abre); ini.setDate(ini.getDate() + 1); continue
+      }
+      const ate2 = fim < fecha ? fim : fecha
+      total += Math.max(0, (ate2 - ini) / 60000)
+      if (ate2 >= fecha) { ini = new Date(abre); ini.setDate(ini.getDate() + 1) } else break
+    }
+    return Math.round(total)
+  }
+  const dentroDoExpediente = (d = new Date()) => d.getHours() >= EXPEDIENTE.de && d.getHours() < EXPEDIENTE.ate
   function fimDoTurno(c) {
     const j = JANELAS[(c.rota || c.rota_sug || '').toLowerCase()]
     const k = /manh/i.test(c.turno || c.turno_sug || '') ? 'manhã' : /noite/i.test(c.turno || c.turno_sug || '') ? 'noite' : 'tarde'
@@ -871,7 +892,7 @@
   }
   // devolve { nivel: 'ok'|'atencao'|'cobrar', motivo } — é o que faz o cartão piscar e entrar na fila de ação
   function relogio(c) {
-    const min = (agora() - T(c.quando)) / 60000
+    const min = minutosUteis(c.quando)                             // só conta o tempo em que havia gente para atender
     if (c.status === 'nova') {
       if (c.para_dia) {                                          // a clínica pediu para outro dia (Thailan 18/set)
         const dia = new Date(c.para_dia + 'T12:00:00')
@@ -1100,8 +1121,8 @@
       }
       // ③ o cliente pediu e ninguém respondeu NO WHATSAPP em 1 hora (responder no grupo já para o relógio — caso Barão de Lucena, 18/set)
       if (c.para_dia && new Date(c.para_dia + 'T12:00:00') > agora()) continue      // é para outro dia: não é terremoto
-      if (c.status === 'nova' && !c.respondido_em && (agora() - T(c.quando)) / 60000 >= 60) {
-        casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt((agora() - T(c.quando)) / 60000)} e ninguém respondeu no WhatsApp` })
+      if (c.status === 'nova' && !c.respondido_em && dentroDoExpediente() && minutosUteis(c.quando) >= PRAZO.terremoto) {
+        casos.push({ tipo: 'cliente_esperando', c, motivo: `${c.clinica} pediu ${oque} há ${fmt(minutosUteis(c.quando))} de expediente e ninguém respondeu no WhatsApp` })
       }
     }
     const daTela = casos.map(x => ({ ...x, chave: `${x.tipo}:${x.c.id}:${dia}` }))
