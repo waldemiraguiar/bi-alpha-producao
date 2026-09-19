@@ -182,9 +182,9 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 .gate-card h2{font-size:20px;font-weight:700}
 .gate-card p{color:var(--mut);font-size:12.5px;margin:4px 0 22px}
 #gateForm{display:flex;flex-direction:column;gap:12px}
-#gatePwd{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:9px;padding:12px 14px;
+#gateUser,#gatePwd{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:9px;padding:12px 14px;
   color:var(--ink);font-size:14px;font-family:inherit;outline:none;transition:border .2s}
-#gatePwd:focus{border-color:var(--cyan)}
+#gateUser:focus,#gatePwd:focus{border-color:var(--cyan)}
 #gateBtn{background:linear-gradient(135deg,var(--cyan),var(--green));color:var(--navy);font-weight:700;
   font-size:14px;border:none;border-radius:9px;padding:12px;cursor:pointer;font-family:inherit;transition:opacity .2s}
 #gateBtn:hover{opacity:.9} #gateBtn:disabled{opacity:.5;cursor:wait}
@@ -221,7 +221,8 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
     <h2>BI Alpha</h2>
     <p>Painel restrito · acesso privado</p>
     <form id="gateForm" autocomplete="off">
-      <input id="gatePwd" type="password" placeholder="Senha de acesso" autocomplete="current-password" autofocus>
+      <input id="gateUser" type="text" placeholder="Usuário" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus>
+      <input id="gatePwd" type="password" placeholder="Senha" autocomplete="current-password">
       <button type="submit" id="gateBtn">Entrar</button>
       <button type="button" id="gateBio" style="display:none;width:100%;margin-top:9px;background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:14px;border-radius:10px;padding:11px;cursor:pointer;font-family:inherit">👆 Entrar com digital</button>
       <div id="gateErr" class="gate-err"></div>
@@ -238,7 +239,14 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
         <div class="sub">Inteligência sobre exames e receita do laboratório <span style="color:#00D4FF;font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:11px">· Agentes de IA Alpha</span></div>
       </div>
     </div>
-    <div class="period" id="period">carregando…</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="period" id="period">carregando…</div>
+      <div id="sessaoBox" style="display:none;align-items:center;gap:8px;font-size:11.5px;color:var(--mut)">
+        <span>👤 <b id="quemEntrou" style="color:var(--ink)"></b></span>
+        <button id="btTrocaSenha" type="button" style="background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">Trocar senha</button>
+        <button id="btSair" type="button" style="background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">Sair</button>
+      </div>
+    </div>
   </header>
 
   <div class="note-fin" id="noteFin"></div>
@@ -287,6 +295,6 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
   <footer id="foot"></footer>
 </div>
 <script src="bio.js"></script>
-<script src="app.js?v=102"></script>
+<script src="app.js?v=103"></script>
 </body>
 </html>

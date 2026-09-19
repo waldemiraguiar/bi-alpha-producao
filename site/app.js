@@ -78,7 +78,9 @@ let ENC = null; // envelope cifrado, carregado sob demanda
 
 // Busca o .enc da FUNÇÃO (/api/enc — atualizado sem deploy) e CAI no estático data/dashboard.enc se falhar.
 async function fetchEncF(name, fallbackUrl){
-  try{ const r = await fetch('/api/enc?f='+name+'&_='+Date.now());
+  try{ const h = window.__TK ? {authorization:'Bearer '+window.__TK} : {};
+    const r = await fetch('/api/enc?f='+name+'&_='+Date.now(), {headers:h});
+    if(r.status===401) throw new Error('sessão expirada — entre novamente');
     if(r.ok){ const j = await r.json(); if(j && j.ct && j.salt && j.iv) return j; } }catch(e){}
   return await fetch(fallbackUrl+'?_='+Date.now()).then(r=>{ if(!r.ok) throw new Error('arquivo de dados não encontrado'); return r.json(); });
 }
@@ -101,6 +103,39 @@ async function decryptDashboard(pwd){
   // segurança: some com o esquema ANTIGO (senha em texto no localStorage) — agora é PRF cifrado
   try{ localStorage.removeItem('bi_fin_bio'); localStorage.removeItem('bi_fin_pw'); }catch(_){}
 
+  // --- login individual (19/set/2026): confere no servidor e abre o "envelope" com a chave do painel ---
+  const b64d=s=>Uint8Array.from(atob(String(s).replace(/-/g,'+').replace(/_/g,'/')), c=>c.charCodeAt(0));
+  const b64e=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
+  async function abreEnvelope(env, senha){                 // env = {salt,iv,ct} cifrado com a senha da pessoa
+    const base=await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+    const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64d(env.salt),iterations:env.iter||250000,hash:'SHA-256'},
+      base, {name:'AES-GCM',length:256}, false, ['decrypt']);
+    return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(env.iv)}, k, b64d(env.ct)));
+  }
+  async function fechaEnvelope(chave, senha){              // usado na troca de senha
+    const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+    const base=await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+    const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'}, base, {name:'AES-GCM',length:256}, false, ['encrypt']);
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv}, k, new TextEncoder().encode(chave));
+    return {salt:b64e(salt), iv:b64e(iv), ct:b64e(ct), iter:250000};
+  }
+  window.__BI_ENVELOPE = fechaEnvelope;
+  async function entrarComUsuario(usuario, senha){
+    const r = await fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({acao:'entrar', usuario, senha})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.erro || 'usuário ou senha inválidos');
+    window.__TK = j.token; window.__USER = {usuario, nome:j.nome, papel:j.papel, abas:j.abas};
+    try{ sessionStorage.setItem('bi_tk', j.token); }catch(_){}
+    const chave = await abreEnvelope(j.envelope, senha);   // a chave do painel só existe aqui, no navegador
+    await enter(chave);
+    const id=document.getElementById('quemEntrou'), box=document.getElementById('sessaoBox');
+    if(id) id.textContent = j.nome || usuario;
+    if(box) box.style.display='flex';
+    if(j.trocar_senha) setTimeout(()=>alert('Sua senha é provisória. Troque em "Trocar senha" no rodapé do painel.'), 800);
+    return true;
+  }
+
   // ENTRA no painel com a senha decifrada (usado por: senha digitada · Touch ID · boot)
   async function enter(pwStr){
     const D = await decryptDashboard(pwStr);   // lança se a senha estiver errada
@@ -115,9 +150,15 @@ async function decryptDashboard(pwd){
 
   form.addEventListener('submit', async e=>{
     e.preventDefault(); err.textContent=''; btn.disabled=true; btn.textContent='Verificando…';
-    try{ await enter(pwd.value); }
+    const usr=(document.getElementById('gateUser')||{}).value||'';
+    try{
+      if(usr.trim()) await entrarComUsuario(usr.trim(), pwd.value);
+      else await enter(pwd.value);                       // sem usuário = modo antigo (só a senha do painel)
+    }
     catch(ex){
-      err.textContent = /não encontrado/.test(ex.message||'') ? 'Dados indisponíveis. Tente recarregar.' : 'Senha incorreta.';
+      const m=String(ex.message||'');
+      err.textContent = /não encontrado/.test(m) ? 'Dados indisponíveis. Tente recarregar.'
+        : /tentativas/.test(m) ? m : /sessão/.test(m) ? m : (usr.trim()? 'Usuário ou senha inválidos.' : 'Senha incorreta.');
       btn.disabled=false; btn.textContent='Entrar'; pwd.select();
     }
   });
@@ -126,17 +167,44 @@ async function decryptDashboard(pwd){
   async function porDigital(){
     if(!BIO || !BIO.enabled()) return;
     try{ gbio.textContent='👆 Toque o Touch ID…';
-      const pw = await BIO.unlock();           // Touch ID → PRF → senha decifrada em memória
-      await enter(pw);
+      const seg = await BIO.unlock();          // Touch ID → PRF → credencial decifrada em memória
+      if(seg.indexOf('\n')>0){ const [u,s]=seg.split('\n'); await entrarComUsuario(u,s); }
+      else await enter(seg);                    // modo antigo (só a senha do painel)
     }catch(e){ console.warn(e); gbio.textContent='👆 Entrar com digital';
       if(!/não está ativo/.test(e.message||'')) err.textContent='Touch ID cancelado — toque de novo ou use a senha.'; }
   }
   if(gbio) gbio.onclick=porDigital;
 
+  // --- trocar a própria senha (a chave do painel é re-embrulhada no navegador) ---
+  const btT=document.getElementById('btTrocaSenha'), btS=document.getElementById('btSair');
+  if(btT) btT.onclick=async()=>{
+    const u=(window.__USER||{}).usuario; if(!u){ alert('Entre com usuário e senha para trocar a senha.'); return; }
+    const atual=prompt('Senha ATUAL:'); if(!atual) return;
+    const nova=prompt('Senha NOVA (mínimo 10 caracteres):'); if(!nova) return;
+    if(nova.length<10){ alert('A senha nova precisa de pelo menos 10 caracteres.'); return; }
+    if(prompt('Repita a senha nova:')!==nova){ alert('As senhas não batem.'); return; }
+    try{
+      const env=await window.__BI_ENVELOPE(window.__PW, nova);            // chave do painel embrulhada na senha nova
+      const enc=new TextEncoder();
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      const base=await crypto.subtle.importKey('raw', enc.encode(nova), 'PBKDF2', false, ['deriveBits']);
+      const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'}, base, 256);
+      const b64=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
+      const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({acao:'trocar_senha', usuario:u, senha:atual, salt_auth:b64(salt), hash_auth:b64(bits), envelope:env})});
+      const j=await r.json().catch(()=>({}));
+      alert(r.ok? 'Senha trocada. Use a nova no próximo acesso.' : ('Não deu: '+(j.erro||'erro')));
+    }catch(e){ alert('Não deu: '+(e.message||e)); }
+  };
+  if(btS) btS.onclick=()=>{ try{ sessionStorage.removeItem('bi_tk'); }catch(_){}
+    window.__TK=null; window.__PW=null; location.reload(); };
+
   if(bset) bset.onclick=async()=>{
     const pw = window.__PW; if(!pw){ alert('Entre com a senha primeiro.'); return; }
+    const usr=(document.getElementById('gateUser')||{}).value||'', sen=(document.getElementById('gatePwd')||{}).value||'';
+    const guardar = (usr.trim() && sen) ? (usr.trim()+'\n'+sen) : pw;
     try{ bset.textContent='👆 Toque p/ ativar…';
-      await BIO.register(pw);                   // cria passkey + cifra a senha com a chave do Touch ID
+      await BIO.register(guardar);                   // cria passkey + cifra a senha com a chave do Touch ID
       bset.textContent='✅ Digital ativa neste Mac'; setTimeout(()=>{ bset.style.display='none'; }, 1800);
     }catch(e){ console.warn(e); bset.textContent='👆 Proteger com digital'; alert('Touch ID: '+(e.message||e)); }
   };

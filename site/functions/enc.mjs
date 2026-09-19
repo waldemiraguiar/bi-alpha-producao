@@ -7,6 +7,7 @@
    Segredo = senha do painel (secret.mjs). Cada SITE tem seu próprio Blob (isolado por deploy). */
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
+import { confereToken } from "./login.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -21,6 +22,18 @@ export default async (req) => {
   if (req.method === "OPTIONS") return new Response("", { headers: cors });
 
   if (req.method === "GET") {
+    // 19/set/2026: o arquivo cifrado NÃO é mais baixável por quem só tem o link.
+    // Precisa de sessão válida (login individual) ou da senha mestre (scripts locais).
+    // Enquanto não houver nenhum usuário cadastrado, segue aberto para não derrubar o painel.
+    const auth = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    let liberado = !!confereToken(auth) || (SECRET && req.headers.get("x-pwd") === SECRET);
+    if (!liberado) {
+      try {
+        const { blobs } = await getStore("bi-auth").list();
+        liberado = !blobs || blobs.length === 0;          // ainda sem usuários = fase de migração
+      } catch (e) { liberado = true; }
+    }
+    if (!liberado) return new Response(JSON.stringify({ erro: "sessao necessaria" }), { status: 401, headers: { ...cors, "content-type": "application/json" } });
     const v = await store.get(key, { type: "text", consistency: "strong" });
     if (!v) return new Response("", { status: 404, headers: cors });
     return new Response(v, { headers: { ...cors, "content-type": "application/json", "cache-control": "no-store" } });
