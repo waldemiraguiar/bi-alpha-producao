@@ -258,7 +258,7 @@ async function decryptDashboard(pwd){
         <div style="font-size:11.5px;color:var(--mut);margin-top:6px">Mande por um canal seguro e peça para trocar no primeiro acesso (botão “Trocar senha”).</div>`;
       const cp=document.getElementById('acCopiar');
       if(cp) cp.onclick=()=>{ navigator.clipboard.writeText(senha).then(()=>{ cp.textContent='Copiado ✓'; }); };
-      pintaAcessos();
+      pintaAcessos(); setTimeout(pintaAcessos, 1500);     // a lista do servidor demora 1s a atualizar
     }catch(e){ alert('Não deu: '+e.message); }
   }
   const btA=document.getElementById('btAcessos');
