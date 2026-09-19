@@ -2102,6 +2102,20 @@ async function renderApoioT(force){
   const STR={'saiu':'✅ saiu do apoio','caiu':'⬇ caiu','caiu pouco':'↘ caiu pouco','estável/subiu':'⚠ continua','novo':'🆕 novo'};
   const spark=(arr,cor)=>{const mx=Math.max(...arr,1);return `<span style="display:inline-flex;gap:2px;align-items:flex-end;height:18px">${arr.map(v=>`<span title="${v}" style="width:5px;height:${Math.max(1,v/mx*18)}px;background:${cor};opacity:${v?1:.25};border-radius:1px"></span>`).join('')}</span>`;};
 
+  if(!document.getElementById('apPiscaCSS')){ const st=document.createElement('style'); st.id='apPiscaCSS';
+    st.textContent=`@keyframes apPisca{0%,100%{opacity:1;transform:scale(1);text-shadow:0 0 18px rgba(0,229,160,.9)}50%{opacity:.25;transform:scale(.94);text-shadow:none}}
+    @keyframes apBorda{0%,100%{box-shadow:0 0 0 0 rgba(0,229,160,.0),0 0 28px rgba(0,229,160,.55)}50%{box-shadow:0 0 0 6px rgba(0,229,160,.25),0 0 6px rgba(0,229,160,.1)}}
+    .apPisca{animation:apPisca 1.1s ease-in-out infinite;display:inline-block}
+    .apBig{font-size:clamp(38px,6vw,72px);font-weight:900;color:#00E5A0;letter-spacing:-.03em;line-height:1}
+    .apBox{border:2px solid #00E5A0;border-radius:14px;padding:12px 18px;animation:apBorda 1.1s ease-in-out infinite;background:rgba(0,229,160,.07);text-align:center;flex:1;min-width:210px}
+    .apChip{border-radius:10px;padding:6px 4px;text-align:center;flex:1;min-width:64px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+    @keyframes alBorda{0%,100%{box-shadow:0 0 0 0 rgba(255,84,112,0),0 0 30px rgba(255,84,112,.6)}50%{box-shadow:0 0 0 7px rgba(255,84,112,.22),0 0 6px rgba(255,84,112,.1)}}
+    @keyframes alPisca{0%,100%{opacity:1}50%{opacity:.3}}
+    .alBox{border:2px solid #FF5470;border-radius:14px;background:rgba(255,84,112,.09);animation:alBorda 1.05s ease-in-out infinite;padding:14px 18px}
+    .alPisca{animation:alPisca 1.05s ease-in-out infinite;display:inline-block}
+    .alVal{font-size:clamp(30px,4.6vw,54px);font-weight:900;color:#FF5470;letter-spacing:-.03em;line-height:1}`;
+    document.head.appendChild(st); }
+
   let h=`<div class="card" style="margin-top:18px">
     <h3>🧪 Laboratório de apoio · TECSA <span class="cap">${esc(D.apoio)} · ${esc(D.periodo)} · atualizado ${esc(D.gerado)}</span></h3>
     <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:10px">
@@ -2116,14 +2130,38 @@ async function renderApoioT(force){
       <b>🧠 Interpretação</b><br>${(D.texto||[]).map(t=>'• '+esc(t)).join('<br>')}</div></div>`;
   if(D.aviso_parcial) h+=`<div class="card" style="margin-top:12px;border-left:3px solid var(--amber);background:rgba(255,176,32,.07)"><b style="color:var(--amber)">${esc(D.aviso_parcial)}</b></div>`;
 
-  if(!document.getElementById('apPiscaCSS')){ const st=document.createElement('style'); st.id='apPiscaCSS';
-    st.textContent=`@keyframes apPisca{0%,100%{opacity:1;transform:scale(1);text-shadow:0 0 18px rgba(0,229,160,.9)}50%{opacity:.25;transform:scale(.94);text-shadow:none}}
-    @keyframes apBorda{0%,100%{box-shadow:0 0 0 0 rgba(0,229,160,.0),0 0 28px rgba(0,229,160,.55)}50%{box-shadow:0 0 0 6px rgba(0,229,160,.25),0 0 6px rgba(0,229,160,.1)}}
-    .apPisca{animation:apPisca 1.1s ease-in-out infinite;display:inline-block}
-    .apBig{font-size:clamp(38px,6vw,72px);font-weight:900;color:#00E5A0;letter-spacing:-.03em;line-height:1}
-    .apBox{border:2px solid #00E5A0;border-radius:14px;padding:12px 18px;animation:apBorda 1.1s ease-in-out infinite;background:rgba(0,229,160,.07);text-align:center;flex:1;min-width:210px}
-    .apChip{border-radius:10px;padding:6px 4px;text-align:center;flex:1;min-width:64px;background:rgba(255,255,255,.03);border:1px solid var(--line)}`;
-    document.head.appendChild(st); }
+  // ---- ⚠ ALERTA FORTE: exame indo para o apoio MAIS CARO (pedido do Wal 19/set) ----
+  const AK=D.alerta_kpi||{}, AL=(D.alertas_preco||[]);
+  const ativos=AL.filter(a=>a.ainda_envia), parados=AL.filter(a=>!a.ainda_envia);
+  if(AL.length){
+    h+=`<div class="alBox" style="margin-top:14px">
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+        <div style="flex:1;min-width:250px">
+          <div style="font-size:15px;font-weight:900;color:#FF5470">${ativos.length?'🚨 <span class="alPisca">VOCÊ ESTÁ PAGANDO MAIS CARO</span>':'✅ Nenhum exame indo hoje para o apoio mais caro'}</div>
+          <div style="font-size:13px;margin-top:4px;line-height:1.5">${ativos.length
+            ? `<b>${N(ativos.length)}</b> exame(s) continuam indo para o apoio errado nos últimos 2 meses. No mesmo ritmo, isso custa <b>${R(AK.ativos_ano)} por ano</b>.`
+            : `Os ${N(parados.length)} casos abaixo já pararam de ser enviados — ficam aqui como histórico.`}</div>
+        </div>
+        ${ativos.length?`<div style="text-align:center;min-width:190px"><div class="alVal alPisca">${R(AK.ativos_ano)}</div><div style="font-size:12px;font-weight:700;margin-top:2px">por ano, pago a mais</div><div style="font-size:11px;color:var(--mut)">${R(AK.ativos_periodo)} nos 8 meses</div></div>`:''}
+      </div>
+      <div style="overflow-x:auto;margin-top:12px"><table class="atab">
+        <thead><tr><th>Exame</th><th>Está indo para</th><th>Deveria ir para</th><th class="num">A mais<br>por exame</th><th class="num">Qtd no<br>período</th><th class="num">Pago a mais<br>no período</th><th class="num">Por ano<br>no ritmo</th><th>Últimos<br>2 meses</th><th>Confere?</th></tr></thead><tbody>
+        ${AL.map(a=>`<tr style="${a.ainda_envia?'background:rgba(255,84,112,.07)':'opacity:.55'}">
+          <td><b>${esc(a.exame_hf||a.exame_vetlab||a.exame_tecsa)}</b><div style="font-size:10px;color:var(--mut)">${esc(a.exame_vetlab||'')}${a.exame_vetlab&&a.exame_tecsa?' · ':''}${esc(a.exame_tecsa||'')}</div></td>
+          <td style="color:var(--red);white-space:nowrap"><b>${esc(a.indo_para)}</b> ${R(a.indo_para==='Vet Lab'?a.custo_vetlab:a.custo_tecsa,2)}</td>
+          <td style="color:var(--green);white-space:nowrap"><b>${esc(a.deveria_ir)}</b> ${R(a.deveria_ir==='Vet Lab'?a.custo_vetlab:a.custo_tecsa,2)}</td>
+          <td class="num" style="color:var(--red)"><b>${R(a.a_mais_por_exame,2)}</b></td>
+          <td class="num">${N(a.qtd_errada)}</td>
+          <td class="num">${R(a.pago_a_mais_periodo)}</td>
+          <td class="num" style="color:${a.ainda_envia?'var(--red)':'var(--mut)'}">${R(a.pago_a_mais_ano)}</td>
+          <td>${a.ainda_envia?`<span style="color:var(--red)">🔴 ainda envia (${N(a.qtd_ult2)})</span>`:'<span style="color:var(--mut)">parou</span>'}</td>
+          <td style="font-size:11px;color:${a.confianca==='confira'?'var(--amber)':'var(--mut)'}">${a.confianca==='confira'?'⚠ conferir nome':'ok'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <div style="font-size:11px;color:var(--mut);margin-top:8px">Comparo o mesmo exame nos dois apoios (Vet Lab com desconto × TECSA na fatura ou, quando nunca foi enviado, na tabela 2026 — que ainda é preço cheio). "Por ano no ritmo" = o que foi pago a mais nos 8 meses, projetado para 12. Antes de mudar a rota do material, confirme com o laboratório que é o mesmo método; as linhas com ⚠ são as que não tenho certeza.</div></div>`;
+  }
+
+
+
 
   // ---- consolidado dos dois apoios (é o número que entra no custo) ----
   const seta=v=>v<0?'▼':'▲', corq=v=>v<0?'#00E5A0':'#FF5470';
