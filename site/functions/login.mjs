@@ -168,3 +168,5 @@ export default async (req) => {
 
   return J({ erro: "ação desconhecida" }, 400);
 };
+
+export const config = { path: "/api/login" };
