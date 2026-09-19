@@ -80,7 +80,11 @@ let ENC = null; // envelope cifrado, carregado sob demanda
 async function fetchEncF(name, fallbackUrl){
   try{ const h = window.__TK ? {authorization:'Bearer '+window.__TK} : {};
     const r = await fetch('/api/enc?f='+name+'&_='+Date.now(), {headers:h});
-    if(r.status===401) throw new Error('sessão expirada — entre novamente');
+    if(r.status===401){ try{ sessionStorage.removeItem('bi_tk'); }catch(_){}
+      if(!window.__avisou401){ window.__avisou401=1;
+        alert('Sua sessão não vale mais (o BI agora entra com usuário e senha). Entre de novo.');
+        window.__TK=null; window.__PW=null; location.reload(); }
+      throw new Error('sessão expirada — entre novamente'); }
     if(r.ok){ const j = await r.json(); if(j && j.ct && j.salt && j.iv) return j; } }catch(e){}
   return await fetch(fallbackUrl+'?_='+Date.now()).then(r=>{ if(!r.ok) throw new Error('arquivo de dados não encontrado'); return r.json(); });
 }
@@ -132,6 +136,7 @@ async function decryptDashboard(pwd){
     const id=document.getElementById('quemEntrou'), box=document.getElementById('sessaoBox');
     if(id) id.textContent = j.nome || usuario;
     if(box) box.style.display='flex';
+    const ba=document.getElementById('btAcessos'); if(ba && j.papel==='dono') ba.style.display='';
     if(j.trocar_senha) setTimeout(()=>alert('Sua senha é provisória. Troque em "Trocar senha" no rodapé do painel.'), 800);
     return true;
   }
@@ -197,6 +202,73 @@ async function decryptDashboard(pwd){
       alert(r.ok? 'Senha trocada. Use a nova no próximo acesso.' : ('Não deu: '+(j.erro||'erro')));
     }catch(e){ alert('Não deu: '+(e.message||e)); }
   };
+  // --- 👥 gestão de acessos pelo próprio BI (só para quem é dono) ---
+  const acM=document.getElementById('acessosModal'), acL=document.getElementById('acLista'),
+        acLog=document.getElementById('acLog'), acSenha=document.getElementById('acSenha');
+  const api = async (corpo)=>{
+    const r = await fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json',
+      ...(window.__TK?{authorization:'Bearer '+window.__TK}:{})}, body:JSON.stringify(corpo)});
+    const j = await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.erro||('erro '+r.status)); return j;
+  };
+  function senhaForte(){
+    const p='alpha bravo carbono delta enzima ferro gama hemo iodo jade kelvin lipase magneta neon osmio platina quartzo radon sigma titanio uranio vetor xenon zinco'.split(' ');
+    const r=n=>p[crypto.getRandomValues(new Uint32Array(1))[0]%p.length];
+    return [r(),r(),r(),r()].join('-')+'-'+(10+crypto.getRandomValues(new Uint32Array(1))[0]%90);
+  }
+  async function credenciais(senha){                       // hash p/ o servidor + envelope com a chave do painel
+    const enc=new TextEncoder(), b64=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    const base=await crypto.subtle.importKey('raw', enc.encode(senha), 'PBKDF2', false, ['deriveBits']);
+    const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'}, base, 256);
+    return {salt_auth:b64(salt), hash_auth:b64(bits), envelope: await window.__BI_ENVELOPE(window.__PW, senha)};
+  }
+  async function pintaAcessos(){
+    try{
+      const j = await api({acao:'listar'});
+      acL.innerHTML = `<table class="atab" style="width:100%"><thead><tr><th>Usuário</th><th>Nome</th><th>Papel</th><th>Último acesso</th><th></th></tr></thead><tbody>
+        ${j.usuarios.map(u=>`<tr><td><b>${esc(u.usuario)}</b></td><td>${esc(u.nome||'')}</td><td>${esc(u.papel||'')}</td>
+          <td style="color:var(--mut)">${u.ultimo_acesso?u.ultimo_acesso.slice(0,16).replace('T',' '):'nunca entrou'}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button data-senha="${esc(u.usuario)}" style="background:transparent;border:1px solid var(--line);color:var(--amber);border-radius:7px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">nova senha</button>
+            <button data-remove="${esc(u.usuario)}" style="background:transparent;border:1px solid var(--line);color:var(--red);border-radius:7px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">tirar acesso</button>
+          </td></tr>`).join('')}</tbody></table>`;
+      acLog.innerHTML = `<div style="font-weight:800;font-size:13px;margin-bottom:6px">Últimos acessos</div>
+        <div style="max-height:200px;overflow:auto"><table class="atab" style="width:100%"><tbody>
+        ${(j.acessos||[]).slice(0,30).map(a=>`<tr><td style="color:var(--mut);white-space:nowrap">${a.quando.slice(0,16).replace('T',' ')}</td>
+          <td><b>${esc(a.usuario)}</b></td><td style="color:${/falha/.test(a.evento)?'var(--red)':'var(--ink)'}">${esc(a.evento)}</td>
+          <td style="color:var(--mut);font-size:11px">${esc((a.ip||'').slice(0,20))}</td></tr>`).join('')}</tbody></table></div>`;
+      acL.querySelectorAll('[data-remove]').forEach(b=>b.onclick=async()=>{
+        if(!confirm('Tirar o acesso de '+b.dataset.remove+'? Ele perde o login na hora.')) return;
+        try{ await api({acao:'remover_usuario', usuario:b.dataset.remove}); pintaAcessos(); }catch(e){ alert(e.message); }});
+      acL.querySelectorAll('[data-senha]').forEach(b=>b.onclick=()=>criar(b.dataset.senha, null, null, true));
+    }catch(e){ acL.innerHTML='<div style="color:var(--amber)">Não consegui listar: '+esc(e.message)+'</div>'; }
+  }
+  async function criar(usuario, nome, papel, so_senha){
+    try{
+      const u=(usuario||'').trim().toLowerCase(); if(!u) { alert('Informe o usuário.'); return; }
+      const senha=senhaForte();
+      const c=await credenciais(senha);
+      await api({acao:'salvar_usuario', usuario:u, nome:(nome||u), papel:(papel||'socio'), abas:['*'], trocar_senha:true, ...c});
+      acSenha.style.display='';
+      acSenha.innerHTML = `<div style="font-size:12px;color:var(--mut)">${so_senha?'Nova senha de':'Acesso criado para'} <b style="color:var(--ink)">${esc(u)}</b> — anote agora, ela não aparece de novo:</div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap">
+          <code style="font-size:18px;font-weight:800;letter-spacing:.02em;color:var(--green)">${esc(senha)}</code>
+          <button id="acCopiar" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit;font-size:12px">Copiar</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--mut);margin-top:6px">Mande por um canal seguro e peça para trocar no primeiro acesso (botão “Trocar senha”).</div>`;
+      const cp=document.getElementById('acCopiar');
+      if(cp) cp.onclick=()=>{ navigator.clipboard.writeText(senha).then(()=>{ cp.textContent='Copiado ✓'; }); };
+      pintaAcessos();
+    }catch(e){ alert('Não deu: '+e.message); }
+  }
+  const btA=document.getElementById('btAcessos');
+  if(btA) btA.onclick=()=>{ acM.style.display=''; acSenha.style.display='none'; pintaAcessos(); };
+  const acF=document.getElementById('acFechar'); if(acF) acF.onclick=()=>{ acM.style.display='none'; };
+  const acC=document.getElementById('acCriar');
+  if(acC) acC.onclick=()=>criar(document.getElementById('acUser').value,
+                                document.getElementById('acNome').value,
+                                document.getElementById('acPapel').value, false);
+
   if(btS) btS.onclick=()=>{ try{ sessionStorage.removeItem('bi_tk'); }catch(_){}
     window.__TK=null; window.__PW=null; location.reload(); };
 

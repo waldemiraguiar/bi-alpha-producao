@@ -230,6 +230,29 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
   </div>
 </div>
 <button id="bioSetup" style="display:none;position:fixed;right:14px;bottom:14px;z-index:30;background:rgba(10,22,40,.92);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">👆 Proteger com digital</button>
+<div id="acessosModal" style="display:none;position:fixed;inset:0;z-index:60;background:rgba(3,10,20,.82);backdrop-filter:blur(3px);overflow:auto;padding:28px 14px">
+  <div style="max-width:760px;margin:0 auto;background:var(--navy2,#0f1b2b);border:1px solid var(--line);border-radius:14px;padding:18px 20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h3 style="margin:0;font-size:17px">👥 Quem entra no BI</h3>
+      <button id="acFechar" type="button" style="background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 11px;cursor:pointer;font-family:inherit">Fechar</button>
+    </div>
+    <div id="acLista" style="margin-top:12px"></div>
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <div style="font-weight:800;font-size:13px;margin-bottom:8px">Dar acesso a alguém</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="acUser" placeholder="usuário (ex.: fulvio)" style="background:rgba(0,0,0,.25);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px;width:180px">
+        <input id="acNome" placeholder="nome completo" style="background:rgba(0,0,0,.25);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px;width:240px">
+        <select id="acPapel" style="background:rgba(0,0,0,.25);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px">
+          <option value="socio">sócio (vê tudo)</option><option value="dono">dono (vê tudo e administra acessos)</option>
+        </select>
+        <button id="acCriar" type="button" style="background:linear-gradient(135deg,var(--cyan),var(--green));color:#07121f;font-weight:800;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-family:inherit;font-size:13px">Criar e gerar senha</button>
+      </div>
+      <div id="acSenha" style="display:none;margin-top:12px;border:2px solid var(--green);border-radius:10px;padding:12px 14px;background:rgba(0,229,160,.08)"></div>
+    </div>
+    <div id="acLog" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px"></div>
+  </div>
+</div>
+
 <div class="wrap" id="dash" style="display:none">
   <header class="top">
     <div class="brand">
@@ -243,6 +266,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
       <div class="period" id="period">carregando…</div>
       <div id="sessaoBox" style="display:none;align-items:center;gap:8px;font-size:11.5px;color:var(--mut)">
         <span>👤 <b id="quemEntrou" style="color:var(--ink)"></b></span>
+        <button id="btAcessos" type="button" style="display:none;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">👥 Acessos</button>
         <button id="btTrocaSenha" type="button" style="background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">Trocar senha</button>
         <button id="btSair" type="button" style="background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">Sair</button>
       </div>
@@ -295,6 +319,6 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
   <footer id="foot"></footer>
 </div>
 <script src="bio.js"></script>
-<script src="app.js?v=104"></script>
+<script src="app.js?v=105"></script>
 </body>
 </html>

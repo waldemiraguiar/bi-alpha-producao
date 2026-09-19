@@ -89,7 +89,9 @@ export default async (req) => {
   try { b = await req.json(); } catch (e) { return J({ erro: "json invalido" }, 400); }
   const acao = String(b.acao || "entrar");
   const st = usuarios();
-  const admin = SECRET && req.headers.get("x-pwd") === SECRET;
+  // administrador: senha mestre (scripts locais) OU sessão de quem é "dono" (gestão pelo próprio BI)
+  const sessao = confereToken((req.headers.get("authorization") || "").replace(/^Bearer\s+/i, ""));
+  const admin = (SECRET && req.headers.get("x-pwd") === SECRET) || (sessao && sessao.p === "dono");
 
   // ---- administração (script local, com a senha mestre) ----
   if (acao === "salvar_usuario" || acao === "remover_usuario" || acao === "listar") {
@@ -108,7 +110,7 @@ export default async (req) => {
     if (!u) return J({ erro: "usuario invalido" }, 400);
     if (acao === "remover_usuario") {
       await st.delete(u);
-      await registra({ usuario: u, evento: "usuario removido", ip, ua });
+      await registra({ usuario: u, evento: "usuario removido" + (sessao ? " por " + sessao.u : ""), ip, ua });
       return J({ ok: true, removido: u });
     }
     if (!b.salt_auth || !b.hash_auth || !b.envelope) return J({ erro: "faltam campos" }, 400);
@@ -118,7 +120,7 @@ export default async (req) => {
       salt_auth: b.salt_auth, hash_auth: b.hash_auth, envelope: b.envelope,
       criado: new Date().toISOString(), trocar_senha: !!b.trocar_senha,
     });
-    await registra({ usuario: u, evento: "usuario criado/atualizado", ip, ua });
+    await registra({ usuario: u, evento: "usuario criado/atualizado" + (sessao ? " por " + sessao.u : ""), ip, ua });
     return J({ ok: true, usuario: u });
   }
 
