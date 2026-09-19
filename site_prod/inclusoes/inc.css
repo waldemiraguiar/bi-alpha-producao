@@ -608,3 +608,11 @@ body.terremoto-on{animation:chaoTerremoto 1.6s ease-in-out infinite}
 .pan-calmo{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:14px;padding:12px 18px;font-size:16px;font-weight:600}
 .pan-rodape{margin-top:12px;background:var(--painel);border:1px solid var(--linha);border-radius:12px;padding:10px 16px;font-size:14.5px}
 body.tv .pan-num b{font-size:40px} body.tv .pan-card h3{font-size:24px}
+
+/* Thailan 18/set: aba do setor pisca com o número de inclusões esperando */
+#abas button.tem{border-color:var(--cc);color:var(--cc);font-weight:700}
+#abas button.tem-atrasado{border-color:var(--vermelho);color:var(--vermelho);animation:abaSetor 1s ease-in-out infinite}
+@keyframes abaSetor{50%{background:#fff1f2;box-shadow:0 0 0 4px rgba(220,38,38,.18)}}
+.acao button.cancelar{background:var(--painel);color:var(--mudo);box-shadow:inset 0 0 0 1px var(--linha)}
+.acao button.cancelar:hover{color:var(--texto);box-shadow:inset 0 0 0 1px var(--mudo)}
+@media (prefers-reduced-motion:reduce){#abas button.tem-atrasado{animation:none}}
