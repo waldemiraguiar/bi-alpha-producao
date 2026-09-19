@@ -130,6 +130,7 @@ async function decryptDashboard(pwd){
     const j = await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(j.erro || 'usuário ou senha inválidos');
     window.__TK = j.token; window.__USER = {usuario, nome:j.nome, papel:j.papel, abas:j.abas};
+    window.__CRED = usuario + '\n' + senha;              // só em memória, para ativar a digital depois
     try{ sessionStorage.setItem('bi_tk', j.token); }catch(_){}
     const chave = await abreEnvelope(j.envelope, senha);   // a chave do painel só existe aqui, no navegador
     await enter(chave);
@@ -149,7 +150,13 @@ async function decryptDashboard(pwd){
     document.getElementById('dash').style.display='';
     render(D);
     // oferece ativar a digital (PRF) depois de entrar com a senha, se o Mac suportar e ainda não estiver ativa
-    if(bset && BIO && !BIO.enabled() && await BIO.platformAvailable()) bset.style.display='';
+    if(bset && BIO){
+      const temTouch = await BIO.platformAvailable();
+      bset.style.display='';
+      bset.textContent = !temTouch ? '👆 Digital: não disponível neste navegador'
+        : BIO.enabled() ? '👆 Refazer digital neste aparelho' : '👆 Proteger com digital';
+      bset.dataset.tem = temTouch ? '1' : '0';
+    }
     return true;
   }
 
@@ -278,10 +285,13 @@ async function decryptDashboard(pwd){
     window.__TK=null; window.__PW=null; location.reload(); };
 
   if(bset) bset.onclick=async()=>{
-    const pw = window.__PW; if(!pw){ alert('Entre com a senha primeiro.'); return; }
-    const usr=(document.getElementById('gateUser')||{}).value||'', sen=(document.getElementById('gatePwd')||{}).value||'';
-    const guardar = (usr.trim() && sen) ? (usr.trim()+'\n'+sen) : pw;
+    if(bset.dataset.tem==='0'){
+      alert('Este navegador não oferece Touch ID / Face ID para sites.\n\nNo Mac use o Safari ou o Chrome (com Touch ID ligado no sistema); no iPhone, o Safari. Em janela anônima não funciona.');
+      return; }
+    const guardar = window.__CRED;
+    if(!guardar){ alert('Para ativar a digital, saia e entre digitando usuário e senha — é isso que ela vai guardar.'); return; }
     try{ bset.textContent='👆 Toque p/ ativar…';
+      try{ if(BIO.enabled()) BIO.disable(); }catch(_){}    // apaga digital antiga (formato velho)
       await BIO.register(guardar);                   // cria passkey + cifra a senha com a chave do Touch ID
       bset.textContent='✅ Digital ativa neste Mac';
       try{ localStorage.setItem('bi_bio_v','2'); }catch(_){} setTimeout(()=>{ bset.style.display='none'; }, 1800);
