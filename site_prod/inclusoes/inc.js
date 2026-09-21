@@ -244,17 +244,28 @@
     const mostrar = (setor === 'cc' || setor === 'todos') && lista.length
     el.hidden = !mostrar
     if (!mostrar) return
-    el.innerHTML = `<h3>🤖 ${lista.length} cartão${lista.length > 1 ? 'ões' : ''} que a IA abriu sozinha — confira e confirme</h3>` + lista.map(c => `
-      <div class="rasc" data-id="${c.id}">
+    // 21/set: era `cartão${'ões'}` e saía "2 cartãoões" na tela. Plural irregular do português.
+    el.innerHTML = `<h3>🤖 ${lista.length} ${lista.length > 1 ? 'cartões' : 'cartão'} que a IA abriu sozinha — confira e confirme</h3>` + lista.map(c => {
+      const grupo = grupoDoRascunho(c)
+      const bate = grupoBateComClinica(grupo, c.clinica)
+      return `
+      <div class="rasc${!bate ? ' rasc-diverge' : ''}" data-id="${c.id}">
         <div class="rasc-msg">${esc(c.obs || '')}</div>
+        <div class="rasc-origem">${grupo
+          ? `📱 pedido veio do grupo <b>${esc(grupo)}</b>`
+          : `📱 <span class="rasc-semgrupo">grupo de origem não identificado — confira antes de confirmar</span>`}</div>
+        ${!bate ? `<div class="rasc-alerta">⚠️ <b>O grupo que pediu não parece ser a clínica da requisição.</b><br>
+          pediu de <b>${esc(nomeClinica(grupo))}</b> · requisição ${esc(c.req || '—')} é de <b>${esc(c.clinica || '—')}</b>.
+          Confirme com a clínica antes de mandar para a Área Técnica.</div>` : ''}
         <div class="rasc-campos">
           <label>Requisição <input data-campo="req" value="${esc(c.req || '')}" inputmode="numeric"></label>
           <label>Pet <input data-campo="pet" value="${esc(c.pet || '')}"></label>
           <label>Exame <input data-campo="exame" value="${esc(c.exame || '')}"></label>
-          <span class="rasc-clin">${esc(c.clinica || '')}${c.novo_numero ? ' · <b class="rosa">amostra de outro dia → novo nº</b>' : ''}</span>
+          <span class="rasc-clin">🏥 ${esc(c.clinica || 'clínica não identificada')}${c.novo_numero ? ' · <b class="rosa">amostra de outro dia → novo nº</b>' : ''}</span>
         </div>
         <div class="acao"><button data-rasc="confirmar">✔ Confirmar e mandar para a Área Técnica</button><button class="nao" data-rasc="descartar">🚫 A IA errou — descartar</button></div>
-      </div>`).join('')
+      </div>`
+    }).join('')
   }
   $('rascunhos') && $('rascunhos').addEventListener('click', async ev => {
     const b = ev.target.closest('button[data-rasc]'); if (!b) return
@@ -263,6 +274,17 @@
     const val = campo => cx.querySelector(`input[data-campo="${campo}"]`).value.trim()
     try {
       if (b.dataset.rasc === 'descartar' && !confirm('Descartar este cartão? A IA não deveria ter aberto.')) return
+      // 21/set: confirmar despacha material para a Área Técnica. Se o grupo que pediu não bate com a
+      // clínica da requisição, a pessoa tem que dizer que viu — a trava é aqui, não só na cor do cartão.
+      if (b.dataset.rasc === 'confirmar') {
+        const ch = chamados.find(x => x.id === id) || {}
+        const g = grupoDoRascunho(ch)
+        if (!grupoBateComClinica(g, ch.clinica) &&
+            !confirm(`ATENÇÃO — conferir antes de mandar para a Área Técnica.\n\n` +
+                     `O pedido veio do grupo:  ${nomeClinica(g)}\n` +
+                     `A requisição ${ch.req || '—'} é da clínica:  ${ch.clinica || '—'}\n\n` +
+                     `São clínicas diferentes. Confirmar mesmo assim?`)) return
+      }
       await rpc('inc_rascunho_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: b.dataset.rasc, p_req: val('req'), p_pet: val('pet'), p_exame: val('exame') })
       toast(b.dataset.rasc === 'confirmar' ? 'Cartão confirmado — seguiu para a Área Técnica' : 'Rascunho descartado')
       await carregar(); desenhar()
@@ -484,6 +506,26 @@
   const ehColeta = t => COLETA_RX.test(t || '') || SO_AVISO_RX.test((t || '').trim())
   const examesDoTexto = t => EXAMES_IA.filter(([rx]) => rx.test(t || '')).map(([, n]) => n)
   const nomeClinica = g => (g || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').replace(/^[^A-Za-z0-9]+/, '').trim()
+  // 21/set — Thailan, por áudio: "ele não me informa qual clínica que é, ele só me dá a opção de
+  // mandar para a área técnica… apareça o nome da clínica e em qual grupo está fazendo esse acréscimo".
+  // O cartão da IA mostrava só a clínica RESOLVIDA (vem do HF pela requisição). O grupo de WhatsApp
+  // de ONDE o pedido saiu não aparecia em lugar nenhum — então ninguém via quando os dois divergiam.
+  // O grupo já está em inc_suspeitas (100% preenchido) e o cartão guarda msg_id: dá para ligar os
+  // dois aqui no navegador, sem mexer no banco.
+  const grupoDoRascunho = c => (suspeitas.find(s => s.msg_id && c.msg_id && s.msg_id === c.msg_id) || {}).grupo || ''
+  // Divergência entre o grupo que pediu e a clínica da requisição digitada: é assim que uma amostra
+  // vai para o cliente errado. Comparação conservadora — só acusa quando NENHUMA palavra significativa
+  // é comum, para não virar alarme falso (regra do teto de alarme).
+  const palavrasFortes = s => new Set((s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(p => p.length >= 4 &&
+      !['alpha', 'labs', 'clinica', 'veterinaria', 'veterinario', 'pet', 'shop', 'vet', 'animal', 'centro', 'hospital', 'dra', 'dr'].includes(p)))
+  function grupoBateComClinica(grupo, clinica) {
+    if (!grupo || !clinica) return true                       // sem um dos dois, não dá para julgar
+    const a = palavrasFortes(nomeClinica(grupo)), b = palavrasFortes(clinica)
+    if (!a.size || !b.size) return true                       // nome genérico demais: não acuso
+    for (const p of a) for (const q of b) if (p === q || p.includes(q) || q.includes(p)) return true
+    return false
+  }
   function chipsIA(x) {
     const ch = []
     if (x.sug_req) {
@@ -1924,12 +1966,23 @@
       c('PETZIUS', '641702', 'Diro AG + Knoff', 'pcr_soro', 5, 12, { setores: 'pcr_soro,hemato', setores_ok: 'pcr_soro' }),
       c('KIRA', '639871', 'Ureia', 'bioquimica', 2, 31),
       c('REX', '639800', 'Colesterol', 'bioquimica', 7, 0, { status: 'concluido', concluido_em: min(15), criado_em: min(200) }),
+      // 21/set — dois rascunhos da IA no modo demonstração, para dar para VER o cartão sem usar
+      // dado real: um em que o grupo bate com a clínica, outro em que NÃO bate (é o caso perigoso).
+      c('ZEUS', '640912', 'Fósforo + Ureia', 'bioquimica', 1, 4, {
+        status: 'rascunho', por_ia: true, msg_id: 'DEMO-OK', clinica: 'Pet Sorriso',
+        obs: 'WhatsApp 09:26: Podem incluir fósforo e ureia no exame do Zeus por favor?' }),
+      c('DENDE', '640819', 'Fósforo + Bilirrubinas', 'bioquimica', 1, 9, {
+        status: 'rascunho', por_ia: true, msg_id: 'DEMO-DIVERGE', clinica: 'Cigavet', novo_numero: true,
+        obs: 'WhatsApp 09:26: Bom dia! Teria como acrescentar no exame do felino Dendê bilirrubina total e fósforo?' }),
     ]
     suspeitas = [{ id: 1, status: 'aberta', tipo: 'inclusao', quando: min(22), grupo: 'Alpha - Pet Sorriso', autor: 'Dra. Ana', texto: 'Podem incluir fósforo e ureia no exame do Zeus por favor?', sug_req: '640912', sug_pet: 'ZEUS', sug_cliente: 'Pet Sorriso', sug_entrada: min(160), sug_n: 2 },
       { id: 4, status: 'aberta', tipo: 'inclusao', quando: min(6), grupo: 'Alpha - Clínica Aurora', autor: 'Recepção', texto: 'Consegue adicionar SDMA na requisição da Nina?', sug_n: 0 },
       { id: 5, status: 'aberta', tipo: 'inclusao', quando: min(31), grupo: 'Alpha - Vet Horizonte', autor: 'Dra. Lu', texto: 'Ainda tem sangue do Bob? Queria acrescentar T4', sug_req: '640877', sug_pet: 'BOB', sug_cliente: 'Vet Horizonte', sug_entrada: min(26 * 60), sug_n: 2 },
       { id: 2, status: 'aberta', tipo: 'amostra', quando: min(9), grupo: 'Alpha - Vet Horizonte', autor: 'Recepção', texto: 'Ainda tem amostra da Mel? Queria ver uma coisa' },
-      { id: 3, status: 'registrada', tipo: 'inclusao', quando: min(95), grupo: 'Alpha - Bandeirantes', autor: 'Dra.', texto: 'Pode acrescentar fibrinogênio e colesterol', resolvido_por: 'DEMO', resolvido_em: min(80) }]
+      { id: 3, status: 'registrada', tipo: 'inclusao', quando: min(95), grupo: 'Alpha - Bandeirantes', autor: 'Dra.', texto: 'Pode acrescentar fibrinogênio e colesterol', resolvido_por: 'DEMO', resolvido_em: min(80) },
+      // as duas suspeitas que deram origem aos rascunhos acima (ligadas pelo msg_id)
+      { id: 10, status: 'aberta', tipo: 'inclusao', quando: min(4), msg_id: 'DEMO-OK', grupo: 'Alpha - Pet Sorriso', autor: 'Dra. Ana', texto: 'Podem incluir fósforo e ureia no exame do Zeus por favor?', sug_req: '640912', sug_pet: 'ZEUS', sug_cliente: 'Pet Sorriso', sug_n: 2 },
+      { id: 11, status: 'aberta', tipo: 'inclusao', quando: min(9), msg_id: 'DEMO-DIVERGE', grupo: 'Alpha - Bandeirantes', autor: 'Recepção', texto: 'Bom dia! Teria como acrescentar no exame do felino Dendê bilirrubina total e fósforo?', sug_req: '640819', sug_pet: 'DENDE', sug_n: 1 }]
     coletas = [
       { id: 1, quando: min(22), grupo: 'Alpha - Vet Horizonte', clinica: 'Vet Horizonte', autor: 'Recepção', texto: 'Tenho amostra para buscar, dá para passar hoje?', rota_sug: 'rota 4', turno_sug: 'tarde de hoje', corte_em: new Date(agora() + 9 * 60000).toISOString(), status: 'nova' },
       { id: 2, quando: min(7), grupo: 'Alpha - Pet Sorriso', clinica: 'Pet Sorriso', autor: 'Dra. Ana', texto: 'Pode mandar o motoboy buscar duas amostras?', rota_sug: 'rota 2', turno_sug: 'tarde de hoje', corte_em: new Date(agora() + 52 * 60000).toISOString(), status: 'nova' },
