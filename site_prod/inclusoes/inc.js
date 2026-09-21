@@ -111,6 +111,7 @@
       conferencia = cf.error ? [] : (cf.data || [])
       const tr = await SB.from('inc_terremotos').select('*').gte('aberto_em', new Date(agora() - 3 * 864e5).toISOString())
       terremotos = tr.error ? [] : (tr.data || [])
+      carregarSensiveis()            // não bloqueia: se o CRM estiver fora, o quadro abre igual
       const sp = await SB.from('inc_suspeitas').select('*').gte('quando', new Date(agora() - 8 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
       suspeitas = sp.error ? [] : (sp.data || [])
       $('conexao').textContent = ''
@@ -250,6 +251,8 @@
       const bate = grupoBateComClinica(grupo, c.clinica)
       return `
       <div class="rasc${!bate ? ' rasc-diverge' : ''}" data-id="${c.id}">
+        ${(() => { const sv = clienteSensivel(c.clinica, grupo); return sv
+          ? `<div class="sensivel">🚨 <b>CLIENTE SENSÍVEL — atenção máxima</b><br>${esc(sv.obs || 'marcado pela equipe no CRM')}${sv.por ? ` <span class="mudo">· marcado por ${esc(sv.por)}</span>` : ''}</div>` : '' })()}
         <div class="rasc-msg">${esc(c.obs || '')}</div>
         <div class="rasc-origem">${grupo
           ? `📱 pedido veio do grupo <b>${esc(grupo)}</b>`
@@ -402,12 +405,14 @@
     explodir(meus)
   }
   function cartaoHTML(c) {
+    const _sv = clienteSensivel(c.clinica)
     const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[etapaVisivel(c)]
     const prazoTxt = c.pausado ? 'esperando a clínica' : c.status === 'sem_amostra' ? 'avisar o cliente' : c.etapa === ETAPA_EXAME ? `prazo ${fmt(PRAZO_EXAME_MIN[c.setor])}` : ROTULO[st]
     const amostra = VALIDADE_H[c.setor] && c.amostra_entrada && pct >= 50
       ? `<div class="amostra ${pct >= 80 ? 'alerta' : ''}">amostra ${pct}% da validade<span class="barra"><i style="width:${pct}%"></i></span></div>` : ''
     return `<article class="cartao ${st}" data-id="${c.id}" title="aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}${c.obs ? ' · ' + esc(c.obs) : ''}">
       <div class="c-esq">
+        ${_sv ? `<div class="selo-sens" title="${esc(_sv.obs || '')}">🚨 SENSÍVEL</div>` : ''}
         ${ehNovo(c) ? '<div class="selo-novo">🔔 NOVO</div>' : ''}
         <div class="c-etapa">${c.status === 'sem_amostra' ? '<span class="selo">sem amostra</span>' : `${etapaVisivel(c)} · ${e ? e.nome : ''}`}${c.novo_numero ? ` <span class="selo novo">${c.novo_req ? 'novo nº ' + esc(c.novo_req) : '🆕 amostra de outro dia: novo nº + nova requisição'}</span>` : ''}</div>
         <div class="c-pet">${esc(c.pet || 'sem nome')} <span class="req">${esc(c.req)}</span></div>
@@ -505,6 +510,29 @@
   const SO_AVISO_RX = /^\W*((bom dia|boa tarde|boa noite|ol[aá]|oi)[\s,!.]*)*(tenho|tem|temos|t[oô] com|estou com|j[aá] tem|h[aá])\s+(\d+\s+)?amostras?\b[^?]*$/i
   const ehColeta = t => COLETA_RX.test(t || '') || SO_AVISO_RX.test((t || '').trim())
   const examesDoTexto = t => EXAMES_IA.filter(([rx]) => rx.test(t || '')).map(([, n]) => n)
+  // ── PEDIDO 4 DA THAILAN (áudio 21/set): "caso seja um cliente sensível, ele precisa emitir um
+  // alerta quando abrir a aba para a gente colocar o restante das informações. Só para chamar a atenção."
+  // A lista de clientes sensíveis é mantida pela equipe no CRM (aba 🚨 Sensíveis). Aqui só LEMOS:
+  // a função do CRM libera CORS e o GET não pede senha. Quem edita continua sendo o CRM — uma dona só.
+  const SENSIVEIS_API = 'https://agente-crm-matriz.netlify.app/api/crm-sensiveis'
+  let sensiveis = []
+  async function carregarSensiveis() {
+    try {
+      const r = await fetch(SENSIVEIS_API, { cache: 'no-store' })
+      if (r.ok) sensiveis = ((await r.json()).sensiveis || []).filter(x => x && x.nome)
+    } catch { /* CRM fora do ar não pode derrubar o quadro */ }
+  }
+  // casa o nome do cliente sensível com o nome da clínica/grupo, sem exigir grafia idêntica
+  const chaveSens = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+  function clienteSensivel(...textos) {
+    const alvo = textos.filter(Boolean).map(chaveSens).join('|')
+    if (!alvo) return null
+    return sensiveis.find(x => {
+      const k = chaveSens(x.nome)
+      return k.length >= 4 && alvo.includes(k)
+    }) || null
+  }
   const nomeClinica = g => (g || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').replace(/^[^A-Za-z0-9]+/, '').trim()
   // 21/set — Thailan, por áudio: "ele não me informa qual clínica que é, ele só me dá a opção de
   // mandar para a área técnica… apareça o nome da clínica e em qual grupo está fazendo esse acréscimo".
@@ -557,7 +585,9 @@
       const estado = cls === 'sem' ? 'SEM CARTÃO' : cls === 'novo' ? 'AGUARDANDO' : x.status === 'nao_e_inclusao' ? 'NÃO É INCLUSÃO' : 'COM CARTÃO'
       const quem = x.resolvido_por ? ` · ${esc(x.resolvido_por)} ${x.resolvido_em ? hm(x.resolvido_em) : ''}` : ''
       return `<div class="ia-item ${cls}" data-id="${x.id}">
-        <div class="ia-clin">${esc(nomeClinica(x.grupo))} <span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)} · ${esc(x.autor || '')}</span></div>
+        <div class="ia-clin">${esc(nomeClinica(x.grupo))} <span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)} · ${esc(x.autor || '')}</span>${clienteSensivel(x.grupo, x.sug_cliente) ? ' <span class="selo-sens">🚨 SENSÍVEL</span>' : ''}</div>
+        ${(() => { const sv = clienteSensivel(x.grupo, x.sug_cliente); return sv && x.status === 'aberta'
+          ? `<div class="sensivel">🚨 <b>CLIENTE SENSÍVEL</b> — ${esc(sv.obs || 'atenção máxima')}</div>` : '' })()}
         <div class="ia-msg">“${esc(x.texto)}”</div>
         ${x.motivo ? `<div class="ia-motivo">${x.status === 'nao_e_inclusao' ? '🚫 errou porque' : '✖️ cancelado porque'}: <b>${esc(x.motivo)}</b></div>` : ''}
         ${chipsIA(x)}
@@ -568,7 +598,26 @@
     const porIdade = (a, b) => T(a.quando) - T(b.quando)
     $('rastLista').innerHTML = (inc.length ? [...semCartao.sort(porIdade).map(x => bloco(x, 'sem')), ...agora_.sort(porIdade).map(x => bloco(x, 'novo')), ...tratadas.sort((a, b) => T(b.quando) - T(a.quando)).map(x => bloco(x, 'ok'))].join('') : '<div class="vazio">Nenhum pedido de inclusão captado no período.</div>')
       + `<h3 class="ia-sub">Perguntas sobre amostra (sem pedido de exame)</h3>`
-      + (amo.length ? amo.map(x => `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}" data-id="${x.id}"><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span><span><b>${esc(nomeClinica(x.grupo))}</b> “${esc(x.texto)}”</span>${x.status === 'aberta' ? '<span class="acao"><button class="cancelar" data-sus="registrada" title="Você já resolveu com a clínica ou o cartão já existe. Some daqui e a IA não aprende nada.">✖️ Cancelar alerta</button><button class="nao" data-sus="nao_e_inclusao" title="A IA não deveria ter captado isso. Frases parecidas deixam de aparecer.">🚫 A IA errou</button></span>' : `<span class="mudo">tratado · ${esc(x.resolvido_por || '')}${x.motivo ? ` · <b>${esc(x.motivo)}</b>` : ''}</span>`}</div>`).join('') : '<div class="vazio">Nenhuma no período.</div>')
+      + (amo.length ? amo.map(x => {
+          const sv = clienteSensivel(x.grupo)
+          // PEDIDOS 5 e 6 DA THAILAN (áudios 21/set):
+          //  5 · "acrescentar mais dois ícones: Acrescentar inclusão e Qual amostra eu tenho?
+          //       se é amostra de bioquímica, de hemograma, se é soro"
+          //  6 · "um ícone pra alertar que essa amostra ainda não tá no laboratório, tá vindo com o
+          //       motoboy… pra gente clicar e colocar um comentário"
+          const acoes = x.status === 'aberta'
+            ? `<span class="acao">
+                 <button data-sus="virar" title="Transformar esta pergunta em cartão de inclusão, já com a clínica preenchida">➕ Acrescentar inclusão</button>
+                 <button class="amostra" data-sus="amostra" title="Registrar qual amostra a clínica tem: bioquímica, hemograma, soro…">🧪 Qual amostra eu tenho?</button>
+                 <button class="caminho" data-sus="a_caminho" title="A amostra ainda NÃO chegou ao laboratório — está vindo na próxima rota com o motoboy">🛵 Amostra a caminho</button>
+                 <button class="cancelar" data-sus="registrada" title="Você já resolveu com a clínica ou o cartão já existe. Some daqui e a IA não aprende nada.">✖️ Cancelar alerta</button>
+                 <button class="nao" data-sus="nao_e_inclusao" title="A IA não deveria ter captado isso. Frases parecidas deixam de aparecer.">🚫 A IA errou</button>
+               </span>`
+            : `<span class="mudo">${x.status === 'a_caminho' ? '🛵 <b>amostra a caminho</b>' : 'tratado'} · ${esc(x.resolvido_por || '')}${x.motivo ? ` · <b>${esc(x.motivo)}</b>` : ''}</span>`
+          return `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}${x.status === 'a_caminho' ? ' vindo' : ''}" data-id="${x.id}">
+            <span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span>
+            <span><b>${esc(nomeClinica(x.grupo))}</b>${sv ? ' <span class="selo-sens">🚨 SENSÍVEL</span>' : ''} “${esc(x.texto)}”${sv && x.status === 'aberta' ? `<br><span class="sens-linha">🚨 ${esc(sv.obs || 'cliente sensível — atenção máxima')}</span>` : ''}</span>
+            ${acoes}</div>` }).join('') : '<div class="vazio">Nenhuma no período.</div>')
     const b = document.querySelector('#abas button[data-setor="rast"]')
     const abertos = inc.filter(x => x.status === 'aberta').length + amo.filter(x => x.status === 'aberta').length
     const urgente = semCartao.length
@@ -1636,6 +1685,41 @@
     // 21/set: aqui havia um confirm("Marcar como RESOLVIDO?"). Agora a caixa de motivo, logo
     // abaixo, já mostra a mensagem original e já é a confirmação — manter os dois faria a Thailan
     // responder DUAS caixas para cancelar um alerta. Uma pergunta, uma resposta.
+    // ── PEDIDO 5a: "Acrescentar inclusão" — abre o cartão já com a clínica preenchida
+    if (b.dataset.sus === 'virar') {
+      const x = suspeitas.find(y => y.id === id)
+      setor = 'cc'; desenhar(); $('btnNova').click()
+      setTimeout(() => {
+        $('nClinica').value = nomeClinica(x?.grupo || '')
+        $('nObs').value = x ? `WhatsApp ${hm(x.quando)}: ${(x.texto || '').slice(0, 80)}` : ''
+        if (x && examesDoTexto(x.texto).length) $('nExame').value = examesDoTexto(x.texto).join(' + ')
+      }, 150)
+      return
+    }
+    // ── PEDIDO 5b: "Qual amostra eu tenho?" — registra o TIPO de amostra que a clínica tem
+    if (b.dataset.sus === 'amostra') {
+      const x = suspeitas.find(y => y.id === id)
+      const qual = await pedirMotivoIA({
+        titulo: 'Qual amostra a clínica tem?',
+        mensagem: (x?.texto || '').slice(0, 140),
+        opcoes: MOTIVOS_AMOSTRA,
+      })
+      if (qual === null) return
+      await marcar(id, 'registrada', `🧪 tem: ${qual}`, `Anotado: ${qual}`)
+      return
+    }
+    // ── PEDIDO 6: "Amostra a caminho" — ainda NÃO chegou ao laboratório, vem na próxima rota
+    if (b.dataset.sus === 'a_caminho') {
+      const x = suspeitas.find(y => y.id === id)
+      const obs = await pedirMotivoIA({
+        titulo: 'A amostra está a caminho — o que avisar?',
+        mensagem: (x?.texto || '').slice(0, 140),
+        opcoes: MOTIVOS_CAMINHO,
+      })
+      if (obs === null) return
+      await marcar(id, 'a_caminho', `🛵 ${obs}`, 'Marcado: amostra a caminho')
+      return
+    }
     let motivo = null
     if (b.dataset.sus === 'nao_e_inclusao') {
       const x = suspeitas.find(y => y.id === id)
@@ -1867,6 +1951,16 @@
     'Pegou o EXAME errado',
     'É pedido para OUTRO dia',
   ]
+  // PEDIDO 5b — os tipos de amostra que a Thailan citou no áudio ("bioquímica, hemograma, soro…")
+  const MOTIVOS_AMOSTRA = [
+    'Soro', 'Sangue total (EDTA) — hemograma', 'Sangue com fluoreto (glicose)',
+    'Plasma (citrato)', 'Urina', 'Lâmina', 'Swab', 'Fezes', 'Líquido cavitário / punção',
+  ]
+  // PEDIDO 6 — por que a amostra ainda não chegou
+  const MOTIVOS_CAMINHO = [
+    'Vem na próxima rota de hoje', 'Vem na rota da tarde', 'Vem amanhã de manhã',
+    'O motoboy já está a caminho', 'A clínica vai trazer', 'Aguardando a clínica separar',
+  ]
   const MOTIVOS_CANCELAR = [
     'Já existe cartão para esse pedido',
     'Já resolvi por fora',
@@ -1911,6 +2005,18 @@
   // A coluna de motivo pode ainda não existir no banco (SQL roda separado). Tento com motivo e,
   // se o banco não conhecer o parâmetro, registro sem ele e DIGO que o motivo não foi guardado —
   // silenciosamente perder a correção dela seria pior do que não ter o campo.
+  // marca a suspeita e cuida do modo demonstração num lugar só — foi o que faltou no 1º teste
+  async function marcar(id, status, motivo, okMsg) {
+    try {
+      let guardou = true
+      if (DEMO) {
+        const x = suspeitas.find(y => y.id === id)
+        if (x) { x.status = status; x.resolvido_por = 'DEMO'; x.resolvido_em = new Date().toISOString(); x.motivo = motivo }
+      } else guardou = await resolverSuspeita(id, status, motivo)
+      toast(guardou ? okMsg : 'Registrado, mas o comentário não foi guardado (falta rodar o SQL)')
+      await carregar(); desenhar()
+    } catch (e) { toast(e.message) }
+  }
   async function resolverSuspeita(id, status, motivo) {
     try { await rpc('inc_suspeita_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_status: status, p_motivo: motivo || null }); return true }
     catch (e) {

@@ -519,6 +519,35 @@ body.tv main{padding-bottom:90px}
 .rasc-campos{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 .rasc-campos label{display:grid;gap:2px;font-size:12px;color:var(--mudo)}
 .rasc-campos input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--linha);border-radius:8px;background:var(--painel);color:var(--texto);min-width:130px}
+/* 21/set — PEDIDOS 5 e 6 DA THAILAN: botões novos no bloco "perguntas sobre amostra".
+   Cores por função, não por enfeite: verde = vira cartão · azul = registra o que tem ·
+   laranja = ainda está vindo. Assim ela distingue sem ler. */
+.ia-amo .acao{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.ia-amo .acao button{font-size:12px;padding:5px 9px;white-space:nowrap}
+.ia-amo .acao button[data-sus="virar"]{border-color:#16a34a;color:#15803d;font-weight:600}
+.ia-amo .acao button[data-sus="virar"]:hover{background:#16a34a;color:#fff}
+.ia-amo .acao button.amostra{border-color:#0369a1;color:#0369a1}
+.ia-amo .acao button.amostra:hover{background:#0369a1;color:#fff}
+.ia-amo .acao button.caminho{border-color:#ea580c;color:#c2410c}
+.ia-amo .acao button.caminho:hover{background:#ea580c;color:#fff}
+/* item marcado como "amostra a caminho": fica visível que ainda não chegou */
+.ia-amo.vindo{border-left:4px solid #ea580c;background:#fff7ed}
+.sens-linha{font-size:12.5px;color:#b91c1c;font-weight:600}
+@media (prefers-color-scheme:dark){
+  .ia-amo.vindo{background:#2a1a0c;border-left-color:#f97316}
+  .sens-linha{color:#fca5a5}
+}
+/* 21/set — PEDIDO 4 DA THAILAN: cliente sensível. A lista vem do CRM (aba 🚨 Sensíveis).
+   Vermelho forte de propósito: é para chamar a atenção antes de ela digitar qualquer coisa. */
+.sensivel{background:#fef2f2;border:1.5px solid #dc2626;border-left:5px solid #dc2626;border-radius:8px;
+  padding:9px 12px;font-size:13.5px;line-height:1.5;color:#7f1d1d;margin-bottom:9px}
+.sensivel b{color:#991b1b}
+.selo-sens{display:inline-block;background:#dc2626;color:#fff;font-size:11px;font-weight:700;
+  letter-spacing:.04em;padding:2px 7px;border-radius:999px;vertical-align:middle}
+@media (prefers-color-scheme:dark){
+  .sensivel{background:#2a1010;border-color:#b91c1c;color:#fecaca}
+  .sensivel b{color:#fca5a5}
+}
 /* 21/set — caixa "por que a IA errou" (pedido da Thailan, por áudio) */
 #dlgErroIA{max-width:560px}
 .erroia-msg{font-size:14px;font-style:italic;color:var(--mudo);background:var(--fundo,#f8fafc);border-left:3px solid var(--linha);padding:8px 12px;border-radius:6px;margin:0 0 10px;line-height:1.5}
