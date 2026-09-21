@@ -559,6 +559,7 @@
       return `<div class="ia-item ${cls}" data-id="${x.id}">
         <div class="ia-clin">${esc(nomeClinica(x.grupo))} <span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)} · ${esc(x.autor || '')}</span></div>
         <div class="ia-msg">“${esc(x.texto)}”</div>
+        ${x.motivo ? `<div class="ia-motivo">${x.status === 'nao_e_inclusao' ? '🚫 errou porque' : '✖️ cancelado porque'}: <b>${esc(x.motivo)}</b></div>` : ''}
         ${chipsIA(x)}
         <div class="ia-lado"><div class="ia-tempo">${cls === 'ok' ? '✓' : fmt(minDesde(x))}</div><div class="ia-estado">${estado}${cls === 'ok' ? quem : ''}</div></div>
         ${x.status === 'aberta' ? `<div class="acao"><button data-sus="abrir">▶️ Iniciar inclusão</button><button class="cancelar" data-sus="registrada" title="O cartão já existe (ou já foi resolvido). Cancela só o alerta — a IA NÃO aprende nada com isso.">✖️ Cancelar alerta</button><button class="nao" data-sus="nao_e_inclusao" title="A IA não deveria ter captado isso. Frases parecidas deixam de aparecer.">🚫 A IA errou — não é inclusão</button></div>` : ''}
@@ -567,7 +568,7 @@
     const porIdade = (a, b) => T(a.quando) - T(b.quando)
     $('rastLista').innerHTML = (inc.length ? [...semCartao.sort(porIdade).map(x => bloco(x, 'sem')), ...agora_.sort(porIdade).map(x => bloco(x, 'novo')), ...tratadas.sort((a, b) => T(b.quando) - T(a.quando)).map(x => bloco(x, 'ok'))].join('') : '<div class="vazio">Nenhum pedido de inclusão captado no período.</div>')
       + `<h3 class="ia-sub">Perguntas sobre amostra (sem pedido de exame)</h3>`
-      + (amo.length ? amo.map(x => `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}" data-id="${x.id}"><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span><span><b>${esc(nomeClinica(x.grupo))}</b> “${esc(x.texto)}”</span>${x.status === 'aberta' ? '<span class="acao"><button class="cancelar" data-sus="registrada" title="Você já resolveu com a clínica ou o cartão já existe. Some daqui e a IA não aprende nada.">✖️ Cancelar alerta</button><button class="nao" data-sus="nao_e_inclusao" title="A IA não deveria ter captado isso. Frases parecidas deixam de aparecer.">🚫 A IA errou</button></span>' : `<span class="mudo">tratado · ${esc(x.resolvido_por || '')}</span>`}</div>`).join('') : '<div class="vazio">Nenhuma no período.</div>')
+      + (amo.length ? amo.map(x => `<div class="ia-amo ${x.status !== 'aberta' ? 'ok' : ''}" data-id="${x.id}"><span class="mudo">${dataCurta(x.quando)} ${hm(x.quando)}</span><span><b>${esc(nomeClinica(x.grupo))}</b> “${esc(x.texto)}”</span>${x.status === 'aberta' ? '<span class="acao"><button class="cancelar" data-sus="registrada" title="Você já resolveu com a clínica ou o cartão já existe. Some daqui e a IA não aprende nada.">✖️ Cancelar alerta</button><button class="nao" data-sus="nao_e_inclusao" title="A IA não deveria ter captado isso. Frases parecidas deixam de aparecer.">🚫 A IA errou</button></span>' : `<span class="mudo">tratado · ${esc(x.resolvido_por || '')}${x.motivo ? ` · <b>${esc(x.motivo)}</b>` : ''}</span>`}</div>`).join('') : '<div class="vazio">Nenhuma no período.</div>')
     const b = document.querySelector('#abas button[data-setor="rast"]')
     const abertos = inc.filter(x => x.status === 'aberta').length + amo.filter(x => x.status === 'aberta').length
     const urgente = semCartao.length
@@ -1632,14 +1633,14 @@
       }, 150)
       return
     }
-    // "Já abri o cartão" sem cartão de verdade = a omissão continua escondida (caso Bandeirantes 16/set) → confere antes
-    if (b.dataset.sus === 'registrada') {
-      const x = suspeitas.find(y => y.id === id)
-      if (!confirm(`Marcar como RESOLVIDO?\n\n"${(x?.texto || '').slice(0, 90)}"\n\nO item fica verde e vai para o histórico da aba.`)) return
-    }
+    // 21/set: aqui havia um confirm("Marcar como RESOLVIDO?"). Agora a caixa de motivo, logo
+    // abaixo, já mostra a mensagem original e já é a confirmação — manter os dois faria a Thailan
+    // responder DUAS caixas para cancelar um alerta. Uma pergunta, uma resposta.
+    let motivo = null
     if (b.dataset.sus === 'nao_e_inclusao') {
       const x = suspeitas.find(y => y.id === id)
-      if (!confirm(`Marcar como ERRO DA IA?\n\n"${(x?.texto || '').slice(0, 90)}"\n\nA IA vai parar de captar frases parecidas.`)) return
+      motivo = await pedirMotivoIA({ titulo: 'Por que a IA errou?', mensagem: (x?.texto || '').slice(0, 140), opcoes: MOTIVOS_ERRO })
+      if (motivo === null) return
     }
     if (b.dataset.sus === 'registrada') {
       const x = suspeitas.find(y => y.id === id)
@@ -1649,11 +1650,15 @@
         setTimeout(() => { $('nClinica').value = (x.grupo || '').replace(/^[^A-Za-z0-9]*Alpha-? ?-? ?/i, '').trim() }, 150)
         return
       }
+      motivo = await pedirMotivoIA({ titulo: 'Por que está cancelando o alerta?', mensagem: (x?.texto || '').slice(0, 140), opcoes: MOTIVOS_CANCELAR })
+      if (motivo === null) return
     }
     try {
-      if (DEMO) { const x = suspeitas.find(y => y.id === id); if (x) { x.status = b.dataset.sus; x.resolvido_por = 'DEMO'; x.resolvido_em = new Date().toISOString() } }
-      else await rpc('inc_suspeita_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_status: b.dataset.sus })
-      toast('Registrado'); await carregar(); desenhar()
+      let guardou = true
+      if (DEMO) { const x = suspeitas.find(y => y.id === id); if (x) { x.status = b.dataset.sus; x.resolvido_por = 'DEMO'; x.resolvido_em = new Date().toISOString(); x.motivo = motivo } }
+      else guardou = await resolverSuspeita(id, b.dataset.sus, motivo)
+      toast(!motivo ? 'Registrado' : guardou ? 'Registrado — obrigado, isso ensina a IA' : 'Registrado, mas o MOTIVO não foi guardado (falta rodar o SQL)')
+      await carregar(); desenhar()
     } catch (e) { toast(e.message) }
   })
 
@@ -1847,6 +1852,73 @@
       toast(e.message)
     }
   })
+  // ── POR QUE A IA ERROU (Thailan, 21/set, por áudio) ───────────────────────────────────────
+  // Antes era um confirm() de OK/Cancelar: a correção dela sumia e eu repetia o mesmo erro no dia
+  // seguinte. Agora o motivo é guardado. Motivos prontos em vez de só campo livre por dois motivos:
+  // ela responde em 1 clique (tem fila esperando), e o dado fica agrupável — dá para contar qual
+  // erro mais se repete e atacar a causa, em vez de ler 300 frases soltas.
+  const MOTIVOS_ERRO = [
+    'Não é pedido de exame — é outra conversa',
+    'É pedido de COLETA, não de inclusão',
+    'É dúvida sobre laudo ou resultado',
+    'Só perguntou se tem amostra, não pediu nada',
+    'Pegou a CLÍNICA errada',
+    'Pegou a REQUISIÇÃO errada',
+    'Pegou o EXAME errado',
+    'É pedido para OUTRO dia',
+  ]
+  const MOTIVOS_CANCELAR = [
+    'Já existe cartão para esse pedido',
+    'Já resolvi por fora',
+    'Pedido repetido — a clínica mandou duas vezes',
+    'A clínica desistiu / cancelou',
+    'Já estava concluído antes do alerta',
+  ]
+  function pedirMotivoIA({ titulo, mensagem, opcoes }) {
+    $('erroIATitulo').textContent = titulo
+    $('erroIAMsg').textContent = mensagem ? `"${mensagem}"` : ''
+    $('erroIAMsg').hidden = !mensagem
+    $('erroIAErro').textContent = ''
+    $('erroIAOutro').value = ''
+    let escolhido = ''
+    const caixa = $('erroIAOpcoes')
+    caixa.innerHTML = opcoes.map(m => `<button type="button" class="erroia-op" data-m="${esc(m)}">${esc(m)}</button>`).join('')
+    const clicar = ev => {
+      const b = ev.target.closest('.erroia-op'); if (!b) return
+      const jaEra = b.classList.contains('sel')
+      caixa.querySelectorAll('.erroia-op').forEach(x => x.classList.remove('sel'))
+      if (!jaEra) { b.classList.add('sel'); escolhido = b.dataset.m } else escolhido = ''
+      $('erroIAErro').textContent = ''
+    }
+    caixa.addEventListener('click', clicar)
+    // se já estiver aberta (dois cliques na corrida), fecho antes: showModal() numa caixa aberta
+    // lança erro e deixa dois estados disputando o mesmo formulário
+    if ($('dlgErroIA').open) $('dlgErroIA').close()
+    $('dlgErroIA').showModal()
+    return new Promise(res => {
+      const limpar = () => { caixa.removeEventListener('click', clicar); $('formErroIA').removeEventListener('submit', ok); $('dlgErroIA').removeEventListener('close', fechar) }
+      const ok = e => {
+        e.preventDefault()
+        const livre = $('erroIAOutro').value.trim()
+        if (!escolhido && !livre) { $('erroIAErro').textContent = 'Escolha um motivo ou escreva o seu.'; return }
+        limpar(); $('dlgErroIA').close(); res([escolhido, livre].filter(Boolean).join(' · ').slice(0, 200))
+      }
+      const fechar = () => { limpar(); res(null) }
+      $('formErroIA').addEventListener('submit', ok)
+      $('dlgErroIA').addEventListener('close', fechar, { once: true })
+    })
+  }
+  // A coluna de motivo pode ainda não existir no banco (SQL roda separado). Tento com motivo e,
+  // se o banco não conhecer o parâmetro, registro sem ele e DIGO que o motivo não foi guardado —
+  // silenciosamente perder a correção dela seria pior do que não ter o campo.
+  async function resolverSuspeita(id, status, motivo) {
+    try { await rpc('inc_suspeita_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_status: status, p_motivo: motivo || null }); return true }
+    catch (e) {
+      if (!/PGRST202|does not exist|could not find|schema cache/i.test(e.message || '')) throw e
+      await rpc('inc_suspeita_resolver', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_status: status })
+      return false
+    }
+  }
   function pedirMotivo(titulo, rotulo = 'Motivo') {
     $('motivoTitulo').textContent = titulo; $('motivoRotulo').textContent = rotulo; $('motivoTexto').value = ''; $('motivoErro').textContent = ''
     $('dlgMotivo').showModal()

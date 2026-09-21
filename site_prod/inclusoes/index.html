@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=62">
+<link rel="stylesheet" href="inc.css?v=65">
 </head>
 <body>
 <header class="topo">
@@ -238,6 +238,22 @@
   </form>
 </dialog>
 
+<!-- Thailan, 21/set (áudio): "sempre que a gente cancelar algum alerta ou colocar que é erro,
+     a gente precisa de alguma barra que a gente consiga colocar o motivo dela ter errado"
+     e "para ela aprender para não errar com o mesmo motivo novamente". -->
+<dialog id="dlgErroIA">
+  <form method="dialog" id="formErroIA">
+    <h2 id="erroIATitulo">Por que a IA errou?</h2>
+    <p class="erroia-msg" id="erroIAMsg"></p>
+    <p class="erroia-ajuda">Escolha o motivo. É assim que a IA aprende a não repetir.</p>
+    <div class="erroia-opcoes" id="erroIAOpcoes"></div>
+    <label class="erroia-livre">Quer explicar melhor? <span>(opcional)</span>
+      <input id="erroIAOutro" placeholder="com suas palavras" maxlength="160" autocomplete="off"></label>
+    <p class="erro" id="erroIAErro"></p>
+    <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Voltar</button><button class="btn-principal">Confirmar</button></div>
+  </form>
+</dialog>
+
 <dialog id="dlgSetor">
   <div class="setor-box">
     <h2>Qual é o seu setor?</h2>
@@ -259,6 +275,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=62"></script>
+<script src="inc.js?v=65"></script>
 </body>
 </html>
