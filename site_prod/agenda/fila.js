@@ -136,15 +136,35 @@
   })
 
   // ── login (mesma sessão do Quadro de Inclusões; eu nunca guardo nem defino senha) ──
-  function mostrarLogin() { $('#painelLogin').hidden = false; $('#inNome').focus() }
+  // ⚠️ 22/set: o Wal não conseguiu entrar. Eu tinha feito campo de texto livre, e o nome dele
+  // está cadastrado como "WAL" — qualquer diferença de maiúscula ou acento derruba o login.
+  // O Quadro de Inclusões nunca teve esse problema porque ESCOLHE o nome numa lista. Mesma coisa
+  // aqui: quem digita, erra; quem escolhe, não.
+  async function mostrarLogin() {
+    $('#painelLogin').hidden = false
+    try {
+      const { data } = await SB.rpc('sep_team_names')
+      const nomes = (data || []).map(x => typeof x === 'string' ? x : (x.nome || '')).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt'))
+      $('#inNome').innerHTML = '<option value="">escolha seu nome…</option>' +
+        nomes.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('')
+      const ultimo = localStorage.getItem('agenda_ultimo_nome')
+      if (ultimo && nomes.includes(ultimo)) $('#inNome').value = ultimo
+    } catch (e) {
+      // sem a lista, volta para digitar — melhor entrar torto do que não entrar
+      $('#inNome').outerHTML = '<input id="inNome" autocomplete="username" required placeholder="seu nome">'
+    }
+    $('#inNome').focus()
+  }
   $('#formLogin').addEventListener('submit', async ev => {
     ev.preventDefault()
     const nome = $('#inNome').value.trim(), senha = $('#inSenha').value
+    if (!nome) { $('#erroLogin').textContent = 'Escolha seu nome na lista'; $('#erroLogin').hidden = false; return }
+    try { localStorage.setItem('agenda_ultimo_nome', nome) } catch {}
     try {
       await rpc('inc_coleta_pegar', { p_nome: nome, p_senha: senha, p_id: 0, p_acao: 'ping' })
     } catch (e) {
       $('#erroLogin').textContent = /não conferem|login/i.test(e.message)
-        ? 'Nome ou senha não conferem' : 'Falta rodar o SQL da fila (inc_coleta_pegar)'
+        ? 'Senha não confere — é a mesma do Quadro de Inclusões' : ('Erro do sistema: ' + e.message)
       $('#erroLogin').hidden = false; return
     }
     sessao = { nome, senha, ate: Date.now() + 12 * 3600e3 }
