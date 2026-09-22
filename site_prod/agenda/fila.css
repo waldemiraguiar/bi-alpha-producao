@@ -1,0 +1,115 @@
+/* FILA DE AGENDAMENTO — Alpha Labs
+   Wal 22/09: "dashboard perfeito, limpo, funcional, simples, feijão com arroz. Bem ilustrado,
+   preciso ganhar a equipe de cara."
+
+   BENCHMARK aplicado (operações com fila de trabalho e várias pessoas em paralelo):
+   ① PULL, não PUSH (Toyota/lean · call centers) — ninguém recebe tarefa empurrada; cada um PEGA
+     o próximo. Evita duas pessoas no mesmo item e equilibra a carga sozinho.
+   ② CLAIM VISÍVEL (Zendesk · Linear · Jira) — ao pegar, o item trava e mostra QUEM está com ele.
+   ③ RELÓGIO NO CARD (Zendesk SLA · triagem hospitalar) — o que espera há mais tempo grita.
+   ④ UMA AÇÃO PRIMÁRIA por card (Material Design) — o botão óbvio, sem menu.
+   ⑤ CONTADOR NO TOPO (torre de controle) — quantos esperando, sempre à vista.
+   ⑥ FILA VAZIA É VITÓRIA (Inbox Zero) — tela de "acabou" em vez de tela em branco. */
+
+:root{
+  --fundo:#f4f6f8; --carta:#fff; --tinta:#16202a; --suave:#5b6b7a; --tenue:#8fa0af;
+  --linha:#e2e8ee; --azul:#15607a; --azulclaro:#e6f2f6;
+  --verde:#136b4a; --verdeclaro:#e7f4ee; --ambar:#8a5b00; --ambarclaro:#fdf3e0;
+  --vermelho:#9c2f24; --vermelhoclaro:#fbeceb;
+  --sombra:0 1px 2px rgba(22,32,42,.06), 0 8px 24px -18px rgba(22,32,42,.4);
+  --cond:'Barlow Condensed',system-ui,sans-serif;
+  --corpo:'Atkinson Hyperlegible',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--tinta);font-family:var(--corpo);font-size:15px;line-height:1.5}
+
+/* ── topo: placar sempre à vista (benchmark ⑤) ── */
+.topo{position:sticky;top:0;z-index:20;background:var(--carta);border-bottom:1px solid var(--linha);
+  padding:14px 22px;display:flex;align-items:center;gap:26px;flex-wrap:wrap;box-shadow:var(--sombra)}
+.olho{font-family:var(--cond);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--azul);font-weight:700}
+.topo h1{font-family:var(--cond);font-size:30px;margin:0;line-height:1;letter-spacing:.01em}
+.placar{display:flex;gap:10px;margin-left:auto}
+.placar .p{background:var(--fundo);border:1px solid var(--linha);border-radius:10px;padding:8px 16px;text-align:center;min-width:92px}
+.placar .p b{display:block;font-family:var(--cond);font-size:30px;line-height:1;color:var(--azul)}
+.placar .p span{font-size:11.5px;color:var(--suave);text-transform:uppercase;letter-spacing:.06em}
+.placar .p.ok b{color:var(--verde)}
+.quem{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--suave)}
+.quem #euSou{font-weight:700;color:var(--tinta)}
+.sair{background:none;border:1px solid var(--linha);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--suave);font-family:var(--corpo);font-size:12.5px}
+.sair:hover{background:var(--fundo)}
+
+main{max-width:1180px;margin:0 auto;padding:22px;display:flex;flex-direction:column;gap:26px}
+.bloco h2{font-family:var(--cond);font-size:21px;margin:0 0 12px;font-weight:700;display:flex;align-items:baseline;gap:9px}
+.bloco h2 small{font-family:var(--corpo);font-size:13px;font-weight:400;color:var(--tenue)}
+.bloco.discreto{opacity:.85}
+
+/* ── cards da fila ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:13px}
+.card{background:var(--carta);border:1px solid var(--linha);border-left:4px solid var(--azul);border-radius:12px;
+  padding:15px 17px;box-shadow:var(--sombra);display:flex;flex-direction:column;gap:9px}
+.card.urgente{border-left-color:var(--vermelho)}
+.card.atencao{border-left-color:var(--ambar)}
+.card.minha{border-left-color:var(--verde);background:var(--verdeclaro)}
+.card .cab{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.card .clinica{font-weight:700;font-size:16.5px;line-height:1.25}
+/* ③ relógio: o que espera há mais tempo grita */
+.espera{margin-left:auto;font-family:var(--cond);font-size:14px;font-weight:700;padding:2px 9px;border-radius:99px;
+  background:var(--azulclaro);color:var(--azul);white-space:nowrap}
+.espera.atencao{background:var(--ambarclaro);color:var(--ambar)}
+.espera.urgente{background:var(--vermelhoclaro);color:var(--vermelho)}
+.pedido{font-size:13.5px;color:var(--suave);background:var(--fundo);border-radius:8px;padding:8px 11px;
+  border-left:2px solid var(--linha);font-style:italic}
+.endereco{font-size:13.5px;color:var(--tinta);display:flex;gap:7px;align-items:flex-start}
+.endereco .ico{opacity:.5}
+.semend{color:var(--ambar);font-size:13px;display:flex;gap:7px;align-items:center}
+.alerta{background:var(--ambarclaro);border:1px solid var(--ambar);color:var(--ambar);border-radius:8px;
+  padding:8px 11px;font-size:12.5px;display:flex;gap:8px;align-items:flex-start}
+.linhaRota{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.linhaRota label{font-size:12.5px;color:var(--suave)}
+select{font-family:var(--corpo);font-size:14px;padding:6px 10px;border:1px solid var(--linha);
+  border-radius:8px;background:var(--carta);color:var(--tinta);cursor:pointer}
+select:focus-visible,button:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+.sug{font-size:11.5px;color:var(--tenue)}
+
+/* ④ uma ação primária por card */
+.acoes{display:flex;gap:8px;margin-top:2px}
+button.principal{flex:1;background:var(--azul);color:#fff;border:0;border-radius:9px;padding:11px 14px;
+  font-family:var(--corpo);font-weight:700;font-size:14.5px;cursor:pointer;transition:filter .15s}
+button.principal:hover{filter:brightness(1.12)}
+button.principal:disabled{opacity:.55;cursor:wait}
+button.principal.postar{background:var(--verde)}
+button.secundaria{background:var(--carta);color:var(--suave);border:1px solid var(--linha);border-radius:9px;
+  padding:11px 13px;font-family:var(--corpo);font-size:13.5px;cursor:pointer}
+button.secundaria:hover{background:var(--fundo)}
+.travado{font-size:12.5px;color:var(--tenue);padding:9px 0 2px;display:flex;gap:7px;align-items:center}
+
+/* ⑥ fila vazia é vitória */
+.vazio{text-align:center;padding:48px 20px;color:var(--suave);background:var(--carta);
+  border:1px dashed var(--linha);border-radius:12px}
+.vazio .ico{font-size:44px;margin-bottom:8px}
+.feitas{display:flex;flex-wrap:wrap;gap:7px}
+.feita{background:var(--verdeclaro);color:var(--verde);border:1px solid var(--verde);border-radius:99px;
+  padding:4px 12px;font-size:12.5px}
+
+/* login */
+.modal{position:fixed;inset:0;background:rgba(22,32,42,.55);display:grid;place-items:center;z-index:50;padding:20px}
+.caixaLogin{background:var(--carta);border-radius:14px;padding:28px;width:min(400px,100%);
+  display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px -20px rgba(0,0,0,.5)}
+.caixaLogin h2{font-family:var(--cond);font-size:26px;margin:0}
+.caixaLogin .ajuda{font-size:13px;color:var(--suave);margin:0}
+.caixaLogin label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--suave)}
+.caixaLogin input{font-family:var(--corpo);font-size:15px;padding:10px 12px;border:1px solid var(--linha);border-radius:9px}
+.caixaLogin button{background:var(--azul);color:#fff;border:0;border-radius:9px;padding:12px;
+  font-family:var(--corpo);font-weight:700;font-size:15px;cursor:pointer;margin-top:4px}
+.erro{color:var(--vermelho);font-size:13px;margin:0}
+
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--tinta);color:#fff;
+  padding:12px 20px;border-radius:10px;font-size:14px;z-index:60;box-shadow:0 8px 30px -8px rgba(0,0,0,.5)}
+.toast.erro{background:var(--vermelho)}
+
+@media (max-width:640px){
+  .topo{padding:12px 14px;gap:14px} .topo h1{font-size:24px}
+  .placar{width:100%;margin-left:0} .placar .p{flex:1;min-width:0;padding:6px 8px}
+  .placar .p b{font-size:24px} main{padding:14px}
+  .cards{grid-template-columns:1fr}
+}

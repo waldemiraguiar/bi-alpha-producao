@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fila de Agendamento · Alpha Labs</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛵</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="fila.css?v=1">
+</head>
+<body>
+
+<header class="topo">
+  <div class="marca">
+    <div class="olho">Alpha Labs · Atendimento ao Cliente</div>
+    <h1>Fila de Agendamento</h1>
+  </div>
+  <div class="placar">
+    <div class="p"><b id="nEsperando">—</b><span>esperando</span></div>
+    <div class="p"><b id="nMinhas">—</b><span>comigo</span></div>
+    <div class="p ok"><b id="nFeitas">—</b><span>postadas hoje</span></div>
+  </div>
+  <div class="quem">
+    <span id="euSou">—</span>
+    <button id="btSair" class="sair" hidden>sair</button>
+  </div>
+</header>
+
+<main>
+  <section id="minhas" class="bloco" hidden>
+    <h2>🙋 Comigo <small>— você pegou, falta postar</small></h2>
+    <div id="listaMinhas" class="cards"></div>
+  </section>
+
+  <section class="bloco">
+    <h2>📥 Na fila <small>— clique em <b>Pegar</b> para reservar</small></h2>
+    <div id="listaFila" class="cards"></div>
+    <div id="vazio" class="vazio" hidden>
+      <div class="ico">☕</div>
+      <p><b>Fila zerada.</b> Tudo que as clínicas pediram já está nas rotas.</p>
+    </div>
+  </section>
+
+  <section class="bloco discreto">
+    <h2>✅ Postadas hoje</h2>
+    <div id="listaFeitas" class="feitas"></div>
+  </section>
+</main>
+
+<div id="painelLogin" class="modal" hidden>
+  <form id="formLogin" class="caixaLogin">
+    <div class="olho">Alpha Labs</div>
+    <h2>Entrar na fila</h2>
+    <p class="ajuda">Use o mesmo nome e senha do Quadro de Inclusões.</p>
+    <label>Seu nome <input id="inNome" autocomplete="username" required></label>
+    <label>Senha <input id="inSenha" type="password" autocomplete="current-password" required></label>
+    <button type="submit">Entrar</button>
+    <p id="erroLogin" class="erro" hidden></p>
+  </form>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="../supabase-js.min.js"></script>
+<script src="fila.js?v=1"></script>
+</body>
+</html>
