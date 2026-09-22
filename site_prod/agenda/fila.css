@@ -21,6 +21,11 @@
   --corpo:'Atkinson Hyperlegible',system-ui,-apple-system,sans-serif;
 }
 *{box-sizing:border-box}
+/* ⚠️ 22/set: o painel de login NÃO sumia depois de entrar e tapava a tela. Causa: o atributo
+   hidden do HTML aplica display:none, mas qualquer regra de CSS com display (grid/flex) vence
+   por especificidade e o elemento reaparece. Vale para TODO elemento com hidden nesta página —
+   o modal, o bloco "Comigo", o aviso de fila vazia, o botão sair. Uma regra resolve as quatro. */
+[hidden]{display:none!important}
 body{margin:0;background:var(--fundo);color:var(--tinta);font-family:var(--corpo);font-size:15px;line-height:1.5}
 
 /* ── topo: placar sempre à vista (benchmark ⑤) ── */
