@@ -154,6 +154,7 @@
 
   function iniciar() {
     $('#euSou').textContent = sessao.nome
+    $('#quemSou').hidden = false
     $('#btSair').hidden = false
     carregar()
     clearInterval(timer); timer = setInterval(carregar, 20000)   // a fila é compartilhada: atualiza sozinha
