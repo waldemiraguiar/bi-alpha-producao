@@ -204,11 +204,17 @@
      Carrega uma vez ao entrar e filtra no navegador — 206 linhas cabem de sobra na
      memória, e assim não há ida ao banco a cada letra digitada. */
   let precos = [], vigencia = '', escolhidos = new Set()
+  // ⚠️ 23/set — o Wal abriu e disse "não funcionou". O card nascia em BRANCO: sem login os
+  // preços não carregam e nada era escrito na tela. Retângulo vazio parece defeito, não espera.
+  // Agora o card sempre diz em que pé está — carregando, pronto, ou com erro e botão de tentar.
+  function estadoOrc(html) { const el = $('#orcLista'); if (el) el.innerHTML = `<div class="orcNada">${html}</div>` }
+  estadoOrc('Entre com seu nome e senha para consultar os preços.')
   const semAcento = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const dinheiro = c => 'R$ ' + (c / 100).toFixed(2).replace('.', ',')
 
   async function carregarPrecos() {
     if (!sessao || precos.length) return
+    estadoOrc('carregando a tabela de preços…')
     try {
       precos = await rpc('precos_listar', { p_nome: sessao.nome, p_senha: sessao.senha }) || []
       vigencia = await rpc('precos_vigencia', { p_nome: sessao.nome, p_senha: sessao.senha }) || ''
@@ -216,7 +222,11 @@
       $('#orcVig').innerHTML = vigencia ? `tabela de <b>${esc(vigencia)}</b>` : ''
       pintarPrecos()
     } catch (e) {
-      $('#orcLista').innerHTML = `<div class="orcNada">Não consegui carregar a tabela de preços.<br><small>${esc(e.message)}</small></div>`
+      const expirou = /login|senha/i.test(e.message)
+      estadoOrc(`Não consegui carregar a tabela de preços.<br>
+        <small>${esc(e.message)}</small><br><br>
+        ${expirou ? 'Sua sessão pode ter expirado — <b>saia e entre de novo</b>.'
+                  : '<button class="secundaria" id="orcTentar">tentar de novo</button>'}`)
     }
   }
 
@@ -278,6 +288,7 @@
     pintarPrecos()
   })
   document.addEventListener('click', ev => {
+    if (ev.target.id === 'orcTentar') { precos = []; carregarPrecos() }
     if (ev.target.id === 'orcLimpar') { escolhidos.clear(); $('#orcQ').value = ''; pintarPrecos() }
     if (ev.target.id === 'orcCopiar') {
       const t = $('#orcTexto')
