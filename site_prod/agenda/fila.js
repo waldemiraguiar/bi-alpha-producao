@@ -19,7 +19,7 @@
         Se for diferente da que está na tela, o selo fica âmbar e pulsa.
      ③ O BOTÃO recarrega forçando o servidor (endereço novo), sem Cmd+Shift+R —
         atalho que o Wal não usa; ele pediu botão dentro do app. */
-  const VERSAO = /*CARIMBO*/'23/09 13:07'
+  const VERSAO = /*CARIMBO*/'23/09 13:09'
   const URL_SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co'
   const KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
   // realtime: o banco AVISA quando muda. Antes eu perguntava a cada 20s — com 5 mesas abertas

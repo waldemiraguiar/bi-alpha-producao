@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-versao-publicada="23/09 13:07">
+<html lang="pt-BR" data-versao-publicada="23/09 13:09">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛵</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<link rel="stylesheet" href="fila.css?v=1790179623">
+<link rel="stylesheet" href="fila.css?v=1790179770">
 </head>
 <body>
 
@@ -15,6 +15,12 @@
   <div class="marca">
     <div class="olho">Alpha Labs · Atendimento ao Cliente</div>
     <h1>Fila de Agendamento</h1>
+    <!-- 🔄 Wal, 23/set: o selo caiu na 3ª linha do cabeçalho e ele não viu. Agora mora
+         colado no título — é a primeira coisa embaixo do nome da tela. -->
+    <div class="versao">
+      <span id="selVersao" title="versão que está na sua tela">·</span>
+      <button id="btAtualizar" title="buscar a versão mais nova">🔄 Atualizar</button>
+    </div>
   </div>
   <div class="placar">
     <div class="p"><b id="nEsperando">·</b><span>esperando</span></div>
@@ -25,30 +31,9 @@
     <span id="euSou"></span>
     <button id="btSair" class="sair" hidden>sair</button>
   </div>
-  <!-- 🔄 Wal, 23/set: "preciso de uma versao com data e horario chamando atencao la e tb um
-       botao de atualizar para evitar esse problema de cache velho". O selo diz QUAL versao a
-       pessoa esta vendo; o botao troca por uma nova sem depender de Cmd+Shift+R. -->
-  <div class="versao">
-    <span id="selVersao" title="versão que está na sua tela">·</span>
-    <button id="btAtualizar" title="buscar a versão mais nova">🔄 Atualizar</button>
-  </div>
 </header>
 
 <main>
-  <section id="minhas" class="bloco" hidden>
-    <h2>🙋 Comigo <small>— você pegou, falta postar</small></h2>
-    <div id="listaMinhas" class="cards"></div>
-  </section>
-
-  <section class="bloco">
-    <h2>📥 Na fila <small>— clique em <b>Pegar</b> para reservar</small></h2>
-    <div id="listaFila" class="faixas"></div>
-    <div id="vazio" class="vazio" hidden>
-      <div class="ico">☕</div>
-      <p><b>Fila zerada.</b> Tudo que as clínicas pediram já está nas rotas.</p>
-    </div>
-  </section>
-
   <!-- 💰 ORÇAMENTO DE EXAMES — Wal, 23/set: "tem muito cliente que pergunta valor de exame,
        e tem muito erro". Os quatro erros que ele listou, e o que cada um exige da tela:
          · preço desatualizado → a data da tabela fica no rodapé de TODO orçamento
@@ -76,6 +61,20 @@
     </div>
   </section>
 
+  <section id="minhas" class="bloco" hidden>
+    <h2>🙋 Comigo <small>— você pegou, falta postar</small></h2>
+    <div id="listaMinhas" class="cards"></div>
+  </section>
+
+  <section class="bloco">
+    <h2>📥 Na fila <small>— clique em <b>Pegar</b> para reservar</small></h2>
+    <div id="listaFila" class="faixas"></div>
+    <div id="vazio" class="vazio" hidden>
+      <div class="ico">☕</div>
+      <p><b>Fila zerada.</b> Tudo que as clínicas pediram já está nas rotas.</p>
+    </div>
+  </section>
+
   <section class="bloco discreto">
     <h2>✅ Postadas hoje</h2>
     <div id="listaFeitas" class="feitas"></div>
@@ -97,6 +96,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="fila.js?v=1790179623"></script>
+<script src="fila.js?v=1790179770"></script>
 </body>
 </html>
