@@ -9,6 +9,15 @@ on:
   schedule:
     - cron: '*/15 0-2,9-23 * * *'   # a cada 15 min, ~06h-23h BRT (UTC=BRT+3; 0-2 cobre a 2ª rotina da noite)
   workflow_dispatch:            # rodar agora p/ testar
+  # 23/set: MEDIDO — o cron pede 15 min e o GitHub estava entregando UMA execução a cada 3-5 HORAS
+  # (repo público = agendamento de baixa prioridade; o inclusoes_hf.yml já tinha sofrido o mesmo em
+  # 17/set). Um vigia que dorme 4 h não é vigia. O "Atualiza Painel de Produção" roda de 10 em 10 min
+  # e é confiável → pegamos carona nele. Sem `if:` de horário de propósito: o cron do painel já é
+  # '*/10 0-2,9-23', exatamente a mesma janela daqui — então a carona nunca cai fora da hora e não
+  # gera `skipped` (que é o que enchia o vigia dos robôs de alarme falso).
+  workflow_run:
+    workflows: ["Atualiza Painel de Produção"]
+    types: [completed]
 
 concurrency:
   group: vigia-frota
