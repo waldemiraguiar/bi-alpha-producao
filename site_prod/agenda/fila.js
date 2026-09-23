@@ -19,7 +19,7 @@
         Se for diferente da que está na tela, o selo fica âmbar e pulsa.
      ③ O BOTÃO recarrega forçando o servidor (endereço novo), sem Cmd+Shift+R —
         atalho que o Wal não usa; ele pediu botão dentro do app. */
-  const VERSAO = /*CARIMBO*/'23/09 13:15'
+  const VERSAO = /*CARIMBO*/'23/09 16:09'
   const URL_SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co'
   const KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
   // realtime: o banco AVISA quando muda. Antes eu perguntava a cada 20s — com 5 mesas abertas
@@ -100,8 +100,18 @@
       ${c._alerta ? `<div class="alerta">⚠️ <span>${esc(c._alerta)}</span></div>` : ''}
       ${orc ? `<div class="sugeridos">
         ${sugeridos.length
-          ? `<div class="sugTit">exames que eu achei parecidos — confira antes de mandar:</div>
-             <ul>${sugeridos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
+          ? `<div class="sugTit">clique no exame certo — o primeiro é o mais provável:</div>
+             <div class="sugLista">${sugeridos.map(x => {
+                 const nome = String(x).split(' = ')[0].trim()
+                 const val = String(x).split(' = ')[1] || ''
+                 const p = precos.find(p => p.nome === nome)
+                 const on = p && escolhidos.has(p.id)
+                 return `<button type="button" class="sugIt${on ? ' on' : ''}" data-exame="${esc(nome)}">
+                   <span class="tic">${on ? '✓' : ''}</span>
+                   <span class="sn">${esc(nome)}</span>
+                   <span class="sv">${esc(val)}</span>
+                 </button>`
+               }).join('')}</div>`
           : `<div class="sugTit">não identifiquei o exame no que ela escreveu — use a busca do orçamento aí em cima.</div>`}
       </div>` : ''}
       <div class="linhaRota"${orc ? ' hidden' : ''}>
@@ -112,7 +122,7 @@
       <div class="acoes">
         ${minha
           ? (orc
-             ? `<button class="principal responder" data-acao="responder" data-id="${c.id}">💬 Montar a resposta</button>
+             ? `<button class="principal responder" data-acao="responder" data-id="${c.id}">💬 Marcar todos e ver a mensagem</button>
                 <button class="secundaria" data-acao="devolver" data-id="${c.id}">devolver à fila</button>`
              : `<button class="principal postar" data-acao="postar" data-id="${c.id}">📤 Postar na rota</button>
                 <button class="secundaria" data-acao="devolver" data-id="${c.id}">devolver à fila</button>`)
@@ -236,7 +246,27 @@
       : 'Não identifiquei o exame — busque pelo nome aí em cima', !escolhidos.size)
   }
 
+  // 🖱️ Wal, 23/set: "no card de orçamento ter opção do colaborador escolher o exame clicando em
+  // cima". Clicar no exame marca ele no orçamento na hora — sem precisar pegar o card, sem
+  // digitar de novo, sem rolar a tela. O primeiro clique já rola até a mensagem montada.
   document.addEventListener('click', ev => {
+    const sug = ev.target.closest('[data-exame]')
+    if (sug) {
+      const p = precos.find(p => p.nome === sug.dataset.exame)
+      if (!p) { toast('Esse exame não está na tabela carregada', true); return }
+      const tinha = escolhidos.has(p.id)
+      tinha ? escolhidos.delete(p.id) : escolhidos.add(p.id)
+      sug.classList.toggle('on', !tinha)
+      sug.querySelector('.tic').textContent = tinha ? '' : '✓'
+      montarOrcamento()
+      if (!tinha) {
+        toast(`${p.nome.slice(0, 40)} — ${dinheiro(p.centavos)} ✓`)
+        // só rola na PRIMEIRA marcação: quem está montando um orçamento de vários
+        // não quer a tela pulando a cada clique
+        if (escolhidos.size === 1) $('#blocoOrc')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      return
+    }
     const b = ev.target.closest('[data-acao]'); if (!b) return
     const id = b.dataset.id
     if (b.dataset.acao === 'responder') responder(id)
