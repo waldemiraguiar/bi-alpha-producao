@@ -5,6 +5,21 @@
    O fluxo, do jeito que o Wal descreveu: a clínica pede → o sistema identifica e sugere a rota →
    o colaborador PEGA, confere e POSTA no grupo do motoboy. */
 (() => {
+  /* ═══ 🔄 VERSÃO NA TELA + BOTÃO ATUALIZAR ═══════════════════════════════════
+     Wal, 23/set: "preciso de uma versão com data e horário chamando atenção e um
+     botão de atualizar para evitar esse problema de cache velho."
+
+     O problema real: a pessoa abre a página, o navegador serve o HTML guardado, e
+     ela vê uma versão antiga sem saber. Some a diferença entre "está quebrado" e
+     "está velho" — foi exatamente o que aconteceu hoje.
+
+     Duas peças:
+     ① O SELO diz a data/hora da versão que está NA TELA. Carimbo gerado no deploy.
+     ② O VIGIA pergunta ao servidor, de 2 em 2 minutos, qual é a versão publicada.
+        Se for diferente da que está na tela, o selo fica âmbar e pulsa.
+     ③ O BOTÃO recarrega forçando o servidor (endereço novo), sem Cmd+Shift+R —
+        atalho que o Wal não usa; ele pediu botão dentro do app. */
+  const VERSAO = /*CARIMBO*/'23/09 13:07'
   const URL_SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co'
   const KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
   // realtime: o banco AVISA quando muda. Antes eu perguntava a cada 20s — com 5 mesas abertas
@@ -352,6 +367,30 @@
     // ao voltar para a aba, atualiza na hora — mesa física fica com a tela aberta o dia todo
     document.addEventListener('visibilitychange', () => { if (!document.hidden) carregar() })
   }
+
+  // ── selo de versão ──
+  const selo = document.querySelector('#selVersao')
+  if (selo) selo.textContent = 'versão ' + VERSAO
+  document.querySelector('#btAtualizar')?.addEventListener('click', ev => {
+    ev.target.disabled = true; ev.target.textContent = 'buscando…'
+    // endereço novo força o servidor a mandar o HTML fresco em vez do guardado
+    location.replace(location.pathname + '?atualizar=' + Date.now())
+  })
+  // vigia: compara a versão da tela com a publicada, de 2 em 2 min
+  async function conferirVersao() {
+    try {
+      const r = await fetch(location.pathname + '?checar=' + Date.now(), { cache: 'no-store' })
+      const t = await r.text()
+      const m = t.match(/versao-publicada="([^"]+)"/)
+      if (m && m[1] && m[1] !== VERSAO && selo) {
+        selo.classList.add('velha')
+        selo.textContent = 'versão ' + VERSAO + ' — há uma nova!'
+        selo.title = 'a versão publicada é ' + m[1] + ' — clique em Atualizar'
+      }
+    } catch {}
+  }
+  setTimeout(conferirVersao, 4000)
+  setInterval(conferirVersao, 120000)
 
   if (!SB) { toast('Sem conexão com o banco', true) }
   else if (sessao) iniciar()

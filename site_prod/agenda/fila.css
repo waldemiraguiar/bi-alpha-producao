@@ -231,3 +231,21 @@ button.secundaria:hover{background:var(--fundo)}
   border:1px solid var(--linha);border-radius:10px;background:var(--fundo);color:var(--tinta);resize:vertical}
 #orcTexto:focus-visible{outline:2px solid var(--azul)}
 @media (max-width:640px){ .orcIt .vl{font-size:15px} .orcLista{max-height:260px} }
+
+/* 🔄 SELO DE VERSÃO + BOTÃO ATUALIZAR (23/set)
+   Wal: "preciso de uma versão com data e horário chamando atenção e um botão de
+   atualizar para evitar esse problema de cache velho."
+   O selo mostra a data/hora da versão que ESTÁ na tela — se estiver velha, a pessoa
+   vê na hora, sem precisar adivinhar. O botão troca de versão sem Cmd+Shift+R
+   (atalho que o Wal não usa: ele pediu botão dentro do app). */
+.versao{display:flex;align-items:center;gap:9px;order:4;margin-left:auto}
+.versao #selVersao{font-family:var(--cond);font-size:12.5px;letter-spacing:.06em;
+  background:var(--azulclaro);color:var(--azul);border:1px solid var(--azul);
+  border-radius:99px;padding:3px 12px;font-weight:700;white-space:nowrap}
+.versao #selVersao.velha{background:var(--ambarclaro);color:var(--ambar);border-color:var(--ambar);
+  animation:pulsoAmbar 1.4s ease-in-out infinite}
+.versao #btAtualizar{background:var(--carta);border:1px solid var(--linha);border-radius:8px;
+  padding:6px 13px;cursor:pointer;font-family:var(--corpo);font-size:13px;color:var(--suave);white-space:nowrap}
+.versao #btAtualizar:hover{background:var(--azulclaro);color:var(--azul);border-color:var(--azul)}
+.versao #btAtualizar:disabled{opacity:.6;cursor:wait}
+@media (max-width:640px){ .versao{order:5;width:100%;margin-left:0;justify-content:space-between} }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-versao-publicada="23/09 13:07">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛵</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<link rel="stylesheet" href="fila.css?v=4">
+<link rel="stylesheet" href="fila.css?v=1790179623">
 </head>
 <body>
 
@@ -24,6 +24,13 @@
   <div class="quem" id="quemSou" hidden>
     <span id="euSou"></span>
     <button id="btSair" class="sair" hidden>sair</button>
+  </div>
+  <!-- 🔄 Wal, 23/set: "preciso de uma versao com data e horario chamando atencao la e tb um
+       botao de atualizar para evitar esse problema de cache velho". O selo diz QUAL versao a
+       pessoa esta vendo; o botao troca por uma nova sem depender de Cmd+Shift+R. -->
+  <div class="versao">
+    <span id="selVersao" title="versão que está na sua tela">·</span>
+    <button id="btAtualizar" title="buscar a versão mais nova">🔄 Atualizar</button>
   </div>
 </header>
 
@@ -90,6 +97,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="fila.js?v=4"></script>
+<script src="fila.js?v=1790179623"></script>
 </body>
 </html>
