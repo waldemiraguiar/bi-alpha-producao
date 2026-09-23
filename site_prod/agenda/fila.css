@@ -186,3 +186,48 @@ button.secundaria:hover{background:var(--fundo)}
   .card.urgente{box-shadow:var(--sombra),0 0 0 3px rgba(156,47,36,.25)}
   .card.atencao{box-shadow:var(--sombra),0 0 0 3px rgba(138,91,0,.2)}
 }
+
+/* ═══ 💰 ORÇAMENTO DE EXAMES (23/set) ═══════════════════════════════════════
+   Os 4 erros que o Wal listou viraram 4 decisões de tela:
+   · preço velho      → a vigência da tabela aparece FIXA ao lado da busca e no
+     rodapé da mensagem. Ninguém manda preço sem saber de quando ele é.
+   · erram o exame    → a busca lista os parecidos JUNTOS, com o que diferencia
+     um do outro visível (os 5 hemogramas lado a lado, cada um com o que inclui).
+   · esquecem prazo   → prazo e material entram na mensagem sempre. Não há opção
+     de tirar: eram o que mais faltava.
+   · demoram          → filtro no navegador, sem ida ao banco a cada letra.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.orc{background:var(--carta);border:1px solid var(--linha);border-radius:12px;padding:15px 17px;
+  box-shadow:var(--sombra);display:flex;flex-direction:column;gap:12px}
+.orcBusca{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#orcQ{flex:1;min-width:220px;font-family:var(--corpo);font-size:15.5px;padding:11px 14px;
+  border:1px solid var(--linha);border-radius:10px;background:var(--fundo);color:var(--tinta)}
+#orcQ:focus-visible{outline:2px solid var(--azul);outline-offset:1px;background:var(--carta)}
+.vigencia{font-size:12px;color:var(--tenue);white-space:nowrap}
+.vigencia b{color:var(--suave)}
+
+.orcLista{display:flex;flex-direction:column;gap:2px;max-height:330px;overflow-y:auto}
+.orcSec{font-family:var(--cond);font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--azul);font-weight:700;padding:11px 2px 3px;position:sticky;top:0;background:var(--carta)}
+.orcIt{display:flex;align-items:flex-start;gap:11px;padding:8px 9px;border-radius:9px;cursor:pointer;
+  border:1px solid transparent}
+.orcIt:hover{background:var(--fundo)}
+.orcIt.on{background:var(--azulclaro);border-color:var(--azul)}
+.orcIt input{margin-top:3px;width:17px;height:17px;accent-color:var(--azul);flex:none;cursor:pointer}
+.orcIt .txt{flex:1;min-width:0}
+.orcIt .nm{font-size:14.5px;line-height:1.3}
+.orcIt.on .nm{font-weight:700}
+.orcIt .det{font-size:11.5px;color:var(--tenue);margin-top:2px}
+.orcIt .vl{font-family:var(--cond);font-size:17px;font-weight:700;color:var(--azul);
+  white-space:nowrap;font-variant-numeric:tabular-nums}
+.orcNada{color:var(--tenue);font-size:13.5px;padding:16px 4px;text-align:center}
+
+.orcCesta{border-top:1px solid var(--linha);padding-top:12px;display:flex;flex-direction:column;gap:9px}
+.orcTopo{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--suave)}
+.orcTopo b{font-family:var(--cond);font-size:20px;color:var(--tinta)}
+.orcTopo #orcTotal{color:var(--verde)}
+.orcTopo button{margin-left:auto;padding:6px 12px}
+#orcTexto{font-family:var(--corpo);font-size:13.5px;line-height:1.55;padding:12px 14px;
+  border:1px solid var(--linha);border-radius:10px;background:var(--fundo);color:var(--tinta);resize:vertical}
+#orcTexto:focus-visible{outline:2px solid var(--azul)}
+@media (max-width:640px){ .orcIt .vl{font-size:15px} .orcLista{max-height:260px} }

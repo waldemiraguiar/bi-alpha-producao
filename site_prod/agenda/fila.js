@@ -197,6 +197,96 @@
     else if (b.dataset.acao === 'postar') postar(id, b)
   })
 
+  /* ═══ 💰 ORÇAMENTO DE EXAMES ═══════════════════════════════════════════════
+     206 exames da tabela de março/2026, extraídos do PDF pela grade e conferidos
+     item a item. Ficam NO BANCO, não em arquivo do site: o repositório é público.
+
+     Carrega uma vez ao entrar e filtra no navegador — 206 linhas cabem de sobra na
+     memória, e assim não há ida ao banco a cada letra digitada. */
+  let precos = [], vigencia = '', escolhidos = new Set()
+  const semAcento = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const dinheiro = c => 'R$ ' + (c / 100).toFixed(2).replace('.', ',')
+
+  async function carregarPrecos() {
+    if (!sessao || precos.length) return
+    try {
+      precos = await rpc('precos_listar', { p_nome: sessao.nome, p_senha: sessao.senha }) || []
+      vigencia = await rpc('precos_vigencia', { p_nome: sessao.nome, p_senha: sessao.senha }) || ''
+      for (const p of precos) p._b = semAcento(p.nome + ' ' + p.secao)
+      $('#orcVig').innerHTML = vigencia ? `tabela de <b>${esc(vigencia)}</b>` : ''
+      pintarPrecos()
+    } catch (e) {
+      $('#orcLista').innerHTML = `<div class="orcNada">Não consegui carregar a tabela de preços.<br><small>${esc(e.message)}</small></div>`
+    }
+  }
+
+  function pintarPrecos() {
+    const q = semAcento($('#orcQ').value.trim())
+    // busca por TODAS as palavras digitadas, em qualquer ordem ("t4 livre" acha "Tiroxina Livre (T4 livre)")
+    const termos = q.split(/\s+/).filter(Boolean)
+    const achados = !termos.length
+      ? (escolhidos.size ? precos.filter(p => escolhidos.has(p.id)) : [])
+      : precos.filter(p => termos.every(t => p._b.includes(t)))
+    const el = $('#orcLista')
+    if (!termos.length && !escolhidos.size) {
+      el.innerHTML = `<div class="orcNada">Digite o nome do exame — são <b>${precos.length}</b> na tabela.<br>
+        <small>Os parecidos aparecem juntos, para não trocar um pelo outro.</small></div>`
+    } else if (!achados.length) {
+      el.innerHTML = `<div class="orcNada">Nenhum exame com <b>“${esc($('#orcQ').value.trim())}”</b>.<br>
+        <small>Tente uma palavra só, ou parte do nome.</small></div>`
+    } else {
+      let sec = ''
+      el.innerHTML = achados.slice(0, 80).map(p => {
+        const cab = p.secao !== sec ? `<div class="orcSec">${esc(sec = p.secao)}</div>` : ''
+        const on = escolhidos.has(p.id)
+        return `${cab}<label class="orcIt ${on ? 'on' : ''}">
+          <input type="checkbox" data-orc="${p.id}"${on ? ' checked' : ''}>
+          <span class="txt">
+            <span class="nm">${esc(p.nome)}</span>
+            <span class="det">${esc(p.material)}${p.prazo ? ' · ' + esc(p.prazo) : ''}</span>
+          </span>
+          <span class="vl">${dinheiro(p.centavos)}</span>
+        </label>`
+      }).join('')
+    }
+    montarOrcamento()
+  }
+
+  function montarOrcamento() {
+    const itens = precos.filter(p => escolhidos.has(p.id))
+    $('#orcCesta').hidden = !itens.length
+    $('#orcN').textContent = itens.length
+    const total = itens.reduce((a, p) => a + p.centavos, 0)
+    $('#orcTotal').textContent = dinheiro(total)
+    if (!itens.length) return
+    // a mensagem leva SEMPRE preço, prazo e material — os três que mais faltavam — e a
+    // vigência da tabela no rodapé, para o cliente e a equipe saberem de quando é o valor.
+    const linhas = itens.map(p =>
+      `• *${p.nome}*\n   ${dinheiro(p.centavos)}${p.prazo ? ` · resultado em ${p.prazo}` : ''}${p.material ? `\n   material: ${p.material}` : ''}`)
+    const soma = itens.length > 1 ? `\n\n💰 *Total: ${dinheiro(total)}*` : ''
+    $('#orcTexto').value =
+      `Orçamento dos exames 🐾\n\n${linhas.join('\n\n')}${soma}\n\n` +
+      `_Valores da tabela de ${vigencia || 'vigência atual'}. Prazo em dias úteis, contados a partir da chegada da amostra no laboratório._\n\n` +
+      `Qualquer dúvida é só chamar! 🙏\n\n🧬 *Alpha Labs · Atendimento ao Cliente*`
+  }
+
+  document.addEventListener('input', ev => { if (ev.target.id === 'orcQ') pintarPrecos() })
+  document.addEventListener('change', ev => {
+    const id = ev.target.dataset && ev.target.dataset.orc
+    if (!id) return
+    ev.target.checked ? escolhidos.add(Number(id)) : escolhidos.delete(Number(id))
+    pintarPrecos()
+  })
+  document.addEventListener('click', ev => {
+    if (ev.target.id === 'orcLimpar') { escolhidos.clear(); $('#orcQ').value = ''; pintarPrecos() }
+    if (ev.target.id === 'orcCopiar') {
+      const t = $('#orcTexto')
+      navigator.clipboard.writeText(t.value)
+        .then(() => toast('Mensagem copiada — é só colar no grupo 📋'))
+        .catch(() => { t.select(); document.execCommand('copy'); toast('Mensagem copiada 📋') })
+    }
+  })
+
   // ── login (mesma sessão do Quadro de Inclusões; eu nunca guardo nem defino senha) ──
   // ⚠️ 22/set: o Wal não conseguiu entrar. Eu tinha feito campo de texto livre, e o nome dele
   // está cadastrado como "WAL" — qualquer diferença de maiúscula ou acento derruba o login.
@@ -239,6 +329,7 @@
     $('#quemSou').hidden = false
     $('#btSair').hidden = false
     carregar()
+    carregarPrecos()          // a tabela de preços vem uma vez, no login
     // ouve a tabela: qualquer inserção/alteração repinta na hora. O intervalo longo fica só como
     // rede de segurança para o caso de a conexão cair sem avisar.
     try {

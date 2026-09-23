@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛵</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<link rel="stylesheet" href="fila.css?v=2">
+<link rel="stylesheet" href="fila.css?v=3">
 </head>
 <body>
 
@@ -42,6 +42,33 @@
     </div>
   </section>
 
+  <!-- 💰 ORÇAMENTO DE EXAMES — Wal, 23/set: "tem muito cliente que pergunta valor de exame,
+       e tem muito erro". Os quatro erros que ele listou, e o que cada um exige da tela:
+         · preço desatualizado → a data da tabela fica no rodapé de TODO orçamento
+         · erram o exame       → a busca mostra os parecidos lado a lado (os 5 hemogramas juntos)
+         · esquecem prazo/material → vão na mensagem sempre, não são opcionais
+         · demoram a responder → busca instantânea, sem sair da tela da fila -->
+  <section class="bloco" id="blocoOrc">
+    <h2>💰 Orçamento de exames <small>— busque, marque e copie a resposta pronta</small></h2>
+    <div class="orc">
+      <div class="orcBusca">
+        <input id="orcQ" type="search" placeholder="digite o exame… (ex: hemograma, t4, urina)" autocomplete="off">
+        <span id="orcVig" class="vigencia"></span>
+      </div>
+      <div id="orcLista" class="orcLista"></div>
+      <div id="orcCesta" class="orcCesta" hidden>
+        <div class="orcTopo">
+          <b id="orcN">0</b> exame(s) · total <b id="orcTotal">R$ 0,00</b>
+          <button id="orcLimpar" class="secundaria">limpar</button>
+        </div>
+        <textarea id="orcTexto" rows="9" readonly></textarea>
+        <div class="acoes">
+          <button id="orcCopiar" class="principal">📋 Copiar a mensagem</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="bloco discreto">
     <h2>✅ Postadas hoje</h2>
     <div id="listaFeitas" class="feitas"></div>
@@ -63,6 +90,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="fila.js?v=2"></script>
+<script src="fila.js?v=3"></script>
 </body>
 </html>
