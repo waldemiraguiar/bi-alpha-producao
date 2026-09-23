@@ -19,7 +19,7 @@
         Se for diferente da que está na tela, o selo fica âmbar e pulsa.
      ③ O BOTÃO recarrega forçando o servidor (endereço novo), sem Cmd+Shift+R —
         atalho que o Wal não usa; ele pediu botão dentro do app. */
-  const VERSAO = /*CARIMBO*/'23/09 13:09'
+  const VERSAO = /*CARIMBO*/'23/09 13:15'
   const URL_SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co'
   const KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
   // realtime: o banco AVISA quando muda. Antes eu perguntava a cada 20s — com 5 mesas abertas
@@ -82,8 +82,13 @@
     const opcoes = ROTAS.map(r => `<option value="${esc(r)}"${r === rotaSel ? ' selected' : ''}>${esc(r)}</option>`).join('')
     const temEnd = !!(c._endereco)
     const t0 = Date.parse(c.quando || c.criado_em) || Date.now()
-    return `<article class="card ${minha ? 'minha' : e.nivel}" data-id="${c.id}" data-nivel="${e.nivel}">
+    // 💚 Wal, 23/set: "pensando em separar por cores, exemplo agendamento azul e orçamento verde".
+    // Assunto diferente, cor diferente — a pessoa bate o olho e sabe o que tem pela frente sem ler.
+    const orc = c.tipo === 'orcamento'
+    const sugeridos = orc && c.item ? String(c.item).split(' · ').filter(Boolean) : []
+    return `<article class="card ${orc ? 'orcamento ' : ''}${minha ? 'minha' : e.nivel}" data-id="${c.id}" data-nivel="${e.nivel}">
       <div class="cab">
+        <span class="assunto ${orc ? 'verde' : 'azul'}">${orc ? '💚 orçamento' : '🛵 coleta'}</span>
         <span class="clinica">${esc(c.clinica || c.grupo || 'clínica')}</span>
         <span class="espera ${e.nivel}" data-desde="${t0}"><i>⏱</i>${e.txt}</span>
       </div>
@@ -93,15 +98,24 @@
         ? `<div class="endereco"><span class="ico">📍</span><span>${esc(c._endereco)}</span></div>`
         : `<div class="semend">⚠️ <span>Sem endereço conhecido — vai precisar montar à mão</span></div>`}
       ${c._alerta ? `<div class="alerta">⚠️ <span>${esc(c._alerta)}</span></div>` : ''}
-      <div class="linhaRota">
+      ${orc ? `<div class="sugeridos">
+        ${sugeridos.length
+          ? `<div class="sugTit">exames que eu achei parecidos — confira antes de mandar:</div>
+             <ul>${sugeridos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
+          : `<div class="sugTit">não identifiquei o exame no que ela escreveu — use a busca do orçamento aí em cima.</div>`}
+      </div>` : ''}
+      <div class="linhaRota"${orc ? ' hidden' : ''}>
         <label for="r${c.id}">Rota:</label>
         <select id="r${c.id}" data-rota="${c.id}">${opcoes}</select>
         ${c.rota_sug ? `<span class="sug">sugestão do sistema${c.fonte ? ` · ${esc(String(c.fonte).split('·').pop().trim())}` : ''}</span>` : ''}
       </div>
       <div class="acoes">
         ${minha
-          ? `<button class="principal postar" data-acao="postar" data-id="${c.id}">📤 Postar na rota</button>
-             <button class="secundaria" data-acao="devolver" data-id="${c.id}">devolver à fila</button>`
+          ? (orc
+             ? `<button class="principal responder" data-acao="responder" data-id="${c.id}">💬 Montar a resposta</button>
+                <button class="secundaria" data-acao="devolver" data-id="${c.id}">devolver à fila</button>`
+             : `<button class="principal postar" data-acao="postar" data-id="${c.id}">📤 Postar na rota</button>
+                <button class="secundaria" data-acao="devolver" data-id="${c.id}">devolver à fila</button>`)
           : `<button class="principal" data-acao="pegar" data-id="${c.id}">🙋 Pegar</button>`}
       </div>
       ${(!minha && c.por) ? `<div class="travado">🔒 com <b>${esc(c.por)}</b></div>` : ''}
@@ -171,7 +185,7 @@
     const { data, error } = await SB.from('inc_coletas').select('*')
       .gte('criado_em', `${hoje}T03:00:00Z`).order('criado_em', { ascending: true }).limit(400)
     if (error) { toast('Não consegui ler a fila: ' + error.message, true); return }
-    coletas = (data || []).filter(c => c.tipo !== 'material')
+    coletas = (data || []).filter(c => c.tipo !== 'material')   // coleta E orçamento entram na fila
     // endereço conhecido: a última parada que já foi postada para aquela clínica
     for (const c of coletas) { c._endereco = c.obs && /^END:/.test(c.obs) ? c.obs.slice(4) : null }
     pintar()
@@ -204,9 +218,28 @@
     carregar()
   }
 
+  // 💬 do card verde para o orçamento: marca os exames sugeridos e rola até lá.
+  // Assim a pessoa não precisa digitar de novo o que eu já identifiquei.
+  function responder(id) {
+    const c = coletas.find(x => String(x.id) === String(id)); if (!c) return
+    const nomes = String(c.item || '').split(' · ').map(x => x.split(' = ')[0].trim()).filter(Boolean)
+    escolhidos.clear()
+    for (const n of nomes) {
+      const p = precos.find(p => p.nome === n)
+      if (p) escolhidos.add(p.id)
+    }
+    $('#orcQ').value = ''
+    pintarPrecos()
+    $('#blocoOrc')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    toast(escolhidos.size
+      ? `${escolhidos.size} exame(s) marcado(s) — confira e copie a mensagem 💚`
+      : 'Não identifiquei o exame — busque pelo nome aí em cima', !escolhidos.size)
+  }
+
   document.addEventListener('click', ev => {
     const b = ev.target.closest('[data-acao]'); if (!b) return
     const id = b.dataset.id
+    if (b.dataset.acao === 'responder') responder(id)
     if (b.dataset.acao === 'pegar') pegar(id)
     else if (b.dataset.acao === 'devolver') devolver(id)
     else if (b.dataset.acao === 'postar') postar(id, b)
