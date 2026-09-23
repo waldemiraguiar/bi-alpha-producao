@@ -118,3 +118,71 @@ button.secundaria:hover{background:var(--fundo)}
   .placar .p b{font-size:24px} main{padding:14px}
   .cards{grid-template-columns:1fr}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   23/set — Wal: "data, hora, cronômetro, piscar amarelo aos 5 min e vermelho
+   aos 10, e os cards se reorganizando juntos na mesma categoria".
+
+   BENCHMARK NOVO (além dos ⑥ do topo):
+   ⑦ AGRUPAR POR IDADE, não listar tudo junto — é o que os guias de "ticket aging"
+     recomendam para atacar atraso em bloco em vez de caçar item por item. Numa
+     lista única o card de 11 min some no meio dos de 1 min.
+   ⑧ O RELÓGIO É O ELEMENTO MAIS FORTE DO CARD — em fila de atendimento o agente
+     prioriza pelo tempo que resta do acordo, não pela ordem de chegada (Zendesk,
+     Gorgias). Por isso o cronômetro virou tipografia grande e tabular.
+   ⑨ PULSO, NÃO PISCA-PISCA — a WCAG 2.3.1 proíbe mais de 3 flashes por segundo
+     (risco de convulsão fotossensível). Aqui o pulso é de 1,4s (≈0,7 Hz), bem
+     abaixo do limite, e some inteiro em prefers-reduced-motion. A cor e o texto
+     continuam distinguindo a faixa — ninguém depende da animação para entender.
+   ⑩ DATA + HORA AO LADO DO CRONÔMETRO — o cronômetro diz HÁ QUANTO TEMPO, a data
+     diz DESDE QUANDO. Quem entra no meio do turno precisa dos dois.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ⑦ blocos por faixa */
+.faixas{display:flex;flex-direction:column;gap:20px}
+.faixa h3{font-family:var(--cond);font-size:17px;font-weight:700;margin:0 0 9px;
+  display:flex;align-items:center;gap:9px;letter-spacing:.01em}
+.faixa h3 .pino{width:9px;height:9px;border-radius:99px;background:var(--tenue);flex:none}
+.faixa h3 b{font-family:var(--cond);font-size:13px;background:var(--linha);color:var(--suave);
+  border-radius:99px;padding:1px 9px;font-weight:700}
+.faixa h3 small{font-family:var(--corpo);font-size:12.5px;font-weight:400;color:var(--tenue);margin-left:2px}
+.faixa.urgente h3{color:var(--vermelho)}
+.faixa.urgente h3 .pino{background:var(--vermelho)}
+.faixa.urgente h3 b{background:var(--vermelhoclaro);color:var(--vermelho)}
+.faixa.atencao h3{color:var(--ambar)}
+.faixa.atencao h3 .pino{background:var(--ambar)}
+.faixa.atencao h3 b{background:var(--ambarclaro);color:var(--ambar)}
+.faixa.novo h3{color:var(--suave)}
+
+/* ⑧ o cronômetro como peça principal do card */
+.espera{font-variant-numeric:tabular-nums;font-size:16px;padding:3px 11px;gap:5px;
+  display:inline-flex;align-items:center}
+.espera i{font-style:normal;font-size:12px;opacity:.75}
+.espera.atencao,.espera.urgente{font-size:17.5px}
+
+/* ⑩ desde quando */
+.card .desde{font-size:12px;color:var(--tenue);margin-top:-4px}
+.card .desde b{font-weight:700;color:var(--suave)}
+
+/* ⑨ pulso — 1,4s (≈0,7 Hz), muito abaixo do teto de 3 flashes/s da WCAG 2.3.1 */
+@keyframes pulsoAmbar{
+  0%,100%{box-shadow:var(--sombra),0 0 0 0 rgba(138,91,0,0)}
+  50%    {box-shadow:var(--sombra),0 0 0 5px rgba(138,91,0,.17)}
+}
+@keyframes pulsoVermelho{
+  0%,100%{box-shadow:var(--sombra),0 0 0 0 rgba(156,47,36,0)}
+  50%    {box-shadow:var(--sombra),0 0 0 6px rgba(156,47,36,.22)}
+}
+@keyframes piscaEtiqueta{ 0%,100%{opacity:1} 50%{opacity:.45} }
+.card.atencao{animation:pulsoAmbar 1.4s ease-in-out infinite;background:#fffdf8}
+.card.urgente{animation:pulsoVermelho 1.4s ease-in-out infinite;background:#fffaf9;border-left-width:6px}
+.card.atencao .espera,.card.urgente .espera{animation:piscaEtiqueta 1.4s ease-in-out infinite}
+/* quem já pegou o card não precisa de alarme: o item tem dono, o pulso vira distração */
+.card.minha{animation:none!important;background:var(--verdeclaro)}
+
+/* respeita quem não quer animação — a cor e o texto sozinhos já dizem a faixa */
+@media (prefers-reduced-motion:reduce){
+  .card.atencao,.card.urgente,.card.atencao .espera,.card.urgente .espera{animation:none!important}
+  .card.urgente{box-shadow:var(--sombra),0 0 0 3px rgba(156,47,36,.25)}
+  .card.atencao{box-shadow:var(--sombra),0 0 0 3px rgba(138,91,0,.2)}
+}

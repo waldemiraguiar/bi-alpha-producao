@@ -7,7 +7,11 @@
 (() => {
   const URL_SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co'
   const KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
-  const SB = window.supabase && window.supabase.createClient ? window.supabase.createClient(URL_SB, KEY) : null
+  // realtime: o banco AVISA quando muda. Antes eu perguntava a cada 20s — com 5 mesas abertas
+  // 10h por dia dá 9.000 consultas/dia (198 mil/mês) para, quase sempre, ouvir "nada mudou".
+  // Ouvindo, a tela fica mais rápida (aparece no instante) e o custo cai para perto de zero.
+  const SB = window.supabase && window.supabase.createClient
+    ? window.supabase.createClient(URL_SB, KEY, { realtime: { params: { eventsPerSecond: 3 } } }) : null
   const $ = s => document.querySelector(s)
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
@@ -28,13 +32,33 @@
     clearTimeout(t._t); t._t = setTimeout(() => { t.hidden = true }, 3400)
   }
 
-  // ── ③ o relógio do card: o que espera há mais tempo grita ──
+  // ── ③ o relógio do card ──
+  // Wal, 23/set: 5 min = amarelo, 10 min = vermelho, e os cards se REAGRUPAM por faixa.
+  // Benchmark: em fila de atendimento o agente prioriza pelo TEMPO QUE RESTA do acordo, não pela
+  // ordem de chegada (Zendesk/Gorgias) — por isso o relógio é o elemento mais forte do card. E o
+  // agrupamento por idade é o que os guias de "ticket aging" usam para atacar o atraso em bloco,
+  // em vez de caçar item por item numa lista só.
+  const SLA = { atencao: 5, urgente: 10 }        // minutos
   function espera(quando) {
-    const min = Math.max(0, Math.round((Date.now() - Date.parse(quando)) / 60000))
-    const txt = min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`
-    // faixas escolhidas com o histórico real: metade das paradas entra em 35 min, 3 de cada 4 em 93.
-    const nivel = min >= 90 ? 'urgente' : min >= 35 ? 'atencao' : ''
+    const ms = Math.max(0, Date.now() - Date.parse(quando))
+    const min = Math.floor(ms / 60000), seg = Math.floor(ms / 1000) % 60
+    const txt = min < 60 ? `${min}:${String(seg).padStart(2, '0')}` : `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`
+    const nivel = min >= SLA.urgente ? 'urgente' : min >= SLA.atencao ? 'atencao' : ''
     return { txt, nivel, min }
+  }
+  // data e hora do pedido — o cronômetro diz HÁ QUANTO TEMPO, isto diz DESDE QUANDO.
+  // Sem os dois, quem chega no meio do turno não sabe se "12:03" é de agora ou de ontem.
+  function quandoTxt(iso) {
+    const d = new Date(iso)
+    if (isNaN(d)) return ''
+    const o = { timeZone: 'America/Sao_Paulo' }
+    const hoje = new Date().toLocaleDateString('sv-SE', o)
+    const dia = d.toLocaleDateString('sv-SE', o)
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', ...o })
+    if (dia === hoje) return `hoje ${hora}`
+    const ontem = new Date(Date.now() - 864e5).toLocaleDateString('sv-SE', o)
+    if (dia === ontem) return `ontem ${hora}`
+    return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', ...o })} ${hora}`
   }
 
   function cardHTML(c, minha) {
@@ -42,11 +66,13 @@
     const rotaSel = c.rota || c.rota_sug || ''
     const opcoes = ROTAS.map(r => `<option value="${esc(r)}"${r === rotaSel ? ' selected' : ''}>${esc(r)}</option>`).join('')
     const temEnd = !!(c._endereco)
-    return `<article class="card ${minha ? 'minha' : e.nivel}" data-id="${c.id}">
+    const t0 = Date.parse(c.quando || c.criado_em) || Date.now()
+    return `<article class="card ${minha ? 'minha' : e.nivel}" data-id="${c.id}" data-nivel="${e.nivel}">
       <div class="cab">
         <span class="clinica">${esc(c.clinica || c.grupo || 'clínica')}</span>
-        <span class="espera ${e.nivel}">⏱ ${e.txt}</span>
+        <span class="espera ${e.nivel}" data-desde="${t0}"><i>⏱</i>${e.txt}</span>
       </div>
+      <div class="desde">pedido <b>${esc(quandoTxt(c.quando || c.criado_em))}</b></div>
       ${c.texto ? `<div class="pedido">“${esc(String(c.texto).slice(0, 130))}”</div>` : ''}
       ${temEnd
         ? `<div class="endereco"><span class="ico">📍</span><span>${esc(c._endereco)}</span></div>`
@@ -67,6 +93,26 @@
     </article>`
   }
 
+  // ── timer ao vivo: atualiza o relógio de cada card a cada segundo, SEM tocar no banco.
+  // Custo zero e a tela "respira" — o Wal pediu mais dinâmica, e dinâmica não precisa ser rede.
+  function tiquetaque() {
+    let virou = false
+    for (const el of document.querySelectorAll('[data-desde]')) {
+      const e = espera(Number(el.dataset.desde))
+      el.innerHTML = `<i>⏱</i>${e.txt}`
+      el.className = 'espera ' + e.nivel
+      const card = el.closest('.card')
+      if (!card) continue
+      if (card.dataset.nivel !== e.nivel) { card.dataset.nivel = e.nivel; virou = true }
+      if (!card.classList.contains('minha')) card.className = 'card ' + e.nivel
+    }
+    // ⓻ REAGRUPAR: o card que acabou de passar de 5 ou 10 min sai do bloco dele e vai para junto
+    // dos outros da mesma faixa. É o ponto do pedido do Wal — ver os atrasados JUNTOS, não
+    // espalhados. Só redesenha quando ALGUÉM vira de faixa; caso contrário a tela só tiquetaqueia.
+    if (virou) pintar()
+  }
+  setInterval(tiquetaque, 1000)
+
   function pintar() {
     const eu = (sessao && sessao.nome || '').toLowerCase()
     const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
@@ -82,7 +128,23 @@
     const ord = (a, b) => Date.parse(a.quando || a.criado_em) - Date.parse(b.quando || b.criado_em)
     $('#minhas').hidden = !minhas.length
     $('#listaMinhas').innerHTML = minhas.sort(ord).map(c => cardHTML(c, true)).join('')
-    $('#listaFila').innerHTML = daFila.sort(ord).map(c => cardHTML(c, false)).join('')
+
+    // ⓻ AGRUPAR POR FAIXA DE ESPERA — os atrasados ficam juntos, no topo.
+    // Numa lista única o item de 11 min some no meio dos de 1 min; agrupado, o bloco vermelho é a
+    // primeira coisa que a pessoa vê ao abrir a tela. Bloco vazio não aparece (não vira ruído).
+    const faixas = [
+      { nivel: 'urgente', titulo: 'Passou de 10 minutos', sub: 'atenda estes primeiro' },
+      { nivel: 'atencao', titulo: 'Passou de 5 minutos', sub: 'começando a atrasar' },
+      { nivel: '', titulo: 'Acabaram de chegar', sub: 'dentro do tempo' },
+    ]
+    $('#listaFila').innerHTML = faixas.map(f => {
+      const desta = daFila.filter(c => espera(c.quando || c.criado_em).nivel === f.nivel).sort(ord)
+      if (!desta.length) return ''
+      return `<div class="faixa ${f.nivel || 'novo'}">
+          <h3><span class="pino"></span>${f.titulo}<b>${desta.length}</b><small>${f.sub}</small></h3>
+          <div class="cards">${desta.map(c => cardHTML(c, false)).join('')}</div>
+        </div>`
+    }).join('')
     $('#vazio').hidden = daFila.length > 0
     $('#listaFeitas').innerHTML = feitas.length
       ? feitas.slice(-40).map(c => `<span class="feita">✓ ${esc(c.clinica || c.grupo)}${c.rota ? ` · ${esc(c.rota)}` : ''}</span>`).join('')
@@ -177,7 +239,14 @@
     $('#quemSou').hidden = false
     $('#btSair').hidden = false
     carregar()
-    clearInterval(timer); timer = setInterval(carregar, 20000)   // a fila é compartilhada: atualiza sozinha
+    // ouve a tabela: qualquer inserção/alteração repinta na hora. O intervalo longo fica só como
+    // rede de segurança para o caso de a conexão cair sem avisar.
+    try {
+      SB.channel('fila-agendamento')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'inc_coletas' }, () => carregar())
+        .subscribe()
+    } catch (e) {}
+    clearInterval(timer); timer = setInterval(carregar, 120000)
     // ao voltar para a aba, atualiza na hora — mesa física fica com a tela aberta o dia todo
     document.addEventListener('visibilitychange', () => { if (!document.hidden) carregar() })
   }
