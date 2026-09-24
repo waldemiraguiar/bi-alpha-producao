@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '*/15 0-2,9-23 * * *'   # a cada 15 min, ~06h-23h BRT (UTC=BRT+3; 0-2 cobre a 2ª rotina da noite)
   workflow_dispatch:            # rodar agora p/ testar
+    inputs:
+      teste_autocura:
+        description: "1 = FIRE-DRILL da auto-cura: dispara o redeploy do painel p/ provar o mecanismo (redeploy é inofensivo)"
+        required: false
+        default: "0"
   # 23/set: MEDIDO — o cron pede 15 min e o GitHub estava entregando UMA execução a cada 3-5 HORAS
   # (repo público = agendamento de baixa prioridade; o inclusoes_hf.yml já tinha sofrido o mesmo em
   # 17/set). Um vigia que dorme 4 h não é vigia. O "Atualiza Painel de Produção" roda de 10 em 10 min
@@ -27,6 +32,9 @@ jobs:
   vigia:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      actions: write        # p/ AUTO-CURA: disparar o "Atualiza Painel de Produção" (deploy=1) sozinho
+      contents: read
     steps:
       - name: Health check da frota + alerta
         env:
@@ -40,6 +48,9 @@ jobs:
           MYSQL_USER:         ${{ secrets.MYSQL_USER }}
           MYSQL_PWD:          ${{ secrets.MYSQL_PWD }}
           MYSQL_DB:           ${{ secrets.MYSQL_DB }}
+          GH_TOKEN:           ${{ secrets.GITHUB_TOKEN }}   # AUTO-CURA: dispara o redeploy do painel
+          GH_REPO:            ${{ github.repository }}
+          TESTE_AUTOCURA:     ${{ github.event.inputs.teste_autocura }}
         run: |
           python3 -m pip install --quiet --disable-pip-version-check pymysql 2>/dev/null || pip3 install --quiet pymysql 2>/dev/null || true
           python3 - <<'PY'
@@ -282,14 +293,68 @@ jobs:
               except Exception as e:
                   print("recuperacao check falhou:",e)
 
+          # ---- AUTO-CURA (24/set/2026): SITE no ar + /api/enc caído = FUNÇÕES apagadas por deploy errado
+          # (incidente 24/set: netlify deploy local da raiz derrubou todas as funções). Dispara o redeploy
+          # OFICIAL (atualiza.yml deploy=1) sozinho. Cooldown de 20 min (marca em sep_marks) p/ não virar
+          # tempestade de deploy. Só age nesta assinatura exata — se o SITE tb caiu, é outra coisa: só avisa.
+          def dispara_redeploy():
+              """Dispara o 'Atualiza Painel de Produção' (deploy=1) via API. Retorna (ok, http)."""
+              repo=os.environ["GH_REPO"]; tok=os.environ["GH_TOKEN"]
+              body=json.dumps({"ref":"main","inputs":{"deploy":"1"}}).encode()
+              h={"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json",
+                 "X-GitHub-Api-Version":"2022-11-28","User-Agent":"vigia-frota","Content-Type":"application/json"}
+              st_d,_,_=http(f"https://api.github.com/repos/{repo}/actions/workflows/atualiza.yml/dispatches","POST",h,body)
+              return st_d in (201,204), st_d
+
+          # FIRE-DRILL manual: prova que o token consegue disparar o redeploy (redeploy é inofensivo).
+          if os.environ.get("TESTE_AUTOCURA")=="1":
+              try:
+                  ok,st_d=dispara_redeploy()
+                  print(f"[FIRE-DRILL] auto-cura dispatch HTTP {st_d} -> {'OK, redeploy disparado' if ok else 'FALHOU'}")
+              except Exception as e:
+                  print("[FIRE-DRILL] auto-cura FALHOU ao disparar:",e)
+              raise SystemExit(0)
+
+          auto_cura_msg=""
+          enc_falhou=any(f.startswith("Dados do painel (/api/enc)") for f in falhas)
+          site_falhou=any(f.startswith("Site do painel") for f in falhas)
+          if enc_falhou and not site_falhou:
+              recente=False
+              try:
+                  _,b,_=supa("/sep_marks?chave=eq.zzz_vigia_autocura&select=obs")
+                  arr=json.loads(b) if b else []
+                  if arr and arr[0].get("obs"):
+                      last=datetime.datetime.strptime(arr[0]["obs"][:19],"%Y-%m-%dT%H:%M:%S")
+                      recente=(datetime.datetime.utcnow()-last).total_seconds()<1200
+              except Exception: pass
+              if recente:
+                  auto_cura_msg="\n\n🔧 Auto-cura já disparada nos últimos 20 min (redeploy em andamento) — aguardando voltar."
+              else:
+                  try:
+                      ok,st_d=dispara_redeploy()
+                      if ok:
+                          auto_cura_msg=("\n\n🔧 AUTO-CURA DISPARADA: redeploy oficial do painel (atualiza.yml deploy=1). "
+                                         "Deve voltar sozinho em ~2-3 min. Se NÃO voltar, é pane real — verifique.")
+                          try:
+                              supa("/sep_marks","POST",{"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+                                   json.dumps({"chave":"zzz_vigia_autocura","estado":"vigia","por":"vigia","obs":datetime.datetime.utcnow().isoformat()}))
+                          except Exception: pass
+                      else:
+                          auto_cura_msg=f"\n\n⚠️ Auto-cura tentada mas o disparo falhou (HTTP {st_d}) — redeploy manual necessário."
+                      print("auto-cura dispatch HTTP:",st_d)
+                  except Exception as e:
+                      auto_cura_msg=f"\n\n⚠️ Auto-cura falhou ao disparar ({e}) — redeploy manual necessário."
+
           # PANE (qualquer check falhou) -> alerta NA HORA
           if falhas:
               corpo=(f"ALERTA Wal ({agora}) — o painel está com problema pra a equipe:\n\n"
                      + "\n".join("❌ "+f for f in falhas)
                      + ("\n\nContexto: "+" | ".join(ctx) if ctx else "")
+                     + auto_cura_msg
                      + "\n\nA equipe pode estar travada. Enquanto verifica: modo papel (separa físico, marca depois — nada se perde).")
+              wa_extra=" 🔧 auto-cura disparada (redeploy)." if "AUTO-CURA DISPARADA" in auto_cura_msg else ""
               alerta("🚨 PANE no painel de Triagem/Produção", corpo,
-                     f"🚨 PANE no painel Triagem/Produção ({agora}): "+"; ".join(falhas[:3])+". Equipe pode estar travada — modo papel enquanto verifica.")
+                     f"🚨 PANE no painel Triagem/Produção ({agora}): "+"; ".join(falhas[:3])+"."+wa_extra+" Equipe pode estar travada — modo papel enquanto verifica.")
               raise SystemExit(0)
 
           # SATURAÇÃO: a tabela cresce sempre (finalizadas não são apagadas). Aviso GENTIL 1x/dia
