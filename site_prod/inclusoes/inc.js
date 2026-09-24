@@ -404,7 +404,7 @@
     try { desenharConferencia() } catch {}
     try { desenharCancelamentos() } catch {}
     if (hist) return desenharHistorico()
-    if (rast || col || rot || npsv || terr || pan || conf) return
+    if (rast || col || rot || npsv || terr || pan || conf || canc) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
     desenharRascunhos()
