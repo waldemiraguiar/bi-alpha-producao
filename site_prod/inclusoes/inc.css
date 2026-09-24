@@ -759,3 +759,15 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .dlg-simnao .leve { background:var(--tec,#6b4fa8); color:#fff; font-weight:600 }
 .dlg-simnao .nao { background:transparent; border-color:var(--linha,#dfe4e3); color:var(--mudo,#5b6b74) }
 .dlg-simnao .nao:hover { border-color:#c0392b; color:#c0392b }
+
+/* ── 🔬 A resposta da ÁREA TÉCNICA escrita no cartão ───────────────────────────────────────
+   Thailan, 24/set (áudio): "não consigo enxergar onde é que tá escrito temos amostra ou não
+   temos amostra". Por isso é selo cheio e não texto colorido: texto colorido some numa tela de
+   TV vista de longe, que é como o quadro é lido de verdade. As duas respostas têm o MESMO peso —
+   um verde fraquinho ao lado de um vermelho forte seria a mesma cegueira, invertida. */
+.info.resp-tec{color:var(--texto);font-size:14.5px;margin-top:6px;line-height:1.7}
+.info.resp-tec>b:first-child{margin-right:6px}
+.tag-tem,.tag-nao{display:inline-block;border-radius:6px;padding:2px 10px;
+  font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.05em;white-space:nowrap}
+.tag-tem{background:var(--ok);color:#04220f}
+.tag-nao{background:var(--vermelho);color:#fff}

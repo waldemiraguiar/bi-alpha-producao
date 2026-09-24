@@ -492,9 +492,24 @@
   }
   function infoExtra(c) {
     const out = []
+    // ── 🔬 A RESPOSTA DA ÁREA TÉCNICA, ESCRITA NO CARTÃO ──────────────────────────────────────
+    // Thailan, 24/set (áudio): "minha área técnica me confirmou que eu tenho uma amostra pra dar
+    // seguimento com o exame. Só que quando essa notificação vem pra atendimento ao cliente, eu
+    // não consigo enxergar onde é que tá escrito 'temos amostra' ou 'não temos amostra'."
+    //
+    // A informação EXISTIA, mas só implícita: o cartão só chega na etapa 3 se a técnica clicou
+    // "Tem amostra suficiente". Quem pega a fila no meio do dia não tem como adivinhar isso —
+    // e adivinhar é justamente o que faz alguém ligar para a clínica falando a coisa errada.
+    // Agora as duas respostas são ESCRITAS, com o mesmo peso visual, com quem respondeu e a hora.
     if (c.status === 'sem_amostra') {
       const ev = ultimoEvento(c, 'sem_amostra')
-      out.push(`<div class="info ruim">🔬 Técnica: <b>${esc(ev?.obs || 'sem motivo escrito')}</b>${ev ? ` · ${esc(ev.por)} às ${hm(ev.quando)}` : ''} → avisar a clínica</div>`)
+      out.push(`<div class="info resp-tec"><b class="tag-nao">🔬 NÃO TEM AMOSTRA</b> <b>${esc(ev?.obs || 'sem motivo escrito')}</b>${ev ? ` — Área Técnica, ${esc(ev.por)} às ${hm(ev.quando)}` : ''} → avisar a clínica</div>`)
+    }
+    // o espelho do de cima: segue visível da etapa 3 até o fim, porque o escritório e quem avisa
+    // o laudo também perguntam "essa aqui tinha amostra mesmo?"
+    if (c.status !== 'sem_amostra' && etapaVisivel(c) >= 3) {
+      const ev = ultimoEvento(c, 'amostra_ok')
+      if (ev) out.push(`<div class="info resp-tec"><b class="tag-tem">🔬 TEM AMOSTRA</b> confirmado pela Área Técnica${ev.por ? ` · ${esc(ev.por)}` : ''}${ev.quando ? ` às ${hm(ev.quando)}` : ''}${ev.obs ? ` · <b>${esc(ev.obs)}</b>` : ''}</div>`)
     }
     if (c.etapa === 3 && c.pausado && c.status === 'aberto') {
       const ev = ultimoEvento(c, 'aguardando_clinica')
@@ -2308,6 +2323,10 @@
       { id: 9, quando: min(300), grupo: 'Alpha - Pet Vida', clinica: 'Pet Vida', autor: 'Dra. Rita', texto: 'Podem buscar o material hoje?', rota_sug: 'rota 2', turno_sug: 'tarde de hoje', corte_em: new Date(agora() - 40 * 60000).toISOString(), status: 'agendada', rota: 'rota 2', turno: 'tarde', por: 'DEMO', agendada_em: min(280) },
       { id: 7, quando: min(240), grupo: 'Alpha - Nup Recreio', clinica: 'Nup Recreio', autor: 'Recepção', texto: 'Podem me mandar alguns tubos vermelhos???', rota_sug: 'rota 9', turno_sug: 'manhã de hoje', status: 'entregue', rota: 'rota 9', turno: 'manhã', por: 'DEMO', na_lista_em: min(200), na_lista_rota: 'rota 9', entregue_em: min(90), tipo: 'material', item: 'tubos' }]
     eventos = chamados.flatMap(x => [{ chamado_id: x.id, quando: x.criado_em, para: 1, acao: 'abriu' }, { chamado_id: x.id, quando: x.etapa_desde, para: x.etapa, acao: 'avancou' }])
+    // todo cartão da etapa 3 pra frente passou pela técnica — a demonstração precisa mostrar isso,
+    // senão quem treina no demo não aprende a procurar o selo que vai ver na operação de verdade
+    for (const x of chamados) if (x.etapa >= 3 && x.status !== 'sem_amostra')
+      eventos.push({ chamado_id: x.id, quando: x.etapa_desde, para: 3, acao: 'amostra_ok', por: 'DEMO' })
     eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
   }
   function demoRpc(nome, a) {
