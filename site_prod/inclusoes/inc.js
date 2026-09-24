@@ -2006,6 +2006,9 @@
       obs = await pedirMotivo(acao === 'cancelar' ? 'Por que cancelar esta inclusão?' : acao === 'sem_amostra' ? 'O que aconteceu com a amostra?' : 'O que a clínica respondeu?')
       if (obs == null) return
     }
+    // a técnica confirmou que tem amostra: aproveito o gesto e pergunto QUAL (1 clique).
+    // Vem em branco se ela pular — e em branco não impede nada, só não aparece no cartão.
+    if (acao === 'amostra_ok') obs = (await pedirAmostra(card)) || null
     if (acao === 'escritorio_ok' && card && card.novo_numero) {
       obs = await pedirMotivo('Qual o NOVO número da amostra no HF?', 'Número')
       if (obs == null) return
@@ -2157,6 +2160,49 @@
         d.close(); d.remove(); resolve(b.dataset.r === '1')
       })
       d.addEventListener('cancel', () => { d.remove(); resolve(false) })   // ESC = não seguir
+      document.body.appendChild(d); d.showModal()
+    })
+  }
+  /**
+   * QUAL AMOSTRA A TÉCNICA TEM NA MÃO — perguntado no momento em que ela confirma.
+   * Wal, 24/set: "SIM, PEDE PRA TECNICA DIZER QUAL AMOSTRA".
+   *
+   * Três cuidados, porque quem responde isso tem fila esperando:
+   * ① UM clique resolve: clicar no tipo já confirma e fecha. Não tem "escolher e depois Salvar".
+   * ② A ordem muda com o SETOR do cartão: em Hematologia o EDTA vem primeiro, em Bioquímica o
+   *    soro. O tipo certo costuma ser o primeiro botão — quem tem pressa acerta sem ler a lista.
+   * ③ NUNCA BLOQUEIA [[regra-sempre-permitir-nunca-bloquear-so-alerta]]: "seguir sem dizer" é um
+   *    botão de verdade, visível, não um ESC escondido. Se ela não souber ou não quiser responder,
+   *    o cartão anda igual. Trava aqui pararia a operação por causa de um campo de texto.
+   */
+  const MOTIVOS_AMOSTRA_POR_SETOR = {
+    hemato:     ['Sangue total (EDTA) — hemograma', 'Lâmina', 'Soro'],
+    bioquimica: ['Soro', 'Plasma (citrato)', 'Sangue com fluoreto (glicose)'],
+    urina_fezes:['Urina', 'Fezes', 'Swab'],
+    pcr_soro:   ['Soro', 'Sangue total (EDTA) — hemograma', 'Swab'],
+    cito_histo: ['Lâmina', 'Líquido cavitário / punção', 'Swab'],
+  }
+  function pedirAmostra(c) {
+    const preferidos = MOTIVOS_AMOSTRA_POR_SETOR[c?.setor] || []
+    const lista = [...preferidos, ...MOTIVOS_AMOSTRA.filter(x => !preferidos.includes(x))]
+    return new Promise(resolve => {
+      const d = document.createElement('dialog')
+      d.className = 'dlg-amostra'
+      d.innerHTML = `<h3>Qual amostra você tem aí?</h3>
+        <p class="qual-cartao"></p>
+        <div class="qual-ops">${lista.map(m => `<button type="button" data-m="${esc(m)}">${esc(m)}</button>`).join('')}</div>
+        <div class="qual-livre"><input type="text" maxlength="60" placeholder="outra — escreva aqui"><button type="button" data-livre="1">Salvar</button></div>
+        <div class="acoes"><button type="button" class="leve" data-pular="1">Seguir sem dizer</button></div>`
+      d.querySelector('.qual-cartao').textContent =
+        `${c?.pet || 'sem nome'} · ${c?.req || ''} · +${c?.exame || ''}${c?.setor ? ' · ' + (NOME_SETOR[c.setor] || '') : ''}`
+      const fim = v => { d.close(); d.remove(); resolve(v) }
+      d.addEventListener('click', ev => {
+        const b = ev.target.closest('button'); if (!b) return
+        if (b.dataset.pular) return fim('')                           // seguiu sem dizer
+        if (b.dataset.livre) { const v = d.querySelector('input').value.trim(); return fim(v || '') }
+        if (b.dataset.m) return fim(b.dataset.m)                      // ① um clique resolve
+      })
+      d.addEventListener('cancel', () => { d.remove(); resolve('') })  // ESC também segue
       document.body.appendChild(d); d.showModal()
     })
   }
