@@ -793,3 +793,51 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .dlg-amostra .acoes{display:flex;justify-content:flex-end;border-top:1px solid var(--linha);padding-top:14px}
 .dlg-amostra .leve{font:inherit;font-size:14px;padding:9px 16px;border-radius:8px;border:1px solid var(--linha);background:transparent;color:var(--mudo)}
 .dlg-amostra .leve:hover{color:var(--texto);border-color:var(--mudo)}
+
+/* ── 🚫 SOLICITAÇÕES DE CANCELAMENTO (pedido do Fúlvio, 24/set) ────────────────────────────
+   Vermelho-tijolo próprio: não é o vermelho de alarme do TERREMOTO nem o rosa da IA. Cancelamento
+   não é emergência — é uma corrida contra o relógio, e merece cor própria para não competir. */
+.aba-cancel{color:#b45309;border-color:color-mix(in srgb,#b45309 45%,transparent)}
+.abas button.aba-cancel.on{background:#b45309;color:#fff}
+.aba-cancel.tem{font-weight:700}
+.selo-cancel{display:inline-block;background:#b45309;color:#fff;font-family:var(--disp);font-weight:700;
+  font-size:.6em;letter-spacing:.04em;border-radius:6px;padding:1px 9px;vertical-align:.25em}
+.cancel-topo{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:12px 0}
+.cancel{background:var(--painel);border-radius:12px;padding:12px 16px;border-left:6px solid var(--linha);
+  display:grid;gap:6px;box-shadow:var(--sombra);border:1px solid var(--linha);border-left-width:6px}
+.cancel.aberto{border-left-color:#b45309}
+.cancel.ok{border-left-color:var(--ok);opacity:.75}
+.cancel.ruim{border-left-color:var(--vermelho)}
+.cancel.mudo{border-left-color:var(--fraco);opacity:.75}
+.can-cab{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between}
+.can-clin{font-family:var(--disp);font-size:20px;letter-spacing:.01em}
+.can-t{font-size:13px;color:var(--mudo);font-family:var(--mono)}
+.can-alvo{font-size:15px}
+.can-alvo .req{font-family:var(--mono);color:var(--mudo);font-size:13.5px}
+.can-txt{font-size:14px;color:var(--mudo);line-height:1.5}
+.can-hf{font-size:13.5px;color:var(--esc);background:var(--painel2);border-radius:8px;padding:6px 10px}
+.can-falta{font-size:13px;color:var(--amarelo)}
+.can-falta .lnk{font:inherit;background:none;border:none;color:var(--cc);text-decoration:underline;padding:0}
+.can-acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.can-acoes button{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid transparent;background:var(--texto);color:#fff}
+.can-acoes .nao{background:transparent;border-color:var(--vermelho);color:var(--vermelho)}
+.can-acoes .leve{background:transparent;border-color:var(--linha);color:var(--mudo)}
+.cancel-hf{font-size:13.5px;color:var(--esc);background:var(--painel2);border-radius:8px;padding:8px 11px;margin:8px 0}
+.cancel-hf.ruim{color:var(--vermelho)}
+#dlgCancel{border:none;border-radius:14px;padding:22px 24px;max-width:560px;width:92vw;
+  box-shadow:0 18px 50px rgba(0,0,0,.22);background:var(--painel);color:var(--texto)}
+#dlgCancel::backdrop{background:rgba(12,22,28,.45)}
+#dlgCancel h3{margin:0 0 4px;font-size:22px}
+#dlgCancel label{display:block;font-size:13px;color:var(--mudo);margin:12px 0 4px}
+#dlgCancel input,#dlgCancel textarea{width:100%;font:inherit;font-size:15px;padding:9px 12px;
+  border:1px solid var(--linha);border-radius:8px;background:var(--painel2);color:var(--texto)}
+#dlgCancel .linha2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#dlgCancel .obrig{color:var(--vermelho)}
+#dlgCancel .erro{color:var(--vermelho);font-size:14px;min-height:1.2em;margin:8px 0 0}
+#dlgCancel .linha-botoes{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+/* classe PRÓPRIA: .rast-filtros tem dois handlers globais (linhas 741 e 2483 do inc.js) que
+   limpavam o realce destes botões e, pior, zeravam o filtro da aba Rastreamento ao clicar aqui. */
+.cancel-filtros{display:flex;gap:6px}
+.cancel-filtros button{background:var(--painel);color:var(--mudo);border:1px solid var(--linha);border-radius:8px;padding:6px 12px}
+.cancel-filtros button.on{background:var(--texto);color:#fff;border-color:var(--texto)}
+.vazio.ruim{color:var(--vermelho);line-height:1.6}

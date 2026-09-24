@@ -78,7 +78,7 @@
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
   let terremotos = [], conferencia = [], heranca = []
-  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
+  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -120,6 +120,11 @@
       nps = np.error ? [] : (np.data || [])
       const nc = await SB.from('nps_convites').select('*').gte('criado_em', new Date(agora() - 180 * 864e5).toISOString()).range(0, 999)
       npsConvites = nc.error ? [] : (nc.data || [])
+      // 🚫 cancelamentos (Fúlvio, 24/set). Se a tabela ainda não existe — o SQL roda separado —
+      // a aba aparece vazia e explica, em vez de o painel inteiro quebrar no erro do select.
+      const cc = await SB.from('inc_cancelamentos').select('*').gte('criado_em', new Date(agora() - 60 * 864e5).toISOString()).order('criado_em', { ascending: false }).range(0, 999)
+      cancelamentos = cc.error ? [] : (cc.data || [])
+      cancelSemTabela = !!cc.error   // "nenhuma solicitação 👍" mentiria se a tabela nem existe
       const rv = await SB.from('rota_vivo').select('*').order('rota')
       rotasVivo = rv.error ? [] : (rv.data || [])
       // 19/set: linha que o ouvinte parou de publicar (ex.: o turno foi reclassificado de noite para manhã)
@@ -385,8 +390,8 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere'
-    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan || conf; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere', canc = setor === 'cancel'
+    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan || conf || canc; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf; $('vCancel').hidden = !canc
     desenharLegenda()
     try { desenharAbasSetor() } catch {}
     desenharRastreamento()
@@ -397,6 +402,7 @@
     try { desenharTerremoto() } catch {}
     try { desenharPanorama() } catch {}
     try { desenharConferencia() } catch {}
+    try { desenharCancelamentos() } catch {}
     if (hist) return desenharHistorico()
     if (rast || col || rot || npsv || terr || pan || conf) return
     const abertos = chamados.filter(ativo)
@@ -521,6 +527,86 @@
       out.push(`<div class="info ok">📧 Escritório liberou e enviou o e-mail${ev ? ` às ${hm(ev.quando)} (${esc(ev.por)})` : ''} → avisar a clínica</div>`)
     }
     return out.join('')
+  }
+  // ══ 🚫 SOLICITAÇÕES DE CANCELAMENTO ═══════════════════════════════════════════════════════
+  // Fúlvio, 24/set por áudio: "uma aba para cancelamento… é quando um cliente manda uma mensagem
+  // pra gente através do WhatsApp, dentro do grupo, que ele não quer mais um exame."
+  //
+  // MEDIDO ANTES DE DESENHAR (10 dias, 15.940 mensagens de cliente):
+  //   ~1 pedido por dia · 11 clínicas distintas · volume baixo, mas cada um é dinheiro e confiança.
+  //
+  // DOIS ACHADOS QUE MUDARAM O DESENHO DO QUE ELE PEDIU:
+  //  ① O cliente quase nunca diz o pet e o exame. 10 dos 15 são "Pode cancelar" · "Desconsidere." ·
+  //    "Cancela por favor" — resposta a uma mensagem do fio. O Fúlvio pediu clínica+animal+exame;
+  //    clínica sempre dá (é o grupo), os outros dois raramente vêm escritos. Por isso pet/req/exame
+  //    são OPCIONAIS na abertura e completáveis depois: exigir tudo faria a pessoa não registrar.
+  //  ② A pergunta real é "ainda dá tempo?". Rodrigo (KBCV, 17/set): "Não tem como cancelar, certo.
+  //    Já usou o reagente." Cancelamento é corrida contra o exame ser processado — um cartão que não
+  //    diz ONDE o exame está obriga a pessoa a ir no HF assim mesmo, e aí o cartão não serviu.
+  const CANCEL_DESFECHO = {
+    cancelado:        { rot: '✅ cancelado no HF',            cls: 'ok' },
+    nao_deu_tempo:    { rot: '⚠️ não deu tempo — exame feito', cls: 'ruim' },
+    ja_estava_pronto: { rot: '📧 laudo já tinha saído',        cls: 'ruim' },
+    desistiu:         { rot: '↩️ cliente desistiu',            cls: 'mudo' },
+  }
+  function cancelAbertos() { return cancelamentos.filter(c => c.status === 'aberto') }
+  function desenharCancelamentos() {
+    const b = document.querySelector('#abas button[data-setor="cancel"]')
+    if (b) {
+      const n = cancelAbertos().length
+      b.innerHTML = '🚫 Cancelamentos' + (n ? ` <span class="badge">${n}</span>` : '')
+      b.classList.toggle('tem', n > 0)
+    }
+    document.querySelectorAll('.cancel-filtros button').forEach(x => x.classList.toggle('on', x.dataset.cper === cancelPer))
+    const alvo = $('cancelLista'); if (!alvo) return
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0)
+    const lim = cancelPer === 'semana' ? agora() - 7 * 864e5 : d0.getTime()
+    const lst = cancelPer === 'aberto'
+      ? cancelAbertos()
+      : cancelamentos.filter(c => c.status !== 'aberto' && T(c.resolvido_em || c.criado_em) >= lim)
+    if (!lst.length) {
+      alvo.innerHTML = cancelSemTabela
+        ? `<div class="vazio ruim">A aba está pronta, mas a tabela ainda não existe no banco.<br>
+           Falta rodar <b>supabase_inclusoes_17_cancelamentos.sql</b> no editor SQL do Supabase.</div>`
+        : `<div class="vazio">${cancelPer === 'aberto'
+            ? 'Nenhuma solicitação de cancelamento em aberto. 👍'
+            : 'Nada resolvido neste período.'}</div>`
+      return
+    }
+    alvo.innerHTML = lst.map(c => {
+      const d = CANCEL_DESFECHO[c.status]
+      const idade = fmt((agora() - T(c.quando_pedido || c.criado_em)) / 60000)
+      const falta = []
+      if (!c.req) falta.push('requisição'); if (!c.pet) falta.push('pet'); if (!c.exame) falta.push('exame')
+      return `<div class="cancel ${c.status === 'aberto' ? 'aberto' : (d ? d.cls : '')}" data-cid="${c.id}">
+        <div class="can-cab">
+          <b class="can-clin">${esc(c.clinica || 'clínica não identificada')}</b>
+          <span class="can-t">${c.status === 'aberto' ? `pedido há ${idade}` : `${d ? d.rot : esc(c.status)} · ${esc(c.resolvido_por || '')}`}</span>
+        </div>
+        <div class="can-alvo">${c.pet ? `<b>${esc(c.pet)}</b>` : '<span class="mudo">pet não informado</span>'}${c.req ? ` <span class="req">${esc(c.req)}</span>` : ''} — quer cancelar: ${c.exame ? `<b>${esc(c.exame)}</b>` : '<span class="mudo">exame não informado</span>'}</div>
+        ${c.texto ? `<div class="can-txt">💬 ${esc(c.texto)}${c.autor ? ` <span class="mudo">— ${esc(c.autor)}</span>` : ''}</div>` : ''}
+        ${c.hf_estado ? `<div class="can-hf">🔎 ${esc(c.hf_estado)}</div>` : ''}
+        ${c.motivo ? `<div class="can-txt mudo">↳ ${esc(c.motivo)}</div>` : ''}
+        ${c.status !== 'aberto' ? '' : `
+          ${falta.length ? `<div class="can-falta">falta ${falta.join(', ')} — <button class="lnk" data-ccompletar="${c.id}">completar</button></div>` : ''}
+          <div class="can-acoes">
+            <button data-cacao="cancelado" data-cid="${c.id}">Cancelado no HF</button>
+            <button class="nao" data-cacao="nao_deu_tempo" data-cid="${c.id}">Não deu tempo — exame feito</button>
+            <button class="nao" data-cacao="ja_estava_pronto" data-cid="${c.id}">Laudo já tinha saído</button>
+            <button class="leve" data-cacao="desistiu" data-cid="${c.id}">Cliente desistiu</button>
+          </div>`}
+      </div>`
+    }).join('')
+  }
+  /** o que o espelho do HF sabe da requisição — é a resposta do "ainda dá tempo?" */
+  async function olharHF(num) {
+    const n = String(num || '').replace(/\D/g, ''); if (!n) return ''
+    try {
+      const r = await rpc('inc_buscar_req', { p_nome: sessao.nome, p_senha: sessao.senha, p_num: n })
+      if (!r) return `requisição ${n} não está no espelho do HF (o espelho atualiza a cada 30 min)`
+      const ex = Array.isArray(r.exames) ? r.exames : []
+      return `HF: ${r.pet || 'pet sem nome'} · ${r.clinica || ''} · ${ex.length} exame(s) lançado(s)${ex.length ? ': ' + ex.slice(0, 8).join(', ') : ''}`
+    } catch { return '' }
   }
   // FASE 2: o que o HF mostra sobre este cartão (conferência automática a cada 30 min)
   function hfLinha(c) {
@@ -2315,6 +2401,89 @@
   })
 
   // ── navegação / TV ──
+  // ── 🚫 cancelamentos: abrir, registrar, completar, dar desfecho ──────────────────────────
+  $('btnNovoCancel')?.addEventListener('click', async () => {
+    if (!(await garantirLogin())) return
+    $('formCancel').reset(); $('cErro').textContent = ''; $('cHF').hidden = true; $('cHF').textContent = ''
+    // as clínicas que já apareceram — evita 40 grafias diferentes da mesma clínica
+    const nomes = [...new Set([...chamados.map(c => c.clinica), ...coletas.map(c => c.clinica), ...cancelamentos.map(c => c.clinica)].filter(Boolean))].sort()
+    $('listaClinicas').innerHTML = nomes.map(n => `<option value="${esc(n)}">`).join('')
+    $('dlgCancel').showModal(); $('cClinica').focus()
+  })
+  // digitou a requisição → digo na hora o que o HF sabe. É a resposta do "ainda dá tempo?",
+  // dada ANTES de a pessoa responder a clínica, não depois.
+  $('cReq')?.addEventListener('change', async () => {
+    const n = $('cReq').value.replace(/\D/g, ''); const cx = $('cHF')
+    if (!n) { cx.hidden = true; return }
+    cx.hidden = false; cx.className = 'cancel-hf'; cx.textContent = 'olhando no HF…'
+    const t = await olharHF(n)
+    cx.textContent = t || 'não consegui olhar o HF agora'
+    cx.className = 'cancel-hf' + (/não está no espelho/.test(t) ? ' ruim' : '')
+    if (!$('cPet').value) { const m = t.match(/^HF:\s*([^·]+)·/); if (m && !/sem nome/.test(m[1])) $('cPet').value = m[1].trim() }
+  })
+  $('formCancel')?.addEventListener('submit', async ev => {
+    if (ev.submitter && ev.submitter.value === 'cancel') return
+    ev.preventDefault()
+    const clinica = $('cClinica').value.trim()
+    if (!clinica) { $('cErro').textContent = 'Diga pelo menos a clínica.'; return }
+    if (!(await garantirLogin())) return
+    try {
+      await rpc('inc_cancel_novo', {
+        p_nome: sessao.nome, p_senha: sessao.senha, p_clinica: clinica,
+        p_pet: $('cPet').value.trim(), p_req: $('cReq').value.replace(/\D/g, ''),
+        p_exame: $('cExame').value.trim(), p_texto: $('cTexto').value.trim(),
+        p_autor: null, p_grupo: null, p_quando: null, p_msg_id: null,
+        p_hf: $('cHF').hidden ? null : $('cHF').textContent,
+      })
+      $('dlgCancel').close(); toast('Solicitação registrada')
+      cancelPer = 'aberto'          // volta para a lista onde o cartão recém-criado aparece
+      await carregar(); desenhar()
+    } catch (e) {
+      $('cErro').textContent = /PGRST202|could not find|schema cache/i.test(e.message || '')
+        ? 'A tabela de cancelamentos ainda não existe no banco — falta rodar o SQL (supabase_inclusoes_17_cancelamentos.sql).'
+        : e.message
+    }
+  })
+  $('vCancel')?.addEventListener('click', async ev => {
+    const f = ev.target.closest('[data-cper]')
+    if (f) { cancelPer = f.dataset.cper; $('vCancel').querySelectorAll('[data-cper]').forEach(x => x.classList.toggle('on', x === f)); return desenharCancelamentos() }
+
+    const comp = ev.target.closest('[data-ccompletar]')
+    if (comp) {
+      if (!(await garantirLogin())) return
+      const id = +comp.dataset.ccompletar, c = cancelamentos.find(x => x.id === id) || {}
+      const req = c.req || await pedirMotivo('Qual a requisição no HF?', 'Número') || ''
+      const hf = req ? await olharHF(req) : ''
+      if (hf) toast(hf)
+      const pet = c.pet || await pedirMotivo('Qual o pet?', 'Pet') || ''
+      const exame = c.exame || await pedirMotivo('Qual exame ele quer cancelar?', 'Exame') || ''
+      try {
+        await rpc('inc_cancel_completar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id,
+          p_pet: pet, p_req: String(req).replace(/\D/g, ''), p_exame: exame, p_hf: hf })
+        await carregar(); desenhar()
+      } catch (e) { toast(e.message) }
+      return
+    }
+
+    const b = ev.target.closest('[data-cacao]'); if (!b) return
+    if (!(await garantirLogin())) return
+    const acao = b.dataset.cacao, id = +b.dataset.cid
+    // "não deu tempo" e "laudo já saiu" viram conversa de cobrança — o motivo é o que a
+    // cobrança vai ler depois, então aqui ele é obrigatório. Nos outros dois, é opcional.
+    let motivo = null
+    if (acao === 'nao_deu_tempo' || acao === 'ja_estava_pronto') {
+      motivo = await pedirMotivo(acao === 'nao_deu_tempo'
+        ? 'O exame já tinha sido feito — o que combinaram com a clínica?'
+        : 'O laudo já tinha saído — o que combinaram com a clínica?')
+      if (motivo == null) return
+    }
+    b.disabled = true
+    try {
+      await rpc('inc_cancel_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_status: acao, p_motivo: motivo })
+      toast('Registrado'); await carregar(); desenhar()
+    } catch (e) { b.disabled = false; toast(e.message) }
+  })
+
   document.querySelectorAll('#abas button').forEach(b => b.addEventListener('click', () => { setor = b.dataset.setor; gravarLocal('inc_setor', setor); desenhar() }))
   document.querySelectorAll('.hist-filtros button').forEach(b => b.addEventListener('click', () => { periodo = b.dataset.per; desenhar() }))
   document.querySelectorAll('.rast-filtros button').forEach(b => b.addEventListener('click', () => { periodoRast = b.dataset.per; desenhar() }))
@@ -2373,9 +2542,40 @@
     // senão quem treina no demo não aprende a procurar o selo que vai ver na operação de verdade
     for (const x of chamados) if (x.etapa >= 3 && x.status !== 'sem_amostra')
       eventos.push({ chamado_id: x.id, quando: x.etapa_desde, para: 3, acao: 'amostra_ok', por: 'DEMO' })
+    // 🚫 cancelamentos do ensaio — TIRADOS DAS MENSAGENS REAIS dos 10 dias, com a clínica trocada.
+    // Os três casos que a operação de verdade produz: o completo, o mudo, e o que não deu tempo.
+    cancelamentos = [
+      { id: 1, criado_em: min(12), quando_pedido: min(12), clinica: 'Clínica de exemplo', autor: 'Viviane',
+        texto: 'Boa tarde! Solicito o cancelamento do exame Check-up felino da paciente Artemísia. O sangue acabou de ser enviado mas a paciente foi a óbito agora mesmo.',
+        pet: 'ARTEMÍSIA', req: '640551', exame: 'Check-up felino', status: 'aberto',
+        hf_estado: 'HF: ARTEMÍSIA · Clínica de exemplo · 6 exame(s) lançado(s): Hemograma, ALT, FAL, Creatinina, Ureia, Glicose' },
+      { id: 2, criado_em: min(34), quando_pedido: min(34), clinica: 'Outra clínica de exemplo', autor: 'Luciana',
+        texto: 'Desconsidere.', status: 'aberto' },
+      { id: 3, criado_em: min(210), quando_pedido: min(215), clinica: 'Terceira clínica de exemplo', autor: 'Rodrigo',
+        texto: 'Pode cancelar o exame de Sansão por favor. Obrigado', pet: 'SANSÃO', req: '640402', exame: 'Perfil hepático',
+        status: 'nao_deu_tempo', resolvido_por: 'DEMO', resolvido_em: min(200),
+        motivo: 'reagente já usado — combinado com a Dra. que entra na fatura e o laudo vai assim mesmo',
+        hf_estado: 'HF: SANSÃO · Terceira clínica de exemplo · 7 exame(s) lançado(s)' },
+    ]
     eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
   }
   function demoRpc(nome, a) {
+    if (nome === 'inc_cancel_novo') {
+      cancelamentos.unshift({ id: cancelamentos.length + 100, criado_em: new Date().toISOString(),
+        quando_pedido: new Date().toISOString(), clinica: a.p_clinica, pet: a.p_pet, req: a.p_req,
+        exame: a.p_exame, texto: a.p_texto, hf_estado: a.p_hf, status: 'aberto', aberto_por: 'DEMO' })
+      return cancelamentos[0].id
+    }
+    if (nome === 'inc_cancel_acao') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.status = a.p_status; x.resolvido_por = 'DEMO'; x.resolvido_em = new Date().toISOString(); x.motivo = a.p_motivo }
+      return true
+    }
+    if (nome === 'inc_cancel_completar') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.pet = a.p_pet || x.pet; x.req = a.p_req || x.req; x.exame = a.p_exame || x.exame; x.hf_estado = a.p_hf || x.hf_estado }
+      return true
+    }
     // ensaio do TERREMOTO: a equipe treina o gesto (assumir → resolver) sem tocar na operação
     if (nome === 'terremoto_assumir') {
       const t = terremotos.find(x => x.chave === a.p_chave)

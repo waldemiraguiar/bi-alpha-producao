@@ -24,6 +24,7 @@
     <button data-setor="terremoto" class="aba-terremoto calmo">🚨 TERREMOTO</button>
     <button data-setor="confere" class="aba-confere">🔍 Conferência</button>
     <button data-setor="rast" class="aba-ia">🤖 Rastreamento de Inclusões</button>
+    <button data-setor="cancel" class="aba-cancel">🚫 Cancelamentos</button>
     <button data-setor="coleta" class="aba-moto">🛵 Agendamentos</button>
     <button data-setor="rotas" class="aba-rota">🛵 BI Rotas</button>
     <button data-setor="nps" class="aba-nps">⭐ NPS</button>
@@ -69,6 +70,24 @@
     <p class="mudo ajuda" id="rastAjuda"></p>
     <div class="numeros" id="rastResumo"></div>
     <div class="rast-lista" id="rastLista"></div>
+  </section>
+
+  <!-- 🚫 CANCELAMENTOS — pedido do Fúlvio, 24/set (áudio).
+       "É quando um cliente manda uma mensagem pra gente através do WhatsApp, dentro do grupo,
+        que ele não quer mais um exame. Normalmente ele já afirma que gostaria de cancelar, ou
+        ele pergunta se ainda dá tempo de fazer o cancelamento." -->
+  <section id="vCancel" hidden>
+    <div class="rast-topo">
+      <h2><span class="selo-cancel">🚫 CANCELAMENTO</span> Solicitações de cancelamento</h2>
+      <p class="mudo">O cliente pediu para <b>não fazer</b> um exame. A pergunta que decide tudo é
+      <b>"ainda dá tempo?"</b> — se o exame já foi processado, não é mais cancelamento, é conversa
+      de cobrança. Por isso o cartão mostra o que o HF sabe da requisição antes de você responder.</p>
+    </div>
+    <div class="cancel-topo">
+      <button class="btn-principal" id="btnNovoCancel">+ Nova solicitação</button>
+      <div class="cancel-filtros"><button data-cper="aberto" class="on">Em aberto</button><button data-cper="dia">Resolvidas hoje</button><button data-cper="semana">7 dias</button></div>
+    </div>
+    <div class="rast-lista" id="cancelLista"></div>
   </section>
 
   <section id="vNps" hidden>
@@ -165,6 +184,32 @@
     <label>Seu setor<select id="criarSetor"><option value="cc">Atendimento ao Cliente</option><option value="tec">Área Técnica</option><option value="esc">Escritório</option></select></label>
     <p class="erro" id="criarErro"></p>
     <div class="linha-botoes"><button type="button" class="btn-sec" data-fechar>Voltar</button><button class="btn-principal" id="criarOk">Criar e entrar</button></div>
+  </form>
+</dialog>
+
+<!-- 🚫 nova solicitação de cancelamento. Só a CLÍNICA é obrigatória: o cliente escreve
+     "Pode cancelar" e some, e exigir pet+exame na abertura faria a pessoa não registrar. -->
+<dialog id="dlgCancel">
+  <form id="formCancel" method="dialog">
+    <h3>Nova solicitação de cancelamento</h3>
+    <p class="mudo">Registre com o que você tem agora. Pet, requisição e exame dá para completar depois.</p>
+    <label>Clínica <span class="obrig">*</span></label>
+    <input id="cClinica" list="listaClinicas" autocomplete="off" required>
+    <datalist id="listaClinicas"></datalist>
+    <div class="linha2">
+      <div><label>Requisição</label><input id="cReq" inputmode="numeric" autocomplete="off" placeholder="ex. 640537"></div>
+      <div><label>Pet</label><input id="cPet" autocomplete="off"></div>
+    </div>
+    <label>Qual exame ele quer cancelar</label>
+    <input id="cExame" autocomplete="off" placeholder="ex. fosfatase alcalina · ou 'a requisição toda'">
+    <div id="cHF" class="cancel-hf" hidden></div>
+    <label>O que o cliente escreveu</label>
+    <textarea id="cTexto" rows="2" placeholder="cole a mensagem do WhatsApp"></textarea>
+    <p class="erro" id="cErro"></p>
+    <div class="linha-botoes">
+      <button value="cancel" class="btn-sec" formnovalidate>Fechar</button>
+      <button class="btn-principal" id="cSalvar">Registrar</button>
+    </div>
   </form>
 </dialog>
 
