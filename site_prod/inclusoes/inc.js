@@ -13,6 +13,9 @@
   // Thailan 18/set: dois acréscimos da mesma clínica podem ser de setores diferentes — cada um sinaliza o seu
   const SETOR_EXAME = { hemato: 'Hematologia', bioquimica: 'Bioquímica', urina_fezes: 'Urina/Fezes', pcr_soro: 'PCR/Sorologia', cito_histo: 'Citologia/Histo', outros: 'Outros' }
   const SETOR_ICONE = { hemato: '🩸', bioquimica: '🧪', urina_fezes: '🧫', pcr_soro: '🦠', cito_histo: '🔬', outros: '📋' }
+  // filtro de setor do exame dentro da aba Área Técnica ('' = mostra tudo).
+  // Fica lembrado no navegador: quem trabalha na bioquímica não quer reescolher a cada visita.
+  let filtroSetorExame = (() => { try { return localStorage.getItem('inc_filtro_setor') || '' } catch { return '' } })()
   const SETORES = {
     cc: { nome: 'ATENDIMENTO AO CLIENTE', cor: 'var(--cc)' },
     esc: { nome: 'ESCRITÓRIO', cor: 'var(--esc)' },
@@ -51,7 +54,7 @@
   // 'exame_especializado' e 'avisou_especializado'. Enquanto o SQL não entrar, o botão fica
   // ESCONDIDO — publicar botão que dá erro ao clicar é pior que não ter botão.
   // Para ligar: troque para true (é só isto) depois de rodar o SQL.
-  const BOTAO_ESPECIALIZADO = false
+  const BOTAO_ESPECIALIZADO = true
   const EXAME_DEMORADO = [
     [/cultura|antibiograma/i,                 7 * 24 * 60],   // 7 dias (confirmado por ela)
     [/c[aá]lculo\s*urin/i,                     7 * 24 * 60],
@@ -414,10 +417,35 @@
     $('corpoSetor').hidden = todos; $('kanban').hidden = !todos
     if (todos) { desenharKanban(abertos); return explodir(abertos) }
 
-    const meus = abertos.filter(c => donoAtual(c) === setor)
+    // ⚠️ 23/09, Thailan (resposta C): "a aba Área Técnica continua uma só, mas com um filtro
+    // por setor dentro dela". O problema: tem exame que a bioquímica faz e exame que a
+    // hematologia faz, e com uma aba só a inclusão grita nos DOIS setores.
+    // Filtro, não aba: o cartão de 2 setores (setores='hemato,bioquimica') aparece nos dois,
+    // e quem não escolhe filtro continua vendo tudo — ninguém perde cartão por engano.
+    let meus = abertos.filter(c => donoAtual(c) === setor)
+    if (setor === 'tec' && filtroSetorExame) {
+      meus = meus.filter(c => {
+        const ss = String(c.setores || c.setor || '').split(',').map(x => x.trim()).filter(Boolean)
+        return ss.includes(filtroSetorExame)
+      })
+    }
     const outros = abertos.filter(c => donoAtual(c) !== setor)
     desenharSuspeitas()
     const s = SETORES[setor]
+    // os botões do filtro só existem na Área Técnica
+    const fs = $('filtroSetor')
+    if (fs) {
+      fs.hidden = setor !== 'tec'
+      if (setor === 'tec') {
+        const cont = k => abertos.filter(c => donoAtual(c) === 'tec' &&
+          String(c.setores || c.setor || '').split(',').map(x => x.trim()).includes(k)).length
+        fs.innerHTML = `<button class="fs ${filtroSetorExame ? '' : 'on'}" data-fset="">Todos</button>` +
+          Object.keys(SETOR_EXAME).map(k => {
+            const n = cont(k)
+            return `<button class="fs ${filtroSetorExame === k ? 'on' : ''}" data-fset="${k}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k])}${n ? ` <b>${n}</b>` : ''}</button>`
+          }).join('')
+      }
+    }
     $('tituloVez').textContent = `Sua vez — ${s.nome}`
     $('tituloVez').style.color = s.cor
     const est = meus.filter(c => ['s-v1', 's-v2', 's-x'].includes(estado(c))).length
@@ -1724,6 +1752,12 @@
     // ── PEDIDO 5a: "Acrescentar inclusão" — abre o cartão já com a clínica preenchida
     if (b.dataset.sus === 'virar') {
       const x = suspeitas.find(y => y.id === id)
+      // ⚠️ 23/09, Thailan: "eu apertei acrescentar inclusão, coloquei os dados, a área técnica
+      // informou que não tem amostra, eu marquei — só que continuou a mensagem escrita pra mim".
+      // O botão abria o formulário e NUNCA marcava a pergunta como tratada (os outros botões
+      // daqui marcam; este não). Guardo o id e marco DEPOIS que o cartão for salvo — se ela
+      // desistir e fechar o formulário, a pergunta continua lá, que é o certo.
+      viradaEmCartao = id
       setor = 'cc'; desenhar(); $('btnNova').click()
       setTimeout(() => {
         $('nClinica').value = nomeClinica(x?.grupo || '')
@@ -1961,9 +1995,36 @@
       obs = await pedirMotivo('Qual o NOVO número da amostra no HF?', 'Número')
       if (obs == null) return
     }
+    // ⚠️ 23/09, Thailan: "quando o colaborador clicar no lançado no HF com o número novo, eu
+    // preciso que você realmente verifique o que foi lançado. Caso não seja lançado, você
+    // notifique. Caso for lançado, notifique também. Preciso pra não seguir sem estar no HF."
+    // ⚠️ A verificação é no número NOVO da requisição (ela frisou isso num áudio só pra isso).
+    // ⚠️ E NUNCA BLOQUEIA: o espelho do HF atualiza de 30 em 30 min, então "não achei" pode
+    // ser só espelho velho. Eu aviso e quem decide é a pessoa — travar aqui pararia o trabalho
+    // por causa do meu atraso de leitura.
+    if (acao === 'escritorio_ok') {
+      const num = String(obs || card?.novo_req || card?.req || '').replace(/\D/g, '')
+      if (num) {
+        let achou = null
+        try { achou = await rpc('inc_buscar_req', { p_nome: sessao.nome, p_senha: sessao.senha, p_num: num }) } catch { achou = null }
+        if (achou) {
+          toast(`✅ conferido no HF: ${achou.pet || 'amostra'} · ${num}`)
+        } else {
+          const segue = await pedirSimNao(
+            `🔴 Não achei a requisição ${num} no HF`,
+            'O espelho do HF atualiza a cada 30 minutos — se você lançou agora, pode ainda não ter chegado aqui.\n\nQuer marcar como lançado mesmo assim?')
+          if (!segue) { b.disabled = false; return }
+        }
+      }
+    }
     b.disabled = true
     try {
-      await rpc('inc_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: acao, p_obs: obs })
+      // as duas ações do exame especializado moram numa função SEPARADA, de propósito:
+      // assim a inc_acao — que comanda os outros 9 botões — não precisou ser reescrita.
+      if (acao === 'exame_especializado' || acao === 'avisou_especializado')
+        await rpc('inc_acao_especializado', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: acao })
+      else
+        await rpc('inc_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_acao: acao, p_obs: obs })
       toast('Registrado'); await carregar(); desenhar()
     } catch (e) {
       b.disabled = false
@@ -2061,6 +2122,29 @@
       return false
     }
   }
+  /**
+   * Sim/Não com aviso — usado quando eu tenho uma DÚVIDA, não uma certeza.
+   * Nasceu da conferência do HF: se eu não acho a requisição, pode ser o espelho velho
+   * (atualiza de 30 em 30 min) e não erro da pessoa. Então eu conto o que vi e ela decide.
+   * O botão de seguir NÃO é o padrão: quem quiser seguir tem que clicar nele de propósito.
+   */
+  function pedirSimNao(titulo, mensagem) {
+    return new Promise(resolve => {
+      const d = document.createElement('dialog')
+      d.className = 'dlg-simnao'
+      d.innerHTML = `<h3></h3><p></p><div class="acoes">
+          <button class="leve" data-r="0">Voltar e conferir</button>
+          <button class="nao" data-r="1">Marcar assim mesmo</button></div>`
+      d.querySelector('h3').textContent = titulo
+      d.querySelector('p').textContent = mensagem
+      d.addEventListener('click', ev => {
+        const b = ev.target.closest('button[data-r]'); if (!b) return
+        d.close(); d.remove(); resolve(b.dataset.r === '1')
+      })
+      d.addEventListener('cancel', () => { d.remove(); resolve(false) })   // ESC = não seguir
+      document.body.appendChild(d); d.showModal()
+    })
+  }
   function pedirMotivo(titulo, rotulo = 'Motivo') {
     $('motivoTitulo').textContent = titulo; $('motivoRotulo').textContent = rotulo; $('motivoTexto').value = ''; $('motivoErro').textContent = ''
     $('dlgMotivo').showModal()
@@ -2089,12 +2173,23 @@
       ? `🆕 Amostra de <b>${dataCurta(q)}</b> (dia anterior): a inclusão vai ganhar <b>NOVO número</b> e precisa de <b>nova requisição</b> para liberar o laudo.`
       : `✅ Amostra de <b>hoje</b>: segue com o <b>mesmo número</b>.`
   }
+  // qual pergunta do Rastreamento está virando cartão agora (null = nenhuma)
+  let viradaEmCartao = null
   $('btnNova').addEventListener('click', async () => {
     if (!(await garantirLogin())) return
     $('formNova').reset(); $('puxado').hidden = true; $('novaErro').textContent = ''; entradaHF = null
     outraClinica = null; if ($('qualClinica')) $('qualClinica').hidden = true
     $('nData').value = diaBR(new Date().toISOString()); $('campoData').hidden = false; avisoDia()
     $('dlgNova').showModal(); $('nReq').focus()
+  })
+  // fechou sem salvar: a pergunta NÃO pode sumir — ninguém tratou nada
+  $('dlgNova').addEventListener('close', () => { viradaEmCartao = null })
+  // clique no filtro de setor (Área Técnica)
+  document.addEventListener('click', ev => {
+    const b = ev.target.closest('#filtroSetor button[data-fset]'); if (!b) return
+    filtroSetorExame = b.dataset.fset || ''
+    try { localStorage.setItem('inc_filtro_setor', filtroSetorExame) } catch {}
+    desenhar()
   })
   $('btnBuscar').addEventListener('click', buscarHF)
   $('nData').addEventListener('change', avisoDia)
@@ -2146,6 +2241,11 @@
       const id = await rpc('inc_abrir2', args)
       if (setor2 && setor2 !== args.p_setor && id) {           // exames de dois setores: cada um marca o seu na etapa 5
         try { await rpc('inc_setores_set', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_setores: `${args.p_setor},${setor2}` }) } catch {}
+      }
+      // a pergunta do Rastreamento que gerou este cartão sai da lista agora que ela existe
+      if (viradaEmCartao != null) {
+        const q = viradaEmCartao; viradaEmCartao = null
+        try { await resolverSuspeita(q, 'registrada', `➕ virou inclusão${id ? ' #' + id : ''}`) } catch {}
       }
       $('dlgNova').close(); toast(setor2 && setor2 !== args.p_setor ? 'Inclusão aberta para 2 setores' : 'Inclusão aberta'); await carregar(); desenhar()
     }
