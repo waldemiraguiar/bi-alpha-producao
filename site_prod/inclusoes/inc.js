@@ -42,6 +42,32 @@
   }
   // etapa 4 = tempo do exame. PROVISÓRIO até medir no HF (Wal autorizou medir).
   const PRAZO_EXAME_MIN = { hemato: 120, bioquimica: 240, urina_fezes: 240, pcr_soro: 4320, cito_histo: 7200, outros: 1440 }
+  // ⚠️ 23/09/2026 — o PET MARLON. "Cultura e Antibiograma" ficou gritando na tela de exames
+  // feitos porque o prazo vinha só do SETOR, e o setor dele estava vazio: caiu no padrão de
+  // 1 dia. Thailan: "cultura leva 7 dias, e tem outros que não saem no mesmo dia".
+  // Agora o prazo olha primeiro o NOME do exame; só depois cai no setor.
+  // Lista dada pela Thailan em 23/09 — ela avisa quando lembrar de mais algum.
+  // ⚠️ O BOTÃO "Exames especializados" depende de a função SQL inc_acao conhecer as ações
+  // 'exame_especializado' e 'avisou_especializado'. Enquanto o SQL não entrar, o botão fica
+  // ESCONDIDO — publicar botão que dá erro ao clicar é pior que não ter botão.
+  // Para ligar: troque para true (é só isto) depois de rodar o SQL.
+  const BOTAO_ESPECIALIZADO = false
+  const EXAME_DEMORADO = [
+    [/cultura|antibiograma/i,                 7 * 24 * 60],   // 7 dias (confirmado por ela)
+    [/c[aá]lculo\s*urin/i,                     7 * 24 * 60],
+    [/\bpcr\b/i,                               4320],         // 3 dias, igual ao setor pcr_soro
+    [/histo(patol|log)?/i,                    7200],         // 5 dias, igual ao cito_histo
+    [/citologia/i,                            7200],
+    [/especializad/i,                         7 * 24 * 60],
+  ]
+  /** quanto tempo este exame tem, olhando o NOME antes do setor */
+  function prazoDoExame(c) {
+    const nome = String(c && c.exame || '')
+    for (const [re, min] of EXAME_DEMORADO) if (re.test(nome)) return min
+    return PRAZO_EXAME_MIN[c && c.setor] || 1440
+  }
+  /** este exame não sai no mesmo dia? (usado para sugerir o botão certo) */
+  function demorado(c) { return prazoDoExame(c) >= 1440 * 2 }
   const VALIDADE_H = { hemato: 24, bioquimica: 168, urina_fezes: 24, pcr_soro: 168, cito_histo: null, outros: 168 }
   const NOME_SETOR = { hemato: 'Hematologia', bioquimica: 'Bioquímica', urina_fezes: 'Urina / Fezes', pcr_soro: 'PCR / Sorologia', cito_histo: 'Citologia / Histo', outros: 'Outros' }
   const LEMBRETE_CLIENTE_MIN = 30       // Thailan 16/set: clínica informada e sem resposta há 30 min → alerta para cobrar de novo
@@ -293,19 +319,25 @@
       await carregar(); desenhar()
     } catch (e) { toast(e.message) }
   })
-  function donoAtual(c) { return c.status === 'sem_amostra' || c.status === 'enviado' ? 'cc' : ETAPAS[c.etapa]?.dono }
-  const ativo = c => c.status === 'aberto' || c.status === 'sem_amostra' || c.status === 'enviado'
-  const etapaVisivel = c => c.status === 'sem_amostra' ? 1 : c.status === 'enviado' ? 7 : c.etapa
+  // ⚠️ 23/09 — Thailan: "tem exame que fica em processamento por dias. Preciso sinalizar pro
+  // sistema que esse exame não sai no mesmo dia, e ao clicar ele vai pra aba do Atendimento
+  // ao Cliente com um chamado pra avisar a clínica que já foi dada entrada na inclusão."
+  // Segue o MESMO desenho do sem_amostra: um status próprio que muda o dono e o botão,
+  // sem inventar etapa nova — a etapa continua registrada para o histórico não mentir.
+  function donoAtual(c) { return c.status === 'sem_amostra' || c.status === 'enviado' || c.status === 'especializado' ? 'cc' : ETAPAS[c.etapa]?.dono }
+  const ativo = c => c.status === 'aberto' || c.status === 'sem_amostra' || c.status === 'enviado' || c.status === 'especializado'
+  const etapaVisivel = c => c.status === 'sem_amostra' ? 1 : c.status === 'enviado' ? 7 : c.status === 'especializado' ? 7 : c.etapa
   // última vez que a clínica foi informada (cada "Mensagem enviada" / "Cobrei de novo" reinicia a contagem)
   function ultimoEvento(c, acao) { const ev = eventos.filter(e => e.chamado_id === c.id && e.acao === acao).sort((a, b) => T(b.quando) - T(a.quando))[0]; return ev || null }
   function estado(c) {
     if (c.hf_alerta) return 's-v2'
     const m = minutosNaEtapa(c)
     if (c.pausado) { const u = ultimoEvento(c, 'aguardando_clinica'); const mm = u ? (agora() - T(u.quando)) / 60000 : m; return mm >= LEMBRETE_CLIENTE_MIN ? 's-v1' : 's-p' }
+    if (c.status === 'especializado') return 's-a1'      // espera combinada: nunca grita
     if (c.status === 'sem_amostra') return m >= ESCALA[1] ? 's-v1' : 's-a2'
     const vence = amostraPct(c) >= 80
     if (c.etapa === ETAPA_EXAME) {
-      const r = m / (PRAZO_EXAME_MIN[c.setor] || 1440)
+      const r = m / prazoDoExame(c)
       return r >= 1.5 ? 's-v2' : r >= 1 ? 's-v1' : (r >= .8 || vence) ? 's-a2' : 's-a1'
     }
     if (m >= ESCALA[3]) return 's-x'
@@ -323,6 +355,7 @@
     const dono = donoAtual(c)
     if (sessao && sessao.setorInc && sessao.setorInc !== 'admin' && sessao.setorInc !== dono) return `<span class="so-setor">ação de ${SETORES[dono].nome}</span>`
     if (c.status === 'enviado') return `<button data-acao="avisou_envio">Clínica avisada do envio · concluir</button>`
+    if (c.status === 'especializado') return `<button data-acao="avisou_especializado">Clínica avisada da entrada · aguardando resultado</button>`
     if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Clínica avisada · encerrar</button>`
     const cancelar = `<button class="leve" data-acao="cancelar">Cancelar</button>`
     switch (c.etapa) {
@@ -331,11 +364,14 @@
       case 4: return `<button data-acao="escritorio_ok">${c.novo_numero ? 'Lançado no HF com NOVO número' : 'Lançado no HF'}</button>${cancelar}`
       case 5: {
         const lista = (c.setores || c.setor || '').split(',').map(x => x.trim()).filter(Boolean)
-        if (lista.length < 2) return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${cancelar}`
+        // o botão de exame demorado aparece SEMPRE, mas em destaque quando o nome do exame
+        // já diz que ele não sai hoje — assim quem não conhece a lista ainda acerta.
+        const esp = BOTAO_ESPECIALIZADO ? `<button class="${demorado(c) ? '' : 'leve'}" data-acao="exame_especializado">Exames especializados</button>` : ''
+        if (lista.length < 2) return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${esp}${cancelar}`
         const ok = (c.setores_ok || '').split(',').map(x => x.trim()).filter(Boolean)
         return lista.map(k => ok.includes(k)
           ? `<button class="setor-ok" disabled>✅ ${esc(SETOR_EXAME[k] || k)} pronto</button>`
-          : `<button data-setor-pronto="${esc(k)}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k] || k)} — marcar pronto</button>`).join('') + cancelar
+          : `<button data-setor-pronto="${esc(k)}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k] || k)} — marcar pronto</button>`).join('') + esp + cancelar
       }
       case 6: return `<button data-acao="encerrar">Liberado e e-mail enviado · encerrar</button>${cancelar}`
     }
@@ -407,7 +443,7 @@
   function cartaoHTML(c) {
     const _sv = clienteSensivel(c.clinica)
     const st = estado(c), m = minutosNaEtapa(c), pct = amostraPct(c), e = ETAPAS[etapaVisivel(c)]
-    const prazoTxt = c.pausado ? 'esperando a clínica' : c.status === 'sem_amostra' ? 'avisar o cliente' : c.etapa === ETAPA_EXAME ? `prazo ${fmt(PRAZO_EXAME_MIN[c.setor])}` : ROTULO[st]
+    const prazoTxt = c.status === 'especializado' ? 'exame especializado · em processamento' : c.pausado ? 'esperando a clínica' : c.status === 'sem_amostra' ? 'avisar o cliente' : c.etapa === ETAPA_EXAME ? `prazo ${fmt(prazoDoExame(c))}` : ROTULO[st]
     const amostra = VALIDADE_H[c.setor] && c.amostra_entrada && pct >= 50
       ? `<div class="amostra ${pct >= 80 ? 'alerta' : ''}">amostra ${pct}% da validade<span class="barra"><i style="width:${pct}%"></i></span></div>` : ''
     return `<article class="cartao ${st}" data-id="${c.id}" title="aberta ${hm(c.criado_em)} por ${esc(c.aberto_por || '')}${c.obs ? ' · ' + esc(c.obs) : ''}">
@@ -1761,7 +1797,7 @@
         if (e.para == null || e.para > 7) continue
         const fim = prox ? T(prox.quando) : (ativo(c) ? agora() : T(c.concluido_em))
         const min = (fim - T(e.quando)) / 60000
-        const lim = e.para === ETAPA_EXAME ? PRAZO_EXAME_MIN[c.setor] : ESCALA[1]
+        const lim = e.para === ETAPA_EXAME ? prazoDoExame(c) : ESCALA[1]
         const estourou = min > lim
         if (estourou) estouros++
         ;(porEtapa[e.para] ||= []).push(min)
@@ -2192,9 +2228,15 @@
     if (nome === 'inc_abrir2') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: 2, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: false, aberto_por: a.p_nome, amostra_entrada: a.p_entrada, cliente_status: a.p_cliente, novo_numero: a.p_novo_numero }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: 2 }); return x.id }
     if (nome === 'inc_abrir') { const x = { id: chamados.length + 100, criado_em: new Date().toISOString(), req: a.p_req, pet: a.p_pet, clinica: a.p_clinica, exame: a.p_exame, setor: a.p_setor, etapa: a.p_autorizado ? 2 : 1, etapa_desde: new Date().toISOString(), status: 'aberto', pausado: !a.p_autorizado, aberto_por: a.p_nome, amostra_entrada: a.p_entrada }; chamados.push(x); eventos.push({ chamado_id: x.id, quando: x.criado_em, para: x.etapa }); return x.id }
     if (nome === 'inc_acao') {
-      const x = chamados.find(y => y.id === a.p_id); const prox = { amostra_ok: 3, sem_amostra: 1, aguardando_clinica: 3, clinica_confirmou: 4, clinica_desistiu: 8, escritorio_ok: 5, exames_digitados: 6, encerrar: 7, avisou_envio: 7, cliente_avisado: 8, cancelar: 8 }[a.p_acao]
-      x.status = a.p_acao === 'encerrar' ? 'enviado' : a.p_acao === 'avisou_envio' ? 'concluido' : prox === 8 ? 'cancelado' : a.p_acao === 'sem_amostra' ? 'sem_amostra' : 'aberto'
-      x.etapa = Math.min(prox, 7); if (a.p_acao !== 'aguardando_clinica') x.etapa_desde = new Date().toISOString(); x.pausado = a.p_acao === 'aguardando_clinica'
+      const x = chamados.find(y => y.id === a.p_id); const prox = { amostra_ok: 3, sem_amostra: 1, aguardando_clinica: 3, clinica_confirmou: 4, clinica_desistiu: 8, escritorio_ok: 5, exames_digitados: 6, encerrar: 7, avisou_envio: 7, cliente_avisado: 8, cancelar: 8, exame_especializado: 5, avisou_especializado: 5 }[a.p_acao]
+      x.status = a.p_acao === 'encerrar' ? 'enviado' : a.p_acao === 'avisou_envio' ? 'concluido' : prox === 8 ? 'cancelado'
+        : a.p_acao === 'sem_amostra' ? 'sem_amostra'
+        : a.p_acao === 'exame_especializado' ? 'especializado'      // vai para o CC avisar a clínica
+        : 'aberto'
+      x.etapa = Math.min(prox, 7); if (a.p_acao !== 'aguardando_clinica') x.etapa_desde = new Date().toISOString()
+      // 'avisou_especializado': a clínica já sabe que entrou, o exame segue em processamento.
+      // Volta para a Área Técnica pausado — quem tira da pausa é o resultado ficar pronto.
+      x.pausado = a.p_acao === 'aguardando_clinica' || a.p_acao === 'avisou_especializado'
       if (a.p_acao === 'escritorio_ok' && x.novo_numero) x.novo_req = a.p_obs
       if (x.status === 'concluido' || x.status === 'cancelado') x.concluido_em = x.etapa_desde
       eventos.push({ chamado_id: x.id, quando: new Date().toISOString(), para: prox, acao: a.p_acao, obs: a.p_obs, por: 'DEMO' }); return x.status
