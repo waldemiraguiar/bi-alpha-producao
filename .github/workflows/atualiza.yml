@@ -77,6 +77,33 @@ jobs:
           node -e "require('fs').writeFileSync('site_prod/functions/admin.mjs','export const ADMIN='+JSON.stringify(process.env.ADMIN_PWD||'')+';\n')"
           cd site_prod/functions && npm init -y >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func pronta"
 
+      # ⛔ 24/set: cinco commits seguidos mexeram no inc.js sem subir o `?v=` do index.html.
+      # O arquivo subia certo (o curl provava), mas o NAVEGADOR de quem ja tinha aberto a pagina
+      # continuava servindo a versao velha do cache — ou seja, a equipe nao via o conserto.
+      # Carimbar na mao e uma etapa que da pra esquecer, e eu esqueci. Agora o proprio deploy
+      # carimba: o `?v=` vira o hash do conteudo, entao muda sozinho quando o arquivo muda e
+      # NAO muda quando o arquivo e o mesmo (cache continua valendo quando deve valer).
+      - name: Carimbar versao dos estaticos (mata cache velho sem Cmd+Shift+R)
+        if: env.DEPLOY_FULL == 'true'
+        run: |
+          python3 - <<'EOF'
+          import hashlib, re, pathlib
+          raiz = pathlib.Path('site_prod')
+          mudou = 0
+          for html in raiz.rglob('*.html'):
+              txt = original = html.read_text(encoding='utf-8')
+              def carimbo(m):
+                  arq = html.parent / m.group('arq')
+                  if not arq.exists(): return m.group(0)
+                  h = hashlib.sha1(arq.read_bytes()).hexdigest()[:8]
+                  return f'{m.group("arq")}?v={h}'
+              txt = re.sub(r'(?P<arq>[A-Za-z0-9_./-]+\.(?:js|css))\?v=[A-Za-z0-9]+', carimbo, txt)
+              if txt != original:
+                  html.write_text(txt, encoding='utf-8'); mudou += 1
+                  print(f'  carimbado: {html}')
+          print(f'{mudou} arquivo(s) HTML carimbado(s)')
+          EOF
+
       - name: Publicar no Netlify (deploy completo)
         if: env.DEPLOY_FULL == 'true'
         env:
