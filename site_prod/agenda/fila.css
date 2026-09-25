@@ -431,3 +431,7 @@ button.principal.responder{background:var(--verde)}
 .card .pedido{display:inline;font-size:13.5px}
 .card .endereco{display:inline-flex;align-items:baseline;gap:4px;font-size:13px;margin-left:8px}
 .card .endereco::before{content:"·";color:var(--tenue);margin-right:6px}
+/* a etiqueta diz POR QUE a mensagem é aquela — se a leitura estiver errada,
+   a pessoa vê antes de mandar, e não depois que a clínica reclamou */
+.card .rSit{float:right;font-weight:700;letter-spacing:0;text-transform:none;font-size:11px;
+  color:var(--suave);background:rgba(0,0,0,.05);padding:2px 9px;border-radius:999px}

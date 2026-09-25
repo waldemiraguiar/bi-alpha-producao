@@ -120,7 +120,9 @@
         ${c.rota_sug ? `<span class="sug">sugestão do sistema${c.fonte ? ` · ${esc(String(c.fonte).split('·').pop().trim())}` : ''}</span>` : ''}
       </div>
         ${orc ? '' : `<div class="respostas">
-          <div class="rTit">📋 a resposta pronta — confira, copie e mande</div>
+          <div class="rTit">📋 a resposta pronta — confira, copie e mande
+            <span class="rSit">${{urgente:'🚨 pediu URGENTE',hoje:'📅 pediu HOJE',amanha:'📅 é para outro dia',turno:'🕒 pediu um turno',material:'🧪 citou o material',pergunta:'❓ fez uma pergunta',padrao:'pedido simples'}[msgsDoCard(c, rotaSel).situacao]}</span>
+          </div>
           <div class="rCaixa cli">
             <div class="rCab"><span class="rQuem">👤 para a CLÍNICA</span>
               <button type="button" class="rCopy" data-cp="cli" data-id="${c.id}">copiar</button></div>
@@ -230,37 +232,69 @@
     carregar()
   }
   /**
-   * 💬 AS DUAS MENSAGENS, NA HORA DE PEGAR — Wal, 25/set (video):
-   * "quando eu clicar aqui pegar, vai aparecer que tipo de mensagem para o cliente e que tipo
-   *  para o motoboy... cada mensagem tem um jeito de resposta. Ai voce poderia botar aqui um
-   *  exemplo da resposta, para a gente visualizar o que vai para o cliente."
+   * 💬 A RESPOSTA MUDA COM O QUE A CLÍNICA ESCREVEU — Wal, 25/set:
+   * "traga exemplos diferentes... use a estatística a nosso favor."
    *
-   * MEDIDO ANTES DE ESCREVER (10 dias, 220 respostas reais a pedido de coleta):
-   *   104 textos DIFERENTES para dizer a mesma coisa
-   *   ~30 eram so "bom dia" / "boa tarde" — cumprimento sem informacao nenhuma
-   *   so 12 das 220 diziam o TURNO, que e a pergunta que a clinica mais faz depois
-   * Nao e falta de padrao da equipe. E falta de botao.
+   * MEDIDO NOS 10 DIAS (258 pedidos de coleta, 64 de orçamento). As situações reais,
+   * por frequência — e cada uma pede uma resposta diferente:
+   *   61%  só "temos coleta"        → confirmar e dizer o turno (que ela NÃO perguntou mas quer)
+   *   22%  pediu um TURNO           → confirmar O TURNO DELA, não o meu palpite
+   *   16%  PERGUNTOU se dá          → responder a PERGUNTA. "Está agendado" não responde "dá pra hoje?"
+   *    5%  disse HOJE               → confirmar que é hoje, com todas as letras
+   *    3%  falou de AMANHÃ          → confirmar o dia, não deixar no ar
+   *    3%  citou o MATERIAL         → repetir o material, para ela saber que eu li
+   *    1%  URGENTE                  → tratar como urgente, não como fila
    *
-   * As duas mensagens sao DIFERENTES de proposito, porque o leitor e outro:
-   *   · a CLINICA quer saber que foi aceito, quando, e que nao precisa cobrar de novo
-   *   · o MOTOBOY quer nome e endereco, e nada mais — ele le na moto, no semaforo
+   * A regra por trás: a resposta tem que RESPONDER. O padrão antigo dizia "está agendado"
+   * para os sete casos — e nos 16% que perguntaram "dá pra hoje?", isso não é resposta.
    */
+  const SITUACOES = [
+    { k: 'urgente', rx: /urgent|agora|imediat|o quanto antes|com pressa|correndo/i },
+    { k: 'hoje',    rx: /\bhoje\b|ainda hoje|at[eé] as? \d|fim do dia|final do dia/i },
+    { k: 'amanha',  rx: /amanh[ãa]|segunda|ter[çc]a|quarta|quinta|sexta|s[aá]bado|outro dia/i },
+    { k: 'turno',   rx: /\b(manh[ãa]|tarde|noite)\b/i },
+    { k: 'material',rx: /sangue|urina|fezes|l[aâ]mina|swab|soro|biops|frag/i },
+    { k: 'pergunta',rx: /\?|consegue|d[aá]\s+pra|dar[ií]a|ser[aá] que|tem como/i },
+  ]
+  /**
+   * ⚠️ A SAUDAÇÃO SAI ANTES DE PROCURAR O TURNO — bug pego no teste com frase real:
+   * "Boa tarde! Podem buscar o material aqui na Visconde de Araguaia?" era classificada como
+   * "pediu o turno da TARDE", quando na verdade é uma PERGUNTA e o "tarde" é só o cumprimento.
+   * Resposta errada: "confirmado para a tarde, como você pediu" — ela não pediu nada disso.
+   */
+  const semSaudacao = t => String(t || '')
+    .replace(/\b(bom\s+dia|boa\s+tarde|boa\s+noite|bomdia|boatarde)\b[\s,!.]*/gi, ' ')
+  function situacaoDo(texto) {
+    const t = semSaudacao(texto)
+    for (const s of SITUACOES) if (s.rx.test(t)) return s.k
+    return 'padrao'
+  }
   function msgsDoCard(c, rota) {
     const hora = new Date().getHours()
-    const turno = hora < 12 ? 'manhã' : hora < 18 ? 'tarde' : 'noite'
+    const turnoAgora = hora < 12 ? 'manhã' : hora < 18 ? 'tarde' : 'noite'
     const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
     const clinica = c.clinica || c.grupo || 'a clínica'
     const end = c._endereco || ''
+    const txt = String(c.texto || '')
+    const sit = situacaoDo(txt)
+    // o turno que ELA pediu ganha do turno em que estamos — se ela disse "tarde", é tarde
+    const pedido = (semSaudacao(txt).match(/\b(manh[ãa]|tarde|noite)\b/i) || [])[1]
+    const turno = pedido ? pedido.toLowerCase().replace('manha', 'manhã') : turnoAgora
+    const naRota = rota ? ` pela *${rota}*` : ''
+    const ass = `\n_🧬 Alpha Labs · Atendimento ao Cliente_`
+    const CORPO = {
+      urgente:  `${saud}! 🚨 Anotado como *urgente*. Já coloquei na próxima saída${naRota}.\nAssim que o motoboy sair eu te aviso aqui.`,
+      hoje:     `${saud}! ✅ Confirmado *para hoje*${naRota ? ` — o motoboy passa aí${naRota}` : ' — já está na rota'}.\nQualquer coisa é só chamar 🐾`,
+      amanha:   `${saud}! ✅ Anotado. Deixei programado e o motoboy passa aí${naRota} na data combinada.\nSe mudar alguma coisa, me avisa 🐾`,
+      turno:    `${saud}! ✅ Confirmado para a *${turno}*, como você pediu.\n🛵 O motoboy passa aí${naRota}.`,
+      material: `${saud}! ✅ Pedido recebido — já agendado para a *${turno}*.\n🛵 O motoboy passa aí${naRota}. Pode deixar o material separado 🧪`,
+      pergunta: `${saud}! ✅ *Consegue sim* — já agendei para a *${turno}*.\n🛵 O motoboy passa aí${naRota}.`,
+      padrao:   `${saud}! ✅ Pedido recebido e *já agendado* para a *${turno}*.\n🛵 O motoboy passa aí${naRota}.\nQualquer coisa é só chamar 🐾`,
+    }
     return {
-      cliente:
-        // 25/set — apertei a mensagem: sem linha em branco e sem despedida de ofício.
-        // Ganha o card (menos rolagem) E ganha a clínica: quem lê no WhatsApp quer o fato,
-        // não três parágrafos. O que importa está nas duas primeiras linhas — agendado e quando.
-        `${saud}! ✅ Pedido recebido e *já agendado* para a *${turno}*.\n` +
-        `🛵 O motoboy passa aí${rota ? ` pela *${rota}*` : ''}.\n` +
-        `Qualquer coisa é só chamar 🐾\n_🧬 Alpha Labs · Atendimento ao Cliente_`,
-      motoboy:
-        `📍 *${clinica}*` + (end ? `\n${end}` : `\n⚠️ sem endereço cadastrado — confirmar com a clínica`),
+      situacao: sit,
+      cliente: CORPO[sit] + ass,
+      motoboy: `📍 *${clinica}*` + (end ? `\n${end}` : `\n⚠️ sem endereço cadastrado — confirmar com a clínica`),
     }
   }
   /** mostra as duas, com botao de copiar cada uma. Nao manda nada sozinho: quem manda e a pessoa. */
