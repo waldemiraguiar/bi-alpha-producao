@@ -435,3 +435,63 @@ button.principal.responder{background:var(--verde)}
    a pessoa vê antes de mandar, e não depois que a clínica reclamou */
 .card .rSit{float:right;font-weight:700;letter-spacing:0;text-transform:none;font-size:11px;
   color:var(--suave);background:rgba(0,0,0,.05);padding:2px 9px;border-radius:999px}
+
+/* ═══ ⛔ AS RESPOSTAS DE "NÃO DEU" (Wal, 25/set) ═══════════════════════════════════════════
+   MEDIDO: em 10 dias, 50 respostas da equipe foram o contrário do "está agendado" —
+   21 "o motoboy já passou/saiu" e 17 "fica para amanhã". Um terço do volume era um caso
+   que a tela não cobria.
+
+   COMO CONVIVEM COM O "SIM", que foi a pergunta:
+     · o SIM continua sendo o texto principal, já escrito e pronto — é o caso de 2 em 3
+     · os NÃO ficam embaixo, como botões pequenos, atrás de uma pergunta ("não deu?")
+     · clicar TROCA o texto na cara, não abre nada — a pessoa lê antes de mandar
+     · a caixa fica âmbar quando está negando, para não copiar "não dá" achando que é "dá"
+     · "voltar ao sim" desfaz, porque errar o clique não pode custar nada
+   O peso visual segue a estatística: o caminho comum é grande e pronto, a exceção é
+   pequena e a um clique. */
+.card .rAlt{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:9px;
+  padding-top:8px;border-top:1px dashed #cfe1f8}
+.card .rAltTit{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--tenue);margin-right:2px}
+.card .rAltBt{font:inherit;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px;
+  border:1px solid #cfe1f8;background:#fff;color:var(--suave);cursor:pointer;white-space:nowrap}
+.card .rAltBt:hover{border-color:#b4690e;color:#b4690e}
+.card .rAltBt.on{background:#b4690e;border-color:#b4690e;color:#fff}
+.card .rAltBt.volta{border-style:dashed;color:#1f6feb;border-color:#1f6feb}
+/* ⚠️ quando está negando, a caixa inteira muda de cor — o erro que isso evita é copiar
+   um "não dá" achando que era o "dá", que chega na clínica como recusa sem motivo */
+.card .rCaixa.cli.negando{background:#fff6ea;border-color:#f2ddbe}
+.card .rCaixa.cli.negando .rQuem{color:#b4690e}
+.card .rCaixa.cli.negando .rCopy{color:#b4690e}
+.card .rCaixa.cli.negando .rAlt{border-top-color:#f2ddbe}
+
+/* ═══ 🛵 O ESTADO DA ROTA DECIDE — refeito em 25/set depois do benchmark ═════════════════
+   O que o benchmark derrubou do meu desenho anterior, e por quê:
+
+   ① "1 em 3 não é exceção, é o segundo caso mais comum". Progressive disclosure (NN/g) manda
+      EXPOR o que é frequente — botão pequeno embaixo era realocar complexidade, não reduzir.
+      Agora os três desfechos ficam em cima, do mesmo tamanho.
+   ② "escolher entre quatro parágrafos parecidos sob pressão" → agora se escolhe entre FATOS
+      ("vai hoje" / "já passou aí" / "fica para amanhã"), padrão de reason code da última milha.
+   ③ ⛔ NÃO pintar "fica para amanhã" de vermelho. GOV.UK reserva a cor de alerta para ação
+      DESTRUTIVA E IRREVERSÍVEL. Avisar que fica para amanhã é a resposta CERTA naquele caso —
+      vermelho ali rotula um desfecho legítimo como engano e gera fadiga de alerta.
+      A cor foi para o ESTADO DA ROTA, que é onde existe risco de verdade.
+   ④ WCAG 1.4.1: a cor nunca anda sozinha. O fato vem escrito ("rota 7 · tarde — FECHADA 14:10")
+      com ícone, para quem não distingue cor ler a mesma informação. */
+.card .rFato{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;
+  padding:6px 10px;border-radius:8px;margin-bottom:9px;border:1px solid}
+.card .rFato.viva   {background:#eaf7ef;border-color:#bfe3cd;color:#13653c}
+.card .rFato.fechada{background:#fdeeea;border-color:#f4cfc6;color:#9c2f24}
+.card .rFato.atencao{background:#fff6e5;border-color:#f2ddbe;color:#8a5b00}
+.card .rFato.neutro {background:#f1f4f7;border-color:var(--linha);color:var(--suave)}
+.card .rFatoIco{font-size:13px}
+
+/* os três desfechos, do mesmo peso — nenhum é "o certo" por tamanho, o certo é o que a rota diz */
+.card .rEsc{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:9px}
+.card .rEscBt{font:inherit;font-size:12.5px;font-weight:700;padding:7px 14px;border-radius:9px;
+  border:1px solid var(--linha);background:#fff;color:var(--suave);cursor:pointer}
+.card .rEscBt:hover{border-color:var(--azul);color:var(--azul)}
+.card .rEscBt.on{background:var(--tinta);border-color:var(--tinta);color:#fff}
+/* quem discorda da minha leitura vê que discordou — sem julgamento, só registro */
+.card .rMudei{font-size:11.5px;color:var(--tenue);font-style:italic}

@@ -119,21 +119,37 @@
         <select id="r${c.id}" data-rota="${c.id}">${opcoes}</select>
         ${c.rota_sug ? `<span class="sug">sugestão do sistema${c.fonte ? ` · ${esc(String(c.fonte).split('·').pop().trim())}` : ''}</span>` : ''}
       </div>
-        ${orc ? '' : `<div class="respostas">
-          <div class="rTit">📋 a resposta pronta — confira, copie e mande
-            <span class="rSit">${{urgente:'🚨 pediu URGENTE',hoje:'📅 pediu HOJE',amanha:'📅 é para outro dia',turno:'🕒 pediu um turno',material:'🧪 citou o material',pergunta:'❓ fez uma pergunta',padrao:'pedido simples'}[msgsDoCard(c, rotaSel).situacao]}</span>
-          </div>
-          <div class="rCaixa cli">
-            <div class="rCab"><span class="rQuem">👤 para a CLÍNICA</span>
-              <button type="button" class="rCopy" data-cp="cli" data-id="${c.id}">copiar</button></div>
-            <pre class="rMsg">${esc(msgsDoCard(c, rotaSel).cliente)}</pre>
-          </div>
-          <div class="rCaixa mot">
-            <div class="rCab"><span class="rQuem">🛵 para o MOTOBOY</span>
-              <button type="button" class="rCopy" data-cp="mot" data-id="${c.id}">copiar</button></div>
-            <pre class="rMsg">${esc(msgsDoCard(c, rotaSel).motoboy)}</pre>
-          </div>
-        </div>`}
+        ${orc ? '' : (() => {
+          const L = leituraDaRota(c, rotaSel)
+          const m = msgsDoCard(c, rotaSel)
+          const escolhido = c._desfecho || L.desfecho
+          const txt = escolhido === 'vai' ? m.cliente : (m.alternativas[escolhido]?.txt || m.cliente)
+          // ⚠️ 3 desfechos, não 4 (benchmark: "máximo 3 visíveis, com rótulos que resumem o
+          // RESULTADO, nunca Sim/Não"). O quarto ("sem motoboy") virou o mesmo texto de
+          // "saiu da região" — na prática a clínica lê a mesma coisa: hoje não vai.
+          const OPCOES = [
+            ['vai',        '✅ vai hoje'],
+            ['ja_passou',  '🛵 já passou aí'],
+            ['so_amanha',  '📅 fica para amanhã'],
+          ]
+          return `<div class="respostas">
+            <div class="rFato ${L.cor}"><span class="rFatoIco">${L.cor === 'fechada' ? '⛔' : L.cor === 'atencao' ? '⚠️' : L.cor === 'viva' ? '🟢' : 'ℹ️'}</span>${esc(L.fato)}</div>
+            <div class="rEsc">
+              ${OPCOES.map(([k, rot]) => `<button type="button" class="rEscBt${escolhido === k ? ' on' : ''}" data-alt="${k}" data-id="${c.id}">${esc(rot)}</button>`).join('')}
+              ${escolhido !== L.desfecho ? `<span class="rMudei">você mudou — eu tinha lido "${esc(OPCOES.find(o => o[0] === L.desfecho)?.[1] || L.desfecho)}"</span>` : ''}
+            </div>
+            <div class="rCaixa cli${escolhido !== 'vai' ? ' negando' : ''}">
+              <div class="rCab"><span class="rQuem">👤 para a CLÍNICA</span>
+                <button type="button" class="rCopy" data-cp="cli" data-id="${c.id}">copiar</button></div>
+              <pre class="rMsg" data-msgcli="${c.id}">${esc(txt)}</pre>
+            </div>
+            <div class="rCaixa mot">
+              <div class="rCab"><span class="rQuem">🛵 para o MOTOBOY</span>
+                <button type="button" class="rCopy" data-cp="mot" data-id="${c.id}">copiar</button></div>
+              <pre class="rMsg">${esc(m.motoboy)}</pre>
+            </div>
+          </div>`
+        })()}
       <div class="acoes">
         ${minha
           ? (orc
@@ -171,6 +187,28 @@
   function pintar() {
     const eu = (sessao && sessao.nome || '').toLowerCase()
     const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+    /**
+     * 🔁 A PROMESSA VOLTA SOZINHA — Wal, 25/set: "perdemos clientes por esquecimento".
+     * MEDIDO: 71 promessas de "fica para amanha" em 10 dias (7,1/dia), nenhuma registrada
+     * em lugar nenhum. Eu tinha TODAS as mensagens do periodo e mesmo assim nao conseguia
+     * dizer quantas foram cumpridas — se eu nao sabia, a equipe tambem nao sabia.
+     *
+     * Ele escolheu o desenho ②: o card NAO vai para uma aba nova. Aba e lugar que alguem
+     * precisa lembrar de abrir — trocaria esquecer a promessa por esquecer a aba.
+     * Ele sai da fila de hoje e VOLTA SOZINHO, no topo, quando o dia/turno chega.
+     */
+    const TURNO_AGORA = (() => { const h = new Date().getHours(); return h < 12 ? 'manhã' : h < 18 ? 'tarde' : 'noite' })()
+    const ORDEM_TURNO = { 'manhã': 0, 'tarde': 1, 'noite': 2 }
+    const promessaVenceu = c => {
+      if (!c.para_quando) return false
+      if (c.para_quando < hoje) return true
+      if (c.para_quando > hoje) return false
+      if (!c.para_turno) return true
+      return (ORDEM_TURNO[c.para_turno] ?? 0) <= (ORDEM_TURNO[TURNO_AGORA] ?? 0)
+    }
+    const prometidas = coletas.filter(c => c.para_quando && c.status === 'agendada')
+    const voltaram   = prometidas.filter(promessaVenceu)
+    const guardadas  = prometidas.filter(c => !promessaVenceu(c))
     const daFila = coletas.filter(c => c.status === 'nova' && !(c.por || '').trim())
     const minhas = coletas.filter(c => c.status === 'nova' && (c.por || '').toLowerCase() === eu)
     const feitas = coletas.filter(c => ['na_lista', 'agendada', 'coletada'].includes(c.status) && (c.na_lista_em || c.agendada_em || '').slice(0, 10) === hoje)
@@ -181,6 +219,12 @@
 
     // o que espera há mais tempo vem primeiro — benchmark ③
     const ord = (a, b) => Date.parse(a.quando || a.criado_em) - Date.parse(b.quando || b.criado_em)
+    // 🔁 o que voltou fica ACIMA de tudo: o cliente já foi avisado e está esperando
+    const ordProm = (a, b) => String(a.para_quando).localeCompare(String(b.para_quando))
+    $('#prometidas').hidden = !voltaram.length
+    $('#listaPrometidas').innerHTML = voltaram.sort(ordProm).map(c => cardHTML(c, true)).join('')
+    $('#guardadas').hidden = !guardadas.length
+    $('#listaGuardadas').innerHTML = guardadas.sort(ordProm).map(c => cardHTML(c, true)).join('')
     $('#minhas').hidden = !minhas.length
     $('#listaMinhas').innerHTML = minhas.sort(ord).map(c => cardHTML(c, true)).join('')
 
@@ -206,12 +250,24 @@
       : '<span class="sug">nenhuma ainda hoje</span>'
   }
 
+  let rotasVivo = []                 // estado ao vivo de cada rota — decide o default da resposta
   async function carregar() {
     const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
     const { data, error } = await SB.from('inc_coletas').select('*')
       .gte('criado_em', `${hoje}T03:00:00Z`).order('criado_em', { ascending: true }).limit(400)
     if (error) { toast('Não consegui ler a fila: ' + error.message, true); return }
-    coletas = (data || []).filter(c => c.tipo !== 'material')   // coleta E orçamento entram na fila
+    // ⛔ 25/set — a fila so lia o que foi CRIADO hoje. Uma promessa feita ontem para hoje
+    // simplesmente nao aparecia: o card ficava invisivel justamente no dia em que importava.
+    const pr = await SB.from('inc_coletas').select('*')
+      .not('para_quando', 'is', null).lte('para_quando', hoje).eq('status', 'agendada').limit(200)
+    const mapa = new Map()
+    for (const c of [...(data || []), ...(pr.error ? [] : pr.data || [])]) mapa.set(c.id, c)
+    coletas = [...mapa.values()].filter(c => c.tipo !== 'material')   // coleta E orcamento entram na fila
+    // 🛵 O ESTADO DA ROTA, AO VIVO. Benchmark 25/set: "o default do card deve seguir o estado da
+    // rota, nao a estatistica. O atendente nunca deveria ver 'agendado para a tarde' num card
+    // onde a tarde acabou." Esta tabela ja existia e a fila nao usava.
+    const rv = await SB.from('rota_vivo').select('*')
+    rotasVivo = rv.error ? [] : (rv.data || [])
     // endereço conhecido: a última parada que já foi postada para aquela clínica
     for (const c of coletas) { c._endereco = c.obs && /^END:/.test(c.obs) ? c.obs.slice(4) : null }
     pintar()
@@ -257,6 +313,48 @@
     { k: 'pergunta',rx: /\?|consegue|d[aá]\s+pra|dar[ií]a|ser[aá] que|tem como/i },
   ]
   /**
+   * 🛵 O ESTADO DA ROTA DECIDE A RESPOSTA — benchmark de 25/set, o achado principal:
+   * "o default do card deve seguir o estado da rota, não a estatística. O atendente nunca
+   *  deveria ver 'agendado para a tarde' num card onde a tarde acabou."
+   *
+   * Antes eu pedia para a pessoa ADIVINHAR se dava, e escolher entre quatro parágrafos
+   * parecidos sob pressão. O sistema já sabia a resposta — a tabela rota_vivo está viva e a
+   * fila não a lia. Agora o card abre com o desfecho certo já escolhido.
+   *
+   * ⚠️ E o atendente pode discordar com um clique: o estado é a MELHOR informação que eu
+   * tenho, não a verdade. O motoboy pode ter voltado, a rota pode ter aberto exceção.
+   * Automatizar o palpite ≠ tirar a decisão de quem está com o cliente na frente.
+   */
+  const ORDEM_T = { 'manhã': 0, 'tarde': 1, 'noite': 2 }
+  function estadoDaRota(rota) {
+    if (!rota) return null
+    const alvo = String(rota).trim().toLowerCase().replace(/\s+/g, ' ')
+    // a linha mais recente daquela rota (a tabela guarda uma por rota+turno)
+    const linhas = rotasVivo
+      .filter(r => String(r.rota || '').toLowerCase().startsWith(alvo + ' ·') || String(r.rota || '').toLowerCase() === alvo)
+      .sort((a, b) => Date.parse(b.atualizado || b.ciclo_aberto || 0) - Date.parse(a.atualizado || a.ciclo_aberto || 0))
+    return linhas[0] || null
+  }
+  /** devolve { desfecho, fato, cor } — o FATO é texto, nunca só cor (WCAG 1.4.1) */
+  function leituraDaRota(c, rota) {
+    const r = estadoDaRota(rota)
+    const h = new Date().getHours()
+    const turnoAgora = h < 12 ? 'manhã' : h < 18 ? 'tarde' : 'noite'
+    if (!r) return { desfecho: 'vai', fato: rota ? `${rota} — sem leitura ao vivo agora` : 'escolha a rota', cor: 'neutro' }
+    const hm = q => { try { return new Date(q).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) } catch { return '' } }
+    // ① a rota FECHOU o ciclo → não dá hoje por essa rota
+    if (r.fechado_em) return { desfecho: 'so_amanha', fato: `${rota} · ${r.turno} — FECHADA ${hm(r.fechado_em)}`, cor: 'fechada' }
+    // ② todas as paradas informadas → o motoboy já rodou tudo
+    if (r.paradas && r.informadas && Number(r.informadas) >= Number(r.paradas))
+      return { desfecho: 'ja_passou', fato: `${rota} · ${r.turno} — todas as ${r.paradas} paradas já informadas`, cor: 'fechada' }
+    // ③ a linha viva é de um turno que já passou → a de agora nem abriu
+    if (r.turno && (ORDEM_T[r.turno] ?? 9) < (ORDEM_T[turnoAgora] ?? 9))
+      return { desfecho: 'so_amanha', fato: `última leitura é da ${r.turno} — a rota de agora ainda não abriu`, cor: 'atencao' }
+    // ④ rodando
+    const falta = Number(r.faltam || 0)
+    return { desfecho: 'vai', fato: `${rota} · ${r.turno} — rodando${falta ? `, faltam ${falta} paradas` : ''}`, cor: 'viva' }
+  }
+  /**
    * ⚠️ A SAUDAÇÃO SAI ANTES DE PROCURAR O TURNO — bug pego no teste com frase real:
    * "Boa tarde! Podem buscar o material aqui na Visconde de Araguaia?" era classificada como
    * "pediu o turno da TARDE", quando na verdade é uma PERGUNTA e o "tarde" é só o cumprimento.
@@ -291,8 +389,49 @@
       pergunta: `${saud}! ✅ *Consegue sim* — já agendei para a *${turno}*.\n🛵 O motoboy passa aí${naRota}.`,
       padrao:   `${saud}! ✅ Pedido recebido e *já agendado* para a *${turno}*.\n🛵 O motoboy passa aí${naRota}.\nQualquer coisa é só chamar 🐾`,
     }
+    /**
+     * ⛔ QUANDO **NÃO** DÁ — Wal, 25/set: "como seria um exemplo de não ser possível
+     * porque o motoboy já saiu da região? ou afins".
+     *
+     * As sete de cima assumiam que dá. Mas MEDI: em 10 dias, 50 respostas da equipe foram
+     * exatamente o contrário — 21 "o motoboy já passou/saiu" e 17 "fica para amanhã".
+     * Um terço do volume de resposta era um caso que a tela não cobria.
+     *
+     * Os textos abaixo são os da própria equipe, apenas padronizados. Vieram do log:
+     *   "Infelizmente o motoboy da região está distante. Estou deixando agendado para
+     *    amanhã na primeira rotina"
+     *   "Infelizmente não temos motoboy disponível. Posso deixar salvo para amanhã?"
+     *   "Verifiquei aqui que o motoboy já passou na clínica. Tem mais algum material?"
+     *
+     * ⚠️ POR QUE É BOTÃO E NÃO AUTOMÁTICO: o sistema não sabe onde o motoboy está agora.
+     * Quem sabe é a pessoa. Adivinhar aqui seria prometer o que não se pode cumprir —
+     * ou negar uma coleta que daria. Eu ofereço o texto; a decisão é de quem está lendo.
+     */
+    const ALTERNATIVAS = {
+      ja_passou: {
+        rot: '🛵 já passou aí',
+        txt: `${saud}! Verifiquei aqui e o motoboy *já passou na clínica* hoje.\n` +
+             `Se ainda tem material, me avisa que eu vejo a próxima saída 🐾`,
+      },
+      fora_regiao: {
+        rot: '📍 saiu da região',
+        txt: `${saud}! Infelizmente o motoboy da região *já está distante* e não consigo retornar hoje.\n` +
+             `Deixo agendado para *amanhã na primeira rota* — pode ser?`,
+      },
+      sem_motoboy: {
+        rot: '🚫 sem motoboy',
+        txt: `${saud}! Infelizmente não tenho motoboy disponível para essa região agora.\n` +
+             `Posso deixar salvo para *amanhã*? Me confirma que eu já agendo 🐾`,
+      },
+      so_amanha: {
+        rot: '📅 só amanhã',
+        txt: `${saud}! As rotas de hoje já fecharam por aqui.\n` +
+             `Deixei agendado para *amanhã*${naRota} — o material pode ficar guardado como está 🧪`,
+      },
+    }
     return {
       situacao: sit,
+      alternativas: Object.fromEntries(Object.entries(ALTERNATIVAS).map(([k, v]) => [k, { rot: v.rot, txt: v.txt + ass }])),
       cliente: CORPO[sit] + ass,
       motoboy: `📍 *${clinica}*` + (end ? `\n${end}` : `\n⚠️ sem endereço cadastrado — confirmar com a clínica`),
     }
@@ -313,7 +452,8 @@
     d.addEventListener('click', ev => {
       const b = ev.target.closest('button'); if (!b) return
       if (b.classList.contains('fechar')) { d.close(); d.remove(); return }
-      const txt = b.dataset.cp === 'cli' ? m.cliente : m.motoboy
+      const alt = c._desfecho || leituraDaRota(c, sel ? sel.value : (c.rota || c.rota_sug || '')).desfecho
+      const txt = b.dataset.cp !== 'cli' ? m.motoboy : (alt === 'vai' ? m.cliente : (m.alternativas[alt]?.txt || m.cliente))
       navigator.clipboard?.writeText(txt).then(() => { b.textContent = 'Copiado ✓'; setTimeout(() => b.textContent = 'Copiar', 1600) })
         .catch(() => toast('Não consegui copiar — selecione o texto', true))
     })
@@ -403,6 +543,16 @@
     else if (b.dataset.acao === 'cancelar') cancelarDaFila(id)
     // 25/set — Wal: "preciso q a resposta esteja escrita no card". Copiar direto do card, sem
     // abrir nada: o caso comum é bater o olho, ver que está certo, copiar e mandar.
+    // ⛔ trocar para a resposta de "não deu" — muda o texto NA CARA, para ler antes de mandar
+    // ⚠️ o atendente pode DISCORDAR do que eu li da rota — guardo a escolha dele no card e
+    // repinto. O estado da rota é o meu melhor palpite, não a verdade: o motoboy pode ter
+    // voltado, a rota pode abrir exceção. Automatizar o palpite não é tirar a decisão de
+    // quem está com o cliente na frente.
+    else if (b.dataset.alt !== undefined) {
+      const c = coletas.find(x => String(x.id) === String(id)); if (!c) return
+      c._desfecho = b.dataset.alt
+      pintar()
+    }
     else if (b.dataset.cp) {
       const c = coletas.find(x => String(x.id) === String(id)); if (!c) return
       const sel = document.querySelector(`[data-rota="${id}"]`)
