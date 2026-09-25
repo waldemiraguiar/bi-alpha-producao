@@ -107,19 +107,31 @@ jobs:
               supa("/sep_marks?chave=eq."+hc,"DELETE")
           except Exception as e: falhas.append(f"Supabase gravação: {e}")
           # 5) PAGINAÇÃO: a leitura traz TODAS as marcas? (o bug de 08/jul = corte em 1000)
+          # RE-CHECK (25/set): um "read timed out" transitório do Supabase aqui virava alarme falso
+          # (painel no ar, dado fresco, tabela pequena e rápida). Tenta 2x com 5s antes de acusar.
           total=0
-          try:
+          def _check_pag():
               st,_,h=supa("/sep_marks?select=chave&limit=1",headers={"Prefer":"count=exact","Range":"0-0"})
-              total=int((h.get("Content-Range") or h.get("content-range") or "/0").split("/")[-1])
-              loaded=0; frm=0
+              tot=int((h.get("Content-Range") or h.get("content-range") or "/0").split("/")[-1])
+              carregado=0; frm=0
               while True:
                   st,b,_=supa(f"/sep_marks?select=chave&offset={frm}&limit=1000")
-                  n=len(json.loads(b)); loaded+=n
+                  n=len(json.loads(b)); carregado+=n
                   if n<1000: break
                   frm+=1000
+              return tot,carregado
+          pag_err=None; loaded=0
+          for _tent in range(2):
+              try:
+                  total,loaded=_check_pag(); pag_err=None; break
+              except Exception as e:
+                  pag_err=e
+                  if _tent==0: time.sleep(5)   # 2ª chance: descarta blip do Supabase
+          if pag_err is not None:
+              falhas.append(f"Check paginação: {pag_err} (2 tentativas)")
+          else:
               ctx.append(f"sep_marks: {total} marcas (paginação carregou {loaded})")
               if loaded<total: falhas.append(f"Painel não carrega TODAS as marcas: {loaded}/{total} (bug tipo 08/jul!)")
-          except Exception as e: falhas.append(f"Check paginação: {e}")
 
           agora=(datetime.datetime.utcnow()-datetime.timedelta(hours=3)).strftime("%d/%m %H:%M BRT")
           def alerta(assunto, corpo, wa):
