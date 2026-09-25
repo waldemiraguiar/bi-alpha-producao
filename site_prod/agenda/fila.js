@@ -119,6 +119,20 @@
         <select id="r${c.id}" data-rota="${c.id}">${opcoes}</select>
         ${c.rota_sug ? `<span class="sug">sugestão do sistema${c.fonte ? ` · ${esc(String(c.fonte).split('·').pop().trim())}` : ''}</span>` : ''}
       </div>
+        ${orc ? '' : `<div class="respostas">
+          <div class="rTit">📋 a resposta pronta — confira, copie e mande</div>
+          <div class="rLinha cli">
+            <span class="rQuem">👤 clínica</span>
+            <span class="rTxt" data-msg="cli" data-id="${c.id}">${esc(msgsDoCard(c, rotaSel).cliente.split('\n')[0])} …</span>
+            <button type="button" class="rCopy" data-cp="cli" data-id="${c.id}">copiar</button>
+          </div>
+          <div class="rLinha mot">
+            <span class="rQuem">🛵 motoboy</span>
+            <span class="rTxt" data-msg="mot" data-id="${c.id}">${esc(msgsDoCard(c, rotaSel).motoboy.replace(/\n/g, ' · '))}</span>
+            <button type="button" class="rCopy" data-cp="mot" data-id="${c.id}">copiar</button>
+          </div>
+          <button type="button" class="rVerTudo" data-acao="vermsgs" data-id="${c.id}">ver as mensagens inteiras</button>
+        </div>`}
       <div class="acoes">
         ${minha
           ? (orc
@@ -212,8 +226,8 @@
     catch (e) { toast('Não consegui reservar: ' + e.message, true) }
     // 25/set — pegar deixou de ser so "travar o card": agora mostra O QUE MANDAR.
     // Abre DEPOIS de reservar, para ninguem copiar mensagem de um card que e de outra pessoa.
-    const selR = document.querySelector(`[data-rota="${id}"]`)
-    if (c.tipo !== 'orcamento') verMensagens(c, selR ? selR.value : (c.rota || c.rota_sug || ''))
+    // 25/set — o diálogo deixou de abrir sozinho: a resposta agora está ESCRITA no card,
+    // e abrir uma janela por cima do que a pessoa já está lendo era atrapalhar, não ajudar.
     carregar()
   }
   /**
@@ -351,6 +365,22 @@
     else if (b.dataset.acao === 'devolver') devolver(id)
     else if (b.dataset.acao === 'postar') postar(id, b)
     else if (b.dataset.acao === 'cancelar') cancelarDaFila(id)
+    // 25/set — Wal: "preciso q a resposta esteja escrita no card". Copiar direto do card, sem
+    // abrir nada: o caso comum é bater o olho, ver que está certo, copiar e mandar.
+    else if (b.dataset.cp) {
+      const c = coletas.find(x => String(x.id) === String(id)); if (!c) return
+      const sel = document.querySelector(`[data-rota="${id}"]`)
+      const m = msgsDoCard(c, sel ? sel.value : (c.rota || c.rota_sug || ''))
+      const txt = b.dataset.cp === 'cli' ? m.cliente : m.motoboy
+      navigator.clipboard?.writeText(txt)
+        .then(() => { b.textContent = 'copiado ✓'; setTimeout(() => b.textContent = 'copiar', 1600) })
+        .catch(() => toast('Não consegui copiar', true))
+    }
+    else if (b.dataset.acao === 'vermsgs') {
+      const c = coletas.find(x => String(x.id) === String(id)); if (!c) return
+      const sel = document.querySelector(`[data-rota="${id}"]`)
+      verMensagens(c, sel ? sel.value : (c.rota || c.rota_sug || ''))
+    }
   })
 
   /* ═══ 💰 ORÇAMENTO DE EXAMES ═══════════════════════════════════════════════
