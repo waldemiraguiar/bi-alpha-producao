@@ -245,7 +245,9 @@ const PRES={interesse:{lbl:"Interesse",ic:"😍",col:"#00E5A0"},orcamento:{lbl:"
   fechou:{lbl:"Fechou",ic:"✅",col:"#00E5A0"},objecao:{lbl:"Objeção",ic:"🛑",col:"#FFB020"},
   sem_interesse:{lbl:"Sem interesse",ic:"❌",col:"#FF5470"},visita:{lbl:"Visita registrada",ic:"📍",col:"#8aa2bd"}};
 const PRORDER=["interesse","orcamento","fechou","objecao","sem_interesse","visita"];
-function syncPista(arr){ PISTA=(arr||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+function syncPista(arr){ const base=(arr||[]).slice(), ids=new Set(base.map(x=>x.id));
+  try{ (pqLoad()||[]).forEach(it=>{ if(it&&!ids.has(it.id)) base.push(it); }); }catch(e){}   // mantém feedbacks da fila offline (não somem num reload enquanto não sincronizam)
+  PISTA=base.sort((a,b)=>(b.ts||0)-(a.ts||0)); }
 async function loadPista(){ try{ const r=await fetch(PISTA_API, {cache:"no-store"}); if(r.ok) syncPista((await r.json()).pista); }catch(e){} }
 /* ---- fila OFFLINE (grava sem sinal → sincroniza quando volta a internet) ---- */
 const PQ_KEY="crm_pista_queue";
