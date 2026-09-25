@@ -95,8 +95,10 @@
       <div class="desde">pedido <b>${esc(quandoTxt(c.quando || c.criado_em))}</b></div>
       ${c.texto ? `<div class="pedido">“${esc(String(c.texto).slice(0, 130))}”</div>` : ''}
       ${temEnd
-        ? `<div class="endereco"><span class="ico">📍</span><span>${esc(c._endereco)}</span></div>`
-        : `<div class="semend">⚠️ <span>Sem endereço conhecido — vai precisar montar à mão</span></div>`}
+        ? `<div class="endereco"><span class="ico">📍</span><span>${esc(c._endereco)}${c._endFonte ? `<i class="endFonte">${esc(c._endFonte)}</i>` : ''}</span></div>`
+        : c._endAmbiguo
+          ? `<div class="semend amb">⚠️ <span>Tenho ${c._endAmbiguo} endereços diferentes para esse nome — <b>confirme com a clínica</b> antes de mandar para o motoboy</span></div>`
+          : `<div class="semend">⚠️ <span>Sem endereço conhecido — vai precisar montar à mão</span></div>`}
       ${c._alerta ? `<div class="alerta">⚠️ <span>${esc(c._alerta)}</span></div>` : ''}
       ${orc ? `<div class="sugeridos">
         ${sugeridos.length
@@ -268,9 +270,60 @@
     // onde a tarde acabou." Esta tabela ja existia e a fila nao usava.
     const rv = await SB.from('rota_vivo').select('*')
     rotasVivo = rv.error ? [] : (rv.data || [])
-    // endereço conhecido: a última parada que já foi postada para aquela clínica
-    for (const c of coletas) { c._endereco = c.obs && /^END:/.test(c.obs) ? c.obs.slice(4) : null }
+    // 📍 ENDEREÇO — Wal, 25/set: "VC TEM O ENDERECO DAS CLINICAS JA, APARECE COMO VC NAO
+    // SABENDO DE NENHUMA". Estava certo: eu só aceitava endereço escrito "END:" dentro da
+    // observação do próprio chamado, coisa que quase nunca acontece — 229 clínicas na fila,
+    // praticamente todas com "sem endereço conhecido". O catálogo existe em dois lugares:
+    // as 80 obrigatórias curadas à mão e o que o ouvinte aprende das listas postadas nos
+    // grupos de rota. Medido: 48% das 229 clínicas da fila passam a ter endereço.
+    // ⚠️ "NUNCA PASSAR UM ENDEREÇO ERRADO" (regra do Wal no agendamentoColeta). "Av. das
+    // Américas 5777" é endereço de TRÊS clínicas: quando o nome casa com mais de uma ficha,
+    // eu NÃO mostro endereço nenhum — mostro que tenho candidatos e mando conferir. Endereço
+    // errado manda o motoboy para a porta errada; endereço em branco só faz a equipe digitar.
+    await carregarEnderecos()
+    for (const c of coletas) {
+      const a = enderecoDe(c.clinica || c.grupo || '')
+      c._endereco = a.endereco || null
+      c._endFonte = a.fonte || ''
+      c._endAmbiguo = a.ambiguo || 0
+    }
     pintar()
+  }
+
+  /* ═══ 📍 CATÁLOGO DE ENDEREÇOS ════════════════════════════════════════════════
+     Fica NO BANCO, não em arquivo do site: o repositório é público e isto é a
+     carteira de clínicas da Alpha. Mesma decisão já tomada para a tabela de preços.
+     A chave é o nome COMPACTADO (sem acento, sem espaço, sem pontuação) — a mesma
+     régua que o ouvinte usa em obrigatoriasAuto.js, senão os dois lados discordam. */
+  let catEnd = null
+  const comp = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+  async function carregarEnderecos() {
+    if (catEnd) return catEnd
+    const r = await SB.from('clinica_endereco').select('chave,nome,endereco,fonte').limit(2000)
+    catEnd = r.error ? [] : (r.data || [])
+    return catEnd
+  }
+
+  /**
+   * Acha o endereço de uma clínica pelo nome que veio do grupo.
+   * Três degraus, do seguro para o arriscado — e o arriscado ele se recusa a chutar:
+   *   ① chave idêntica                      → mostra
+   *   ② uma única ficha contida no nome      → mostra, marcado como aproximado
+   *   ③ mais de uma ficha casa               → NÃO mostra (ambíguo)
+   * O piso de 5 caracteres no degrau ② existe porque chave curta casa com qualquer coisa:
+   * "dok" aparece dentro de "DOKTOR PET", que é outra clínica em outro bairro.
+   */
+  function enderecoDe(nome) {
+    const cn = comp(nome)
+    if (!cn || !catEnd || !catEnd.length) return {}
+    const exato = catEnd.find(x => x.chave === cn)
+    if (exato) return { endereco: exato.endereco, fonte: exato.fonte || 'cadastro' }
+    const perto = catEnd.filter(x => x.chave.length >= 5 && (cn.includes(x.chave) || x.chave.includes(cn)))
+    if (perto.length === 1) return { endereco: perto[0].endereco, fonte: (perto[0].fonte || 'cadastro') + ' · nome parecido' }
+    if (perto.length > 1) return { ambiguo: perto.length }
+    return {}
   }
 
   // ── ① PULL: o colaborador PEGA. ② CLAIM: trava e mostra quem está com o item ──
@@ -534,7 +587,11 @@
       }
       return
     }
-    const b = ev.target.closest('[data-acao]'); if (!b) return
+    // ⛔ 25/set — BUG QUE MATOU 5 BOTÕES: este seletor era só [data-acao], mas os botões de
+    // desfecho usam data-alt e os de copiar usam data-cp. O closest() devolvia null e o
+    // handler saía no return ANTES de chegar nos ramos que tratam os dois. Estavam na tela,
+    // pintavam o :hover, e não faziam nada. Seletor tem que listar TODO atributo tratado aqui.
+    const b = ev.target.closest('[data-acao],[data-alt],[data-cp]'); if (!b) return
     const id = b.dataset.id
     if (b.dataset.acao === 'responder') responder(id)
     if (b.dataset.acao === 'pegar') pegar(id)

@@ -67,6 +67,15 @@ main{max-width:1180px;margin:0 auto;padding:22px;display:flex;flex-direction:col
 .endereco{font-size:13.5px;color:var(--tinta);display:flex;gap:7px;align-items:flex-start}
 .endereco .ico{opacity:.5}
 .semend{color:var(--ambar);font-size:13px;display:flex;gap:7px;align-items:center}
+/* 📍 de onde veio o endereço — a equipe confia diferente do que ela mesma cadastrou
+   e do que eu deduzi de uma lista de rota. Dizer a procedência é o que torna o
+   aproximado utilizável em vez de perigoso. */
+.endFonte{display:block;font-style:normal;font-size:11px;opacity:.6;margin-top:2px;letter-spacing:.02em}
+/* ambíguo NÃO é a mesma coisa que vazio: aqui eu SEI que existe endereço e sei que
+   posso errar. Fundo próprio para não ser lido de relance como "não tenho nada". */
+.semend.amb{background:rgba(255,176,32,.10);border:1px solid rgba(255,176,32,.35);
+  border-radius:9px;padding:7px 10px;align-items:flex-start;line-height:1.45}
+.semend.amb b{color:var(--ambar)}
 .alerta{background:var(--ambarclaro);border:1px solid var(--ambar);color:var(--ambar);border-radius:8px;
   padding:8px 11px;font-size:12.5px;display:flex;gap:8px;align-items:flex-start}
 .linhaRota{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
