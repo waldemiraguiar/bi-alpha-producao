@@ -2,9 +2,11 @@
    Netlify Blobs. GET -> {pista}. POST {acao:'save'|'remove', item, id, senha}.
    Cada feedback: cliente + texto (transcrito da voz, editável) + resultado + carimbo
    de data/hora. PERMANENTE — vira histórico por dia/semana/mês/ano. Editável (upsert por id).
+   Escrita com CAS (updateBlob) — sem lost update entre comercial e escritório.
    Segredo (senha do time CRM) injetado no deploy (secret.mjs). */
 import { getStore } from "@netlify/blobs";
 import * as SEC from "./secret.mjs";
+import { updateBlob } from "./_store.mjs";
 const SECRET = SEC.SECRET;
 
 const RES = ["interesse", "orcamento", "fechou", "objecao", "sem_interesse", "visita"];
@@ -24,22 +26,26 @@ export default async (req) => {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
-    let lista = await load();
+
     if (body.acao === "remove") {
-      lista = lista.filter((x) => x.id !== body.id);
-    } else {
-      const it = body.item || {};
+      const next = await updateBlob(store, "lista", (prev) => (prev || []).filter((x) => x.id !== body.id));
+      return Response.json({ ok: true, pista: next }, { headers: cors });
+    }
+
+    const it = body.item || {};
+    // DESMARCAÇÃO exige CÓDIGO DA DIRETORIA (não depende da lista — valida antes)
+    const gateDesmarc = (it.baixa && it.baixa.tipo === "desmarcado") || (it.desmarc_add && typeof it.desmarc_add === "object");
+    if (gateDesmarc) {
+      if (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE)
+        return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
+    }
+
+    let rejeitVazio = false;
+    const next = await updateBlob(store, "lista", (prev) => {
+      const lista = (prev || []).slice();
       const existing = lista.find((x) => x.id === it.id);
       // "vazio" só barra CRIAÇÃO (item novo). Update parcial (obs_add/reag_add/baixa em item existente) passa.
-      if (!existing && !String(it.texto || "").trim() && !String(it.cliente || "").trim())
-        return new Response(JSON.stringify({ erro: "vazio" }), { status: 400, headers: cors });
-      // DESMARCAÇÃO (a visita não aconteceu) exige CÓDIGO DA DIRETORIA — vale p/ "perdido" (baixa desmarcado)
-      // E p/ "remarcado" (desmarc_add sem baixa). A diretoria só LIBERA; o rep já escolheu o destino.
-      const gateDesmarc = (it.baixa && it.baixa.tipo === "desmarcado") || (it.desmarc_add && typeof it.desmarc_add === "object");
-      if (gateDesmarc) {
-        if (!SEC.DIR_CODE || body.dir_code !== SEC.DIR_CODE)
-          return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
-      }
+      if (!existing && !String(it.texto || "").trim() && !String(it.cliente || "").trim()) { rejeitVazio = true; return undefined; }
       // histórico permanente de desmarcações (auditoria — nunca some, mesmo quando remarcado volta pra agenda)
       let desmarc_hist = (existing && Array.isArray(existing.desmarc_hist)) ? existing.desmarc_hist : [];
       if (it.desmarc_add && typeof it.desmarc_add === "object") {
@@ -96,10 +102,10 @@ export default async (req) => {
         resultado: keep("resultado", RES.includes(it.resultado) ? it.resultado : "visita"),
         data_visita: keep("data_visita", String(it.data_visita || "").slice(0, 20)),
         checkin: (it.checkin && typeof it.checkin === "object")
-          ? { lat: +it.checkin.lat || 0, lng: +it.checkin.lng || 0, acc: +it.checkin.acc || 0, ts: +it.checkin.ts || 0 }
+          ? { lat: +it.checkin.lat || 0, lng: +it.checkin.lng || 0, acc: +it.checkin.acc || 0, ts: +it.checkin.ts || 0, semgps: !!it.checkin.semgps }
           : (existing ? existing.checkin || null : null),   // não perde o check-in ao editar
         checkout: (it.checkout && typeof it.checkout === "object")
-          ? { lat: +it.checkout.lat || 0, lng: +it.checkout.lng || 0, acc: +it.checkout.acc || 0, ts: +it.checkout.ts || 0 }
+          ? { lat: +it.checkout.lat || 0, lng: +it.checkout.lng || 0, acc: +it.checkout.acc || 0, ts: +it.checkout.ts || 0, semgps: !!it.checkout.semgps }
           : (existing ? existing.checkout || null : null),   // saída (opcional) — mede o tempo na clínica
         proximo: keep("proximo", String(it.proximo || "").slice(0, 20)),
         sem_retorno: keep("sem_retorno", !!it.sem_retorno),
@@ -115,11 +121,11 @@ export default async (req) => {
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém data original ao editar
         ts_upd: Date.now(),
       };
-      lista = lista.filter((x) => x.id !== clean.id);
-      lista.push(clean);
-    }
-    await store.setJSON("lista", lista);
-    return Response.json({ ok: true, pista: await load() }, { headers: cors });
+      return lista.filter((x) => x.id !== clean.id).concat([clean]);
+    });
+    if (rejeitVazio)
+      return new Response(JSON.stringify({ erro: "vazio" }), { status: 400, headers: cors });
+    return Response.json({ ok: true, pista: next }, { headers: cors });
   }
   return new Response("metodo nao permitido", { status: 405, headers: cors });
 };

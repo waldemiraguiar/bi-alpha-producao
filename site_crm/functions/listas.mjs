@@ -4,6 +4,7 @@
    Netlify Blobs, permanente. GET público. POST {acao:'set', cfg, senha} (senha do time). */
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
+import { updateBlob } from "./_store.mjs";
 
 // Defaults (semente do pedido da Luciane) — usados enquanto ninguém salvou ainda
 const DEFAULTS = {
@@ -78,7 +79,7 @@ export default async (req) => {
       if (!clean.fechadores.length) clean.fechadores = DEFAULTS.fechadores;
       if (!clean.canais.length) clean.canais = DEFAULTS.canais;
       if (!clean.origens.length) clean.origens = DEFAULTS.origens;
-      await store.setJSON("cfg", clean);
+      await updateBlob(store, "cfg", () => clean);
       return Response.json({ ok: true, cfg: clean }, { headers: cors });
     }
     return new Response(JSON.stringify({ erro: "acao invalida" }), { status: 400, headers: cors });

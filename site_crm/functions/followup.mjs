@@ -3,6 +3,7 @@
    Segredo (senha do time CRM) injetado no deploy (secret.mjs). Auto-expira em 30 dias. */
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
+import { updateBlob } from "./_store.mjs";
 
 const AGE = 30 * 864e5; // 30 dias
 
@@ -30,14 +31,17 @@ export default async (req) => {
     if (body.cod == null)
       return new Response(JSON.stringify({ erro: "sem cliente" }), { status: 400, headers: cors });
     const cod = String(body.cod);
-    let lista = (await load()).filter((x) => String(x.cod) !== cod);
-    if (body.acao !== "remove")
-      lista.push({
-        cod, nome: body.nome || "", por: body.por || "equipe",
-        nota: (body.nota || "").slice(0, 140), ts: Date.now(),
-      });
-    await store.setJSON("lista", lista);
-    return Response.json({ ok: true, followups: await load() }, { headers: cors });
+    const cut = Date.now() - AGE;
+    const next = await updateBlob(store, "lista", (prev) => {
+      let lista = (prev || []).filter((x) => x && x.ts > cut && String(x.cod) !== cod);
+      if (body.acao !== "remove")
+        lista.push({
+          cod, nome: body.nome || "", por: body.por || "equipe",
+          nota: (body.nota || "").slice(0, 140), ts: Date.now(),
+        });
+      return lista;
+    });
+    return Response.json({ ok: true, followups: next.filter((x) => x && x.ts > cut) }, { headers: cors });
   }
   return new Response("metodo nao permitido", { status: 405, headers: cors });
 };

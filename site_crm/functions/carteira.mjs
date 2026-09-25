@@ -4,6 +4,7 @@
    obs, por(operador), ts. Netlify Blobs, permanente, upsert por id. Segredo = senha do time. */
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
+import { updateBlob } from "./_store.mjs";
 
 export default async (req) => {
   const store = getStore("crm-carteira");
@@ -20,13 +21,15 @@ export default async (req) => {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
-    let lista = await load();
     if (body.acao === "remove") {
-      lista = lista.filter((x) => x.id !== body.id);
-    } else {
-      const it = body.item || {};
-      if (!String(it.nome || "").trim())
-        return new Response(JSON.stringify({ erro: "sem nome" }), { status: 400, headers: cors });
+      const next = await updateBlob(store, "lista", (prev) => (prev || []).filter((x) => x.id !== body.id));
+      return Response.json({ ok: true, carteira: next }, { headers: cors });
+    }
+    const it = body.item || {};
+    if (!String(it.nome || "").trim())
+      return new Response(JSON.stringify({ erro: "sem nome" }), { status: 400, headers: cors });
+    const next = await updateBlob(store, "lista", (prev) => {
+      const lista = (prev || []).slice();
       const existing = lista.find((x) => x.id === it.id);
       const clean = {
         id: it.id || ("c" + Date.now()),
@@ -46,11 +49,9 @@ export default async (req) => {
         ts: existing ? existing.ts : (it.ts || Date.now()),
         ts_upd: Date.now(),
       };
-      lista = lista.filter((x) => x.id !== clean.id);
-      lista.push(clean);
-    }
-    await store.setJSON("lista", lista);
-    return Response.json({ ok: true, carteira: await load() }, { headers: cors });
+      return lista.filter((x) => x.id !== clean.id).concat([clean]);
+    });
+    return Response.json({ ok: true, carteira: next }, { headers: cors });
   }
   return new Response("metodo nao permitido", { status: 405, headers: cors });
 };

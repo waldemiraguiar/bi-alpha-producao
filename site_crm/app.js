@@ -265,19 +265,25 @@ async function pqFlush(){
   pqSave(rest);
   if(rest.length!==q.length && ACTIVE==="pista") renderTab();
 }
+// enfileira no aparelho + mostra local (otimista) — NUNCA perde o feedback do comercial
+function pqEnqueue(it, aviso){
+  const item={...it, id:it.id||("f"+Date.now()), ts:it.ts||Date.now(), ts_upd:Date.now(), _offline:true};
+  const q=pqLoad(); q.push(item); pqSave(q);
+  PISTA=PISTA.filter(x=>x.id!==item.id); PISTA.unshift(item); PISTA.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  if(aviso!==false) alert("📴 Não consegui subir agora — salvei no aparelho. Sincroniza sozinho quando a internet voltar.");
+  return true;
+}
 async function savePista(it){ if(!it.por) it.por=meuRep()||"equipe";
   it.edit_by=operadorAtual()||it.por; it.edit_ts=Date.now();   // QUEM mudou/ajustou (auditoria)
   try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"save",item:it,senha:window.__pwd})});
     if(r.status===401){ alert("Sessão sem permissão. Saia e entre de novo com a senha do time."); return false; }
     if(r.ok){ syncPista((await r.json()).pista); return true; }
-    return false;
+    // 4xx = validação/permissão (reenfileirar não resolve → avisa); 5xx = instabilidade → enfileira p/ não perder
+    if(r.status>=400 && r.status<500){ let erro=""; try{ erro=((await r.json())||{}).erro||""; }catch(_){}
+      alert("Não salvou"+(erro?" ("+erro+")":"")+". Confira os campos e tente de novo."); return false; }
+    return pqEnqueue(it);   // 5xx / instabilidade → guarda no aparelho, não perde
   }catch(e){
-    // SEM SINAL: enfileira no aparelho + mostra local (otimista)
-    const item={...it, id:it.id||("f"+Date.now()), ts:it.ts||Date.now(), ts_upd:Date.now(), _offline:true};
-    const q=pqLoad(); q.push(item); pqSave(q);
-    PISTA=PISTA.filter(x=>x.id!==item.id); PISTA.unshift(item); PISTA.sort((a,b)=>(b.ts||0)-(a.ts||0));
-    alert("📴 Sem sinal — salvo no aparelho. Sincroniza sozinho quando a internet voltar.");
-    return true;
+    return pqEnqueue(it);   // sem sinal → guarda no aparelho
   }
 }
 async function removePista(id){ try{ const r=await fetch(PISTA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",id,senha:window.__pwd})}); if(r.ok){ syncPista((await r.json()).pista); } }catch(e){} }
@@ -883,6 +889,11 @@ function visitaLoad(){ try{ return JSON.parse(localStorage.getItem("crm_visita")
 function visitaSave(v){ try{ localStorage.setItem("crm_visita", JSON.stringify(v)); }catch(e){} }
 function visitaClear(){ try{ localStorage.removeItem("crm_visita"); }catch(e){} }
 function iniciarVisita(ret){   // ret = retorno da agenda {id,cliente,bairro} → amarra a visita ao agendamento
+  // ⚠️ SLOT ÚNICO: se já há visita em andamento, não sobrescreve calado (perderia o check-in/GPS da anterior)
+  const _atual=visitaLoad();
+  if(_atual){ const mesma = ret && ret.id && _atual.returnId===ret.id;
+    if(!mesma && !confirm(`⚠️ Você já tem uma visita ABERTA em "${_atual.cliente||"?"}".\n\nSe começar outra agora, a chegada (e o GPS) dessa se PERDE. Feche a atual primeiro (📝 feedback + saída) ou cancele a chegada.\n\nComeçar outra assim mesmo?`)) return;
+  }
   let cli, bairro, returnId=null;
   if(ret){ cli=ret.cliente||""; bairro=ret.bairro||""; returnId=ret.id||null; }
   else { cli=(prompt("📍 CHECK-IN DE CHEGADA — qual cliente/clínica você está visitando agora?")||"").trim(); if(!cli) return; bairro=(prompt("Bairro (pra montar a rota):")||"").trim(); }
@@ -1329,6 +1340,10 @@ function renderCheckinStatus(){
   const el=document.getElementById("fCheckinStatus"); if(!el) return;
   el.style.display=(F_CHECKIN||F_CHECKOUT)?"block":"none"; el.innerHTML=checkinResumo(F_CHECKIN,F_CHECKOUT);
 }
+/* 💾 RASCUNHO do feedback da pista — o texto/campos sobrevivem a reload/kill do navegador (rua) */
+function fDraftSave(o){ try{ localStorage.setItem("crm_pista_draft", JSON.stringify(o)); }catch(e){} }
+function fDraftLoad(){ try{ return JSON.parse(localStorage.getItem("crm_pista_draft")||"null"); }catch(e){ return null; } }
+function fDraftClear(){ try{ localStorage.removeItem("crm_pista_draft"); }catch(e){} }
 function openPistaRec(id){
   const f=id?PISTA.find(x=>x.id===id):null;
   const _v=visitaLoad();
@@ -1414,11 +1429,27 @@ function openPistaRec(id){
     if(F_COMPLETING){ item.baixa={tipo:"compareceu", ts:Date.now(), por:rep, checkin:F_CHECKIN, checkout:F_CHECKOUT}; }   // finalizou o retorno agendado → baixa automática
     const ok=await savePista(item);
     if(ok){
+      fDraftClear();   // feedback salvo (ou enfileirado) → some o rascunho
       const recl=(document.getElementById("fReclama")||{}).value; const rt=(recl||"").trim();
-      if(rt){ try{ await saveRelato({clinica:cli, texto:rt, data:dataVisita||hojeISO(), origem:"visita", por:rep}); }catch(e){} }   // reclamação → vira Relato, tudo aqui
-      visitaClear(); closeModal(); if(rt) alert("✅ Feedback salvo + 🗣️ reclamação virou Relato."); renderTab();
+      let relOk=true; if(rt){ try{ relOk=await saveRelato({clinica:cli, texto:rt, data:dataVisita||hojeISO(), origem:"visita", por:rep}); }catch(e){ relOk=false; } }   // reclamação → vira Relato
+      visitaClear(); closeModal();
+      if(rt) alert(relOk?"✅ Feedback salvo + 🗣️ reclamação virou Relato.":"✅ Feedback salvo. ⚠️ A reclamação NÃO subiu — reenvie depois em 📣 Relatos.");
+      renderTab();
     } else { btn.disabled=false; btn.textContent="Salvar feedback"; } };
   const del=document.getElementById("fDel"); if(del) del.onclick=()=>excluirFeedback(F_ID);
+  // 💾 RASCUNHO: recupera o que foi digitado e não salvou; autosalva a cada digitação
+  const _dkey=F_ID||"new";
+  const snap=()=>({ k:_dkey, rep:(document.getElementById("fRep")||{}).value||"", cli:(document.getElementById("fCli")||{}).value||"", bairro:(document.getElementById("fBairro")||{}).value||"", visita:(document.getElementById("fVisita")||{}).value||"", texto:(document.getElementById("fTexto")||{}).value||"", prox:(document.getElementById("fProx")||{}).value||"", semret:!!((document.getElementById("fSemRet")||{}).checked), reclama:(document.getElementById("fReclama")||{}).value||"", res:F_RES, ts:Date.now() });
+  const _dr=fDraftLoad();
+  if(_dr && _dr.k===_dkey && (_dr.texto||_dr.reclama||_dr.cli)){
+    const put=(id,v)=>{ const el=document.getElementById(id); if(el && v && !el.value) el.value=v; };
+    put("fRep",_dr.rep); put("fCli",_dr.cli); put("fBairro",_dr.bairro); put("fVisita",_dr.visita); put("fTexto",_dr.texto); put("fReclama",_dr.reclama); put("fProx",_dr.prox);
+    if(_dr.semret){ const cb=document.getElementById("fSemRet"); if(cb) cb.checked=true; }
+    if(_dr.res){ F_RES=_dr.res; document.querySelectorAll("#fRes [data-r]").forEach(b=>b.classList.toggle("on", b.dataset.r===F_RES)); }
+    const h=document.getElementById("fProxHint"); if(h){ h.style.display="block"; h.style.borderColor="rgba(0,229,160,.4)"; h.style.color="#7effcf"; h.style.background="rgba(0,229,160,.1)"; h.innerHTML='🔄 <b>Recuperei o que você tinha digitado</b> (ainda não salvo) — confira e salve. <a id="fDescartar" style="color:#ff8fa3;cursor:pointer;text-decoration:underline">🗑️ descartar</a>'; const dd=document.getElementById("fDescartar"); if(dd) dd.onclick=()=>{ fDraftClear(); openPistaRec(id); }; }
+  }
+  const _mb=document.getElementById("modalBody"); if(_mb){ _mb.addEventListener("input", ()=>{ try{ fDraftSave(snap()); }catch(e){} }); }
+  const _fr=document.getElementById("fRes"); if(_fr) _fr.addEventListener("click", ()=>{ try{ fDraftSave(snap()); }catch(e){} });
 }
 
 /* 📣 NOVO/EDITAR RELATO — o rep GRAVA o áudio contando o cenário; vira card estruturado + dores detectadas */
@@ -1772,6 +1803,8 @@ const APP_BUILD = "__APP_BUILD__";   // trocado por um timestamp (dígitos) no d
 let _verBusy=false;
 async function checkVersion(){
   if(!/^[0-9]{6,}$/.test(APP_BUILD) || _verBusy) return;   // sem carimbo real → desligado (dev/local)
+  // NUNCA recarrega com um modal aberto (ex.: comercial digitando feedback) — perderia o texto não salvo
+  const _m=document.getElementById("modal"); if(_m && _m.style.display==="flex") return;
   _verBusy=true;
   try{
     const r=await fetch("version.json?_="+Date.now(),{cache:"no-store"});
@@ -3907,7 +3940,7 @@ function renderTab(){
         <div class="mid"></div>
         <div class="rcell"><span class="pr" style="background:${pr.col}22;color:${pr.col}">${esc(pr.lbl)}</span><button class="delfb" data-obs="${esc(f.id)}" title="Adicionar observação (acompanhamento do escritório)" style="color:#9fe6ff">💬</button><button class="delfb" data-delfb="${esc(f.id)}" title="Excluir (vai pro histórico)">🗑️</button></div>
       </div>`; });
-    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''}" data-pv="feed">🎤 Feedbacks</button><button class="subtab ${pistaView==='relatos'?'on':''}" data-pv="relatos">📣 Relatos${RELATOS.length?` (${RELATOS.length})`:''}</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='bi'?'on':''}" data-pv="bi">📊 BI</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
+    const toggle=`<div class="subtabs"><button class="subtab ${pistaView==='feed'?'on':''} ${pqCount()?'subtab-alert':''}" data-pv="feed">🎤 Feedbacks${pqCount()?` · 📴${pqCount()}`:''}</button><button class="subtab ${pistaView==='relatos'?'on':''}" data-pv="relatos">📣 Relatos${RELATOS.length?` (${RELATOS.length})`:''}</button><button class="subtab ${pistaView==='retornos'?'on':''}" data-pv="retornos">📅 Retornos / rotas</button><button class="subtab ${pistaView==='realizados'?'on':''}" data-pv="realizados">✅ Realizados${realizados.length?` (${realizados.length})`:''}</button><button class="subtab ${pistaView==='naofeitos'?'on':''} ${naofeitosN?'subtab-alert':''}" data-pv="naofeitos">⏰ Não feitos${naofeitosN?` (${naofeitosN})`:''}</button><button class="subtab ${pistaView==='bi'?'on':''}" data-pv="bi">📊 BI</button><button class="subtab ${pistaView==='exclusoes'?'on':''}" data-pv="exclusoes">🗑️ Exclusões${EXCL.length?` (${EXCL.length})`:''}</button></div>`;
     const wirePista=()=>{
       document.querySelectorAll("#content [data-pv]").forEach(el=>el.onclick=()=>{ pistaView=el.dataset.pv; selReset(); pinned=true; setPin(); search=""; renderTab(); });
       document.querySelectorAll("#content [data-fb]").forEach(el=>el.onclick=()=>{ if(selMode){ const id=el.dataset.fb; SEL.has(id)?SEL.delete(id):SEL.add(id); renderTab(); return; } openPistaRec(el.dataset.fb); });
@@ -4191,10 +4224,15 @@ function renderTab(){
 
     c.innerHTML=`${toggle}${repBar}
       ${pqCount()?`<div class="proxhint" style="border-color:#FFB020;color:#ffd94d;background:rgba(255,176,32,.12);margin-bottom:12px">📴 <b>${pqCount()}</b> feedback(s) salvos sem sinal — sincroniza sozinho quando a internet voltar${navigator.onLine?` · <a onclick="pqFlush()" style="color:var(--cyan);cursor:pointer;text-decoration:underline">sincronizar agora</a>`:""}</div>`:""}
-      ${(()=>{ const v=visitaLoad(); if(!v||!v.checkin) return ""; const t=new Date(v.checkin.ts),pp=n=>String(n).padStart(2,"0");
-        return `<div class="proxhint" style="border-color:#00E5A0;color:#7effcf;background:rgba(0,229,160,.14);margin-bottom:8px;font-size:14px">🟢 <b>Visita em andamento:</b> ${esc(v.cliente)}${v.bairro?" · 📍 "+esc(v.bairro):""} · chegou ${pp(t.getHours())}:${pp(t.getMinutes())}</div>
+      ${(()=>{ const v=visitaLoad(); if(!v) return "";
+        if(v.checkin){ const t=new Date(v.checkin.ts),pp=n=>String(n).padStart(2,"0");
+          return `<div class="proxhint" style="border-color:#00E5A0;color:#7effcf;background:rgba(0,229,160,.14);margin-bottom:8px;font-size:14px">🟢 <b>Visita em andamento:</b> ${esc(v.cliente)}${v.bairro?" · 📍 "+esc(v.bairro):""} · chegou ${pp(t.getHours())}:${pp(t.getMinutes())}</div>
           <button class="bigmic" id="visFim" style="margin-bottom:6px">📝 Registrar feedback + check-out (sair)</button>
-          <button class="baixabtn no" id="visCancel" type="button" style="width:100%;margin-bottom:12px">✖ Não cheguei ainda — cancelar chegada</button>`; })()}
+          <button class="baixabtn no" id="visCancel" type="button" style="width:100%;margin-bottom:12px">✖ Não cheguei ainda — cancelar chegada</button>`; }
+        // visita ABERTA sem check-in (dado parcial/antigo) — nunca deixa presa: dá saída ou cancela
+        return `<div class="proxhint" style="border-color:#FFB020;color:#ffd94d;background:rgba(255,176,32,.12);margin-bottom:8px;font-size:14px">🟠 <b>Visita aberta:</b> ${esc(v.cliente||"?")}${v.bairro?" · 📍 "+esc(v.bairro):""} <span class="t-mut" style="font-weight:500">(sem check-in registrado)</span></div>
+          <button class="bigmic" id="visFim" style="margin-bottom:6px">📝 Registrar feedback + saída</button>
+          <button class="baixabtn no" id="visCancel" type="button" style="width:100%;margin-bottom:12px">✖ Cancelar esta visita</button>`; })()}
       ${!visitaLoad()?`<button class="bigmic" id="visIni" type="button" style="margin-bottom:6px">📍 Cheguei — check-in de chegada (começa a visita)</button><div class="t-mut" style="font-size:12px;margin-bottom:12px;text-align:center">Bata o check-in ao CHEGAR. O feedback + saída você faz ao sair.</div>`:""}
       <div class="kgrid">
         ${kpi("g", hoje, "Hoje", "feedbacks de hoje")}
@@ -4249,8 +4287,9 @@ function renderTabs(){
             : (Array.isArray(D[tb.k]) ? act(D[tb.k]).length : (r[tb.k] || 0));
     const on = tb.k===ACTIVE;
     const bcls = (tb.k==="reativar"||tb.k==="em_queda"||tb.k==="parados") && n>0 ? "late" : "";
+    const fila = tb.k==="pista" ? pqCount() : 0;   // 📴 feedbacks aguardando internet — visível de qualquer aba
     return `<div class="tab ${tb.cls} ${on?"on":""}" data-k="${tb.k}">
-      <span class="tn">${tb.ic} ${tb.nm}</span>
+      <span class="tn">${tb.ic} ${tb.nm}${fila?` <span title="${fila} feedback(s) aguardando internet" style="font-size:11px">📴${fila}</span>`:''}</span>
       <span class="tb ${tb.bcls||bcls}">${n}</span>
       ${on && !pinned && !locked ? '<span class="prog" id="prog"></span>' : ''}
     </div>`;

@@ -4,6 +4,7 @@
    Netlify Blobs, permanente (histórico), upsert por id. Segredo = senha do time. */
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
+import { updateBlob } from "./_store.mjs";
 
 const CORES = ["vermelho", "laranja", "amarelo", "verde", "azul", "roxo", "rosa", "cinza"];
 
@@ -24,29 +25,26 @@ export default async (req) => {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
-    let lista = await load();
 
     // SQUADS — lista gerenciável (Diretoria, Gerência Técnica, Microbiologia, PCR/ELISA, Histopato/IHQ, Qualidade…)
     if (body.acao === "squads_set") {
       const arr = Array.isArray(body.squads) ? [...new Set(body.squads.map((s) => String(s || "").trim()).filter(Boolean))].slice(0, 60) : [];
-      await store.setJSON("squads", arr);
+      await updateBlob(store, "squads", () => arr);
       return Response.json({ ok: true, squads: await loadSquads() }, { headers: cors });
     }
 
     // LOG de EXCLUSÃO de tópico (governança dia/mês/ano — nada some sem rastro)
     if (body.acao === "logexcl") {
-      const log = await loadExcl();
       const e = body.item || {};
-      log.unshift({ id: "x" + Date.now(), titulo: String(e.titulo || "").slice(0, 200), sec: String(e.sec || "").slice(0, 80),
-        pauta: String(e.pauta || "").slice(0, 10), por: String(e.por || "equipe").slice(0, 40), motivo: String(e.motivo || "").slice(0, 300), ts: Date.now() });
-      await store.setJSON("excluidos", log.slice(0, 2000));
-      return Response.json({ ok: true, excluidos: await loadExcl() }, { headers: cors });
+      const rec = { id: "x" + Date.now(), titulo: String(e.titulo || "").slice(0, 200), sec: String(e.sec || "").slice(0, 80),
+        pauta: String(e.pauta || "").slice(0, 10), por: String(e.por || "equipe").slice(0, 40), motivo: String(e.motivo || "").slice(0, 300), ts: Date.now() };
+      const next = await updateBlob(store, "excluidos", (prev) => [rec, ...(prev || [])].slice(0, 2000));
+      return Response.json({ ok: true, excluidos: next }, { headers: cors });
     }
 
     if (body.acao === "remove") {
-      lista = lista.filter((x) => x.id !== body.id);
-      await store.setJSON("lista", lista);
-      return Response.json({ ok: true, pautas: await load() }, { headers: cors });
+      const next = await updateBlob(store, "lista", (prev) => (prev || []).filter((x) => x.id !== body.id));
+      return Response.json({ ok: true, pautas: next }, { headers: cors });
     }
 
     const it = body.item || {};
@@ -88,12 +86,13 @@ export default async (req) => {
       ts: +it.ts || Date.now(),
       ts_upd: Date.now(),
     };
-    lista = lista.filter((x) => x.id !== clean.id);
-    lista.push(clean);
-    lista.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : b.ts - a.ts));   // mais recente no topo
-    lista = lista.slice(0, 300);
-    await store.setJSON("lista", lista);
-    return Response.json({ ok: true, pautas: await load() }, { headers: cors });
+    const next = await updateBlob(store, "lista", (prev) => {
+      let lista = (prev || []).filter((x) => x.id !== clean.id);
+      lista.push(clean);
+      lista.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : b.ts - a.ts));   // mais recente no topo
+      return lista.slice(0, 300);
+    });
+    return Response.json({ ok: true, pautas: next }, { headers: cors });
   }
   return new Response("metodo nao permitido", { status: 405, headers: cors });
 };

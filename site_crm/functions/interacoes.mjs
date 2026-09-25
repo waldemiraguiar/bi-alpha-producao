@@ -4,6 +4,7 @@
    Segredo (senha do time CRM) injetado no deploy (secret.mjs). Auto-expira em 365 dias. */
 import { getStore } from "@netlify/blobs";
 import { SECRET } from "./secret.mjs";
+import { updateBlob } from "./_store.mjs";
 
 const RESULTADOS = ["positivo", "negociacao", "sem_resposta", "em_andamento", "negativo"];
 
@@ -27,10 +28,11 @@ export default async (req) => {
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
 
-    let log = await load();
     if (body.acao === "remove") {
-      log = log.filter((x) => x.id !== body.id);
-    } else {
+      const next = await updateBlob(store, "log", (prev) => (prev || []).filter((x) => x.id !== body.id));
+      return Response.json({ ok: true, interacoes: next }, { headers: cors });
+    }
+    {
       if (body.cod == null)
         return new Response(JSON.stringify({ erro: "sem cliente" }), { status: 400, headers: cors });
       const resultado = RESULTADOS.includes(body.resultado) ? body.resultado : "sem_resposta";
@@ -54,10 +56,9 @@ export default async (req) => {
           situacao: (body.snapshot?.situacao || "").slice(0, 20),
         },
       };
-      log.push(rec);
+      const next = await updateBlob(store, "log", (prev) => (prev || []).concat([rec]));
+      return Response.json({ ok: true, interacoes: next }, { headers: cors });
     }
-    await store.setJSON("log", log);
-    return Response.json({ ok: true, interacoes: await load() }, { headers: cors });
   }
   return new Response("metodo nao permitido", { status: 405, headers: cors });
 };

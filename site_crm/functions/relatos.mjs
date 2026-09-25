@@ -5,6 +5,7 @@
    Netlify Blobs, permanente, upsert por id. Segredo (senha do time CRM) injetado no deploy (secret.mjs). */
 import { getStore } from "@netlify/blobs";
 import * as SEC from "./secret.mjs";
+import { updateBlob } from "./_store.mjs";
 const SECRET = SEC.SECRET;
 
 const ORIG = ["ligacao", "reuniao", "visita", "whatsapp", "outro"];
@@ -24,13 +25,15 @@ export default async (req) => {
     const body = await req.json().catch(() => ({}));
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
-    let lista = await load();
     if (body.acao === "remove") {
-      lista = lista.filter((x) => x.id !== body.id);
-    } else {
-      const it = body.item || {};
-      if (!String(it.texto || "").trim() && !String(it.clinica || "").trim())
-        return new Response(JSON.stringify({ erro: "vazio" }), { status: 400, headers: cors });
+      const next = await updateBlob(store, "lista", (prev) => (prev || []).filter((x) => x.id !== body.id));
+      return Response.json({ ok: true, relatos: next }, { headers: cors });
+    }
+    const it = body.item || {};
+    if (!String(it.texto || "").trim() && !String(it.clinica || "").trim())
+      return new Response(JSON.stringify({ erro: "vazio" }), { status: 400, headers: cors });
+    const next = await updateBlob(store, "lista", (prev) => {
+      const lista = (prev || []).slice();
       const existing = lista.find((x) => x.id === it.id);
       const clean = {
         id: it.id || ("r" + Date.now()),
@@ -45,11 +48,9 @@ export default async (req) => {
         ts: existing ? existing.ts : (it.ts || Date.now()),   // mantém a data original ao editar
         ts_upd: Date.now(),
       };
-      lista = lista.filter((x) => x.id !== clean.id);
-      lista.push(clean);
-    }
-    await store.setJSON("lista", lista);
-    return Response.json({ ok: true, relatos: await load() }, { headers: cors });
+      return lista.filter((x) => x.id !== clean.id).concat([clean]);
+    });
+    return Response.json({ ok: true, relatos: next }, { headers: cors });
   }
   return new Response("metodo nao permitido", { status: 405, headers: cors });
 };
