@@ -87,9 +87,15 @@ jobs:
         if: env.DEPLOY_FULL == 'true'
         run: |
           python3 - <<'EOF'
-          import hashlib, re, pathlib
+          import hashlib, re, pathlib, datetime, zoneinfo
           raiz = pathlib.Path('site_prod')
           mudou = 0
+          # ⛔ 25/set — o selo de versao das paginas estava CHUMBADO em "23/09 16:09" e nunca
+          # mais mudou. O botao "Atualizar" existe desde 23/set para a equipe nao ficar em
+          # versao velha; ele recarregava certo, mas o selo dizia sempre a mesma coisa, entao
+          # parecia que nada tinha acontecido. Botao que funciona e mente e pior que botao
+          # quebrado: a pessoa conclui que ja esta na versao nova. Agora o deploy carimba.
+          agora = datetime.datetime.now(zoneinfo.ZoneInfo('America/Sao_Paulo')).strftime('%d/%m %H:%M')
           for html in raiz.rglob('*.html'):
               txt = original = html.read_text(encoding='utf-8')
               def carimbo(m):
@@ -98,6 +104,7 @@ jobs:
                   h = hashlib.sha1(arq.read_bytes()).hexdigest()[:8]
                   return f'{m.group("arq")}?v={h}'
               txt = re.sub(r'(?P<arq>[A-Za-z0-9_./-]+\.(?:js|css))\?v=[A-Za-z0-9]+', carimbo, txt)
+              txt = re.sub(r'(data-versao-publicada=")[^"]*(")', lambda m: m.group(1) + agora + m.group(2), txt)
               if txt != original:
                   html.write_text(txt, encoding='utf-8'); mudou += 1
                   print(f'  carimbado: {html}')
