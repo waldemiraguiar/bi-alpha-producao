@@ -264,6 +264,19 @@ async function pqFlush(){
   }
   pqSave(rest);
   if(rest.length!==q.length && ACTIVE==="pista") renderTab();
+  filaBeacon();   // avisa o monitor (subiu tudo? ou ainda tem preso?)
+}
+/* ---- 📡 MONITOR DA FILA: heartbeat p/ o servidor quando há feedback preso (online mas não sobe) ---- */
+const FILA_API="/api/crm-fila";
+function crmDevId(){ try{ let d=localStorage.getItem("crm_dev"); if(!d){ d="d"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); localStorage.setItem("crm_dev",d);} return d; }catch(e){ return "d0"; } }
+let _filaHad=false;
+async function filaBeacon(){
+  try{ if(!window.__pwd || !navigator.onLine) return;   // offline não reporta (ter fila sem sinal é normal/esperado)
+    const q=pqLoad(), n=q.length;
+    if(n===0){ if(!_filaHad) return; _filaHad=false; } else { _filaHad=true; }   // manda "limpou" só 1x
+    const oldest = n ? Math.min(...q.map(x=>+x.ts||Date.now())) : 0;
+    await fetch(FILA_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"beacon",senha:window.__pwd,device:crmDevId(),rep:meuRep()||"",n,oldest_ts:oldest})});
+  }catch(e){}
 }
 // enfileira no aparelho + mostra local (otimista) — NUNCA perde o feedback do comercial
 function pqEnqueue(it, aviso){
@@ -271,6 +284,7 @@ function pqEnqueue(it, aviso){
   const q=pqLoad(); q.push(item); pqSave(q);
   PISTA=PISTA.filter(x=>x.id!==item.id); PISTA.unshift(item); PISTA.sort((a,b)=>(b.ts||0)-(a.ts||0));
   if(aviso!==false) alert("📴 Não consegui subir agora — salvei no aparelho. Sincroniza sozinho quando a internet voltar.");
+  filaBeacon();   // avisa o monitor que tem item na fila
   return true;
 }
 async function savePista(it){ if(!it.por) it.por=meuRep()||"equipe";

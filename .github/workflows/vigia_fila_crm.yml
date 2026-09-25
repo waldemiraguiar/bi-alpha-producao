@@ -1,0 +1,81 @@
+name: Vigia da FILA do CRM (feedback preso do comercial)
+
+on:
+  schedule:
+    - cron: '*/15 9-23 * * *'   # a cada 15 min, ~06h-20h BRT (UTC=BRT+3)
+  workflow_dispatch:
+
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checa filas e alerta se houver feedback preso
+        env:
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+          CALLMEBOT_PHONE:    ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY:   ${{ secrets.CALLMEBOT_APIKEY }}
+        run: |
+          python3 - <<'PY'
+          import os, json, ssl, smtplib, urllib.request, urllib.parse, datetime
+          from email.mime.text import MIMEText
+
+          # Aparelho ONLINE (heartbeat < FRESH_MIN) com feedback preso há mais de STUCK_MIN = incidente real.
+          FRESH_MIN = 6      # só considera aparelho que deu sinal nos últimos 6 min (está online agora)
+          STUCK_MIN = 20     # feedback preso na fila há mais de 20 min (online) = algo travou o envio
+          FROTAS = {
+              "Matriz":    "https://agente-crm-matriz.netlify.app/api/crm-fila",
+              "Cabo Frio": "https://agente-crm-cabofrio.netlify.app/api/crm-fila",
+          }
+          now = datetime.datetime.utcnow().timestamp() * 1000
+          agora = (datetime.datetime.utcnow() - datetime.timedelta(hours=3)).strftime("%d/%m %H:%M BRT")
+
+          presos = []
+          for nome, url in FROTAS.items():
+              try:
+                  req = urllib.request.Request(url + ("?_=%d" % int(now)), headers={"Cache-Control": "no-cache"})
+                  data = json.loads(urllib.request.urlopen(req, timeout=30).read().decode())
+                  for b in data.get("beacons", []):
+                      if not b or int(b.get("n", 0)) <= 0:
+                          continue
+                      if now - int(b.get("ts", 0)) > FRESH_MIN * 60000:      # aparelho não está online agora
+                          continue
+                      idade_min = (now - int(b.get("oldest_ts", now))) / 60000.0
+                      if idade_min >= STUCK_MIN:
+                          presos.append((nome, b.get("rep", "?"), int(b.get("n", 0)), int(idade_min)))
+              except Exception as e:
+                  print(f"{nome}: erro ao ler fila -> {e}")
+
+          if not presos:
+              print("✅ Nenhum feedback preso. Tudo sincronizando.")
+              raise SystemExit(0)
+
+          linhas = [f"• {frota} — {rep}: {n} feedback(s) preso(s) há ~{idade} min" for (frota, rep, n, idade) in presos]
+          corpo = ("⚠️ FEEDBACK PRESO NA FILA DO CRM (aparelho online, mas não está subindo):\n\n"
+                   + "\n".join(linhas)
+                   + f"\n\nVerificado {agora}.\nProvável causa: sessão do comercial caiu (relogar) ou instabilidade do servidor. "
+                     "O dado NÃO foi perdido (está guardado no aparelho) — mas não subiu ainda.")
+          wa = "⚠️ CRM: " + "; ".join([f"{frota}/{rep} {n} preso(s) ~{idade}min" for (frota, rep, n, idade) in presos])
+
+          def alerta(assunto, corpo, wa):
+              try:
+                  GU = os.environ["GMAIL_USER"]; GP = os.environ["GMAIL_APP_PASSWORD"]; TO = os.environ.get("EMAIL_TO") or GU
+                  m = MIMEText(corpo, "plain", "utf-8"); m["Subject"] = assunto; m["From"] = GU; m["To"] = TO
+                  with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as s:
+                      s.login(GU, GP); s.sendmail(GU, [TO], m.as_string())
+                  print("email enviado:", assunto)
+              except Exception as e:
+                  print("email falhou:", e)
+              try:
+                  ph = os.environ.get("CALLMEBOT_PHONE", "").strip(); ak = os.environ.get("CALLMEBOT_APIKEY", "").strip()
+                  if ph and ak:
+                      u = ("https://api.callmebot.com/whatsapp.php?phone=" + urllib.parse.quote(ph)
+                           + "&text=" + urllib.parse.quote(wa) + "&apikey=" + urllib.parse.quote(ak))
+                      urllib.request.urlopen(u, timeout=30).read(); print("whatsapp enviado")
+              except Exception as e:
+                  print("whatsapp falhou:", e)
+
+          alerta("⚠️ CRM — feedback preso na fila do comercial", corpo, wa)
+          print(corpo)
+          PY
