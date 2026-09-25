@@ -126,7 +126,8 @@
                 <button class="secundaria" data-acao="devolver" data-id="${c.id}">devolver à fila</button>`
              : `<button class="principal postar" data-acao="postar" data-id="${c.id}">📤 Postar na rota</button>
                 <button class="secundaria" data-acao="devolver" data-id="${c.id}">devolver à fila</button>`)
-          : `<button class="principal" data-acao="pegar" data-id="${c.id}">🙋 Pegar</button>`}
+          : `<button class="principal" data-acao="pegar" data-id="${c.id}">🙋 Pegar</button>
+               <button class="cancelar" data-acao="cancelar" data-id="${c.id}" title="Não é pedido de coleta — tirar da fila">✕</button>`}
       </div>
       ${(!minha && c.por) ? `<div class="travado">🔒 com <b>${esc(c.por)}</b></div>` : ''}
     </article>`
@@ -209,6 +210,82 @@
     try { const r = await rpc('inc_coleta_pegar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: Number(id), p_acao: 'pegar' })
       if (r && r.startsWith('ja_com:')) toast('Já está com ' + r.slice(7), true) }
     catch (e) { toast('Não consegui reservar: ' + e.message, true) }
+    // 25/set — pegar deixou de ser so "travar o card": agora mostra O QUE MANDAR.
+    // Abre DEPOIS de reservar, para ninguem copiar mensagem de um card que e de outra pessoa.
+    const selR = document.querySelector(`[data-rota="${id}"]`)
+    if (c.tipo !== 'orcamento') verMensagens(c, selR ? selR.value : (c.rota || c.rota_sug || ''))
+    carregar()
+  }
+  /**
+   * 💬 AS DUAS MENSAGENS, NA HORA DE PEGAR — Wal, 25/set (video):
+   * "quando eu clicar aqui pegar, vai aparecer que tipo de mensagem para o cliente e que tipo
+   *  para o motoboy... cada mensagem tem um jeito de resposta. Ai voce poderia botar aqui um
+   *  exemplo da resposta, para a gente visualizar o que vai para o cliente."
+   *
+   * MEDIDO ANTES DE ESCREVER (10 dias, 220 respostas reais a pedido de coleta):
+   *   104 textos DIFERENTES para dizer a mesma coisa
+   *   ~30 eram so "bom dia" / "boa tarde" — cumprimento sem informacao nenhuma
+   *   so 12 das 220 diziam o TURNO, que e a pergunta que a clinica mais faz depois
+   * Nao e falta de padrao da equipe. E falta de botao.
+   *
+   * As duas mensagens sao DIFERENTES de proposito, porque o leitor e outro:
+   *   · a CLINICA quer saber que foi aceito, quando, e que nao precisa cobrar de novo
+   *   · o MOTOBOY quer nome e endereco, e nada mais — ele le na moto, no semaforo
+   */
+  function msgsDoCard(c, rota) {
+    const hora = new Date().getHours()
+    const turno = hora < 12 ? 'manhã' : hora < 18 ? 'tarde' : 'noite'
+    const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
+    const clinica = c.clinica || c.grupo || 'a clínica'
+    const end = c._endereco || ''
+    return {
+      cliente:
+        `${saud}! ✅ Recebemos seu pedido e *já está agendado* para o período da *${turno}*.\n` +
+        `🛵 O motoboy passa aí${rota ? ` pela *${rota}*` : ''}.\n\n` +
+        `Se precisar de mais alguma coisa, é só chamar. 🐾\n\n_🧬 Alpha Labs · Atendimento ao Cliente_`,
+      motoboy:
+        `📍 *${clinica}*` + (end ? `\n${end}` : `\n⚠️ sem endereço cadastrado — confirmar com a clínica`),
+    }
+  }
+  /** mostra as duas, com botao de copiar cada uma. Nao manda nada sozinho: quem manda e a pessoa. */
+  function verMensagens(c, rota) {
+    const m = msgsDoCard(c, rota)
+    const d = document.createElement('dialog')
+    d.className = 'dlg-msgs'
+    d.innerHTML = `<h3>O que mandar agora</h3>
+      <p class="sub">${esc(c.clinica || c.grupo || '')}${rota ? ` · ${esc(rota)}` : ' · <b>escolha a rota no card</b>'}</p>
+      <div class="bloco cli"><div class="rot">👤 para a CLÍNICA, no grupo dela</div>
+        <pre>${esc(m.cliente)}</pre><button type="button" data-cp="cli">Copiar</button></div>
+      <div class="bloco mot"><div class="rot">🛵 para o MOTOBOY, no grupo da rota</div>
+        <pre>${esc(m.motoboy)}</pre><button type="button" data-cp="mot">Copiar</button></div>
+      <p class="nota">Nada sai sozinho daqui — você copia e manda. O <b>Postar na rota</b> continua fazendo o envio do motoboy.</p>
+      <div class="acoes"><button type="button" class="fechar">Fechar</button></div>`
+    d.addEventListener('click', ev => {
+      const b = ev.target.closest('button'); if (!b) return
+      if (b.classList.contains('fechar')) { d.close(); d.remove(); return }
+      const txt = b.dataset.cp === 'cli' ? m.cliente : m.motoboy
+      navigator.clipboard?.writeText(txt).then(() => { b.textContent = 'Copiado ✓'; setTimeout(() => b.textContent = 'Copiar', 1600) })
+        .catch(() => toast('Não consegui copiar — selecione o texto', true))
+    })
+    d.addEventListener('cancel', () => d.remove())
+    document.body.appendChild(d); d.showModal()
+  }
+  /**
+   * ✕ TIRAR DA FILA sem precisar pegar (Wal, 25/set, video: "eu posso, de repente, ter um x
+   * aqui para eu poder cancelar?"). O caso comum e a pessoa bater o olho, ver que NAO e pedido
+   * de coleta, e querer limpar a fila. Antes so dava para devolver DEPOIS de pegar.
+   * PERGUNTA ANTES: e acao destrutiva e o card some da fila de todo mundo.
+   */
+  async function cancelarDaFila(id) {
+    const c = coletas.find(x => String(x.id) === String(id)); if (!c) return
+    const quem = c.clinica || c.grupo || 'este pedido'
+    if (!confirm('Tirar "' + quem + '" da fila?\n\nUse quando NÃO for pedido de coleta.\nO card some para todo mundo.')) return
+    try {
+      // a RPC exige os 7 parametros — rota/turno/obs vao nulos no descarte
+      await rpc('inc_coleta_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: Number(id),
+        p_acao: 'descartar', p_rota: null, p_turno: null, p_obs: 'tirado da fila pelo ✕ (não era pedido de coleta)' })
+      toast('Tirado da fila')
+    } catch (e) { toast('Não consegui tirar: ' + e.message, true) }
     carregar()
   }
   async function devolver(id) {
@@ -273,6 +350,7 @@
     if (b.dataset.acao === 'pegar') pegar(id)
     else if (b.dataset.acao === 'devolver') devolver(id)
     else if (b.dataset.acao === 'postar') postar(id, b)
+    else if (b.dataset.acao === 'cancelar') cancelarDaFila(id)
   })
 
   /* ═══ 💰 ORÇAMENTO DE EXAMES ═══════════════════════════════════════════════

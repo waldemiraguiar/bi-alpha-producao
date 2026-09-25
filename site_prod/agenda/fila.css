@@ -289,3 +289,90 @@ button.principal.responder{background:var(--verde)}
 .sugIt .sv{font-family:var(--cond);font-size:15px;font-weight:700;color:var(--verde);
   white-space:nowrap;font-variant-numeric:tabular-nums}
 .sugLista .sugIt:first-child{border-left:3px solid var(--verde)}
+
+/* ═══ 🎨 CARD INTEIRO COM A COR DO ASSUNTO (Wal, 25/set, por vídeo) ══════════════════════════
+   "quando for agendamento, o card inteiro tem que ser de uma cor. Eu botei azul, e quando é
+    orçamento, verde. Eu preciso que fique piscando mais intensamente."
+
+   Hoje só o SELO era azul/verde — o card em si era branco, e a cor da borda contava o TEMPO
+   de espera. Duas informações disputando o mesmo lugar: quem batia o olho via urgência, não
+   assunto. Agora são dois canais separados, e nenhum apaga o outro:
+     · o ASSUNTO pinta o card inteiro (fundo + borda) — azul coleta, verde orçamento
+     · o TEMPO continua no pulso e na etiqueta do cronômetro
+   Assim dá para ver "é orçamento E está estourando" de uma vez só. */
+.card{background:#f2f7fd;border-left-color:#1f6feb}                 /* coleta = azul, o padrão */
+.card.orcamento{background:#f1faf4;border-left-color:#1a7f47}       /* orçamento = verde */
+.card .assunto.azul{background:#1f6feb;color:#fff}
+.card .assunto.verde{background:#1a7f47;color:#fff}
+.card .assunto{font-weight:800;letter-spacing:.02em;padding:3px 11px;border-radius:999px;font-size:12.5px}
+
+/* o tempo continua mandando na BORDA quando aperta — assunto pinta o fundo, tempo pinta a beirada */
+.card.atencao{border-left-color:var(--ambar)}
+.card.urgente{border-left-color:var(--vermelho);border-left-width:7px}
+.card.minha{border-left-color:var(--verde)}
+
+/* ⑩ PULSO MAIS FORTE — ele pediu "piscando mais intensamente".
+   Subi o alcance (5px→11px) e a opacidade (.17→.34), e acelerei de 1,4s para 1,0s.
+   ⚠️ 1,0s = 1 flash/s, ainda um terço do teto de 3/s da WCAG 2.3.1 (epilepsia fotossensível).
+   Não passo disso: mais rápido vira risco de saúde, não urgência. */
+@keyframes pulsoAmbarForte{
+  0%,100%{box-shadow:var(--sombra),0 0 0 0 rgba(138,91,0,0)}
+  50%    {box-shadow:var(--sombra),0 0 0 10px rgba(138,91,0,.30)}
+}
+@keyframes pulsoVermelhoForte{
+  0%,100%{box-shadow:var(--sombra),0 0 0 0 rgba(156,47,36,0)}
+  50%    {box-shadow:var(--sombra),0 0 0 11px rgba(156,47,36,.34)}
+}
+.card.atencao{animation:pulsoAmbarForte 1s ease-in-out infinite}
+.card.urgente{animation:pulsoVermelhoForte 1s ease-in-out infinite}
+.card.atencao .espera,.card.urgente .espera{animation:piscaEtiqueta 1s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .card.atencao,.card.urgente,.card.atencao .espera,.card.urgente .espera{animation:none!important}
+}
+
+/* ✕ TIRAR DA FILA sem precisar pegar (Wal, 25/set: "eu posso, de repente, ter um x aqui
+   para eu poder cancelar?"). Hoje só dava para devolver DEPOIS de pegar — e o caso comum é
+   o contrário: a pessoa bate o olho, vê que não é pedido de coleta, e quer limpar a fila.
+   Discreto de propósito: é ação destrutiva, não pode competir com o botão principal. */
+.card .acoes .cancelar{background:transparent;border:1px solid var(--linha);color:var(--tenue);
+  border-radius:9px;padding:8px 13px;font-size:15px;line-height:1;cursor:pointer}
+.card .acoes .cancelar:hover{border-color:var(--vermelho);color:var(--vermelho)}
+
+/* ═══ 💬 AS DUAS MENSAGENS (Wal, 25/set por vídeo) ══════════════════════════════════════════
+   Medido: 220 respostas reais a pedido de coleta em 10 dias → 104 textos DIFERENTES para dizer
+   a mesma coisa, ~30 eram só "bom dia", e só 12 diziam o turno. Não é falta de padrão da
+   equipe — é falta de botão. As duas caixas são visualmente distintas de propósito: quem lê
+   é outro (clínica × motoboy), e trocar uma pela outra é o erro que esta tela existe para evitar. */
+.dlg-msgs{border:none;border-radius:16px;padding:22px 24px;max-width:600px;width:92vw;
+  box-shadow:0 20px 60px rgba(0,0,0,.25);background:var(--carta);color:var(--tinta)}
+.dlg-msgs::backdrop{background:rgba(12,22,28,.45)}
+.dlg-msgs h3{margin:0 0 2px;font-size:21px}
+.dlg-msgs .sub{margin:0 0 16px;font-size:14px;color:var(--suave)}
+.dlg-msgs .bloco{border-radius:12px;padding:12px 14px;margin-bottom:12px;border:1px solid var(--linha)}
+.dlg-msgs .bloco.cli{background:#f2f7fd;border-color:#bcd8f7}
+.dlg-msgs .bloco.mot{background:#fff8ef;border-color:#f0d9b5}
+.dlg-msgs .rot{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:7px}
+.dlg-msgs .bloco.cli .rot{color:#1f6feb}
+.dlg-msgs .bloco.mot .rot{color:#b4690e}
+.dlg-msgs pre{margin:0 0 9px;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:14.5px;line-height:1.5}
+.dlg-msgs .bloco button{font:inherit;font-size:13.5px;font-weight:700;padding:7px 15px;border-radius:8px;
+  border:1px solid currentColor;background:transparent;cursor:pointer}
+.dlg-msgs .bloco.cli button{color:#1f6feb}
+.dlg-msgs .bloco.mot button{color:#b4690e}
+.dlg-msgs .nota{font-size:12.5px;color:var(--tenue);margin:0 0 14px;line-height:1.5}
+.dlg-msgs .acoes{display:flex;justify-content:flex-end}
+.dlg-msgs .fechar{font:inherit;font-size:14px;padding:9px 18px;border-radius:9px;border:1px solid var(--linha);
+  background:transparent;color:var(--suave);cursor:pointer}
+
+/* ⚠️ COLISÃO DE ESPECIFICIDADE (achada no teste, 25/set):
+   `.card.atencao{background:#fffdf8}` e `.card.urgente{background:#fffaf9}` são regras ANTIGAS
+   com a mesma força de `.card{...}` — e pintavam o fundo com a cor do TEMPO, apagando a cor do
+   ASSUNTO. O card de coleta ficava bege em vez de azul justamente quando começava a apertar.
+   Aqui o assunto ganha o fundo de volta, com especificidade maior. O tempo continua na BORDA
+   e no PULSO — os dois sinais convivem sem um apagar o outro. */
+.card.atencao,.card.urgente,.card.minha{background:#f2f7fd}
+.card.orcamento,
+.card.orcamento.atencao,.card.orcamento.urgente,.card.orcamento.minha{background:#f1faf4}
+/* quem pegou o card ganha um anel verde em vez de trocar o fundo — assim dá para ver
+   "é meu E é orçamento" ao mesmo tempo, que antes era impossível */
+.card.minha{box-shadow:var(--sombra),inset 4px 0 0 0 var(--verde)}
