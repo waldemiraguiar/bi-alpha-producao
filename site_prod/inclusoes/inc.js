@@ -618,30 +618,90 @@
             : 'Nada resolvido neste período.'}</div>`
       return
     }
-    alvo.innerHTML = lst.map(c => {
-      const d = CANCEL_DESFECHO[c.status]
-      const idade = fmt((agora() - T(c.quando_pedido || c.criado_em)) / 60000)
-      const falta = []
-      if (!c.req) falta.push('requisição'); if (!c.pet) falta.push('pet'); if (!c.exame) falta.push('exame')
-      return `<div class="cancel ${c.status === 'aberto' ? 'aberto' : (d ? d.cls : '')}" data-cid="${c.id}">
-        <div class="can-cab">
-          <b class="can-clin">${esc(c.clinica || 'clínica não identificada')}</b>
-          <span class="can-t">${c.status === 'aberto' ? `pedido há ${idade}` : `${d ? d.rot : esc(c.status)} · ${esc(c.resolvido_por || '')}`}</span>
-        </div>
-        <div class="can-alvo">${c.pet ? `<b>${esc(c.pet)}</b>` : '<span class="mudo">pet não informado</span>'}${c.req ? ` <span class="req">${esc(c.req)}</span>` : ''} — quer cancelar: ${c.exame ? `<b>${esc(c.exame)}</b>` : '<span class="mudo">exame não informado</span>'}</div>
-        ${c.texto ? `<div class="can-txt">💬 ${esc(c.texto)}${c.autor ? ` <span class="mudo">— ${esc(c.autor)}</span>` : ''}</div>` : ''}
-        ${c.hf_estado ? `<div class="can-hf">🔎 ${esc(c.hf_estado)}</div>` : ''}
-        ${c.motivo ? `<div class="can-txt mudo">↳ ${esc(c.motivo)}</div>` : ''}
-        ${c.status !== 'aberto' ? '' : `
-          ${falta.length ? `<div class="can-falta">falta ${falta.join(', ')} — <button class="lnk" data-ccompletar="${c.id}">completar</button></div>` : ''}
-          <div class="can-acoes">
-            <button data-cacao="cancelado" data-cid="${c.id}">Cancelado no HF</button>
-            <button class="nao" data-cacao="nao_deu_tempo" data-cid="${c.id}">Não deu tempo — exame feito</button>
-            <button class="nao" data-cacao="ja_estava_pronto" data-cid="${c.id}">Laudo já tinha saído</button>
-            <button class="leve" data-cacao="desistiu" data-cid="${c.id}">Cliente desistiu</button>
-          </div>`}
+    alvo.innerHTML = lst.map(c => cancelCartao(c)).join('')
+  }
+  // ── o fluxo que o Fúlvio desenhou nos 5 áudios de 25/set ────────────────────────────
+  // registrar/validar → perguntar ao setor (5 min) → [confirmar com o cliente] e
+  // [escritório cria o cancelado no HF] AO MESMO TEMPO → conferir no HF.
+  const PRAZO_CANCEL_MIN = 5
+  const meuSetor = () => (sessao && sessao.setorInc) || ''
+  const podeAgir = dono => { const m = meuSetor(); return !m || m === 'admin' || m === dono }
+  function cancelEtapa(c) {
+    if (c.status !== 'aberto') return null
+    if (!c.perguntado_em) return { n: 1, dono: 'cc', nome: 'Encaminhar ao setor do exame' }
+    if (!c.respondido_em) return { n: 2, dono: 'tec', nome: 'Área Técnica: dá para cancelar?' }
+    if (!c.cliente_ok_em || !c.hf_feito_em) return { n: 3, dono: null, nome: 'Confirmar com o cliente e cancelar no HF' }
+    return { n: 4, dono: 'esc', nome: 'Conferir no HF' }
+  }
+  function cancelCartao(c) {
+    const d = CANCEL_DESFECHO[c.status]
+    const idade = fmt((agora() - T(c.quando_pedido || c.criado_em)) / 60000)
+    const et = cancelEtapa(c)
+    // o relógio dos 5 minutos só corre enquanto a técnica não respondeu
+    const esperando = et && et.n === 2 ? (agora() - T(c.perguntado_em)) / 60000 : 0
+    const estourou = esperando > PRAZO_CANCEL_MIN
+    const falta = []
+    if (!c.req) falta.push('requisição'); if (!c.pet) falta.push('pet'); if (!c.exame) falta.push('exame')
+    return `<div class="cancel ${c.status === 'aberto' ? (estourou ? 'aberto estourou' : 'aberto') : (d ? d.cls : '')}" data-cid="${c.id}">
+      <div class="can-cab">
+        <b class="can-clin">${esc(c.clinica || 'clínica não identificada')}</b>
+        <span class="can-t">${c.status === 'aberto' ? `pedido há ${idade}` : `${d ? d.rot : esc(c.status)} · ${esc(c.resolvido_por || '')}`}</span>
+      </div>
+      <div class="can-alvo">${c.pet ? `<b>${esc(c.pet)}</b>` : '<span class="mudo">pet não informado</span>'}${c.req ? ` <span class="req">${esc(c.req)}</span>` : ''} — quer cancelar: ${c.exame ? `<b>${esc(c.exame)}</b>` : '<span class="mudo">exame não informado</span>'}${c.exame_digitado ? ' <span class="can-sel-feito">já estava digitado</span>' : ''}</div>
+      ${c.caminho === 'sem_amostra' ? '<div class="can-hf">📦 a amostra ainda não tinha chegado ao laboratório</div>' : ''}
+      ${c.texto ? `<div class="can-txt">💬 ${esc(c.texto)}${c.autor ? ` <span class="mudo">— ${esc(c.autor)}</span>` : ''}</div>` : ''}
+      ${c.hf_estado ? `<div class="can-hf">🔎 ${esc(c.hf_estado)}</div>` : ''}
+      ${c.resposta_obs ? `<div class="can-txt mudo">↳ Área Técnica: ${esc(c.resposta_obs)}</div>` : ''}
+      ${c.hf_conferido_txt ? `<div class="can-hf ${c.hf_conferido_ok ? 'ok' : ''}">🔎 ${esc(c.hf_conferido_txt)}</div>` : ''}
+      ${c.motivo ? `<div class="can-txt mudo">↳ ${esc(c.motivo)}</div>` : ''}
+      ${c.status !== 'aberto' ? '' : cancelPasso2(c, et, esperando, estourou, falta)}
+    </div>`
+  }
+  function cancelPasso2(c, et, esperando, estourou, falta) {
+    if (!et) return ''
+    const trilha = `<div class="can-trilha">${[1, 2, 3, 4].map(n =>
+      `<i class="${n < et.n ? 'ok' : n === et.n ? 'aqui' : ''}"></i>`).join('')}<span>${esc(et.nome)}</span></div>`
+
+    // ── etapa 1: o Atendimento ao Cliente diz qual setor faz o exame ──
+    if (et.n === 1) {
+      if (!podeAgir('cc')) return trilha + `<span class="so-setor">ação de ATENDIMENTO AO CLIENTE</span>`
+      return trilha + `${falta.length ? `<div class="can-falta">falta ${falta.join(', ')} — <button class="lnk" data-ccompletar="${c.id}">completar</button></div>` : ''}
+        <div class="can-pergunta">Qual setor faz este exame? A pergunta vai com prazo de ${PRAZO_CANCEL_MIN} min.</div>
+        <div class="can-acoes setores">${Object.keys(SETOR_EXAME).map(k =>
+          `<button class="leve" data-cset="${k}" data-cid="${c.id}">${SETOR_ICONE[k]} ${esc(SETOR_EXAME[k])}</button>`).join('')}</div>
+        <div class="can-acoes"><button class="leve" data-cacao="desistiu" data-cid="${c.id}">Cliente desistiu</button></div>`
+    }
+
+    // ── etapa 2: a Área Técnica responde (o relógio de 5 min corre aqui) ──
+    if (et.n === 2) {
+      const rel = `<div class="can-relogio ${estourou ? 'ruim' : ''}">${SETOR_ICONE[c.setor_exame] || '🔬'} ${esc(SETOR_EXAME[c.setor_exame] || c.setor_exame || '')} ·
+        perguntado há ${fmt(esperando)}${estourou ? ` — passou dos ${PRAZO_CANCEL_MIN} min` : ` de ${PRAZO_CANCEL_MIN} min`}</div>`
+      const cobranca = estourou && podeAgir('cc') && !c.cobrado_em
+        ? `<div class="can-acoes"><button class="nao" data-ccobrar="${c.id}">A técnica não respondeu — vou sinalizar ao colaborador</button></div>` : ''
+      const jaCobrou = c.cobrado_em ? `<div class="can-hf">📣 Atendimento ao Cliente já foi avisado às ${hm(c.cobrado_em)}</div>` : ''
+      if (!podeAgir('tec')) return trilha + rel + jaCobrou + cobranca + `<span class="so-setor">resposta da ÁREA TÉCNICA</span>`
+      return trilha + rel + jaCobrou + `<div class="can-acoes">
+        <button data-cresp="pode" data-cid="${c.id}">Pode cancelar</button>
+        <button class="nao" data-cresp="nao_da" data-cid="${c.id}">Não dá — o exame já foi feito</button></div>` + cobranca
+    }
+
+    // ── etapa 3: os DOIS lados ao mesmo tempo (Fúlvio, áudio 17h26) ──
+    if (et.n === 3) {
+      const lado = (feito, quem, quando, dono, rot, btn, attr) => feito
+        ? `<div class="can-lado ok">✅ ${rot} · ${esc(quem || '')} ${quando ? 'às ' + hm(quando) : ''}</div>`
+        : podeAgir(dono)
+          ? `<div class="can-lado"><button ${attr}="${c.id}">${btn}</button></div>`
+          : `<div class="can-lado"><span class="so-setor">${rot}: ação de ${SETORES[dono].nome}</span></div>`
+      return trilha + `<div class="can-paralelo">
+        ${lado(c.cliente_ok_em, c.cliente_ok_por, c.cliente_ok_em, 'cc', 'Cliente avisado', 'Confirmei o cancelamento com o cliente', 'data-ccliente')}
+        ${lado(c.hf_feito_em, c.hf_feito_por, c.hf_feito_em, 'esc', 'Cancelado no HF', 'Criei o exame cancelado no HF', 'data-chf')}
       </div>`
-    }).join('')
+    }
+
+    // ── etapa 4: a conferência que valida o que o escritório fez ──
+    return trilha + `<div class="can-acoes">
+      <button data-cconferir="${c.id}">Conferir no HF agora</button>
+      <button class="leve" data-cacao="cancelado" data-cid="${c.id}">Encerrar — cancelamento concluído</button></div>`
   }
   /** o que o espelho do HF sabe da requisição — é a resposta do "ainda dá tempo?" */
   async function olharHF(num) {
@@ -2500,47 +2560,163 @@
 
   // ── navegação / TV ──
   // ── 🚫 cancelamentos: abrir, registrar, completar, dar desfecho ──────────────────────────
+  // Fúlvio 25/set: o diálogo deixou de ser um formulário e virou dois caminhos.
+  // camCancel = por onde a pessoa começou · hfCancel = o que o HF devolveu · exCancel = exame escolhido
+  let camCancel = null, hfCancel = null, exCancel = null, forcarDigitado = false
+  function cancelPasso(qual) {
+    camCancel = qual
+    $('cPasso1').hidden   = !!qual
+    $('cPassoReq').hidden = qual !== 'req'
+    $('cPassoSem').hidden = qual !== 'sem_amostra'
+    $('cFim').hidden      = !qual
+    $('cSalvar').hidden   = !qual
+    if (qual === 'req') { $('cSalvar').hidden = true; $('cReq').focus() }   // só libera depois de validar
+    else if (qual === 'sem_amostra') $('cClinica').focus()
+  }
   $('btnNovoCancel')?.addEventListener('click', async () => {
     if (!(await garantirLogin())) return
-    $('formCancel').reset(); $('cErro').textContent = ''; $('cHF').hidden = true; $('cHF').textContent = ''
+    $('formCancel').reset()
+    hfCancel = null; exCancel = null; forcarDigitado = false
+    $('cErro').textContent = ''; $('cReqErro').textContent = ''
+    $('cConfere').hidden = true; $('cExames').hidden = true; $('cDigitado').hidden = true
     // as clínicas que já apareceram — evita 40 grafias diferentes da mesma clínica
     const nomes = [...new Set([...chamados.map(c => c.clinica), ...coletas.map(c => c.clinica), ...cancelamentos.map(c => c.clinica)].filter(Boolean))].sort()
     $('listaClinicas').innerHTML = nomes.map(n => `<option value="${esc(n)}">`).join('')
-    $('dlgCancel').showModal(); $('cClinica').focus()
+    cancelPasso(null)
+    $('dlgCancel').showModal()
   })
-  // digitou a requisição → digo na hora o que o HF sabe. É a resposta do "ainda dá tempo?",
-  // dada ANTES de a pessoa responder a clínica, não depois.
-  $('cReq')?.addEventListener('change', async () => {
-    const n = $('cReq').value.replace(/\D/g, ''); const cx = $('cHF')
-    if (!n) { cx.hidden = true; return }
-    cx.hidden = false; cx.className = 'cancel-hf'; cx.textContent = 'olhando no HF…'
-    const t = await olharHF(n)
-    cx.textContent = t || 'não consegui olhar o HF agora'
-    cx.className = 'cancel-hf' + (/não está no espelho/.test(t) ? ' ruim' : '')
-    if (!$('cPet').value) { const m = t.match(/^HF:\s*([^·]+)·/); if (m && !/sem nome/.test(m[1])) $('cPet').value = m[1].trim() }
+  $('dlgCancel')?.addEventListener('click', ev => {
+    const cam = ev.target.closest('[data-cam]')
+    if (cam) { cancelPasso(cam.dataset.cam); return }
+    if (ev.target.closest('[data-cvoltar]')) { hfCancel = null; exCancel = null; forcarDigitado = false; $('cConfere').hidden = true; $('cExames').hidden = true; $('cDigitado').hidden = true; cancelPasso(null) }
   })
+
+  // ① busca a requisição e devolve TUDO para a pessoa validar
+  // "você tem que passar todas essas informações para ele validar se a gente enxergou
+  //  o número correto, se é exatamente desse cliente que está falando, desse pet"
+  async function buscarReqCancel() {
+    const n = $('cReq').value.replace(/\D/g, '')
+    $('cReqErro').textContent = ''; $('cExames').hidden = true; $('cDigitado').hidden = true
+    exCancel = null; forcarDigitado = false; $('cSalvar').hidden = true
+    if (!n) { $('cReqErro').textContent = 'Digite o número da requisição.'; return }
+    $('cConfere').hidden = false; $('cConfere').className = 'cancel-confere'
+    $('cConfere').innerHTML = '<span class="mudo">olhando no HF…</span>'
+    let r = null
+    try { r = await rpc('inc_cancel_req', { p_nome: sessao.nome, p_senha: sessao.senha, p_num: n }) }
+    catch (e) {
+      $('cConfere').hidden = true
+      $('cReqErro').textContent = /PGRST202|could not find|schema cache/i.test(e.message || '')
+        ? 'Falta rodar o SQL supabase_inclusoes_19_cancelamento_fluxo.sql no Supabase.' : e.message
+      return
+    }
+    if (!r) {
+      // NUNCA BLOQUEAR: o espelho atualiza a cada 30 min, a requisição pode ser novinha
+      $('cConfere').className = 'cancel-confere ruim'
+      $('cConfere').innerHTML = `A requisição <b>${esc(n)}</b> não está no espelho do HF — ele atualiza a cada 30 min.
+        <div class="conf-acoes"><button type="button" class="btn-sec" data-csem="1">Seguir assim mesmo e preencher à mão</button></div>`
+      return
+    }
+    hfCancel = r
+    const ex = Array.isArray(r.exames) ? r.exames : []
+    $('cConfere').className = 'cancel-confere'
+    $('cConfere').innerHTML = `<div class="conf-tit">É este mesmo?</div>
+      <dl class="conf-dl">
+        <dt>Clínica</dt><dd><b>${esc(r.clinica || '—')}</b></dd>
+        <dt>Pet</dt><dd><b>${esc(r.pet || '—')}</b>${r.especie ? ' · ' + esc(r.especie) : ''}</dd>
+        <dt>Entrada</dt><dd>${r.entrada ? dataCurta(r.entrada) + ' ' + hm(r.entrada) : '—'}</dd>
+        <dt>Exames</dt><dd>${ex.length}</dd>
+      </dl>
+      <div class="conf-acoes">
+        <button type="button" class="btn-principal" data-cvalida="sim">É este mesmo</button>
+        <button type="button" class="btn-sec" data-cvalida="nao">Não é este</button>
+      </div>
+      <p class="mudo conf-obs">O tutor não aparece aqui: o espelho do HF não traz esse campo hoje.</p>`
+  }
+  $('cBuscar')?.addEventListener('click', buscarReqCancel)
+  $('cReq')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarReqCancel() } })
+
+  // ② validou → mostra os exames, cada um com o que o HF disse
+  $('cConfere')?.addEventListener('click', ev => {
+    if (ev.target.closest('[data-csem]')) {   // requisição fora do espelho: segue à mão
+      $('cConfere').hidden = true; cancelPasso('sem_amostra'); $('cReqErro').textContent = ''
+      toast('Requisição não encontrada — preencha clínica, pet e exame à mão')
+      return
+    }
+    const v = ev.target.closest('[data-cvalida]'); if (!v) return
+    if (v.dataset.cvalida === 'nao') {
+      hfCancel = null; $('cConfere').hidden = true; $('cExames').hidden = true
+      $('cReq').value = ''; $('cReq').focus()
+      toast('Digite outro número de requisição')
+      return
+    }
+    const ex = Array.isArray(hfCancel.exames) ? hfCancel.exames : []
+    $('cExames').hidden = false
+    $('cExLista').innerHTML = ex.length
+      ? ex.map((e, i) => `<button type="button" class="ex ${e.digitado ? 'feito' : ''}" data-cex="${i}">
+           <b>${esc(e.exame || '—')}</b>
+           <span>${e.digitado ? '✅ já digitado' : '⏳ ainda não digitado'}</span></button>`).join('')
+        + `<button type="button" class="ex toda" data-cex="toda"><b>A requisição toda</b><span>cancelar tudo</span></button>`
+      : `<p class="mudo">Nenhum exame lançado nesta requisição no espelho do HF.</p>`
+    $('cDigitado').hidden = true; $('cSalvar').hidden = true
+  })
+
+  // ③ a trava do Fúlvio: exame já digitado FOI REALIZADO, não se cancela.
+  // Mas com saída visível — quem pula registra assim mesmo e vira conversa de cobrança.
+  $('cExLista')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-cex]'); if (!b) return
+    $('cExLista').querySelectorAll('.ex').forEach(x => x.classList.toggle('on', x === b))
+    forcarDigitado = false
+    const ex = Array.isArray(hfCancel && hfCancel.exames) ? hfCancel.exames : []
+    exCancel = b.dataset.cex === 'toda' ? { exame: 'A requisição toda', digitado: ex.some(e => e.digitado) } : ex[+b.dataset.cex]
+    const trava = $('cDigitado')
+    if (exCancel && exCancel.digitado) {
+      trava.hidden = false
+      trava.innerHTML = `<b>Já foi digitado — este exame não pode ser cancelado.</b>
+        <span>Ele já foi realizado. Isso vira conversa de cobrança com a clínica, não cancelamento.</span>
+        <div class="conf-acoes"><button type="button" class="btn-sec" data-cforcar="1">Registrar assim mesmo</button></div>`
+      $('cSalvar').hidden = true
+    } else {
+      trava.hidden = true; $('cSalvar').hidden = false
+    }
+  })
+  $('cDigitado')?.addEventListener('click', ev => {
+    if (!ev.target.closest('[data-cforcar]')) return
+    forcarDigitado = true; $('cSalvar').hidden = false
+    toast('Vai ser registrado como "não deu tempo" — o exame já foi feito')
+  })
+
   $('formCancel')?.addEventListener('submit', async ev => {
     if (ev.submitter && ev.submitter.value === 'cancel') return
     ev.preventDefault()
-    const clinica = $('cClinica').value.trim()
-    if (!clinica) { $('cErro').textContent = 'Diga pelo menos a clínica.'; return }
+    if (!camCancel) return
     if (!(await garantirLogin())) return
+    const pelaReq = camCancel === 'req' && hfCancel
+    const clinica = pelaReq ? (hfCancel.clinica || '') : $('cClinica').value.trim()
+    if (!pelaReq && !clinica) { $('cErro').textContent = 'Diga pelo menos a clínica.'; return }
+    if (pelaReq && !exCancel) { $('cErro').textContent = 'Escolha qual exame ele quer cancelar.'; return }
+    const args = {
+      p_nome: sessao.nome, p_senha: sessao.senha,
+      p_caminho: pelaReq ? 'req' : 'sem_amostra',
+      p_clinica: clinica || null,
+      p_pet: pelaReq ? (hfCancel.pet || null) : ($('cPet').value.trim() || null),
+      p_req: pelaReq ? String(hfCancel.req || '') : null,
+      p_exame: pelaReq ? (exCancel.exame || null) : ($('cExame').value.trim() || null),
+      p_digitado: pelaReq ? !!exCancel.digitado : null,
+      p_texto: $('cTexto').value.trim() || null,
+      p_autor: null, p_grupo: null, p_quando: null, p_msg_id: null,
+      p_hf: pelaReq ? `HF: ${hfCancel.pet || ''} · ${hfCancel.clinica || ''} · ${(hfCancel.exames || []).length} exame(s)` : null,
+    }
+    $('cSalvar').disabled = true
     try {
-      await rpc('inc_cancel_novo', {
-        p_nome: sessao.nome, p_senha: sessao.senha, p_clinica: clinica,
-        p_pet: $('cPet').value.trim(), p_req: $('cReq').value.replace(/\D/g, ''),
-        p_exame: $('cExame').value.trim(), p_texto: $('cTexto').value.trim(),
-        p_autor: null, p_grupo: null, p_quando: null, p_msg_id: null,
-        p_hf: $('cHF').hidden ? null : $('cHF').textContent,
-      })
+      await rpc('inc_cancel_novo2', args)
       $('dlgCancel').close(); toast('Solicitação registrada')
       cancelPer = 'aberto'          // volta para a lista onde o cartão recém-criado aparece
       await carregar(); desenhar()
     } catch (e) {
       $('cErro').textContent = /PGRST202|could not find|schema cache/i.test(e.message || '')
-        ? 'A tabela de cancelamentos ainda não existe no banco — falta rodar o SQL (supabase_inclusoes_17_cancelamentos.sql).'
+        ? 'Falta rodar o SQL supabase_inclusoes_19_cancelamento_fluxo.sql no Supabase.'
         : e.message
-    }
+    } finally { $('cSalvar').disabled = false }
   })
   $('vCancel')?.addEventListener('click', async ev => {
     const f = ev.target.closest('[data-cper]')
@@ -2560,6 +2736,66 @@
           p_pet: pet, p_req: String(req).replace(/\D/g, ''), p_exame: exame, p_hf: hf })
         await carregar(); desenhar()
       } catch (e) { toast(e.message) }
+      return
+    }
+
+    // ── as ações do fluxo novo (Fúlvio 25/set) ──
+    const sep = ev.target.closest('[data-cset]')          // ① encaminhar ao setor do exame
+    if (sep) {
+      if (!(await garantirLogin())) return
+      sep.disabled = true
+      try { await rpc('inc_cancel_perguntar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +sep.dataset.cid, p_setor: sep.dataset.cset })
+            toast(`Pergunta enviada à ${SETOR_EXAME[sep.dataset.cset]} — ${PRAZO_CANCEL_MIN} min para responder`); await carregar(); desenhar() }
+      catch (e) { sep.disabled = false; toast(e.message) }
+      return
+    }
+    const resp = ev.target.closest('[data-cresp]')        // ② a Área Técnica responde
+    if (resp) {
+      if (!(await garantirLogin())) return
+      const qual = resp.dataset.cresp
+      // "não dá" fecha o cartão e vira cobrança — o motivo é o que a cobrança vai ler
+      let obs = null
+      if (qual === 'nao_da') { obs = await pedirMotivo('O exame já foi feito — o que a clínica precisa saber?'); if (obs == null) return }
+      resp.disabled = true
+      try { await rpc('inc_cancel_responder', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +resp.dataset.cid, p_resposta: qual, p_obs: obs })
+            toast(qual === 'pode' ? 'Segue para o cliente E para o escritório' : 'Registrado — vira conversa de cobrança'); await carregar(); desenhar() }
+      catch (e) { resp.disabled = false; toast(e.message) }
+      return
+    }
+    const cob = ev.target.closest('[data-ccobrar]')       // ② passou dos 5 min
+    if (cob) {
+      if (!(await garantirLogin())) return
+      cob.disabled = true
+      try { await rpc('inc_cancel_cobrar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +cob.dataset.ccobrar })
+            toast('Registrado que a técnica não respondeu'); await carregar(); desenhar() }
+      catch (e) { cob.disabled = false; toast(e.message) }
+      return
+    }
+    const cli = ev.target.closest('[data-ccliente]')      // ③ lado do Atendimento ao Cliente
+    if (cli) {
+      if (!(await garantirLogin())) return
+      cli.disabled = true
+      try { await rpc('inc_cancel_cliente_ok', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +cli.dataset.ccliente })
+            toast('Cliente confirmado'); await carregar(); desenhar() }
+      catch (e) { cli.disabled = false; toast(e.message) }
+      return
+    }
+    const chf = ev.target.closest('[data-chf]')           // ③ lado do Escritório
+    if (chf) {
+      if (!(await garantirLogin())) return
+      chf.disabled = true
+      try { await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf })
+            toast('Registrado — agora dá para conferir no HF'); await carregar(); desenhar() }
+      catch (e) { chf.disabled = false; toast(e.message) }
+      return
+    }
+    const conf = ev.target.closest('[data-cconferir]')    // ④ a conferência do Fúlvio
+    if (conf) {
+      if (!(await garantirLogin())) return
+      conf.disabled = true
+      try { const r = await rpc('inc_cancel_conferir', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +conf.dataset.cconferir })
+            toast(r && r.ok ? '✅ ' + r.txt : '🔎 ' + ((r && r.txt) || 'não consegui conferir agora')); await carregar(); desenhar() }
+      catch (e) { conf.disabled = false; toast(e.message) }
       return
     }
 
@@ -2653,6 +2889,38 @@
         hf_estado: 'HF: ARTEMÍSIA · Clínica de exemplo · 6 exame(s) lançado(s): Hemograma, ALT, FAL, Creatinina, Ureia, Glicose' },
       { id: 2, criado_em: min(34), quando_pedido: min(34), clinica: 'Outra clínica de exemplo', autor: 'Luciana',
         texto: 'Desconsidere.', status: 'aberto' },
+      // ── o fluxo do Fúlvio em cada etapa, para treinar o gesto sem esperar ──
+      { id: 4, criado_em: min(7), quando_pedido: min(7), clinica: 'Veterinária Caotinho', autor: 'Dra. Marina',
+        texto: 'Consegue cancelar a fosfatase da Lilith? Pedimos sem querer.',
+        pet: 'LILITH', req: '640537', exame: 'Fosfatase alcalina', status: 'aberto', caminho: 'req',
+        validado_em: min(7), exame_digitado: false,
+        hf_estado: 'HF: LILITH · Veterinária Caotinho · 3 exame(s)' },
+      { id: 5, criado_em: min(9), quando_pedido: min(9), clinica: 'Clínica de exemplo', autor: 'Paula',
+        texto: 'Cancela o PCR da Nina por favor',
+        pet: 'NINA', req: '640921', exame: 'PCR Erliquiose', status: 'aberto', caminho: 'req',
+        validado_em: min(9), exame_digitado: false,
+        setor_exame: 'pcr_soro', perguntado_em: min(8), perguntado_por: 'DEMO',
+        hf_estado: 'HF: NINA · Clínica de exemplo · 1 exame(s)' },
+      { id: 6, criado_em: min(40), quando_pedido: min(40), clinica: 'Alpha - Paula Andriotti', autor: 'Bruna',
+        texto: 'Por favor cancelar a ureia do Thor',
+        pet: 'THOR', req: '640712', exame: 'Ureia', status: 'aberto', caminho: 'req',
+        validado_em: min(40), exame_digitado: false,
+        setor_exame: 'bioquimica', perguntado_em: min(31), perguntado_por: 'DEMO',
+        hf_estado: 'HF: THOR · Alpha - Paula Andriotti · 5 exame(s)' },
+      { id: 7, criado_em: min(55), quando_pedido: min(55), clinica: 'Outra clínica de exemplo', autor: 'Camila',
+        texto: 'Cancelar o hemograma da Mel',
+        pet: 'MEL', req: '640688', exame: 'Hemograma', status: 'aberto', caminho: 'req',
+        validado_em: min(55), exame_digitado: false,
+        setor_exame: 'hemato', perguntado_em: min(50), perguntado_por: 'DEMO',
+        respondido_em: min(48), respondido_por: 'DEMO', resposta: 'pode',
+        resposta_obs: 'ainda não pipetei, dá para tirar',
+        hf_estado: 'HF: MEL · Outra clínica de exemplo · 4 exame(s)' },
+      { id: 8, criado_em: min(90), quando_pedido: min(92), clinica: 'Clínica de exemplo', autor: 'Dr. André',
+        texto: 'A amostra do Simba nem saiu daqui ainda, pode cancelar',
+        pet: 'SIMBA', exame: 'Perfil tireoidiano', status: 'aberto', caminho: 'sem_amostra',
+        setor_exame: 'bioquimica', perguntado_em: min(80), perguntado_por: 'DEMO',
+        respondido_em: min(78), respondido_por: 'DEMO', resposta: 'pode',
+        cliente_ok_em: min(70), cliente_ok_por: 'DEMO' },
       { id: 3, criado_em: min(210), quando_pedido: min(215), clinica: 'Terceira clínica de exemplo', autor: 'Rodrigo',
         texto: 'Pode cancelar o exame de Sansão por favor. Obrigado', pet: 'SANSÃO', req: '640402', exame: 'Perfil hepático',
         status: 'nao_deu_tempo', resolvido_por: 'DEMO', resolvido_em: min(200),
@@ -2673,6 +2941,65 @@
       eventos.push({ chamado_id: x.id, quando: new Date().toISOString(), para: falta.length ? 2 : 3, acao: falta.length ? 'amostra_setor_ok' : 'amostra_ok', obs, por: 'DEMO' })
       if (!falta.length) { x.etapa = 3; x.etapa_desde = new Date().toISOString() }
       return falta.length ? falta.join(', ') : 'completo'
+    }
+    // ── ensaio do fluxo de cancelamento (Fúlvio 25/set). Nada é gravado. ──
+    // As requisições do demo são de mentira, mas o ESTADO dos exames é o caso real:
+    // uma com exame já digitado (não dá para cancelar) e uma ainda não digitada.
+    if (nome === 'inc_cancel_req') {
+      const n = String(a.p_num || '').replace(/\D/g, '')
+      const banco = {
+        '640537': { req: '640537', clinica: 'Veterinária Caotinho', pet: 'LILITH', especie: 'Canina',
+                    entrada: new Date(agora() - 3 * 3600e3).toISOString(),
+                    exames: [{ id: 1, exame: 'ALT (TGP)', digitado: true,  data_exame: null },
+                             { id: 2, exame: 'Fosfatase alcalina', digitado: false, data_exame: null },
+                             { id: 3, exame: 'Ureia', digitado: false, data_exame: null }] },
+        '640921': { req: '640921', clinica: 'Clínica de exemplo', pet: 'NINA', especie: 'Felina',
+                    entrada: new Date(agora() - 26 * 3600e3).toISOString(),
+                    exames: [{ id: 4, exame: 'PCR Erliquiose', digitado: false, data_exame: null }] },
+      }
+      return banco[n] || null
+    }
+    if (nome === 'inc_cancel_novo2') {
+      cancelamentos.unshift({ id: cancelamentos.length + 100, criado_em: new Date().toISOString(),
+        quando_pedido: new Date().toISOString(), clinica: a.p_clinica, pet: a.p_pet, req: a.p_req,
+        exame: a.p_exame, texto: a.p_texto, hf_estado: a.p_hf, status: 'aberto', aberto_por: 'DEMO',
+        caminho: a.p_caminho, exame_digitado: a.p_digitado,
+        validado_em: a.p_caminho === 'req' ? new Date().toISOString() : null })
+      return cancelamentos[0].id
+    }
+    if (nome === 'inc_cancel_perguntar') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.setor_exame = a.p_setor; x.perguntado_em = new Date().toISOString(); x.perguntado_por = 'DEMO' }
+      return true
+    }
+    if (nome === 'inc_cancel_responder') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) {
+        x.resposta = a.p_resposta; x.respondido_em = new Date().toISOString(); x.respondido_por = 'DEMO'
+        x.resposta_obs = a.p_obs
+        if (a.p_resposta === 'nao_da') { x.status = 'nao_deu_tempo'; x.resolvido_por = 'DEMO'; x.resolvido_em = new Date().toISOString() }
+      }
+      return true
+    }
+    if (nome === 'inc_cancel_cobrar') {
+      const x = cancelamentos.find(y => y.id === a.p_id); if (x) x.cobrado_em = new Date().toISOString(); return true
+    }
+    if (nome === 'inc_cancel_cliente_ok') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.cliente_ok_em = new Date().toISOString(); x.cliente_ok_por = 'DEMO' }
+      return true
+    }
+    if (nome === 'inc_cancel_hf_feito') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.hf_feito_em = new Date().toISOString(); x.hf_feito_por = 'DEMO' }
+      return true
+    }
+    if (nome === 'inc_cancel_conferir') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      // no ensaio, o espelho "ainda não atualizou" — é o caso que a equipe mais vai ver
+      const r = { ok: false, txt: 'ainda não apareceu exame cancelado no HF (o espelho atualiza a cada 30 min)' }
+      if (x) { x.hf_conferido_em = new Date().toISOString(); x.hf_conferido_ok = r.ok; x.hf_conferido_txt = r.txt }
+      return r
     }
     if (nome === 'inc_cancel_novo') {
       cancelamentos.unshift({ id: cancelamentos.length + 100, criado_em: new Date().toISOString(),

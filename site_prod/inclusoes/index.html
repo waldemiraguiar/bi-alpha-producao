@@ -192,23 +192,63 @@
 <dialog id="dlgCancel">
   <form id="formCancel" method="dialog">
     <h3>Nova solicitação de cancelamento</h3>
-    <p class="mudo">Registre com o que você tem agora. Pet, requisição e exame dá para completar depois.</p>
-    <label>Clínica <span class="obrig">*</span></label>
-    <input id="cClinica" list="listaClinicas" autocomplete="off" required>
-    <datalist id="listaClinicas"></datalist>
-    <div class="linha2">
-      <div><label>Requisição</label><input id="cReq" inputmode="numeric" autocomplete="off" placeholder="ex. 640537"></div>
-      <div><label>Pet</label><input id="cPet" autocomplete="off"></div>
+
+    <!-- PASSO 1 — os dois caminhos (Fúlvio, áudios 25/set 17h20 e 17h21):
+         "são dois caminhos iniciais: iniciar colocando o número de registro, ou
+          identificar que a amostra não chegou ainda ao laboratório." -->
+    <div id="cPasso1">
+      <p class="mudo">Por onde dá para começar?</p>
+      <div class="cam-escolha">
+        <button type="button" class="cam" data-cam="req">
+          <b>Tenho o número da requisição</b>
+          <span>O animal já está no laboratório e já tem registro. É o que mais acontece.</span>
+        </button>
+        <button type="button" class="cam" data-cam="sem_amostra">
+          <b>A amostra ainda não chegou ao laboratório</b>
+          <span>Ainda não existe número de requisição.</span>
+        </button>
+      </div>
     </div>
-    <label>Qual exame ele quer cancelar</label>
-    <input id="cExame" autocomplete="off" placeholder="ex. fosfatase alcalina · ou 'a requisição toda'">
-    <div id="cHF" class="cancel-hf" hidden></div>
-    <label>O que o cliente escreveu</label>
-    <textarea id="cTexto" rows="2" placeholder="cole a mensagem do WhatsApp"></textarea>
-    <p class="erro" id="cErro"></p>
+
+    <!-- PASSO 2A — pela requisição: o HF responde e a pessoa VALIDA -->
+    <div id="cPassoReq" hidden>
+      <button type="button" class="lnk cam-voltar" data-cvoltar="1">← escolher outro começo</button>
+      <label>Número da requisição <span class="obrig">*</span></label>
+      <div class="linha-busca">
+        <input id="cReq" inputmode="numeric" autocomplete="off" placeholder="ex. 640537">
+        <button type="button" class="btn-sec" id="cBuscar">Buscar no HF</button>
+      </div>
+      <p class="erro" id="cReqErro"></p>
+      <!-- o operador confere se enxergamos o cliente e o pet certos antes de seguir -->
+      <div id="cConfere" class="cancel-confere" hidden></div>
+      <!-- cada exame da requisição, com o estado que o HF deu -->
+      <div id="cExames" hidden>
+        <label>Qual exame ele quer cancelar</label>
+        <div class="ex-lista" id="cExLista"></div>
+        <div id="cDigitado" class="cancel-trava" hidden></div>
+      </div>
+    </div>
+
+    <!-- PASSO 2B — sem amostra no laboratório -->
+    <div id="cPassoSem" hidden>
+      <button type="button" class="lnk cam-voltar" data-cvoltar="1">← escolher outro começo</button>
+      <label>Clínica <span class="obrig">*</span></label>
+      <input id="cClinica" list="listaClinicas" autocomplete="off">
+      <datalist id="listaClinicas"></datalist>
+      <div class="linha2">
+        <div><label>Pet</label><input id="cPet" autocomplete="off"></div>
+        <div><label>Qual exame ele quer cancelar</label><input id="cExame" autocomplete="off" placeholder="ex. fosfatase alcalina"></div>
+      </div>
+    </div>
+
+    <div id="cFim" hidden>
+      <label>O que o cliente escreveu</label>
+      <textarea id="cTexto" rows="2" placeholder="cole a mensagem do WhatsApp"></textarea>
+      <p class="erro" id="cErro"></p>
+    </div>
     <div class="linha-botoes">
       <button value="cancel" class="btn-sec" formnovalidate>Fechar</button>
-      <button class="btn-principal" id="cSalvar">Registrar</button>
+      <button class="btn-principal" id="cSalvar" hidden>Registrar</button>
     </div>
   </form>
 </dialog>

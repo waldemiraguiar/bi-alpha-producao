@@ -826,6 +826,59 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .can-acoes .nao{background:transparent;border-color:var(--vermelho);color:var(--vermelho)}
 .can-acoes .leve{background:transparent;border-color:var(--linha);color:var(--mudo)}
 .cancel-hf{font-size:13.5px;color:var(--esc);background:var(--painel2);border-radius:8px;padding:8px 11px;margin:8px 0}
+
+/* ═══ fluxo de cancelamento (Fúlvio, 5 áudios de 25/set) ═══ */
+/* os dois caminhos de abertura: requisição, ou amostra que ainda não chegou */
+.cam-escolha{display:grid;gap:10px;margin:10px 0}
+.cam{display:block;text-align:left;font:inherit;background:var(--painel2);border:1.5px solid var(--linha);border-radius:12px;padding:14px 16px;cursor:pointer}
+.cam:hover{border-color:var(--cc);background:var(--painel)}
+.cam b{display:block;font-size:16px;margin-bottom:3px}
+.cam span{display:block;font-size:13.5px;color:var(--mudo);line-height:1.45}
+.cam-voltar{display:inline-block;font:inherit;font-size:13px;background:none;border:none;color:var(--cc);text-decoration:underline;padding:0;margin-bottom:10px;cursor:pointer}
+.linha-busca{display:flex;gap:8px}
+.linha-busca input{flex:1;min-width:0}
+/* o painel de validação: "é exatamente desse cliente, desse pet?" */
+.cancel-confere{background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:12px 14px;margin:10px 0}
+.cancel-confere.ruim{border-color:var(--amarelo);background:#fffbeb}
+.conf-tit{font-family:var(--disp);font-size:18px;margin-bottom:8px}
+.conf-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 10px;font-size:14px}
+.conf-dl dt{color:var(--mudo)}
+.conf-dl dd{margin:0}
+.conf-acoes{display:flex;flex-wrap:wrap;gap:8px}
+.conf-obs{font-size:12.5px;margin:8px 0 0}
+/* cada exame da requisição com o estado que o HF deu */
+.ex-lista{display:grid;gap:6px;margin:6px 0}
+.ex{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;font:inherit;
+    background:var(--painel);border:1.5px solid var(--linha);border-radius:9px;padding:9px 12px;cursor:pointer}
+.ex:hover{border-color:var(--cc)}
+.ex.on{border-color:var(--cc);background:#eff6ff}
+.ex span{font-size:12.5px;color:var(--mudo);font-family:var(--mono);white-space:nowrap}
+.ex.feito span{color:var(--vermelho)}
+.ex.toda{border-style:dashed}
+/* a trava: exame digitado já foi realizado — com saída visível para quem pula */
+.cancel-trava{background:#fef2f2;border:1.5px solid var(--vermelho);border-radius:10px;padding:12px 14px;margin:8px 0}
+.cancel-trava b{display:block;color:var(--vermelho);font-size:15px;margin-bottom:4px}
+.cancel-trava span{display:block;font-size:13.5px;color:var(--mudo);line-height:1.45;margin-bottom:8px}
+/* a trilha das 4 etapas dentro do cartão */
+.can-trilha{display:flex;align-items:center;gap:5px;margin:8px 0 6px;font-size:13px;color:var(--mudo)}
+.can-trilha i{width:22px;height:5px;border-radius:3px;background:var(--linha)}
+.can-trilha i.ok{background:var(--ok)}
+.can-trilha i.aqui{background:var(--cc)}
+.can-trilha span{margin-left:6px;font-family:var(--disp);font-size:15px;color:var(--texto);letter-spacing:.01em}
+.can-pergunta{font-size:14px;margin-top:6px}
+.can-acoes.setores button{font-size:13px;padding:6px 11px}
+/* o relógio dos 5 minutos */
+.can-relogio{font-family:var(--mono);font-size:13px;color:var(--mudo);background:var(--painel2);border-radius:8px;padding:6px 10px;margin:6px 0}
+.can-relogio.ruim{color:var(--vermelho);background:#fef2f2;font-weight:700}
+.cancel.aberto.estourou{border-left-color:var(--vermelho)}
+/* os dois lados que correm ao mesmo tempo depois do "pode cancelar" */
+.can-paralelo{display:grid;gap:8px;margin-top:6px}
+@media(min-width:620px){.can-paralelo{grid-template-columns:1fr 1fr}}
+.can-lado{background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.can-lado.ok{border-color:var(--ok);color:var(--ok)}
+.can-lado button{font:inherit;font-size:13.5px;padding:8px 12px;border-radius:8px;border:none;background:var(--texto);color:#fff;width:100%;cursor:pointer}
+.can-hf.ok{color:var(--ok);border:1px solid var(--ok)}
+.can-sel-feito{font-family:var(--mono);font-size:12px;color:var(--vermelho)}
 .cancel-hf.ruim{color:var(--vermelho)}
 #dlgCancel{border:none;border-radius:14px;padding:22px 24px;max-width:560px;width:92vw;
   box-shadow:0 18px 50px rgba(0,0,0,.22);background:var(--painel);color:var(--texto)}
