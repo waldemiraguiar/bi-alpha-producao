@@ -121,17 +121,16 @@
       </div>
         ${orc ? '' : `<div class="respostas">
           <div class="rTit">📋 a resposta pronta — confira, copie e mande</div>
-          <div class="rLinha cli">
-            <span class="rQuem">👤 clínica</span>
-            <span class="rTxt" data-msg="cli" data-id="${c.id}">${esc(msgsDoCard(c, rotaSel).cliente.split('\n')[0])} …</span>
-            <button type="button" class="rCopy" data-cp="cli" data-id="${c.id}">copiar</button>
+          <div class="rCaixa cli">
+            <div class="rCab"><span class="rQuem">👤 para a CLÍNICA</span>
+              <button type="button" class="rCopy" data-cp="cli" data-id="${c.id}">copiar</button></div>
+            <pre class="rMsg">${esc(msgsDoCard(c, rotaSel).cliente)}</pre>
           </div>
-          <div class="rLinha mot">
-            <span class="rQuem">🛵 motoboy</span>
-            <span class="rTxt" data-msg="mot" data-id="${c.id}">${esc(msgsDoCard(c, rotaSel).motoboy.replace(/\n/g, ' · '))}</span>
-            <button type="button" class="rCopy" data-cp="mot" data-id="${c.id}">copiar</button>
+          <div class="rCaixa mot">
+            <div class="rCab"><span class="rQuem">🛵 para o MOTOBOY</span>
+              <button type="button" class="rCopy" data-cp="mot" data-id="${c.id}">copiar</button></div>
+            <pre class="rMsg">${esc(msgsDoCard(c, rotaSel).motoboy)}</pre>
           </div>
-          <button type="button" class="rVerTudo" data-acao="vermsgs" data-id="${c.id}">ver as mensagens inteiras</button>
         </div>`}
       <div class="acoes">
         ${minha
@@ -254,9 +253,12 @@
     const end = c._endereco || ''
     return {
       cliente:
-        `${saud}! ✅ Recebemos seu pedido e *já está agendado* para o período da *${turno}*.\n` +
-        `🛵 O motoboy passa aí${rota ? ` pela *${rota}*` : ''}.\n\n` +
-        `Se precisar de mais alguma coisa, é só chamar. 🐾\n\n_🧬 Alpha Labs · Atendimento ao Cliente_`,
+        // 25/set — apertei a mensagem: sem linha em branco e sem despedida de ofício.
+        // Ganha o card (menos rolagem) E ganha a clínica: quem lê no WhatsApp quer o fato,
+        // não três parágrafos. O que importa está nas duas primeiras linhas — agendado e quando.
+        `${saud}! ✅ Pedido recebido e *já agendado* para a *${turno}*.\n` +
+        `🛵 O motoboy passa aí${rota ? ` pela *${rota}*` : ''}.\n` +
+        `Qualquer coisa é só chamar 🐾\n_🧬 Alpha Labs · Atendimento ao Cliente_`,
       motoboy:
         `📍 *${clinica}*` + (end ? `\n${end}` : `\n⚠️ sem endereço cadastrado — confirmar com a clínica`),
     }
