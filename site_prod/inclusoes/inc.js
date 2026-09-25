@@ -78,7 +78,7 @@
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
   let terremotos = [], conferencia = [], heranca = []
-  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = false, periodo = 'dia'
+  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = (() => { try { return localStorage.getItem('inc_som') === '1' } catch { return false } })(), periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -1729,7 +1729,7 @@
     }
     const b = ev.target.closest('button[data-alarme]'); if (!b) return
     alarmeEscolhido = b.dataset.alarme; gravarLocal('inc_alarme', alarmeEscolhido)
-    somLiberado = true
+    ligarSom(true)
     if (!tocarAlarme(alarmeEscolhido)) toast('Clique em 🔊 Som primeiro')
     desenharTerremoto()
   })
@@ -2001,8 +2001,32 @@
 
   // ── som (a TV precisa de um clique para liberar áudio) ──
   let ctx = null, ultimoBip = 0
+  // Thailan 25/set: o som tem que SOBREVIVER ao F5. Antes a preferência só existia em
+  // memória — atualizar a página voltava com o alarme mudo e ninguém percebia.
+  // ⚠️ Gravar a preferência sozinha não basta: quando a página carrega SEM um clique,
+  // o navegador cria o AudioContext SUSPENSO. O botão diria "ligado" com a tela muda —
+  // pior que hoje, porque hoje a equipe sabe que precisa clicar. Então: o primeiro toque
+  // em QUALQUER lugar da página destrava, e até lá o botão conta a verdade.
+  function audioPreso() { return !!ctx && ctx.state === 'suspended' }
+  function rotularSom() {
+    const b = $('btnSom'); if (!b) return
+    b.textContent = !somLiberado ? '🔈 Som' : audioPreso() ? '🔊 Som ligado — clique na tela' : '🔊 Som ligado'
+    b.classList.toggle('som-preso', somLiberado && audioPreso())
+  }
+  function destravarAudio() {
+    try { ctx ||= new (window.AudioContext || window.webkitAudioContext)() } catch { return }
+    if (ctx.state === 'suspended') ctx.resume().then(rotularSom).catch(() => {})
+    rotularSom()
+  }
+  function ligarSom(v) {
+    somLiberado = v
+    gravarLocal('inc_som', v ? '1' : null)
+    if (v) destravarAudio()
+    rotularSom()
+  }
   function bip(vezes) {
     if (!somLiberado || Date.now() - ultimoBip < 20000) return
+    if (audioPreso()) { destravarAudio(); if (audioPreso()) return }   // tela ainda muda: não gasta o intervalo
     ultimoBip = Date.now()
     try {
       ctx ||= new (window.AudioContext || window.webkitAudioContext)()
@@ -2112,7 +2136,11 @@
     }
   }
   const ehNovo = c => { const t = novos.get(chaveDe(c)); return t && agora() - t < 5 * 60000 }
-  $('btnSom').addEventListener('click', () => { somLiberado = !somLiberado; $('btnSom').textContent = somLiberado ? '🔊 Som ligado' : '🔈 Som'; if (somLiberado) { ultimoBip = 0; bip(1) } })
+  $('btnSom').addEventListener('click', () => { ligarSom(!somLiberado); if (somLiberado) { ultimoBip = 0; bip(1) } })
+  // ao abrir a página já ligada, tenta destravar sozinho; se o navegador segurar,
+  // o primeiro toque em qualquer lugar resolve — ninguém precisa achar o botão.
+  if (somLiberado) destravarAudio(); else rotularSom()
+  ;['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { if (somLiberado && audioPreso()) destravarAudio() }, { passive: true }))
   $('explodeFechar').addEventListener('click', () => { explodeCalado.add($('explode').dataset.chave); desenhar() })
 
   // ── ações ──

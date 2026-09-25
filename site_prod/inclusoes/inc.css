@@ -32,6 +32,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .ferramentas{display:flex;gap:8px;align-items:center}
 .relogio{font-family:var(--mono);color:var(--mudo);margin-right:6px}
 .btn-sec{background:transparent;color:var(--texto);border:1px solid var(--linha);border-radius:8px;padding:6px 12px}
+/* som ligado mas ainda travado pelo navegador: pisca até alguém tocar na tela (Thailan 25/set) */
+.btn-sec.som-preso{border-color:var(--amarelo);color:var(--amarelo);animation:somPisca 1.6s ease-in-out infinite}
+@keyframes somPisca{50%{opacity:.45}}
 .btn-login{background:var(--painel2);color:var(--texto);border:1px solid var(--linha);border-radius:8px;padding:6px 12px}
 .btn-principal{font-family:var(--disp);font-size:19px;font-weight:600;background:var(--texto);color:var(--chao);border:0;border-radius:8px;padding:8px 16px}
 body.tv .topo .ferramentas .btn-sec#btnTV{background:var(--painel2)}
