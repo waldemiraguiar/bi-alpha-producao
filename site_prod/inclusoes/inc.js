@@ -367,7 +367,20 @@
     if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Clínica avisada · encerrar</button>`
     const cancelar = `<button class="leve" data-acao="cancelar">Cancelar</button>`
     switch (c.etapa) {
-      case 2: return `<button data-acao="amostra_ok">Tem amostra suficiente</button><button class="nao" data-acao="sem_amostra">Não tem amostra → avisar clínica</button>${cancelar}`
+      // ⚠️ Thailan, 24/set 21h22 (áudio): "o pessoal da bioquímica confirmou que tem amostra,
+      // só que pro pessoal da hematologia NÃO APARECEU A OPÇÃO. Quando a bioquímica validou,
+      // automaticamente validou pelos dois. Eu preciso que CADA SETOR VALIDE O SEU."
+      // O cartão já sabia atender dois setores — mas só na etapa 5. Aqui era um botão só, e quem
+      // clicasse primeiro respondia pelo outro sem saber. Agora é o MESMO desenho da etapa 5.
+      case 2: {
+        const lista = (c.setores || c.setor || '').split(',').map(x => x.trim()).filter(Boolean)
+        const semAmostra = `<button class="nao" data-acao="sem_amostra">Não tem amostra → avisar clínica</button>`
+        if (lista.length < 2) return `<button data-acao="amostra_ok">Tem amostra suficiente</button>${semAmostra}${cancelar}`
+        const ok = (c.setores_amostra || '').split(',').map(x => x.trim()).filter(Boolean)
+        return lista.map(k => ok.includes(k)
+          ? `<button class="setor-ok" disabled>✅ ${esc(SETOR_EXAME[k] || k)} — tem amostra</button>`
+          : `<button data-amostra-setor="${esc(k)}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k] || k)} — tem amostra</button>`).join('') + semAmostra + cancelar
+      }
       case 3: return `<button data-acao="clinica_confirmou">${c.cliente_status === 'autorizou' ? 'Clínica avisada · seguir' : 'Clínica autorizou · seguir'}</button><button class="leve" data-acao="aguardando_clinica">${c.pausado ? 'Cobrei a clínica de novo' : 'Mensagem enviada · aguardando clínica'}</button><button class="nao" data-acao="clinica_desistiu">Clínica não quer · cancelar</button>`
       case 4: return `<button data-acao="escritorio_ok">${c.novo_numero ? 'Lançado no HF com NOVO número' : 'Lançado no HF'}</button>${cancelar}`
       case 5: {
@@ -465,7 +478,7 @@
     $('outros').innerHTML = ['cc', 'esc', 'tec'].filter(k => k !== setor).map(k => {
       const d = SETORES[k], lst = outros.filter(c => donoAtual(c) === k)
       return `<div class="grupo-setor" style="--c:${d.cor}"><div class="gs-cab"><span>${d.nome}</span><span>${lst.length}</span></div>
-        <div class="linhas">${lst.length ? lst.map(c => `<div class="lin ${['s-v1', 's-v2', 's-x'].includes(estado(c)) ? 'atras' : ''}"><span><b>${esc(c.pet || '')}</b> +${esc(c.exame)}</span><span class="t">${c.pausado ? 'cliente' : fmt(minutosNaEtapa(c))}</span></div>`).join('') : '<div class="lin mudo">—</div>'}</div></div>`
+        <div class="linhas">${lst.length ? lst.map(c => `<div class="lin ${['s-v1', 's-v2', 's-x'].includes(estado(c)) ? 'atras' : ''}"><span><b>${esc(c.pet || '')}</b> +${esc(c.exame)}${parcialAmostra(c)}</span><span class="t">${c.pausado ? 'cliente' : fmt(minutosNaEtapa(c))}</span></div>`).join('') : '<div class="lin mudo">—</div>'}</div></div>`
     }).join('')
 
     const hoje = new Date().toDateString()
@@ -473,6 +486,23 @@
     $('concluidas').innerHTML = conc.length ? `<div class="linhas">${conc.map(c => `<div class="lin ${c.hf_alerta ? 'atras' : ''}"><span>${c.hf_alerta ? '⚠ não está no HF · ' : ''}✓ <b>${esc(c.pet || '')}</b> +${esc(c.exame)}</span><span class="t">${fmt((T(c.concluido_em) - T(c.criado_em)) / 60000)}</span></div>`).join('')}</div>` : '<div class="lin mudo">nenhuma ainda</div>'
 
     explodir(meus)
+  }
+  /**
+   * O COMUNICADO AO ATENDIMENTO, um por setor (Thailan 24/set):
+   * "quando o pessoal da bioquímica validar, envie um comunicado pro atendimento ao cliente,
+   *  e quando o pessoal da hematologia validar, outro comunicado. Não só um."
+   * O cartão de 2 setores fica na etapa 2 até os dois responderem — então, sem isto, o
+   * Atendimento só ficava sabendo no fim. Agora ele vê cada resposta chegar, na caixa
+   * "Aguardando outros setores", que é onde esse cartão aparece para ele.
+   */
+  function parcialAmostra(c) {
+    const lista = (c.setores || '').split(',').map(x => x.trim()).filter(Boolean)
+    if (lista.length < 2 || c.etapa !== 2 || c.status !== 'aberto') return ''
+    const ok = (c.setores_amostra || '').split(',').map(x => x.trim()).filter(Boolean)
+    if (!ok.length) return ''
+    const falta = lista.filter(k => !ok.includes(k))
+    return ` <span class="parcial">🔬 ${ok.map(k => esc(SETOR_EXAME[k] || k)).join(' + ')} ok` +
+           `${falta.length ? ` · falta ${falta.map(k => esc(SETOR_EXAME[k] || k)).join(', ')}` : ''}</span>`
   }
   function cartaoHTML(c) {
     const _sv = clienteSensivel(c.clinica)
@@ -513,6 +543,21 @@
     }
     // o espelho do de cima: segue visível da etapa 3 até o fim, porque o escritório e quem avisa
     // o laudo também perguntam "essa aqui tinha amostra mesmo?"
+    // confirmação PARCIAL (etapa 2, dois setores): é o "comunicado" que a Thailan pediu —
+    // um por setor, visível assim que cada um responde, sem esperar o cartão andar.
+    const listaSet = (c.setores || '').split(',').map(x => x.trim()).filter(Boolean)
+    if (listaSet.length >= 2 && c.status === 'aberto') {
+      const feitos = (c.setores_amostra || '').split(',').map(x => x.trim()).filter(Boolean)
+      if (feitos.length) {
+        const evs = eventos.filter(e => e.chamado_id === c.id && (e.acao === 'amostra_setor_ok' || e.acao === 'amostra_ok'))
+        const falta = listaSet.filter(k => !feitos.includes(k))
+        out.push(`<div class="info resp-tec">` + feitos.map(k => {
+          const ev = evs.filter(e => String(e.obs || '').startsWith(k)).sort((a, b) => T(b.quando) - T(a.quando))[0]
+          const tipo = ev && /·\s*([^—]+?)\s*—/.exec(String(ev.obs || ''))
+          return `<b class="tag-tem">🔬 ${esc(SETOR_EXAME[k] || k)}: TEM AMOSTRA</b>${ev ? ` <span class="mudo">${esc(ev.por)} às ${hm(ev.quando)}${tipo ? ' · ' + esc(tipo[1].trim()) : ''}</span>` : ''}`
+        }).join('<br>') + (falta.length ? `<br><b class="tag-falta">⏳ falta ${falta.map(k => esc(SETOR_EXAME[k] || k)).join(', ')}</b>` : '') + `</div>`)
+      }
+    }
     if (c.status !== 'sem_amostra' && etapaVisivel(c) >= 3) {
       const ev = ultimoEvento(c, 'amostra_ok')
       if (ev) out.push(`<div class="info resp-tec"><b class="tag-tem">🔬 TEM AMOSTRA</b> confirmado pela Área Técnica${ev.por ? ` · ${esc(ev.por)}` : ''}${ev.quando ? ` às ${hm(ev.quando)}` : ''}${ev.obs ? ` · <b>${esc(ev.obs)}</b>` : ''}</div>`)
@@ -2072,6 +2117,31 @@
 
   // ── ações ──
   $('cartoes').addEventListener('click', async ev => {
+    // 🔬 cada setor confirma a SUA amostra (Thailan 24/set). Mesma pergunta "qual amostra"
+    // do botão de setor único — quem responde continua respondendo em 1 clique.
+    const ba = ev.target.closest('button[data-amostra-setor]')
+    if (ba) {
+      if (!(await garantirLogin())) return
+      const id = +ba.closest('[data-id]').dataset.id
+      const card = chamados.find(x => x.id === id)
+      const setorDoBotao = ba.dataset.amostraSetor
+      const obs = (await pedirAmostra({ ...card, setor: setorDoBotao })) || null
+      ba.disabled = true
+      try {
+        const r = await rpc('inc_amostra_setor', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_setor: setorDoBotao, p_obs: obs })
+        toast(r === 'completo'
+          ? 'Todos os setores confirmaram — seguiu para o Atendimento ao Cliente'
+          // a RPC devolve o CÓDIGO do setor ('hemato'); quem lê o aviso quer o nome
+          : `Marcado. Ainda falta: ${String(r).split(',').map(k => SETOR_EXAME[k.trim()] || k.trim()).join(', ')}`)
+        await carregar(); desenhar()
+      } catch (e) {
+        ba.disabled = false
+        toast(/PGRST202|could not find|schema cache/i.test(e.message || '')
+          ? 'Falta rodar o SQL supabase_inclusoes_18_amostra_por_setor.sql'
+          : e.message)
+      }
+      return
+    }
     const bs = ev.target.closest('button[data-setor-pronto]')
     if (bs) {
       if (!(await garantirLogin())) return
@@ -2509,6 +2579,10 @@
       c('FRED', '640099', 'Fósforo', 'bioquimica', 4, 6, { novo_numero: true, amostra_entrada: min(26 * 60) }),
       c('PETZIUS', '641702', 'Diro AG + Knoff', 'pcr_soro', 5, 12, { setores: 'pcr_soro,hemato', setores_ok: 'pcr_soro' }),
       c('KIRA', '639871', 'Ureia', 'bioquimica', 2, 31),
+      // O CASO REAL DA THAILAN (NINA 643336, 24/set): exames de DOIS setores na mesma inclusão.
+      // Fica no demo porque é o caso que quebrou — quem treina precisa ver o botão por setor.
+      c('NINA', '643336', 'RIFI e Elisa de leish, PCR hemoparasitose, IGG e IGM de erlichia',
+        'bioquimica', 2, 26, { setores: 'bioquimica,hemato', cliente_status: 'quer_saber_amostra', pausado: false }),
       c('REX', '639800', 'Colesterol', 'bioquimica', 7, 0, { status: 'concluido', concluido_em: min(15), criado_em: min(200) }),
       // 21/set — dois rascunhos da IA no modo demonstração, para dar para VER o cartão sem usar
       // dado real: um em que o grupo bate com a clínica, outro em que NÃO bate (é o caso perigoso).
@@ -2560,6 +2634,18 @@
     eventos.push({ chamado_id: 6, quando: min(38), para: 3, acao: 'aguardando_clinica', por: 'DEMO' }, { chamado_id: 7, quando: min(5), para: 1, acao: 'sem_amostra', obs: 'soro hemolisado, não dá para fazer', por: 'DEMO' }, { chamado_id: 8, quando: min(3), para: 7, acao: 'encerrar', por: 'DEMO' })
   }
   function demoRpc(nome, a) {
+    if (nome === 'inc_amostra_setor') {
+      const x = chamados.find(y => y.id === a.p_id); if (!x) return 'erro'
+      const todos = (x.setores || x.setor || '').split(',').map(z => z.trim()).filter(Boolean)
+      const feitos = (x.setores_amostra || '').split(',').map(z => z.trim()).filter(Boolean)
+      if (!feitos.includes(a.p_setor)) feitos.push(a.p_setor)
+      x.setores_amostra = feitos.join(',')
+      const falta = todos.filter(k => !feitos.includes(k))
+      const obs = a.p_setor + (a.p_obs ? ' · ' + a.p_obs : '') + (falta.length ? ' — ainda falta: ' + falta.join(', ') : ' — último setor, seguiu para o Atendimento')
+      eventos.push({ chamado_id: x.id, quando: new Date().toISOString(), para: falta.length ? 2 : 3, acao: falta.length ? 'amostra_setor_ok' : 'amostra_ok', obs, por: 'DEMO' })
+      if (!falta.length) { x.etapa = 3; x.etapa_desde = new Date().toISOString() }
+      return falta.length ? falta.join(', ') : 'completo'
+    }
     if (nome === 'inc_cancel_novo') {
       cancelamentos.unshift({ id: cancelamentos.length + 100, criado_em: new Date().toISOString(),
         quando_pedido: new Date().toISOString(), clinica: a.p_clinica, pet: a.p_pet, req: a.p_req,

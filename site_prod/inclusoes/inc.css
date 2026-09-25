@@ -841,3 +841,8 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .cancel-filtros button{background:var(--painel);color:var(--mudo);border:1px solid var(--linha);border-radius:8px;padding:6px 12px}
 .cancel-filtros button.on{background:var(--texto);color:#fff;border-color:var(--texto)}
 .vazio.ruim{color:var(--vermelho);line-height:1.6}
+/* ⏳ falta o outro setor — Thailan 24/set: o Atendimento precisa ver quem já respondeu
+   e quem ainda não, sem esperar o cartão andar. Amarelo: não é erro, é espera. */
+.tag-falta{display:inline-block;border-radius:6px;padding:2px 10px;background:var(--amarelo);color:#1a1405;
+  font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.05em;white-space:nowrap}
+.lin .parcial{font-size:12px;color:var(--ok);font-weight:600;white-space:nowrap}
