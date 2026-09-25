@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Freio do Robô</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛑</text></svg>">
+<!-- ⚠️ TUDO INLINE DE PROPÓSITO: uma requisição só. Esta página existe para ser aberta com
+     pressa e possivelmente com sinal ruim; cada arquivo extra é uma chance de não carregar. -->
+<style>
+  :root{
+    --fundo:#0f1115; --carta:#171a21; --linha:#262b36; --tinta:#eef1f6; --suave:#98a2b3;
+    --perigo:#e5484d; --perigo-forte:#ff6166; --ok:#30a46c; --ambar:#f5a524;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--fundo);color:var(--tinta);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    min-height:100dvh;overscroll-behavior:none}
+  body{padding:max(18px,env(safe-area-inset-top)) 18px max(24px,env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:18px;max-width:560px;margin:0 auto}
+  h1{font-size:19px;margin:0;letter-spacing:-.01em}
+  .topo{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .quem{font-size:12.5px;color:var(--suave)}
+
+  /* o painel de estado é a coisa mais importante da tela: quem abre com pressa precisa
+     saber EM QUE ESTADO ESTÁ antes de encostar em qualquer botão */
+  .estado{background:var(--carta);border:1px solid var(--linha);border-radius:16px;padding:18px}
+  .estado.parado{border-color:var(--perigo);background:linear-gradient(180deg,rgba(229,72,77,.14),rgba(229,72,77,.05))}
+  .estado.rodando{border-color:rgba(48,164,108,.5);background:linear-gradient(180deg,rgba(48,164,108,.12),rgba(48,164,108,.04))}
+  .selo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:650;letter-spacing:-.02em}
+  .selo .bola{width:13px;height:13px;border-radius:50%;flex:none}
+  .rodando .bola{background:var(--ok);box-shadow:0 0 0 0 rgba(48,164,108,.6);animation:pulso 2.4s infinite}
+  .parado .bola{background:var(--perigo)}
+  @keyframes pulso{70%{box-shadow:0 0 0 11px rgba(48,164,108,0)}100%{box-shadow:0 0 0 0 rgba(48,164,108,0)}}
+  @media (prefers-reduced-motion:reduce){.rodando .bola{animation:none}}
+  .detalhe{margin-top:9px;font-size:13.5px;color:var(--suave);line-height:1.5}
+  .detalhe b{color:var(--tinta);font-weight:600}
+
+  /* BOTÃO DE PARAR — grande o bastante para o polegar achar sem olhar.
+     Segurar 1,5s em vez de tocar: bolso e bolsa apertam botão sozinhos, e parar a
+     operação sem querer num sábado de movimento é caro. Segurar ninguém faz por acidente. */
+  .parar{position:relative;overflow:hidden;border:0;border-radius:20px;padding:34px 20px;width:100%;
+    background:var(--perigo);color:#fff;font:700 21px/1.25 inherit;letter-spacing:-.01em;
+    display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;
+    box-shadow:0 10px 30px rgba(229,72,77,.3);touch-action:none;user-select:none}
+  .parar:active{background:var(--perigo-forte)}
+  .parar .sub{font:500 13px/1.3 inherit;opacity:.9}
+  .parar .enche{position:absolute;inset:0 auto 0 0;width:0;background:rgba(255,255,255,.28);
+    transition:width .05s linear;pointer-events:none}
+  .parar[disabled]{opacity:.45}
+
+  .soltar{border:1px solid var(--linha);background:var(--carta);color:var(--tinta);
+    border-radius:16px;padding:18px;width:100%;font:600 17px/1.3 inherit;cursor:pointer}
+  .soltar:active{background:#1d222b}
+  form{display:flex;flex-direction:column;gap:11px}
+  input,select{width:100%;padding:15px;border-radius:13px;border:1px solid var(--linha);
+    background:var(--carta);color:var(--tinta);font:16px inherit}
+  input::placeholder{color:#6b7280}
+  label{font-size:12.5px;color:var(--suave)}
+  .oque{font-size:12.5px;color:var(--suave);line-height:1.6;
+    background:var(--carta);border:1px solid var(--linha);border-radius:14px;padding:14px 16px}
+  .oque b{color:var(--tinta)}
+  .erro{color:var(--perigo);font-size:13.5px}
+  .ok{color:var(--ok);font-size:13.5px}
+  [hidden]{display:none!important}
+  .rodape{text-align:center;font-size:11.5px;color:#5b6472;margin-top:auto;padding-top:10px}
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <h1>🛑 Freio do robô</h1>
+  <span class="quem" id="quem"></span>
+</div>
+
+<!-- ENTRAR -->
+<form id="login" hidden>
+  <label for="nome">Quem é você</label>
+  <select id="nome"><option value="">— escolha —</option></select>
+  <label for="senha">Senha (a mesma do Quadro de Inclusões)</label>
+  <input id="senha" type="password" autocomplete="current-password" inputmode="text">
+  <button class="soltar" type="submit">Entrar</button>
+  <div class="erro" id="erroLogin" hidden></div>
+</form>
+
+<!-- ESTADO -->
+<div class="estado" id="estado" hidden>
+  <div class="selo"><span class="bola"></span><span id="seloTxt">—</span></div>
+  <div class="detalhe" id="detalhe"></div>
+</div>
+
+<!-- PARAR -->
+<button class="parar" id="btParar" hidden>
+  <span class="enche" id="enche"></span>
+  <span>SEGURE PARA PARAR TUDO</span>
+  <span class="sub">solta antes de 1,5s e não acontece nada</span>
+</button>
+
+<!-- SOLTAR -->
+<form id="formSoltar" hidden>
+  <label for="senha2">Para voltar a mandar mensagem, confirme a senha</label>
+  <input id="senha2" type="password" autocomplete="current-password">
+  <button class="soltar" type="submit">🟢 Soltar o freio — o robô volta a mandar</button>
+  <div class="erro" id="erroSoltar" hidden></div>
+</form>
+
+<div class="oque" id="oque" hidden>
+  <b>O que o freio para:</b> toda mensagem que o robô manda — aviso de coleta para a clínica,
+  parada fixa, lista de obrigatórias e relatório de rota. Nas <b>três máquinas</b> ao mesmo tempo.<br><br>
+  <b>O que ele não faz:</b> não apaga nada e não desliga o robô. Ele continua lendo e
+  registrando tudo; só não fala. Ao soltar, o que ficou parado sai — menos o que já
+  envelheceu mais de 1 hora, que é descartado sozinho.<br><br>
+  <b>Demora até 15 segundos</b> para as máquinas perceberem.
+</div>
+
+<div class="rodape" id="rodape"></div>
+
+<script>
+const SB='https://lrwjcdvporaivxvfuiwt.supabase.co'
+const K='sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
+const $=s=>document.querySelector(s)
+// ⛔ nada de lista chutada aqui: os nomes vêm da MESMA fonte da Fila (sep_team_names).
+// Uma lista escrita à mão envelhece calada — entra gente nova, sai gente, e um dia alguém
+// abre isto numa emergência e não acha o próprio nome.
+let NOMES=[]
+
+// A sessão aqui dura 30 dias, não 12 horas como na Fila: numa emergência, cair na tela de
+// login é justamente o que não pode acontecer. O que protege não é a validade curta — é
+// que SOLTAR o freio sempre pede a senha de novo. Parar é fácil; voltar a mandar é que é sério.
+const lerSes=()=>{try{const s=JSON.parse(localStorage.getItem('freio_sessao')||'null');return s&&s.ate>Date.now()?s:null}catch{return null}}
+const gravarSes=s=>{try{localStorage.setItem('freio_sessao',JSON.stringify(s))}catch{}}
+let sessao=lerSes(), estado=null
+
+async function rpc(fn,args){
+  const r=await fetch(`${SB}/rest/v1/rpc/${fn}`,{method:'POST',
+    headers:{apikey:K,Authorization:`Bearer ${K}`,'Content-Type':'application/json'},
+    body:JSON.stringify(args)})
+  const t=await r.text()
+  if(!r.ok) throw new Error((()=>{try{return JSON.parse(t).message||t}catch{return t}})())
+  try{return JSON.parse(t)}catch{return t}
+}
+
+async function lerEstado(){
+  try{
+    const r=await fetch(`${SB}/rest/v1/robo_freio?select=parado,por,motivo,quando&id=eq.1&limit=1`,
+      {headers:{apikey:K,Authorization:`Bearer ${K}`},cache:'no-store'})
+    const j=await r.json()
+    estado=Array.isArray(j)&&j.length?j[0]:null
+  }catch{ estado=null }
+  pintar()
+}
+
+function quando(q){
+  if(!q) return ''
+  const d=new Date(q), min=Math.round((Date.now()-d)/60000)
+  const hm=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'})
+  if(min<1) return 'agora mesmo'
+  if(min<60) return `há ${min} min (${hm})`
+  const dia=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',timeZone:'America/Sao_Paulo'})
+  return `${dia} às ${hm}`
+}
+
+function pintar(){
+  const dentro=!!sessao
+  $('#login').hidden=dentro
+  $('#estado').hidden=!dentro
+  $('#oque').hidden=!dentro
+  $('#quem').textContent=dentro?sessao.nome:''
+  if(!dentro) return
+  if(!estado){
+    $('#estado').className='estado'
+    $('#seloTxt').textContent='não consegui ler'
+    $('#detalhe').innerHTML='Sem resposta do sistema agora. <b>Isso não significa que o robô parou.</b> Tente de novo em instantes.'
+    $('#btParar').hidden=false; $('#formSoltar').hidden=true
+    return
+  }
+  const p=!!estado.parado
+  $('#estado').className='estado '+(p?'parado':'rodando')
+  $('#seloTxt').textContent=p?'PARADO':'rodando normal'
+  $('#detalhe').innerHTML=p
+    ? `Parado por <b>${(estado.por||'?')}</b> ${quando(estado.quando)}.${estado.motivo?`<br>Motivo: <b>${estado.motivo}</b>`:''}<br><br>Nenhuma mensagem está saindo em nenhuma das três máquinas.`
+    : `O robô está mandando mensagem normalmente.${estado.por?`<br>Última mudança: <b>${estado.por}</b> ${quando(estado.quando)}.`:''}`
+  $('#btParar').hidden=p
+  $('#formSoltar').hidden=!p
+  $('#rodape').textContent='atualiza sozinho a cada 10 s'
+}
+
+// ── segurar para parar ──────────────────────────────────────────────────────────
+const SEGURAR=1500
+let t0=null, raf=null
+function comecou(ev){
+  ev.preventDefault()
+  if(t0) return
+  t0=Date.now()
+  const passo=()=>{
+    if(!t0) return
+    const p=Math.min(1,(Date.now()-t0)/SEGURAR)
+    $('#enche').style.width=(p*100)+'%'
+    if(p>=1){ soltarDedo(true); return }
+    raf=requestAnimationFrame(passo)
+  }
+  raf=requestAnimationFrame(passo)
+}
+function soltarDedo(completou){
+  if(raf) cancelAnimationFrame(raf)
+  raf=null; t0=null
+  $('#enche').style.width='0'
+  if(completou) parar()
+}
+const bt=$('#btParar')
+bt.addEventListener('pointerdown',comecou)
+bt.addEventListener('pointerup',()=>soltarDedo(false))
+bt.addEventListener('pointercancel',()=>soltarDedo(false))
+bt.addEventListener('pointerleave',()=>soltarDedo(false))
+bt.addEventListener('contextmenu',e=>e.preventDefault())
+
+async function parar(){
+  bt.disabled=true
+  try{ if(navigator.vibrate) navigator.vibrate([40,60,40]) }catch{}
+  try{
+    await rpc('robo_freio_puxar',{p_nome:sessao.nome,p_senha:sessao.senha,p_parar:true,p_motivo:'parado pelo celular'})
+    await lerEstado()
+  }catch(e){
+    alert(/login/i.test(e.message)?'Senha não confere mais — entre de novo.':'Não consegui parar: '+e.message)
+    if(/login/i.test(e.message)){ localStorage.removeItem('freio_sessao'); sessao=null; pintar() }
+  }
+  bt.disabled=false
+}
+
+$('#formSoltar').addEventListener('submit',async ev=>{
+  ev.preventDefault()
+  const senha=$('#senha2').value
+  $('#erroSoltar').hidden=true
+  try{
+    await rpc('robo_freio_puxar',{p_nome:sessao.nome,p_senha:senha,p_parar:false,p_motivo:null})
+    sessao={...sessao,senha}; gravarSes(sessao)
+    $('#senha2').value=''
+    await lerEstado()
+  }catch(e){
+    $('#erroSoltar').textContent=/login/i.test(e.message)?'Senha não confere':'Erro: '+e.message
+    $('#erroSoltar').hidden=false
+  }
+})
+
+$('#login').addEventListener('submit',async ev=>{
+  ev.preventDefault()
+  const nome=$('#nome').value, senha=$('#senha').value
+  $('#erroLogin').hidden=true
+  if(!nome){ $('#erroLogin').textContent='Escolha seu nome'; $('#erroLogin').hidden=false; return }
+  try{
+    await rpc('inc_coleta_pegar',{p_nome:nome,p_senha:senha,p_id:0,p_acao:'ping'})
+  }catch(e){
+    $('#erroLogin').textContent=/não conferem|login/i.test(e.message)?'Senha não confere':'Erro: '+e.message
+    $('#erroLogin').hidden=false; return
+  }
+  sessao={nome,senha,ate:Date.now()+30*24*3600e3}
+  gravarSes(sessao); pintar(); lerEstado()
+})
+
+async function carregarNomes(){
+  try{
+    const d=await rpc('sep_team_names',{})
+    NOMES=(d||[]).map(x=>typeof x==='string'?x:(x.nome||'')).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt'))
+  }catch{ NOMES=[] }
+  if(!NOMES.length){
+    // sem a lista, vira campo de digitar: melhor entrar torto do que não entrar numa emergência
+    $('#nome').outerHTML='<input id="nome" autocomplete="username" placeholder="seu nome">'
+  }else{
+    NOMES.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;$('#nome').appendChild(o)})
+    try{ const u=localStorage.getItem('agenda_ultimo_nome'); if(u&&NOMES.includes(u)) $('#nome').value=u }catch{}
+  }
+}
+if(!sessao) carregarNomes()
+pintar()
+if(sessao) lerEstado()
+setInterval(()=>{ if(sessao&&!document.hidden) lerEstado() },10000)
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&sessao) lerEstado() })
+</script>
+</body>
+</html>
