@@ -5,7 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
 <title>Freio do Robô</title>
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛑</text></svg>">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icone-512.png">
+<!-- iOS ainda quer estas duas para abrir sem a barra do Safari quando salvo na tela de início -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Freio">
+<meta name="mobile-web-app-capable" content="yes">
 <!-- ⚠️ TUDO INLINE DE PROPÓSITO: uma requisição só. Esta página existe para ser aberta com
      pressa e possivelmente com sinal ruim; cada arquivo extra é uma chance de não carregar. -->
 <style>
@@ -272,8 +279,35 @@ async function carregarNomes(){
   }
 }
 if(!sessao) carregarNomes()
+// ── app ────────────────────────────────────────────────────────────────────────
+// O SW deixa a página abrir na hora mesmo com sinal ruim. Se falhar, não faz diferença
+// nenhuma para o funcionamento: é só velocidade de abertura.
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{})
+
+// No iPhone não existe botão de instalar: o caminho é Compartilhar → Adicionar à Tela de
+// Início, e ninguém descobre isso sozinho. Então eu digo — uma vez, e só se ainda não está
+// rodando como app.
+const comoApp = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone
+function convidar(){
+  if(comoApp) return
+  let jaVi=false; try{ jaVi=localStorage.getItem('freio_convite')==='1' }catch{}
+  if(jaVi) return
+  const iOS=/iPad|iPhone|iPod/.test(navigator.userAgent)
+  const d=document.createElement('div')
+  d.className='oque'
+  d.style.borderColor='var(--ambar)'
+  d.innerHTML = `<b>📲 Deixe isto como app no celular</b><br>${iOS
+    ? 'Toque em <b>Compartilhar</b> (o quadradinho com a seta pra cima) e depois em <b>Adicionar à Tela de Início</b>.'
+    : 'Abra o menu do navegador (⋮) e toque em <b>Instalar aplicativo</b> ou <b>Adicionar à tela inicial</b>.'}
+    <br><br>Assim ele abre num toque, sem digitar endereço — que é o que você vai querer no aperto.
+    <br><br><button class="soltar" id="btVi" style="padding:12px;font-size:14px">entendi, não mostrar mais</button>`
+  document.body.insertBefore(d, $('#rodape'))
+  $('#btVi').onclick=()=>{ try{localStorage.setItem('freio_convite','1')}catch{}; d.remove() }
+}
+
 pintar()
 if(sessao) lerEstado()
+convidar()
 setInterval(()=>{ if(sessao&&!document.hidden) lerEstado() },10000)
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&sessao) lerEstado() })
 </script>
