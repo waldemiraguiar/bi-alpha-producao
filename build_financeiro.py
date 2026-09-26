@@ -642,6 +642,11 @@ def build():
                            "Valores reais (Contas Médicas + Recurso de Glosa) informados manualmente por competência. "
                            "Some no faturamento TOTAL; não é rateada nas quebras por cliente/exame."}
 
+    # ---- Pet Love: CONSOLIDADO exame-a-exame (jan→set/2026, base real dos relatórios financeiros .xls) ----
+    # Gerado offline a partir dos 9 relatórios financeiros Pet Love (16 colunas: atend, exame, plano, vet,
+    # repasse, copart, status). Vive cifrado em data_petlove.enc. Se ausente, a aba não quebra.
+    D["petlove_consolidado"] = _PLF.get("petlove_consolidado_2026.json", {})
+
     # ---- Pet Love: MARGEM (reembolso PL vs nossa tabela varejo) + exames ----
     # Dados extraídos OFFLINE dos relatórios "Informações do Pagamento" (Contas Médicas)
     # e da Tabela de Preços Alpha Mar/2026. Atualizar rodando os extratores quando vierem

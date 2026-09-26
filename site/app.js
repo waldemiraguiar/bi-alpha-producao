@@ -955,8 +955,93 @@ function plYearStats(D){
     projCons:PC.t,projMonC:PC.mon,projConsPct:pct(PC.t),
     projOtim:PO.t,projMonO:PO.mon,projOtimPct:pct(PO.t)};
 }
+/* ===== Pet Love · CONSOLIDADO exame-a-exame (base real dos relatórios financeiros) ===== */
+function plConsolidado(D){
+  const C=D.petlove_consolidado; if(!C||!C.total||!C.total.exames) return '';
+  const T=C.total, PM=C.por_mes||{}, EX=C.exames||{}, PLN=C.planos||{}, ST=C.status||{}, VT=C.vets||{};
+  const meses=Object.keys(PM).sort();
+  const pago=ST['Pago']||{n:0,rep:0}, nao=ST['Não Pago']||{n:0,rep:0};
+  const pagoPct=T.repasse>0?100*pago.rep/T.repasse:0;
+  const rng=(a,b)=>`${MES3PL[+a.slice(5,7)]}→${MES3PL[+b.slice(5,7)]}/${a.slice(2,4)}`;
+  const periodo=meses.length?rng(meses[0],meses[meses.length-1]):'';
+  // rankings
+  const exArr=Object.entries(EX).map(([k,v])=>({nome:k,...v}));
+  const topRep=[...exArr].sort((a,b)=>b.rep-a.rep).slice(0,8);
+  const topVol=[...exArr].sort((a,b)=>b.n-a.n).slice(0,8);
+  const top5rep=[...exArr].sort((a,b)=>b.rep-a.rep).slice(0,5).reduce((s,x)=>s+x.rep,0);
+  // grupos
+  const BASICO=['Creatinina','Uréia','Alanina Aminotransferase (TGP/ALT)','Fosfatase Alcalina (FA)','Aspartato Aminotransferase (TGO/AST)','Proteínas Totais e Frações'];
+  const bqN=BASICO.reduce((s,k)=>s+((EX[k]||{}).n||0),0), bqR=BASICO.reduce((s,k)=>s+((EX[k]||{}).rep||0),0);
+  const alto=exArr.filter(x=>x.ticket>=80); const altoN=alto.reduce((s,x)=>s+x.n,0), altoR=alto.reduce((s,x)=>s+x.rep,0);
+  // planos
+  const plArr=Object.entries(PLN).map(([k,v])=>({nome:k,...v})).sort((a,b)=>b.rep-a.rep);
+  const petloveRep=plArr.filter(p=>/^petlove/i.test(p.nome)).reduce((s,p)=>s+p.rep,0);
+  const top2=(plArr[0]?plArr[0].rep:0)+(plArr[1]?plArr[1].rep:0);
+  // vet vazio
+  const vazio=VT['']||{n:0,rep:0,atend:0};
+  const vazioPct=T.repasse>0?100*vazio.rep/T.repasse:0;
+  // ticket por mês (estabilidade)
+  const tks=meses.map(m=>PM[m].ticket_exame); const tkMin=Math.min(...tks), tkMax=Math.max(...tks);
+  const mxRep=Math.max(...meses.map(m=>PM[m].repasse),1);
+  const pf=(a,b)=>b>0?(100*a/b).toFixed(1)+'%':'—';
+  const brl2=n=>'R$ '+(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  // barra util (track de largura fixa p/ proporção ficar visível em coluna estreita)
+  const bar=(w,col)=>`<div style="width:120px;height:10px;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden"><div style="height:10px;width:${Math.round(w)}%;background:${col};border-radius:6px"></div></div>`;
+
+  let h=`<div class="card" style="margin:2px 0 16px;border-color:rgba(0,212,255,.35);background:linear-gradient(180deg,rgba(0,212,255,.05),transparent)">
+    <h3>🔬 Consolidado exame-a-exame — ${periodo}/2026 <span class="cap">base REAL dos relatórios financeiros (${num(T.exames)} exames · ${num(T.atendimentos)} atendimentos · repasse ${brlk(T.repasse)})</span></h3>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><div class="lbl">🎟️ Ticket médio / EXAME</div><div class="val" style="color:var(--cyan)">${brl2(T.ticket_medio_exame)}</div><div class="delta">estável ${brl2(tkMin)}–${brl2(tkMax)} em ${meses.length} meses</div></div>
+      <div class="kpi"><div class="lbl">Ticket médio / ATENDIMENTO</div><div class="val">${brl2(T.ticket_medio_atend)}</div><div class="delta">repasse por visita</div></div>
+      <div class="kpi"><div class="lbl">Exames por atendimento</div><div class="val" style="color:var(--green)">${T.exames_por_atend.toFixed(2)}</div><div class="delta">intensidade diagnóstica</div></div>
+      <div class="kpi"><div class="lbl">% Pago (recebível)</div><div class="val" style="color:${pagoPct>=90?'var(--green)':'var(--amber)'}">${pagoPct.toFixed(1)}%</div><div class="delta">${brlk(nao.rep)} em aberto</div></div>
+    </div></div>`;
+
+  // repasse + ticket por mês
+  h+=`<div class="card" style="margin-bottom:16px"><h3>Repasse mensal · ticket estável <span class="cap">o ticket/exame variou só entre ${brl(tkMin)} e ${brl(tkMax)} o ano todo — previsibilidade de receita unitária</span></h3>
+    <table class="atab"><thead><tr><th>Mês</th><th class="num">Atend.</th><th class="num">Exames</th><th class="num">Repasse</th><th style="width:120px">—</th><th class="num">Ticket/exame</th><th class="num">Ticket/atend</th><th class="num">% Pago</th></tr></thead><tbody>`+
+    meses.slice().reverse().map(m=>{const x=PM[m];const parcial=(m===meses[meses.length-1]);const pg=x.repasse>0?100*x.pago/x.repasse:0;
+      return `<tr><td>${MES3PL[+m.slice(5,7)]}/${m.slice(2,4)}${parcial?' <span style="color:var(--amber);font-size:10px;font-weight:700">parcial</span>':''}</td>
+        <td class="num">${num(x.atendimentos)}</td><td class="num">${num(x.exames)}</td>
+        <td class="num" style="color:var(--cyan);font-weight:600">${brl(x.repasse)}</td>
+        <td>${bar(100*x.repasse/mxRep,'var(--cyan)')}</td>
+        <td class="num">${brl2(x.ticket_exame)}</td><td class="num" style="color:var(--mut)">${brl2(x.ticket_atend)}</td>
+        <td class="num" style="color:${parcial?'var(--mut)':(pg>=90?'var(--green)':'var(--amber)')}">${parcial?'—':pg.toFixed(0)+'%'}</td></tr>`;}).join('')+
+    `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">O mês corrente aparece "parcial" e com % Pago baixo por estar dentro do ciclo de faturamento — não é inadimplência.</div></div>`;
+
+  // mix de exames — 2 colunas
+  const exTbl=(rows,val)=>`<table class="atab"><thead><tr><th>Exame</th><th class="num">Volume</th><th class="num">${val==='rep'?'Receita':'Ticket'}</th><th class="num">${val==='rep'?'% rec.':'% vol.'}</th></tr></thead><tbody>`+
+    rows.map(x=>`<tr><td>${esc(x.nome)}</td><td class="num">${num(x.n)}</td><td class="num" style="color:${val==='rep'?'var(--cyan)':'var(--mut)'}">${val==='rep'?brl(x.rep):brl2(x.ticket)}</td><td class="num" style="color:var(--mut)">${val==='rep'?pf(x.rep,T.repasse):pf(x.n,T.exames)}</td></tr>`).join('')+`</tbody></table>`;
+  h+=`<div class="grid g2" style="margin-bottom:16px">
+    <div class="card"><h3>Top exames por RECEITA <span class="cap">onde está o dinheiro</span></h3>${exTbl(topRep,'rep')}</div>
+    <div class="card"><h3>Top exames por VOLUME <span class="cap">o giro da bancada</span></h3>${exTbl(topVol,'vol')}</div></div>`;
+
+  // insights (2 motores + concentração + planos + dado)
+  h+=`<div class="grid g2" style="margin-bottom:16px">
+    <div class="card"><h3>Os dois motores de receita</h3>
+      <div style="margin:10px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--mut);font-weight:600">Painel bioquímico básico (6 exames)</span><b>${pf(bqR,T.repasse)} da receita</b></div>${bar(100*bqN/T.exames,'var(--green)')}<div style="font-size:11px;color:var(--mut);margin-top:3px">${pf(bqN,T.exames)} do VOLUME — alto giro, arroz-com-feijão</div></div>
+      <div style="margin:10px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--mut);font-weight:600">Ponta de alto valor (PCR/sorologia/histo/cultura)</span><b>${pf(altoR,T.repasse)} da receita</b></div>${bar(100*altoR/T.repasse,'var(--amber)')}<div style="font-size:11px;color:var(--mut);margin-top:3px">só ${pf(altoN,T.exames)} do volume · ticket médio ${brl2(altoR/Math.max(altoN,1))} — aqui mora a margem</div></div>
+      <div style="font-size:11.5px;color:var(--mut);margin-top:6px">Top 5 exames concentram <b style="color:var(--fg)">${pf(top5rep,T.repasse)}</b> da receita — carteira fácil de gerir.</div></div>
+    <div class="card"><h3>Carteira & dado</h3>
+      <div style="margin:10px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--mut);font-weight:600">Planos Petlove (todos)</span><b>${pf(petloveRep,T.repasse)}</b></div>${bar(100*petloveRep/T.repasse,'var(--cyan)')}<div style="font-size:11px;color:var(--mut);margin-top:3px">Top 2 (Tranquilo+Ideal) = ${pf(top2,T.repasse)} · ${Object.keys(PLN).length} planos distintos (multi-operadora: Porto, Itaú, Health for Pet)</div></div>
+      <div style="margin:10px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--mut);font-weight:600">⚠ Receita sem veterinário identificado</span><b style="color:var(--amber)">${vazioPct.toFixed(1)}%</b></div>${bar(vazioPct,'var(--amber)')}<div style="font-size:11px;color:var(--mut);margin-top:3px">${brlk(vazio.rep)} (${num(vazio.atend)} atend.) — maior oportunidade de CRM: preencher o requisitante</div></div>
+      <div style="font-size:11.5px;color:var(--mut);margin-top:6px"><b style="color:var(--fg)">${num(Object.keys(VT).length-1)}</b> veterinários/clínicas requisitando — rede pulverizada e saudável.</div></div></div>`;
+
+  // benchmark de mercado
+  h+=`<div class="card" style="margin-bottom:18px;border-color:rgba(0,229,160,.3)">
+    <h3>🌍 Benchmark de mercado — o palco</h3>
+    <div class="grid g2" style="font-size:12.5px;line-height:1.55">
+      <div><b style="color:var(--green)">Mercado pet Brasil 2026: R$ 81 bi</b> (+4,35%). Serviços veterinários = R$ 14 bi (17,3%). Análises clínicas vet é o segmento em expansão (point-of-care CAGR 8,3%).<br><span style="color:var(--mut)">Fonte: Panorama PetVet / ABRAS 2025-26</span></div>
+      <div><b style="color:var(--green)">Petlove é líder: 65% de market share, +700 mil vidas</b> em planos de saúde pet. A Alpha já é fornecedora do maior player do país.<br><span style="color:var(--mut)">Fonte: Exame / Central do Varejo</span></div>
+      <div><b style="color:var(--green)">IDEXX (referência global): reference lab US$ 1,42 bi em 2025 (+9–11%)</b>, puxado por preço (+4%) e intensidade diagnóstica por visita (+5% volume/visita). É exatamente o vetor dos nossos ${T.exames_por_atend.toFixed(1)} exames/atendimento.<br><span style="color:var(--mut)">Fonte: IDEXX FY2025</span></div>
+      <div><b style="color:var(--green)">Mars × IDEXX disputam um mercado de US$ 45 bi</b> em diagnóstico animal — o ativo "laboratório com dados estruturados + IA" está em consolidação mundial.<br><span style="color:var(--mut)">Fonte: MaximizeMarketResearch</span></div>
+    </div></div>`;
+  return h;
+}
+
 function renderPetlove(D){
   const wrap=document.getElementById('petlove'); if(!wrap) return;
+  const _plCons=plConsolidado(D);
   const pl=D.petlove||{}; const men=pl.mensal||{}; const at=pl.atend_mensal||{};
   const mensalLab={}; (D.mensal||[]).forEach(x=>mensalLab[x.ym]={fat:x.fat||0,qtd:x.qtd||0});
   const yms=Object.keys(men).sort();
@@ -1033,7 +1118,26 @@ function renderPetlove(D){
     rec.map(ym=>{const v=men[ym]||0;const lab=(mensalLab[ym]||{}).fat||0;const q=(mensalLab[ym]||{}).qtd||0;const p=lab+v>0?100*v/(lab+v):0;const n=(at[ym]||{}).n_atend;
       return `<tr><td>${ymLabel(ym)}</td><td class="num">${lab?brl(lab):'—'}</td><td class="num">${q?num(q):'—'}</td><td class="num" style="color:var(--cyan)">${v?brl(v):'—'}</td><td class="num">${n?num(n):'—'}</td><td class="num" style="color:#00D4FF;font-weight:700">${PL_EXAMES[ym]?num(PL_EXAMES[ym]):'—'}</td><td class="num">${(lab+v)?brl(lab+v):'—'}</td><td class="num" style="font-weight:700">${v?p.toFixed(1)+'%':'—'}</td></tr>`;}).join('')+
     `</tbody></table><div style="color:var(--mut);font-size:11px;margin-top:8px">Produção interna e exames vêm do sistema (inclui 2026). "Atend. PL" e "Exames PL" (produção Pet Love, plano Petlove%) só constam dos meses cujos relatórios Pet Love foram importados. Mande o export do mês que eu adiciono.</div></div>`;
-  wrap.innerHTML=html;
+  // ---- sub-abas dentro de Pet Love: Consolidado 2026 (default) | Repasse & Projeção ----
+  const temCons = !!_plCons;
+  const subnav = `<style>.plsubnav{display:flex;gap:8px;margin:2px 0 14px;flex-wrap:wrap}
+    .plsub{background:rgba(255,255,255,.05);color:var(--mut);border:1px solid var(--line);border-radius:9px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer}
+    .plsub.on{background:var(--cyan);color:#04212a;border-color:transparent}</style>
+    <div class="plsubnav">
+      <button class="plsub${temCons?' on':''}" data-s="cons"${temCons?'':' disabled style="opacity:.4;cursor:not-allowed"'}>🔬 Consolidado 2026</button>
+      <button class="plsub${temCons?'':' on'}" data-s="proj">📈 Repasse &amp; Projeção</button></div>`;
+  wrap.innerHTML = subnav
+    + `<div id="plsub-cons"${temCons?'':' style="display:none"'}>${_plCons||''}</div>`
+    + `<div id="plsub-proj"${temCons?' style="display:none"':''}>${html}</div>`;
+  const sbtns=[...wrap.querySelectorAll('.plsub')];
+  sbtns.forEach(b=>b.addEventListener('click',()=>{
+    if(b.disabled) return;
+    sbtns.forEach(o=>o.classList.toggle('on',o===b));
+    const s=b.dataset.s;
+    document.getElementById('plsub-cons').style.display=(s==='cons')?'':'none';
+    document.getElementById('plsub-proj').style.display=(s==='proj')?'':'none';
+    if(s==='proj'){ drawPetloveChart(); drawPetloveYearChart(); }
+  }));
 }
 function drawPetloveChart(){
   const D=window.__D; if(!D) return; const cv=document.getElementById('plChart'); if(!cv||typeof Chart==='undefined') return;
