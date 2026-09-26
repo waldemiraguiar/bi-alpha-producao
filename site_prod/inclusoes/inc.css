@@ -2,7 +2,7 @@
 :root{
   --chao:#eef1f6; --painel:#ffffff; --painel2:#f4f7fb; --linha:#dfe4ec;
   --texto:#111827; --mudo:#667085; --fraco:#98a2b3;
-  --cc:#2563eb; --esc:#0d9488; --tec:#7c3aed; --ia:#db2777; --ia-fundo:#fdf2f8; --moto:#ea580c; --moto-fundo:#fff7ed;
+  --cc:#2563eb; --esc:#0d9488; --tec:#7c3aed; --tri:#c2410c; --ia:#db2777; --ia-fundo:#fdf2f8; --moto:#ea580c; --moto-fundo:#fff7ed;
   --amarelo:#d97706; --vermelho:#dc2626; --pausa:#98a2b3; --ok:#16a34a;
   --sombra:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
   --disp:"Barlow Condensed","Arial Narrow",sans-serif;
@@ -834,6 +834,17 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .cam:hover{border-color:var(--cc);background:var(--painel)}
 .cam b{display:block;font-size:16px;margin-bottom:3px}
 .cam span{display:block;font-size:13.5px;color:var(--mudo);line-height:1.45}
+/* setor TRIAGEM (Fúlvio 25/set): aba nova, só trata cancelamento */
+.selo-tri{background:var(--tri);color:#fff;border-radius:6px;padding:2px 8px;font-family:var(--disp);letter-spacing:.02em}
+#abas button[data-setor="tri"].tem{border-color:var(--tri);color:var(--tri)}
+.tri-filtros{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.tri-filtros button{font:inherit;font-size:14px;padding:6px 12px;border-radius:8px;border:1px solid var(--linha);background:transparent;color:var(--mudo);cursor:pointer}
+.tri-filtros button.on{background:var(--tri);border-color:var(--tri);color:#fff}
+/* requisição toda × exame específico */
+.alvo-escolha{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}
+.alvo{font:inherit;font-size:14px;padding:9px 14px;border-radius:9px;border:1.5px solid var(--linha);background:var(--painel);cursor:pointer}
+.alvo:hover{border-color:var(--cc)}
+.alvo.on{border-color:var(--cc);background:#eff6ff;font-weight:700}
 .cam-voltar{display:inline-block;font:inherit;font-size:13px;background:none;border:none;color:var(--cc);text-decoration:underline;padding:0;margin-bottom:10px;cursor:pointer}
 .linha-busca{display:flex;gap:8px}
 .linha-busca input{flex:1;min-width:0}

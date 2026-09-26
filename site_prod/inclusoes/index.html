@@ -20,6 +20,7 @@
     <button data-setor="cc">Atendimento ao Cliente</button>
     <button data-setor="esc">Escritório</button>
     <button data-setor="tec">Área Técnica</button>
+    <button data-setor="tri">Triagem</button>
     <button data-setor="todos">Todos</button>
     <button data-setor="terremoto" class="aba-terremoto calmo">🚨 TERREMOTO</button>
     <button data-setor="confere" class="aba-confere">🔍 Conferência</button>
@@ -76,6 +77,16 @@
        "É quando um cliente manda uma mensagem pra gente através do WhatsApp, dentro do grupo,
         que ele não quer mais um exame. Normalmente ele já afirma que gostaria de cancelar, ou
         ele pergunta se ainda dá tempo de fazer o cancelamento." -->
+  <!-- 🧭 TRIAGEM (Fúlvio 25/set 18h17). Setor novo: só trata cancelamento, e trata
+       junto com o Escritório — os dois dão CIENTE ao mesmo tempo. -->
+  <section id="vTriagem" hidden>
+    <div class="rast-topo"><h2><span class="selo-tri">🧭 TRIAGEM</span> Cancelamentos para dar ciente</h2>
+      <p class="mudo">O Atendimento ao Cliente registra e manda para cá <b>e para o Escritório ao mesmo tempo</b>.
+      Cada lado dá o seu ciente. O prazo é de <b>5 minutos</b> — cancelamento é corrida contra o exame ser processado.</p></div>
+    <div class="tri-filtros"><button data-tper="abertos" class="on">Esperando ciente</button><button data-tper="dia">Meus cientes de hoje</button></div>
+    <div class="rast-lista" id="triLista"></div>
+  </section>
+
   <section id="vCancel" hidden>
     <div class="rast-topo">
       <h2><span class="selo-cancel">🚫 CANCELAMENTO</span> Solicitações de cancelamento</h2>
@@ -221,27 +232,41 @@
       <p class="erro" id="cReqErro"></p>
       <!-- o operador confere se enxergamos o cliente e o pet certos antes de seguir -->
       <div id="cConfere" class="cancel-confere" hidden></div>
-      <!-- cada exame da requisição, com o estado que o HF deu -->
-      <div id="cExames" hidden>
-        <label>Qual exame ele quer cancelar</label>
-        <div class="ex-lista" id="cExLista"></div>
+    </div>
+
+    <!-- PASSO 2B — sem amostra no laboratório. Aqui a requisição não existe no HF,
+         então a identificação é toda à mão — e é o caminho em que o Fúlvio pediu o TUTOR. -->
+    <div id="cPassoSem" hidden>
+      <button type="button" class="lnk cam-voltar" data-cvoltar="1">← escolher outro começo</button>
+      <label>Clínica <span class="obrig">*</span></label>
+      <input id="cClinica" list="listaClinicas" autocomplete="off" placeholder="digite e escolha — as opções vêm do HF">
+      <datalist id="listaClinicas"></datalist>
+      <div class="linha2">
+        <div><label>Pet <span class="obrig">*</span></label><input id="cPet" autocomplete="off"></div>
+        <div><label>Tutor</label><input id="cTutor" autocomplete="off"></div>
+      </div>
+    </div>
+
+    <!-- o que cancelar: a requisição toda ou um exame (Fúlvio 18h16) -->
+    <div id="cAlvo" hidden>
+      <label>O que ele quer cancelar <span class="obrig">*</span></label>
+      <div class="alvo-escolha">
+        <button type="button" class="alvo" data-calvo="exame">Um exame específico</button>
+        <button type="button" class="alvo" data-calvo="tudo">A requisição toda</button>
+      </div>
+      <div id="cAlvoExame" hidden>
+        <div id="cExames" hidden>
+          <div class="ex-lista" id="cExLista"></div>
+        </div>
+        <input id="cExame" list="listaExames" autocomplete="off" placeholder="digite e escolha — as opções vêm do HF" hidden>
+        <datalist id="listaExames"></datalist>
         <div id="cDigitado" class="cancel-trava" hidden></div>
       </div>
     </div>
 
-    <!-- PASSO 2B — sem amostra no laboratório -->
-    <div id="cPassoSem" hidden>
-      <button type="button" class="lnk cam-voltar" data-cvoltar="1">← escolher outro começo</button>
-      <label>Clínica <span class="obrig">*</span></label>
-      <input id="cClinica" list="listaClinicas" autocomplete="off">
-      <datalist id="listaClinicas"></datalist>
-      <div class="linha2">
-        <div><label>Pet</label><input id="cPet" autocomplete="off"></div>
-        <div><label>Qual exame ele quer cancelar</label><input id="cExame" autocomplete="off" placeholder="ex. fosfatase alcalina"></div>
-      </div>
-    </div>
-
     <div id="cFim" hidden>
+      <label>Quem fez a triagem <span class="obrig">*</span></label>
+      <input id="cColab" autocomplete="off" placeholder="nome do colaborador">
       <label>O que o cliente escreveu</label>
       <textarea id="cTexto" rows="2" placeholder="cole a mensagem do WhatsApp"></textarea>
       <p class="erro" id="cErro"></p>
