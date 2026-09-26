@@ -956,6 +956,11 @@ function plYearStats(D){
     projOtim:PO.t,projMonO:PO.mon,projOtimPct:pct(PO.t)};
 }
 /* ===== Pet Love · CONSOLIDADO exame-a-exame (base real dos relatórios financeiros) ===== */
+function plabcShow(n){
+  const box=document.getElementById('plabc'); if(!box) return;
+  box.querySelectorAll('tr[data-rk]').forEach(r=>{r.style.display=(+r.dataset.rk<=n)?'':'none';});
+  box.querySelectorAll('.abcbtn').forEach(b=>b.classList.toggle('on',+b.dataset.n===n));
+}
 function plConsolidado(D){
   const C=D.petlove_consolidado; if(!C||!C.total||!C.total.exames) return '';
   const T=C.total, PM=C.por_mes||{}, EX=C.exames||{}, PLN=C.planos||{}, ST=C.status||{}, VT=C.vets||{};
@@ -1015,6 +1020,29 @@ function plConsolidado(D){
   h+=`<div class="grid g2" style="margin-bottom:16px">
     <div class="card"><h3>Top exames por RECEITA <span class="cap">onde está o dinheiro</span></h3>${exTbl(topRep,'rep')}</div>
     <div class="card"><h3>Top exames por VOLUME <span class="cap">o giro da bancada</span></h3>${exTbl(topVol,'vol')}</div></div>`;
+
+  // ---- Curva de saída (ABC) — todos os exames rankeados por volume, com toggle e destaque rosa nos 8 primeiros ----
+  const abc=[...exArr].sort((a,b)=>b.n-a.n);
+  let cum=0; const abcRows=abc.map((x,i)=>{cum+=x.n; const rk=i+1; const cabeca=rk<=8;
+    const style=cabeca?'background:rgba(255,45,140,.09);border-left:3px solid #FF2D8C':'';
+    const namec=cabeca?'color:#FFB3D4;font-weight:700':'';
+    return `<tr data-rk="${rk}"${rk>30?' style="display:none"':''}><td style="${style}"><span style="color:var(--mut);font-size:11px">${rk}</span></td>`+
+      `<td style="${style}"><span style="${namec}">${cabeca?'🌸 ':''}${esc(x.nome)}</span></td>`+
+      `<td class="num">${num(x.n)}</td><td class="num" style="color:var(--mut)">${pf(x.n,T.exames)}</td>`+
+      `<td class="num" style="color:var(--mut)">${(100*cum/T.exames).toFixed(1)}%</td>`+
+      `<td class="num">${brl2(x.ticket)}</td><td class="num" style="color:var(--cyan)">${brl(x.rep)}</td>`+
+      `<td class="num" style="color:var(--mut)">${pf(x.rep,T.repasse)}</td>`+
+      `<td class="num" style="color:var(--mut)">🔜</td></tr>`;}).join('');
+  const abcBtn=(n,lbl,on)=>`<button class="abcbtn${on?' on':''}" data-n="${n}" onclick="plabcShow(${n})">${lbl}</button>`;
+  h+=`<div class="card" id="plabc" style="margin-bottom:16px">
+    <style>#plabc .abcbtn{background:rgba(255,255,255,.05);color:var(--mut);border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-weight:700;font-size:12.5px;cursor:pointer}
+      #plabc .abcbtn.on{background:#FF2D8C;color:#fff;border-color:transparent}</style>
+    <h3>🌸 Curva de saída — o que mais sai (ABC) <span class="cap">${abc.length} exames no catálogo · rosa = os 8 da cabeça (onde a margem se decide) · Top 5 = 50% da saída · Top 14 = 80% · Top 30 = 91%</span></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px">${abcBtn(10,'Top 10',false)}${abcBtn(30,'Top 30',true)}${abcBtn(50,'Top 50',false)}${abcBtn(9999,'Todos',false)}</div>
+    <div class="scrolly" style="max-height:620px">
+    <table class="atab"><thead><tr><th>#</th><th>Exame</th><th class="num">Volume</th><th class="num">% vol.</th><th class="num">% acum.</th><th class="num">Ticket (repasse)</th><th class="num">Receita</th><th class="num">% rec.</th><th class="num">Margem</th></tr></thead>
+    <tbody>${abcRows}</tbody></table></div>
+    <div style="color:var(--mut);font-size:11.5px;margin-top:10px"><b style="color:#FFB3D4">Coluna Margem (🔜):</b> próxima camada — cruzo o repasse de cada exame com o <b>custo por exame</b> (estudo de custos) e pinto aqui a margem real, exame a exame.</div></div>`;
 
   // insights (2 motores + concentração + planos + dado)
   h+=`<div class="grid g2" style="margin-bottom:16px">
