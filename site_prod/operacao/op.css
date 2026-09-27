@@ -1,0 +1,117 @@
+/* Movimento das Rotas — painel de operação no celular.
+   Paleta validada com o script da skill dataviz: as SÉRIES (azul dia útil ×
+   laranja domingo) passam nos seis testes em claro e escuro.
+   ⚠️ verde/vermelho de candle NÃO é série: é status de direção, e por isso vem
+   SEMPRE com seta (▲▼) e número. Verde × vermelho tem ΔE 4,1 para deuteranopia —
+   sozinhos, 8% dos homens não distinguem. A seta é o que carrega o significado. */
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --surface-2:#f4f3f0; --linha:#e3e1dc;
+  --tinta:#0b0b0b; --tinta-2:#52514e; --tinta-3:#8a8880;
+  --s1:#2a78d6;           /* dia útil */
+  --s2:#eb6834;           /* domingo  */
+  --sobe:#0ca30c;         /* status good    */
+  --cai:#d03b3b;          /* status critical */
+  --lado:#8a8880;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --surface-1:#11151a; --surface-2:#1a1f26; --linha:#2b323c;
+    --tinta:#ffffff; --tinta-2:#c3c2b7; --tinta-3:#8b8f96;
+    --s1:#3987e5; --s2:#d95926; --sobe:#0ca30c; --cai:#d03b3b; --lado:#8b8f96;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#11151a; --surface-2:#1a1f26; --linha:#2b323c;
+  --tinta:#ffffff; --tinta-2:#c3c2b7; --tinta-3:#8b8f96;
+  --s1:#3987e5; --s2:#d95926; --sobe:#0ca30c; --cai:#d03b3b; --lado:#8b8f96;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--surface-1);color:var(--tinta);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  min-height:100dvh}
+body{padding:max(14px,env(safe-area-inset-top)) 14px max(24px,env(safe-area-inset-bottom));
+  max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:19px;margin:0;letter-spacing:-.02em}
+h2{font-size:15px;margin:0 0 10px;letter-spacing:-.01em}
+.sub{margin:2px 0 0;font-size:12px;color:var(--tinta-3)}
+.miudo{font-weight:400;font-size:12px;color:var(--tinta-3)}
+.topo{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.ico{background:var(--surface-2);border:1px solid var(--linha);color:var(--tinta-2);
+  border-radius:10px;width:38px;height:38px;font-size:16px;cursor:pointer;flex:none}
+.cartao{background:var(--surface-2);border:1px solid var(--linha);border-radius:var(--r);padding:15px}
+form.cartao{display:flex;flex-direction:column;gap:9px}
+label{font-size:12.5px;color:var(--tinta-2)}
+input,select{width:100%;padding:13px;border-radius:11px;border:1px solid var(--linha);
+  background:var(--surface-1);color:var(--tinta);font:16px inherit}
+.bt{border:0;border-radius:11px;padding:14px;background:var(--s1);color:#fff;
+  font:600 16px inherit;cursor:pointer}
+.erro{color:var(--cai);font-size:13px;margin:0}
+
+/* número herói */
+.heroi{text-align:center}
+.rot{margin:0;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tinta-3)}
+.numero{margin:4px 0 0;font-size:54px;font-weight:700;letter-spacing:-.04em;line-height:1;
+  font-variant-numeric:tabular-nums}
+.heroiDia{margin:4px 0 0;font-size:13px;color:var(--tinta-2)}
+.deltas{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.delta{background:var(--surface-1);border:1px solid var(--linha);border-radius:10px;
+  padding:8px 11px;font-size:12px;color:var(--tinta-2);display:flex;flex-direction:column;
+  align-items:center;gap:2px;min-width:92px}
+.delta b{font-size:14px;font-variant-numeric:tabular-nums}
+.sobe{color:var(--sobe)} .cai{color:var(--cai)} .lado{color:var(--lado)}
+
+/* legenda e filtros */
+.cabG{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.filtros{display:flex;gap:6px}
+.chip{background:var(--surface-1);border:1px solid var(--linha);color:var(--tinta-2);
+  border-radius:99px;padding:6px 11px;font:500 12px inherit;cursor:pointer}
+.chip.on{background:var(--s1);border-color:var(--s1);color:#fff}
+.legenda{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 12px;font-size:11.5px;color:var(--tinta-3)}
+.lg{display:flex;align-items:center;gap:5px}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+.sw.s1{background:var(--s1)} .sw.s2{background:var(--s2)}
+.lgv{color:var(--sobe)} .lgb{color:var(--cai)}
+
+/* gráfico de colunas */
+.grafico{position:relative}
+.colunas{display:flex;align-items:flex-end;gap:2px;height:170px;padding-top:22px}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;
+  align-items:center;gap:3px;cursor:pointer;position:relative}
+.barra{width:100%;border-radius:4px 4px 0 0;background:var(--s1);min-height:3px;
+  transition:filter .12s}
+.col.dom .barra{background:var(--s2)}
+.col:hover .barra,.col.sel .barra{filter:brightness(1.18)}
+.colRot{font-size:9px;color:var(--tinta-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+.colTopo{position:absolute;top:0;font-size:9.5px;font-variant-numeric:tabular-nums;
+  white-space:nowrap;font-weight:600}
+/* barras horizontais */
+.barrasH{display:flex;flex-direction:column;gap:7px}
+.lh{display:grid;grid-template-columns:82px 1fr 40px;gap:9px;align-items:center;font-size:12.5px}
+.lh .nm{color:var(--tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lh .tr{background:var(--surface-1);border-radius:5px;height:17px;overflow:hidden}
+.lh .pr{height:100%;background:var(--s1);border-radius:5px;min-width:3px}
+.lh .vl{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.lh .sub2{grid-column:2/4;font-size:10.5px;color:var(--tinta-3);margin-top:-4px}
+
+/* tooltip */
+.dica{position:fixed;z-index:20;background:var(--tinta);color:var(--surface-1);
+  border-radius:9px;padding:8px 11px;font-size:12px;pointer-events:none;opacity:0;
+  transition:opacity .1s;max-width:200px;line-height:1.4}
+.dica.on{opacity:1}
+.dica b{font-variant-numeric:tabular-nums}
+
+.verTabela{margin-top:12px;background:none;border:0;color:var(--tinta-3);
+  font:500 12px inherit;text-decoration:underline;cursor:pointer;padding:4px 0}
+.tabela{margin-top:8px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--linha);white-space:nowrap}
+th{color:var(--tinta-3);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.nota{margin:0 0 12px;font-size:12.5px;color:var(--tinta-2)}
+.rodape{text-align:center;font-size:11px;color:var(--tinta-3);margin:4px 0 0}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}

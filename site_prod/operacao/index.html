@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#11151a">
+<title>Movimento das Rotas</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Movimento">
+<link rel="stylesheet" href="op.css?v=1">
+</head>
+<body data-palette="#2a78d6,#eb6834">
+
+<header class="topo">
+  <div>
+    <h1>Movimento das rotas</h1>
+    <p class="sub" id="sub">carregando…</p>
+  </div>
+  <button id="btTema" class="ico" title="claro / escuro" aria-label="alternar tema">◐</button>
+</header>
+
+<!-- ENTRAR -->
+<form id="login" class="cartao" hidden>
+  <label for="nome">Quem é você</label>
+  <select id="nome"><option value="">— escolha —</option></select>
+  <label for="senha">Senha (a mesma do Quadro de Inclusões)</label>
+  <input id="senha" type="password" autocomplete="current-password">
+  <button class="bt" type="submit">Entrar</button>
+  <p class="erro" id="erroLogin" hidden></p>
+</form>
+
+<main id="painel" hidden>
+
+  <!-- número herói -->
+  <section class="cartao heroi">
+    <p class="rot">exames no último dia com movimento</p>
+    <p class="numero" id="heroiN">—</p>
+    <p class="heroiDia" id="heroiDia"></p>
+    <div class="deltas" id="deltas"></div>
+  </section>
+
+  <!-- dia a dia -->
+  <section class="cartao">
+    <div class="cabG">
+      <h2>Dia a dia</h2>
+      <div class="filtros" role="group" aria-label="período">
+        <button class="chip on" data-dias="14">14 dias</button>
+        <button class="chip" data-dias="30">30 dias</button>
+        <button class="chip" data-dias="90">tudo</button>
+      </div>
+    </div>
+    <p class="legenda">
+      <span class="lg"><i class="sw s1"></i>dia útil</span>
+      <span class="lg"><i class="sw s2"></i>domingo</span>
+      <span class="lg lgv">▲ subiu</span>
+      <span class="lg lgb">▼ caiu</span>
+    </p>
+    <div class="grafico" id="gDia"></div>
+    <button class="verTabela" data-tab="tDia">ver como tabela</button>
+    <div class="tabela" id="tDia" hidden></div>
+  </section>
+
+  <!-- por rota -->
+  <section class="cartao">
+    <h2>Por rota <span class="miudo" id="rotaDia"></span></h2>
+    <div class="grafico barrasH" id="gRota"></div>
+    <button class="verTabela" data-tab="tRota">ver como tabela</button>
+    <div class="tabela" id="tRota" hidden></div>
+  </section>
+
+  <!-- domingo -->
+  <section class="cartao" id="secDomingo" hidden>
+    <h2>Domingo <span class="miudo">série separada</span></h2>
+    <p class="nota" id="notaDom"></p>
+    <div class="grafico" id="gDom"></div>
+  </section>
+
+  <!-- por motoboy -->
+  <section class="cartao" id="secMb" hidden>
+    <h2>Por motoboy <span class="miudo" id="mbDia"></span></h2>
+    <div class="grafico barrasH" id="gMb"></div>
+  </section>
+
+  <p class="rodape" id="rodape"></p>
+</main>
+
+<script src="op.js?v=1"></script>
+</body>
+</html>
