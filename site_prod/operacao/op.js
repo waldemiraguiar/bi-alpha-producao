@@ -194,7 +194,8 @@
       colunas('#gDom', doms)
     }
 
-    $('#rodape').textContent = 'a série cresce todo dia · fonte: confirmações dos motoboys nos grupos de rota'
+    const hm = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', ...BR })
+    $('#rodape').textContent = `atualizado às ${hm} · atualiza sozinho ao abrir e a cada 5 min`
   }
 
   // ── interação ──────────────────────────────────────────────────────────────
@@ -226,7 +227,7 @@
     }
     try { localStorage.setItem('agenda_ultimo_nome', nome) } catch {}
     sessao = { nome, senha, ate: Date.now() + 12 * 3600e3 }
-    gravarSes(sessao); entrar()
+    gravarSes(sessao); entrar(); ligarAtualizacao()
   })
 
   async function nomes() {
@@ -240,7 +241,21 @@
 
   function entrar() { $('#login').hidden = true; $('#painel').hidden = false; carregar() }
 
+  /**
+   * 🔄 SE ATUALIZA SOZINHO — três gatilhos, porque um só não cobre o uso real:
+   *  ① ao abrir (sempre)
+   *  ② ao VOLTAR para o app — é o caso comum: o celular fica com o app aberto atrás
+   *     do WhatsApp o dia inteiro, e sem isto você veria o número de horas atrás
+   *  ③ a cada 5 min com a tela à frente — o dado do dia muda ao longo da rota
+   * ⚠️ nunca busca com a aba escondida: gastaria bateria e rede para pintar o que
+   * ninguém está vendo.
+   */
+  function ligarAtualizacao() {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && sessao) carregar() })
+    setInterval(() => { if (!document.hidden && sessao) carregar() }, 5 * 60000)
+  }
+
   sessao = lerSes()
-  if (sessao) entrar()
+  if (sessao) { entrar(); ligarAtualizacao() }
   else { $('#login').hidden = false; nomes() }
 })()

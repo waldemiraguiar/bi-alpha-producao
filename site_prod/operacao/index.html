@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Movimento">
-<link rel="stylesheet" href="op.css?v=2">
+<link rel="stylesheet" href="op.css?v=3">
 </head>
 <body data-palette="#2a78d6,#eb6834">
 
@@ -87,6 +87,25 @@
   <p class="rodape" id="rodape"></p>
 </main>
 
-<script src="op.js?v=1"></script>
+<script>
+/* 📲 No iPhone não existe botão de instalar: o caminho é Compartilhar → rolar →
+   Adicionar à Tela de Início, e ninguém descobre isso sozinho. Aviso uma vez. */
+;(()=>{const app=matchMedia('(display-mode: standalone)').matches||navigator.standalone
+let vi=false; try{vi=localStorage.getItem('op_convite')==='1'}catch{}
+if(app||vi) return
+addEventListener('load',()=>{ if(document.querySelector('#painel').hidden) return
+  const iOS=/iPad|iPhone|iPod/.test(navigator.userAgent)
+  const d=document.createElement('div'); d.className='cartao'
+  d.style.cssText='border-color:var(--s2)'
+  d.innerHTML=`<p style="margin:0 0 8px;font-weight:600;font-size:13.5px">📲 Deixe como app no celular</p>
+  <p style="margin:0 0 10px;font-size:12.5px;color:var(--tinta-2);line-height:1.5">${iOS
+    ? 'Toque em <b>Compartilhar</b> (o quadradinho com a seta pra cima), <b>role a lista para baixo</b> e toque em <b>Adicionar à Tela de Início</b>.'
+    : 'Abra o menu do navegador (⋮) e toque em <b>Instalar aplicativo</b>.'}</p>
+  <button class="chip" id="opVi">entendi, não mostrar mais</button>`
+  document.querySelector('#painel').appendChild(d)
+  d.querySelector('#opVi').onclick=()=>{ try{localStorage.setItem('op_convite','1')}catch{}; d.remove() }
+})})()
+</script>
+<script src="op.js?v=3"></script>
 </body>
 </html>
