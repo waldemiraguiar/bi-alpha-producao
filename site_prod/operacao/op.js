@@ -255,6 +255,10 @@
     setInterval(() => { if (!document.hidden && sessao) carregar() }, 5 * 60000)
   }
 
+  // o SW deixa o app abrir na hora mesmo com sinal ruim. Se falhar, não muda nada
+  // para quem usa: é só velocidade de abertura.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {})
+
   sessao = lerSes()
   if (sessao) { entrar(); ligarAtualizacao() }
   else { $('#login').hidden = false; nomes() }
