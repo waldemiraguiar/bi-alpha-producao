@@ -624,7 +624,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',socios:'socios',apoio:'apoio',apoiot:'apoiot'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',socios:'socios',apoio:'apoio',apoiot:'apoiot',voz:'voz'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -638,6 +638,7 @@ function wireFTabs(){
     if(v==='ccia') renderCustosCC();
     if(v==='apoio') renderApoio();
     if(v==='apoiot') renderApoioT();
+    if(v==='voz') renderVoz();
     if(v==='socios') renderSocios();
   });});
 }
@@ -2617,4 +2618,81 @@ async function renderApoioT(force){
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,
       plugins:{legend:{labels:{color:'#8aa2bd',font:{size:11}}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+R(c.raw,2)}}},
       scales:{x:{ticks:{...tick,callback:v=>'R$ '+v},grid},y:{ticks:{...tick,font:{size:9}},grid:{display:false}}}}}));
+}
+
+/* ---- aba 🗣️ VOZ DO CLIENTE (28/set/2026) ----------------------------------------
+   O que o cliente fala no WhatsApp, classificado automaticamente (Haiku 4.5, R$ 0,004
+   por conversa). Publicado CIFRADO de ~/Claude BI Alpha/voz_cliente/publicar_voz.py.
+
+   ⛔ POR QUE CIFRADO: em 28/09 publiquei este mesmo painel como HTML puro em
+   site_prod/atendimento/ — com NOME DE CLÍNICA e PENDÊNCIA — no repo PÚBLICO. Ficou
+   11 min no ar e exigiu reescrever o histórico do git. Aqui vai pelo /api/enc.
+   ⛔ QUEM VÊ: só wal e fulvio. O Alexandre NUNCA vê o BI.
+
+   ⚠️ MOSTRA 'RESPONDE' E 'RESOLVE' JUNTOS DE PROPÓSITO: 97,2% das perguntas são
+   respondidas (mediana 5 min) mas só ~76% das conversas FECHAM. Essa distância é o
+   trabalho que sobra — promessa que não volta, exame que ficou de verificar. Um número
+   sozinho esconde o outro. */
+let _vozOk=false;
+async function renderVoz(force){
+  const wrap=document.getElementById('voz'); if(!wrap) return;
+  if(_vozOk && !force) return;
+  wrap.innerHTML='<div class="card" style="margin-top:18px;color:var(--mut)">Carregando a voz do cliente…</div>';
+  let D;
+  try{ const env=await fetchEncF('voz_cliente','data/voz_cliente.enc'); D=await decryptEncObj(env, window.__PW||''); }
+  catch(e){ wrap.innerHTML=`<div class="card" style="margin-top:18px;color:var(--amber)">Voz do Cliente ainda não publicada (${esc(String(e.message||e))}).</div>`; return; }
+  _vozOk=true;
+  const R=D.resumo, N=v=>Number(v||0).toLocaleString('pt-BR');
+  const EMO={coleta:'🛵',agendamento:'📅',resultado:'📄',preco:'💰',exame_duvida:'🧪',material:'📦',
+             requisicao:'📋',recoleta:'🔁',reclamacao:'😟',aviso:'💬',agradecimento:'🙏',outro:'❔'};
+  const kpi=(rot,val,sub,cor)=>`<div style="min-width:150px;flex:1"><div class="acmp-l">${rot}</div>`+
+    `<div class="acmp-v" style="font-size:24px;${cor?`color:${cor}`:''}">${val}</div><div class="acmp-s">${sub}</div></div>`;
+
+  // volume por dia — fim de semana em outra cor, fatia âmbar = o que ficou em aberto
+  const maxN=Math.max(...D.por_dia.map(x=>x.n),1);
+  const barras=D.por_dia.map(x=>{
+    const fds=(x.wd==='sáb'||x.wd==='dom');
+    return `<div style="flex:1;min-width:26px;text-align:center">`+
+      `<div style="position:relative;height:104px;display:flex;align-items:flex-end;justify-content:center" title="${x.n} conversas · ${x.abertas} em aberto">`+
+      `<div style="width:72%;height:${100*x.n/maxN}%;background:${fds?'#8b6cf0':'#3d8bfd'};border-radius:4px 4px 0 0;min-height:3px"></div>`+
+      `<div style="position:absolute;bottom:0;width:72%;height:${100*x.abertas/maxN}%;background:#f0a030;border-radius:0 0 4px 4px;opacity:.9"></div></div>`+
+      `<div style="font-size:11px;font-weight:600;margin-top:5px">${x.n}</div>`+
+      `<div style="font-size:10px;color:var(--mut);line-height:1.2">${x.dia.slice(-2)}<br><span style="opacity:.6">${x.wd}</span></div></div>`;
+  }).join('');
+
+  const maxT=Math.max(...D.temas.map(t=>t[1]),1);
+  const temas=D.temas.map(([k,v])=>`<tr><td style="padding:6px 8px">${EMO[k]||'❔'} ${esc(k)}</td>`+
+    `<td style="padding:6px 8px;text-align:right;font-weight:600">${N(v)}</td>`+
+    `<td style="padding:6px 8px;width:30%"><i style="display:block;height:7px;border-radius:4px;background:#3d8bfd;opacity:.75;width:${100*v/maxT}%"></i></td>`+
+    `<td style="padding:6px 8px;text-align:right;color:var(--mut)">${(100*v/R.conversas).toFixed(0)}%</td></tr>`).join('');
+
+  const espera=(D.mais_esperam||[]).map(x=>`<tr><td style="padding:6px 8px">${esc(String(x.clinica).slice(0,46))}</td>`+
+    `<td style="padding:6px 8px;text-align:right;font-weight:600">${x.pendencias}</td></tr>`).join('')
+    || '<tr><td style="padding:6px 8px;color:var(--mut)">nenhuma clínica com mais de uma pendência</td></tr>';
+
+  const ab=(D.abertas||[]).slice().sort((a,b)=>(a.urgencia!=='alta')-(b.urgencia!=='alta')).slice(0,30)
+    .map(x=>`<tr><td style="padding:6px 8px;color:var(--mut);white-space:nowrap">${esc(x.dia.slice(-5))} ${esc(x.hora||'')}</td>`+
+      `<td style="padding:6px 8px">${x.urgencia==='alta'?'⚡ ':''}${esc(String(x.clinica).slice(0,34))}</td>`+
+      `<td style="padding:6px 8px;opacity:.9">${esc(String(x.pendencia).slice(0,86))}</td></tr>`).join('');
+
+  wrap.innerHTML=`
+  <div class="card" style="margin-top:18px">
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      ${kpi('CONVERSAS', N(R.conversas), `${R.dias} dias · ${R.por_dia}/dia`)}
+      ${kpi('FECHAM', R.pct_fecha+'%', 'assunto concluído', '#2fbf71')}
+      ${kpi('EM ABERTO', N(R.abertas), 'ficaram pela metade', '#f0a030')}
+      ${kpi('URGÊNCIA ALTA', N(R.alta), 'cliente esperando hoje', '#e5484d')}
+    </div>
+  </div>
+  <div class="card"><div class="h">Volume por dia</div>
+    <div style="display:flex;gap:4px;align-items:flex-end;overflow-x:auto;padding:6px 0">${barras}</div>
+    <div style="display:flex;gap:16px;font-size:11px;color:var(--mut);margin-top:8px;flex-wrap:wrap">
+      <span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#3d8bfd;margin-right:5px"></i>dia útil</span>
+      <span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#8b6cf0;margin-right:5px"></i>fim de semana</span>
+      <span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#f0a030;margin-right:5px"></i>ficaram em aberto</span>
+    </div></div>
+  <div class="card"><div class="h">Sobre o que o cliente fala</div><table style="width:100%;border-collapse:collapse;font-size:13.5px">${temas}</table></div>
+  <div class="card"><div class="h">Clínicas com mais de uma pendência</div><table style="width:100%;border-collapse:collapse;font-size:13.5px">${espera}</table></div>
+  <div class="card"><div class="h">Em aberto · urgência alta primeiro</div><table style="width:100%;border-collapse:collapse;font-size:13px">${ab}</table>
+    <div style="color:var(--mut);font-size:11px;margin-top:10px">Classificação automática das conversas de WhatsApp · atualiza todo dia às 5h30</div></div>`;
 }
