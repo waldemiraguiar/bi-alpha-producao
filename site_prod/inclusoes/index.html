@@ -200,6 +200,27 @@
 
 <!-- 🚫 nova solicitação de cancelamento. Só a CLÍNICA é obrigatória: o cliente escreve
      "Pode cancelar" e some, e exigir pet+exame na abertura faria a pessoa não registrar. -->
+<!-- 🧪 exames liberados um a um (Thailan, áudio 28/set 17h40).
+     A lista NÃO vem do HF: no caso real da Nina o hf_exames está vazio, e a Babésia
+     que ela precisa marcar está dentro de um parêntese no texto digitado. O sistema
+     sugere a quebra; quem manda é a técnica. -->
+<dialog id="dlgExames">
+  <form id="formExames" method="dialog">
+    <h3>Exames liberados</h3>
+    <p class="mudo" id="exCab"></p>
+    <div id="exItens" class="ex-check"></div>
+    <div class="linha-busca">
+      <input id="exNovo" autocomplete="off" placeholder="faltou um exame? escreva e some">
+      <button type="button" class="btn-sec" id="exAdd">Somar</button>
+    </div>
+    <p class="erro" id="exErro"></p>
+    <div class="linha-botoes">
+      <button value="cancel" class="btn-sec" formnovalidate>Fechar</button>
+      <button class="btn-principal" id="exSalvar">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlgCancel">
   <form id="formCancel" method="dialog">
     <h3>Nova solicitação de cancelamento</h3>

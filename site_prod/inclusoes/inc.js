@@ -398,11 +398,11 @@
         // o botão de exame demorado aparece SEMPRE, mas em destaque quando o nome do exame
         // já diz que ele não sai hoje — assim quem não conhece a lista ainda acerta.
         const esp = BOTAO_ESPECIALIZADO ? `<button class="${demorado(c) ? '' : 'leve'}" data-acao="exame_especializado">Exames especializados</button>` : ''
-        if (lista.length < 2) return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${esp}${cancelar}`
+        if (lista.length < 2) return `<button data-acao="exames_digitados">Exames feitos e digitados</button>${libBotao(c)}${esp}${cancelar}`
         const ok = (c.setores_ok || '').split(',').map(x => x.trim()).filter(Boolean)
         return lista.map(k => ok.includes(k)
           ? `<button class="setor-ok" disabled>✅ ${esc(SETOR_EXAME[k] || k)} pronto</button>`
-          : `<button data-setor-pronto="${esc(k)}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k] || k)} — marcar pronto</button>`).join('') + esp + cancelar
+          : `<button data-setor-pronto="${esc(k)}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k] || k)} — marcar pronto</button>`).join('') + libBotao(c) + esp + cancelar
       }
       case 6: return `<button data-acao="encerrar">Liberado e e-mail enviado · encerrar</button>${cancelar}`
     }
@@ -539,6 +539,7 @@
   }
   function infoExtra(c) {
     const out = []
+    const lib = libLinha(c); if (lib) out.push(lib)
     // ── 🔬 A RESPOSTA DA ÁREA TÉCNICA, ESCRITA NO CARTÃO ──────────────────────────────────────
     // Thailan, 24/set (áudio): "minha área técnica me confirmou que eu tenho uma amostra pra dar
     // seguimento com o exame. Só que quando essa notificação vem pra atendimento ao cliente, eu
@@ -748,6 +749,43 @@
         ${lst.map(c => `<div class="mini ${estado(c)}"><b>${esc(c.pet || '')}</b><span>${esc(c.req)} · +${esc(c.exame)}</span><span class="mudo">${esc(c.clinica || '')}</span><span class="t">${c.status === 'sem_amostra' ? 'SEM AMOSTRA · ' : ''}${c.pausado ? 'aguardando cliente ' : ''}${fmt(minutosNaEtapa(c))}</span></div>`).join('') || '<span class="mudo">—</span>'}</div>`
     }).join('')
   }
+  // ══ EXAMES LIBERADOS UM A UM (Thailan, áudio 28/set 17h40) ══
+  // "Erlichia e Anaplasma foram liberados, mas a Babésia ainda não. Eu não consigo
+  //  dar baixa sem tudo estar liberado."
+  const libDe = c => {
+    const v = c.exames_lib
+    if (!v || typeof v !== 'object') return null
+    return { itens: Array.isArray(v.itens) ? v.itens : [], ok: Array.isArray(v.ok) ? v.ok : [] }
+  }
+  // SUGESTÃO de quebra — nunca a palavra final. O texto real da Nina é
+  // "RIFI e Elisa de leish, PCR hemoparasitose (Erlichia, anaplasma e babesia), IGG e IGM de erlichia":
+  // a Babésia está DENTRO do parêntese, então abro os parênteses também.
+  function sugerirExames(c) {
+    const fonte = (c.hf_exames || c.exame || '').trim()
+    if (!fonte) return []
+    const partes = []
+    // primeiro o que está entre parênteses, que costuma ser a lista de verdade
+    fonte.replace(/\(([^)]*)\)/g, (_, dentro) => { partes.push(dentro); return ' · ' })
+    partes.push(fonte.replace(/\([^)]*\)/g, ' · '))
+    const itens = partes.join(' · ')
+      .split(/·|,|;|\/|\be\b/i)
+      .map(x => x.replace(/\s+/g, ' ').trim())
+      .filter(x => x.length > 2)
+    return [...new Set(itens)]
+  }
+  function libLinha(c) {
+    const L = libDe(c); if (!L || !L.itens.length) return ''
+    const falta = L.itens.filter(x => !L.ok.includes(x))
+    return `<div class="lib-linha">🧪 liberados ${L.ok.length}/${L.itens.length}` +
+      (falta.length ? ` · <span class="falta">falta: ${esc(falta.join(', '))}</span>` : ` · <span class="tudo">tudo liberado</span>`) +
+      `</div>`
+  }
+  const libBotao = c => {
+    const L = libDe(c)
+    const rot = L && L.itens.length ? `🧪 Exames liberados · ${L.ok.length}/${L.itens.length}` : '🧪 Exames liberados'
+    return `<button class="leve" data-exlib="${c.id}">${rot}</button>`
+  }
+
   function explodir(lista) {
     // explosão: só para cartões DESTE setor (a TV de cada setor grita o que é dela)
     const pior = lista.filter(c => estado(c) === 's-x' && !explodeCalado.has(c.id + ':' + c.etapa)).sort((a, b) => minutosNaEtapa(b) - minutosNaEtapa(a))[0]
@@ -2256,6 +2294,17 @@
       }
       return
     }
+    // Thailan 28/set: "não consigo dar baixa sem tudo estar liberado". Aviso — não trava:
+    // quem precisa seguir mesmo assim segue, e fica registrado o que faltava.
+    const bd = ev.target.closest('button[data-acao="exames_digitados"], button[data-setor-pronto]')
+    if (bd) {
+      const cid = +bd.closest('[data-id]')?.dataset.id
+      const cc = chamados.find(x => x.id === cid), L = cc && libDe(cc)
+      if (L && L.itens.length) {
+        const falta = L.itens.filter(x => !L.ok.includes(x))
+        if (falta.length && !(await pedirSimNao('Ainda tem exame sem liberar', `Falta: ${falta.join(', ')}.`))) return
+      }
+    }
     const bs = ev.target.closest('button[data-setor-pronto]')
     if (bs) {
       if (!(await garantirLogin())) return
@@ -2632,6 +2681,66 @@
         : !!$('cExame').value.trim()
     $('cSalvar').hidden = !(alvoCancel && ok)
   }
+  // ── 🧪 diálogo dos exames liberados ──
+  let exId = null, exItens = [], exOk = []
+  function desenharExames() {
+    $('exItens').innerHTML = exItens.length
+      ? exItens.map((x, i) => `<label class="${exOk.includes(x) ? 'ok' : ''}">
+          <input type="checkbox" data-exi="${i}" ${exOk.includes(x) ? 'checked' : ''}>
+          <span>${esc(x)}</span>
+          <button type="button" class="tira" data-extira="${i}" title="tirar da lista">×</button>
+        </label>`).join('')
+      : '<p class="mudo">Nenhum exame na lista ainda. Escreva abaixo e some.</p>'
+  }
+  document.addEventListener('click', async ev => {
+    const b = ev.target.closest('[data-exlib]'); if (!b) return
+    if (!(await garantirLogin())) return
+    exId = +b.dataset.exlib
+    const c = chamados.find(x => x.id === exId); if (!c) return
+    const L = libDe(c)
+    // se ainda não existe lista, ofereço a quebra do texto — mas quem confirma é ela
+    exItens = L && L.itens.length ? L.itens.slice() : sugerirExames(c)
+    exOk = L ? L.ok.slice() : []
+    $('exCab').innerHTML = `<b>${esc(c.pet || '')} ${esc(c.req || '')}</b> — ${esc(c.exame || '')}` +
+      (L && L.itens.length ? '' : '<br><span class="mudo">Quebrei o que estava escrito como sugestão. Tire, some ou renomeie à vontade.</span>')
+    $('exErro').textContent = ''
+    desenharExames()
+    $('dlgExames').showModal()
+  })
+  $('exItens')?.addEventListener('click', ev => {
+    const t = ev.target.closest('[data-extira]')
+    if (t) { const i = +t.dataset.extira; const nome = exItens[i]; exItens.splice(i, 1); exOk = exOk.filter(x => x !== nome); return desenharExames() }
+  })
+  $('exItens')?.addEventListener('change', ev => {
+    const cb = ev.target.closest('[data-exi]'); if (!cb) return
+    const nome = exItens[+cb.dataset.exi]
+    exOk = cb.checked ? [...new Set([...exOk, nome])] : exOk.filter(x => x !== nome)
+    desenharExames()
+  })
+  function somarExame() {
+    const v = $('exNovo').value.trim(); if (!v) return
+    if (!exItens.includes(v)) exItens.push(v)
+    $('exNovo').value = ''; desenharExames(); $('exNovo').focus()
+  }
+  $('exAdd')?.addEventListener('click', somarExame)
+  $('exNovo')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); somarExame() } })
+  $('formExames')?.addEventListener('submit', async ev => {
+    if (ev.submitter && ev.submitter.value === 'cancel') return
+    ev.preventDefault()
+    if (!(await garantirLogin())) return
+    $('exSalvar').disabled = true
+    try {
+      await rpc('inc_exames_lib', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: exId, p_itens: exItens, p_ok: exOk })
+      $('dlgExames').close()
+      const falta = exItens.filter(x => !exOk.includes(x))
+      toast(falta.length ? `Faltam ${falta.length}: ${falta.join(', ')}` : '✅ Todos os exames liberados')
+      await carregar(); desenhar()
+    } catch (e) {
+      $('exErro').textContent = /PGRST202|could not find|schema cache/i.test(e.message || '')
+        ? 'Falta rodar o SQL supabase_inclusoes_20_exames_liberados.sql no Supabase.' : e.message
+    } finally { $('exSalvar').disabled = false }
+  })
+
   $('btnNovoCancel')?.addEventListener('click', async () => {
     if (!(await garantirLogin())) return
     $('formCancel').reset()
@@ -2920,6 +3029,9 @@
       c('ZECA', '640133', 'Albumina', 'bioquimica', 7, 3, { status: 'enviado' }),
       c('FRED', '640099', 'Fósforo', 'bioquimica', 4, 6, { novo_numero: true, amostra_entrada: min(26 * 60) }),
       c('PETZIUS', '641702', 'Diro AG + Knoff', 'pcr_soro', 5, 12, { setores: 'pcr_soro,hemato', setores_ok: 'pcr_soro' }),
+      // caso real da Nina (Thailan 28/set): UM setor, VÁRIOS exames, e a Babésia
+      // dentro do parêntese — o que nenhuma regra de vírgula acerta sozinha
+      c('NINA', '643336', 'RIFI e Elisa de leish, PCR hemoparasitose (Erlichia, anaplasma e babesia), IGG e IGM de erlichia', 'pcr_soro', 5, 25),
       c('KIRA', '639871', 'Ureia', 'bioquimica', 2, 31),
       // O CASO REAL DA THAILAN (NINA 643336, 24/set): exames de DOIS setores na mesma inclusão.
       // Fica no demo porque é o caso que quebrou — quem treina precisa ver o botão por setor.
@@ -3013,6 +3125,12 @@
       return falta.length ? falta.join(', ') : 'completo'
     }
     // ── ensaio do fluxo de cancelamento com TRIAGEM (Fúlvio 25/set). Nada é gravado. ──
+    if (nome === 'inc_exames_lib') {
+      const x = chamados.find(y => y.id === a.p_id)
+      const v = { itens: a.p_itens || [], ok: (a.p_ok || []).filter(o => (a.p_itens || []).includes(o)), por: 'DEMO', quando: new Date().toISOString() }
+      if (x) x.exames_lib = v
+      return v
+    }
     if (nome === 'inc_cancel_sugestoes') {
       return { clinicas: ['Veterinária Caotinho', 'Clínica de exemplo', 'Alpha - Paula Andriotti', 'Outra clínica de exemplo'],
                exames: ['ALT (TGP)', 'Fosfatase alcalina', 'Ureia', 'PCR Erliquiose', 'Hemograma', '4DX', 'Perfil tireoidiano'] }

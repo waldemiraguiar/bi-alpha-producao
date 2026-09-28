@@ -829,6 +829,16 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 
 /* ═══ fluxo de cancelamento (Fúlvio, 5 áudios de 25/set) ═══ */
 /* os dois caminhos de abertura: requisição, ou amostra que ainda não chegou */
+/* exames liberados um a um (Thailan 28/set) */
+.ex-check{display:grid;gap:6px;margin:8px 0;max-height:46vh;overflow:auto}
+.ex-check label{display:flex;align-items:center;gap:10px;background:var(--painel2);border:1px solid var(--linha);border-radius:9px;padding:9px 12px;font-size:14.5px;cursor:pointer}
+.ex-check label.ok{border-color:var(--ok);background:#f0fdf4}
+.ex-check input{width:18px;height:18px;flex:none}
+.ex-check .tira{margin-left:auto;background:none;border:none;color:var(--fraco);font:inherit;font-size:18px;line-height:1;cursor:pointer;padding:0 4px}
+.ex-check .tira:hover{color:var(--vermelho)}
+.lib-linha{font-size:13.5px;background:var(--painel2);border-radius:8px;padding:6px 10px;margin-top:4px}
+.lib-linha .falta{color:var(--amarelo);font-weight:700}
+.lib-linha .tudo{color:var(--ok);font-weight:700}
 .cam-escolha{display:grid;gap:10px;margin:10px 0}
 .cam{display:block;text-align:left;font:inherit;background:var(--painel2);border:1.5px solid var(--linha);border-radius:12px;padding:14px 16px;cursor:pointer}
 .cam:hover{border-color:var(--cc);background:var(--painel)}
