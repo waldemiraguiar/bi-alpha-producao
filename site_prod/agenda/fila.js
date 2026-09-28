@@ -19,7 +19,15 @@
         Se for diferente da que está na tela, o selo fica âmbar e pulsa.
      ③ O BOTÃO recarrega forçando o servidor (endereço novo), sem Cmd+Shift+R —
         atalho que o Wal não usa; ele pediu botão dentro do app. */
-  const VERSAO = /*CARIMBO*/'23/09 16:09'
+  // ⚠️ 28/09 — ALARME QUE NUNCA DESLIGAVA. Isto era `const VERSAO = /*CARIMBO*/'23/09 16:09'`,
+  // esperando que o deploy substituísse o marcador. Mas o deploy carimba só os .html, nunca o .js:
+  // o HTML ia para "28/09 15:36" e este número ficava congelado em 23/09 para sempre. O vigia
+  // comparava os dois, via diferença e escrevia "há uma nova!" — SEMPRE. A pessoa clicava em
+  // Atualizar, a página recarregava e o aviso continuava. Virou o "lobo, lobo" que este mesmo
+  // mecanismo existia para evitar: quando houvesse versão nova de verdade, ninguém acreditaria.
+  // Conserto na raiz: FONTE ÚNICA. O JS lê a versão do próprio HTML que o deploy já carimba.
+  // Não há mais dois números para desincronizar, e nada precisa carimbar este arquivo.
+  const VERSAO = document.documentElement.dataset.versaoPublicada || '—'
   const URL_SB = 'https://lrwjcdvporaivxvfuiwt.supabase.co'
   const KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8'
   // realtime: o banco AVISA quando muda. Antes eu perguntava a cada 20s — com 5 mesas abertas
@@ -819,7 +827,9 @@
       const r = await fetch(location.pathname + '?checar=' + Date.now(), { cache: 'no-store' })
       const t = await r.text()
       const m = t.match(/versao-publicada="([^"]+)"/)
-      if (m && m[1] && m[1] !== VERSAO && selo) {
+      // ⚠️ VERSAO === '—' significa "não sei em que versão estou" (HTML sem carimbo, só em
+      // desenvolvimento). Nesse caso NÃO avisa: comparar com o que não se conhece é inventar alarme.
+      if (m && m[1] && VERSAO !== '—' && m[1] !== VERSAO && selo) {
         selo.classList.add('velha')
         selo.textContent = 'versão ' + VERSAO + ' — há uma nova!'
         selo.title = 'a versão publicada é ' + m[1] + ' — clique em Atualizar'
