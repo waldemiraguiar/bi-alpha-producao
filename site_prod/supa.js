@@ -49,10 +49,18 @@
     upsertUrg(table, row) { return SB.from(table).upsert(row); },
     delUrg(table, registro) { return SB.from(table).delete().eq('registro', String(registro)); },
     // ---- Realtime (push) ----
-    subscribe(tables, cb) {
+    subscribe(tables, cb, debounceMs = 0) {
       if (!SB) return null;
+      // DEBOUNCE opcional (Wal 28/set): coalesce RAJADAS de eventos numa recarga só. O callback
+      // costuma reler a tabela inteira (loadMarks); sem isso, marcar 10 itens = 10 leituras completas
+      // × cada cliente → foi o que saturou a CPU do Supabase (NANO 96%). Com debounce, vira 1 leitura.
+      let fn = cb;
+      if (debounceMs > 0) {
+        let t = null;
+        fn = (...a) => { if (t) clearTimeout(t); t = setTimeout(() => { t = null; cb(...a); }, debounceMs); };
+      }
       const ch = SB.channel('rt_' + tables.join('_') + '_' + Math.floor(performance.now()));
-      tables.forEach(t => ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, cb));
+      tables.forEach(t => ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, fn));
       ch.subscribe();
       return ch;
     },

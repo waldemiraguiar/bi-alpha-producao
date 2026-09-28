@@ -227,7 +227,7 @@
       if (timer) { clearInterval(timer); timer = null; }
       if (useSupa()) {
         // Realtime: re-renderiza quando flags/baixas mudam (push, ZERO polling)
-        sub = window.SUPA.subscribe(['cli_flags', 'cli_baixas'], async () => { await load(); render(); });
+        sub = window.SUPA.subscribe(['cli_flags', 'cli_baixas'], async () => { await load(); render(); }, 1200);
       } else {
         timer = setInterval(async () => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) { await load(); render(); } }, 60000);
       }
@@ -235,7 +235,7 @@
       classe = 'esp'; await load(); render();
       if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; }
       if (timer) { clearInterval(timer); timer = null; }
-      if (useSupa()) sub = window.SUPA.subscribe(['cli_baixas'], async () => { await load(); render(); });
+      if (useSupa()) sub = window.SUPA.subscribe(['cli_baixas'], async () => { await load(); render(); }, 1200);
       // re-renderiza a cada 60s p/ as cores acompanharem o relógio (vira vermelho 2 dias antes)
       timer = setInterval(() => { const el = $('cli'); if (el && el.style.display !== 'none' && !document.hidden) render(); }, 60000);
     } else { if (sub) { window.SUPA && window.SUPA.unsub(sub); sub = null; } if (timer) { clearInterval(timer); timer = null; } }

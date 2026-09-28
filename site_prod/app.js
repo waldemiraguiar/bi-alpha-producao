@@ -389,7 +389,7 @@ async function boot(D){
   if(window.__muref)clearInterval(window.__muref);
   // urgentes só importam no modo TV. Com Supabase: Realtime (push, zero polling); senão: polling 90s
   if(window.SUPA&&window.SUPA.ok){
-    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas','sep_marks','sep_descartes','amostras'],async()=>{if(document.getElementById('content').style.display!=='none'&&!typingSearch()){await loadManual();buildTabs();renderActive();}});
+    if(!window.__urgsub) window.__urgsub=window.SUPA.subscribe(['urg_lista','urg_baixas','sep_marks','sep_descartes','amostras'],async()=>{if(document.getElementById('content').style.display!=='none'&&!typingSearch()){await loadManual();buildTabs();renderActive();}},1200);
   }else{
     window.__muref=setInterval(async()=>{if(document.hidden||document.getElementById('content').style.display==='none'||typingSearch())return;const k=[...manual].sort().join();await loadManual();if(k!==[...manual].sort().join())renderActive();},90000);
   }

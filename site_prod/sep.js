@@ -971,7 +971,7 @@
     if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
     if (m === 'sep') {
       await loadTeam(); await loadMarks(); render();
-      if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep' && !typingObs()) { await loadMarks(); render(); } });
+      if (useSupa()) subSep = window.SUPA.subscribe(['sep_marks', 'sep_descartes'], async () => { if (MODE === 'sep' && !typingObs()) { await loadMarks(); render(); } }, 1200);
       else timer = setInterval(async () => { if (MODE === 'sep' && !document.hidden && !typingObs()) { await loadMarks(); render(); } }, 60000);
       // logout automático por inatividade (só faz sentido no modo equipe)
       idleTimer = setInterval(() => { if (MODE === 'sep' && teamMode && op && Date.now() - lastAct > IDLE_MIN * 60000) { saveOp(null); render(); } }, 60000);
