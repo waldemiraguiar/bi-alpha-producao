@@ -400,12 +400,35 @@
     // ② todas as paradas informadas → o motoboy já rodou tudo
     if (r.paradas && r.informadas && Number(r.informadas) >= Number(r.paradas))
       return { desfecho: 'ja_passou', fato: `${rota} · ${r.turno} — todas as ${r.paradas} paradas já informadas`, cor: 'fechada' }
-    // ③ a linha viva é de um turno que já passou → a de agora nem abriu
-    if (r.turno && (ORDEM_T[r.turno] ?? 9) < (ORDEM_T[turnoAgora] ?? 9))
-      return { desfecho: 'so_amanha', fato: `última leitura é da ${r.turno} — a rota de agora ainda não abriu`, cor: 'atencao' }
-    // ④ rodando
-    const falta = Number(r.faltam || 0)
-    return { desfecho: 'vai', fato: `${rota} · ${r.turno} — rodando${falta ? `, faltam ${falta} paradas` : ''}`, cor: 'viva' }
+    // ③ ⚠️ 27/set — AQUI ESTAVA O DEFEITO. Este degrau decidia pelo RÓTULO de turno
+    // (`ORDEM_T[r.turno]`), que é interpretação: o `rota_vivo` carimba o turno pela hora em
+    // que o CICLO FECHA, e a rota Angra fecha à noite mesmo rodando 8h–18h. Resultado: às 21h
+    // a Fila dizia "✅ vai hoje" para uma rota que parou às 18h.
+    //
+    // Agora decide pelo HORÁRIO REAL da última parada informada, que é fato. Medido em 2.526
+    // intervalos entre confirmações da mesma rota: mediana 10 min, p90 34 min, p95 100 min —
+    // uma rota viva "fala" a cada ~10 min. Silêncio de 90 min é fora do normal.
+    //
+    // ⚠️ E o fato vai ESCRITO no card ("há 3h20"), não só a conclusão: quando eu erro, o
+    // atendente vê por quê e discorda com um clique.
+    const ult = r.ultima_conf || r.primeira_conf
+    if (ult) {
+      const t = Date.parse(ult)
+      const dia = q => new Date(q).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+      const min = Math.round((Date.now() - t) / 60000)
+      const quanto = min < 60 ? `há ${min} min` : `há ${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`
+      // a última parada informada é de OUTRO DIA → a rota de hoje não abriu
+      if (dia(t) !== dia(Date.now()))
+        return { desfecho: 'so_amanha', fato: `${rota} — última parada informada em ${new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })}, a de hoje ainda não abriu`, cor: 'atencao' }
+      // silenciosa há muito tempo → provavelmente já rodou tudo
+      if (min >= 90)
+        return { desfecho: 'so_amanha', fato: `${rota} · última parada informada ${hm(ult)} (${quanto}) — parece que já rodou`, cor: 'atencao' }
+      // ④ rodando, e com a prova na tela
+      const falta = Number(r.faltam || 0)
+      return { desfecho: 'vai', fato: `${rota} — rodando · última parada ${hm(ult)} (${quanto})${falta ? `, faltam ${falta}` : ''}`, cor: 'viva' }
+    }
+    // ⑤ sem horário nenhum: a lista foi postada mas ninguém confirmou ainda
+    return { desfecho: 'vai', fato: `${rota} · ${r.turno || 'lista postada'} — nenhuma parada informada ainda`, cor: 'neutro' }
   }
   /**
    * ⚠️ A SAUDAÇÃO SAI ANTES DE PROCURAR O TURNO — bug pego no teste com frase real:
