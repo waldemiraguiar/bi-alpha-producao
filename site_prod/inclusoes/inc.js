@@ -88,6 +88,12 @@
   const agora = () => Date.now()
   const hm = q => new Date(T(q)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   const dataCurta = q => new Date(T(q)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  // quando + DIA. "às 20:54" num cartão de 3 dias não diz nada (Thailan 28/set).
+  const quandoDia = q => {
+    const d = new Date(T(q)), h = new Date(); h.setHours(0, 0, 0, 0)
+    const dia = d >= h ? 'hoje' : d >= new Date(h - 864e5) ? 'ontem' : dataCurta(q)
+    return `${dia} às ${hm(q)}`
+  }
   const fmt = m => { m = Math.max(0, Math.round(m)); return m >= 1440 ? `${Math.floor(m / 1440)}d ${Math.floor(m % 1440 / 60)}h` : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min` }
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   function lerLocal(k) { try { return localStorage.getItem(k) } catch { return null } }
@@ -544,7 +550,7 @@
     // Agora as duas respostas são ESCRITAS, com o mesmo peso visual, com quem respondeu e a hora.
     if (c.status === 'sem_amostra') {
       const ev = ultimoEvento(c, 'sem_amostra')
-      out.push(`<div class="info resp-tec"><b class="tag-nao">🔬 NÃO TEM AMOSTRA</b> <b>${esc(ev?.obs || 'sem motivo escrito')}</b>${ev ? ` — Área Técnica, ${esc(ev.por)} às ${hm(ev.quando)}` : ''} → avisar a clínica</div>`)
+      out.push(`<div class="info resp-tec"><b class="tag-nao">🔬 NÃO TEM AMOSTRA</b> <b>${esc(ev?.obs || 'sem motivo escrito')}</b>${ev ? ` — Área Técnica, ${esc(ev.por)} ${quandoDia(ev.quando)}` : ''} → avisar a clínica</div>`)
     }
     // o espelho do de cima: segue visível da etapa 3 até o fim, porque o escritório e quem avisa
     // o laudo também perguntam "essa aqui tinha amostra mesmo?"
@@ -559,13 +565,13 @@
         out.push(`<div class="info resp-tec">` + feitos.map(k => {
           const ev = evs.filter(e => String(e.obs || '').startsWith(k)).sort((a, b) => T(b.quando) - T(a.quando))[0]
           const tipo = ev && /·\s*([^—]+?)\s*—/.exec(String(ev.obs || ''))
-          return `<b class="tag-tem">🔬 ${esc(SETOR_EXAME[k] || k)}: TEM AMOSTRA</b>${ev ? ` <span class="mudo">${esc(ev.por)} às ${hm(ev.quando)}${tipo ? ' · ' + esc(tipo[1].trim()) : ''}</span>` : ''}`
+          return `<b class="tag-tem">🔬 ${esc(SETOR_EXAME[k] || k)}: TEM AMOSTRA</b>${ev ? ` <span class="mudo">${esc(ev.por)} ${quandoDia(ev.quando)}${tipo ? ' · ' + esc(tipo[1].trim()) : ''}</span>` : ''}`
         }).join('<br>') + (falta.length ? `<br><b class="tag-falta">⏳ falta ${falta.map(k => esc(SETOR_EXAME[k] || k)).join(', ')}</b>` : '') + `</div>`)
       }
     }
     if (c.status !== 'sem_amostra' && etapaVisivel(c) >= 3) {
       const ev = ultimoEvento(c, 'amostra_ok')
-      if (ev) out.push(`<div class="info resp-tec"><b class="tag-tem">🔬 TEM AMOSTRA</b> confirmado pela Área Técnica${ev.por ? ` · ${esc(ev.por)}` : ''}${ev.quando ? ` às ${hm(ev.quando)}` : ''}${ev.obs ? ` · <b>${esc(ev.obs)}</b>` : ''}</div>`)
+      if (ev) out.push(`<div class="info resp-tec"><b class="tag-tem">🔬 TEM AMOSTRA</b> confirmado pela Área Técnica${ev.por ? ` · ${esc(ev.por)}` : ''}${ev.quando ? ` ${quandoDia(ev.quando)}` : ''}${ev.obs ? ` · <b>${esc(ev.obs)}</b>` : ''}</div>`)
     }
     if (c.etapa === 3 && c.pausado && c.status === 'aberto') {
       const ev = ultimoEvento(c, 'aguardando_clinica')
@@ -2156,7 +2162,12 @@
   }
   // enquanto houver terremoto SEM DONO, o alarme volta a cada 25 s — é o "para tudo"
   let ultimoAlarme = 0
+  // o terremoto sai da rota (coleta/entrega de material): quem resolve é o Atendimento
+  // ao Cliente. A bancada (hemato, bioquímica, PCR, citologia) não tem o que fazer com
+  // ele — e estava sendo acordada à toa. Thailan, 28/set.
+  function ouveTerremoto() { return setor === 'cc' || setor === 'todos' || setor === 'terremoto' || setor === 'panorama' }
   function insistirAlarme() {
+    if (!ouveTerremoto()) return
     let semDono = 0
     try { semDono = terremotosAtivos().filter(x => !x.reg || !x.reg.assumido_por).length } catch { return }
     if (!semDono) return
@@ -2187,7 +2198,8 @@
     if (terr.length) {
       const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0)
       const noDia = terremotos.filter(t => T(t.aberto_em) >= hoje0.getTime()).length
-      if (noDia < TERR_TETO) { ultimoAlarme = agora(); tocarAlarme() }   // passou do teto: continua na tela, mas para de apitar
+      // passou do teto: continua na tela, mas para de apitar. E só apita para quem resolve.
+      if (noDia < TERR_TETO && ouveTerremoto()) { ultimoAlarme = agora(); tocarAlarme() }
       toast(`🚨 TERREMOTO — ${terr.length > 1 ? `${terr.length} casos` : 'pare o que estiver fazendo'}`)
     }
     const cobra = chegaram.filter(k => k[0] === 'x')
