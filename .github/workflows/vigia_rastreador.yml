@@ -27,4 +27,7 @@ jobs:
           HISTO_INTAKE_TOKEN: ${{ secrets.HISTO_INTAKE_TOKEN }}
           CALLMEBOT_PHONE:    ${{ secrets.CALLMEBOT_PHONE }}
           CALLMEBOT_APIKEY:   ${{ secrets.CALLMEBOT_APIKEY }}
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
         run: python3 vigia_rastreador_nuvem.py

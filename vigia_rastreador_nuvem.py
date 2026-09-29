@@ -23,7 +23,11 @@ import datetime
 import json
 import os
 import re
+import smtplib
+import ssl
+import sys
 import urllib.request
+from email.mime.text import MIMEText
 from urllib.parse import quote
 
 SB_URL = "https://lrwjcdvporaivxvfuiwt.supabase.co"
@@ -72,6 +76,41 @@ def whats(texto):
         return False
 
 
+def email(assunto, corpo):
+    """⭐ Canal principal desta versão. Descobri testando o caminho do alarme que a
+    conta do CallMeBot está PAUSADA ("Your Account is Paused due to technical
+    issues") — ele devolve 200 e a mensagem não sai. Alarme que depende de um canal
+    só, e sem provar que esse canal entrega, é alarme que falha calado."""
+    gu = os.environ.get("GMAIL_USER", "")
+    gp = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
+    to = (os.environ.get("EMAIL_TO") or gu).strip()
+    if not (gu and gp and to):
+        print("E-mail: não configurado."); return False
+    try:
+        m = MIMEText(corpo, "plain", "utf-8")
+        m["Subject"], m["From"], m["To"] = assunto, gu, to
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as sv:
+            sv.login(gu, gp)
+            sv.sendmail(gu, [t.strip() for t in to.split(",") if t.strip()], m.as_string())
+        print(f"E-mail -> {to}: OK")
+        return True
+    except Exception as e:
+        print("E-mail FALHOU:", type(e).__name__, str(e)[:120])
+        return False
+
+
+def alarmar(assunto, texto):
+    """Dois canais, e conta quantos entregaram. Zero canal = o job FALHA, para o
+    GitHub mandar o aviso dele — é a última rede."""
+    n = 0
+    if email(assunto, texto):
+        n += 1
+    if whats(texto):
+        n += 1
+    print(f"canais que entregaram: {n}")
+    return n
+
+
 def main():
     agora = datetime.datetime.now(datetime.timezone.utc)
     brt = agora - datetime.timedelta(hours=3)
@@ -97,15 +136,25 @@ def main():
         novo = antes          # madrugada: o Mac dorme, não é notícia
 
     if novo != antes:
+        entregues = 1
         if novo == "parado":
-            whats(f"🚨 ALPHA — o rastreador de cancelamentos não entrega há {idade:.0f} min "
-                  f"(limite {LIMITE_MIN}). Pode ser o Mac desligado, sem login depois de um "
-                  f"reboot, ou o script quebrado. Aba Cancelamentos fica sem achar pedido novo.")
+            entregues = alarmar("🚨 ALPHA — rastreador de cancelamentos parado",
+                  f"O rastreador de cancelamentos não entrega há {idade:.0f} min (limite {LIMITE_MIN}).\n\n"
+                  "Pode ser: o Mac desligado, sem login depois de um reboot (FileVault), ou o script quebrado.\n"
+                  "Enquanto isso, a aba Cancelamentos para de achar pedido novo do cliente.")
         elif novo == "sem_batida":
-            whats("🚨 ALPHA — nunca recebi batida do rastreador de cancelamentos. "
+            entregues = alarmar("🚨 ALPHA — nunca recebi batida do rastreador",
+                  "Nunca recebi batida do rastreador de cancelamentos.\n"
                   "Ele nunca rodou, ou não está conseguindo falar com o banco.")
         elif novo == "ok" and antes in ("parado", "sem_batida"):
-            whats(f"✅ ALPHA — o rastreador de cancelamentos voltou (entregou há {idade:.0f} min).")
+            entregues = alarmar("✅ ALPHA — rastreador de cancelamentos voltou",
+                  f"O rastreador voltou a entregar (última batida há {idade:.0f} min).")
+        if entregues == 0:
+            # ⛔ nenhum canal entregou: não engula. O job falha e o GitHub avisa.
+            gravar(ESTADO, {"estado": novo, "visto_em": agora.isoformat(),
+                            "idade_min": None if idade is None else round(idade),
+                            "sem_canal": True})
+            sys.exit("ALARME SEM CANAL: nem e-mail nem WhatsApp entregaram")
 
     gravar(ESTADO, {"estado": novo, "visto_em": agora.isoformat(),
                     "idade_min": None if idade is None else round(idade)})
