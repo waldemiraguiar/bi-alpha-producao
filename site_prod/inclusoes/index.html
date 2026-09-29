@@ -125,6 +125,16 @@
       <div class="cancel-filtros"><button data-cper="aberto" class="on">Em aberto</button><button data-cper="dia">Resolvidas hoje</button><button data-cper="semana">7 dias</button></div>
     </div>
     <div class="rast-lista" id="cancelLista"></div>
+
+    <!-- 🔎 Fúlvio 28/set 20h00: "a preocupação não é só o parâmetro que a gente criou
+         de cancelamento. É se um cliente pediu e o processo não avançou." -->
+    <div class="rast-cancel" id="rastCancel" hidden>
+      <h3><span class="selo-rastc">🔎 RASTREADOR</span> Pedidos que o cliente fez e ninguém tratou</h3>
+      <p class="mudo">Mensagens de cancelamento que apareceram nos grupos e ainda não viraram cartão.
+      Não tento adivinhar pet nem requisição — em 14 dias medidos, o número da requisição
+      <b>nunca</b> veio na mensagem. Leia e decida.</p>
+      <div id="rastCancelLista"></div>
+    </div>
   </section>
 
   <section id="vNps" hidden>

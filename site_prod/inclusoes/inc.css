@@ -917,6 +917,18 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .cancel.aberto.estourou{border-left-color:var(--vermelho)}
 /* os dois lados que correm ao mesmo tempo depois do "pode cancelar" */
 /* a Triagem consultando os setores (Fúlvio 28/set 20h04) */
+/* 🔎 rastreador de cancelamentos (Fúlvio 28/set 20h00) */
+.rast-cancel{margin-top:22px;border-top:2px dashed var(--linha);padding-top:14px}
+.rast-cancel h3{font-family:var(--disp);font-size:21px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+.selo-rastc{background:var(--ia);color:#fff;border-radius:6px;padding:2px 8px;font-size:15px}
+.suspc{background:var(--ia-fundo);border:1px solid var(--ia);border-radius:11px;padding:10px 13px;margin-bottom:8px;display:grid;gap:5px}
+.suspc-cab{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between}
+.suspc-grupo{font-family:var(--disp);font-size:17px}
+.suspc-t{font-size:12.5px;color:var(--mudo);font-family:var(--mono)}
+.suspc-txt{font-size:14.5px;line-height:1.45}
+.suspc-acoes{display:flex;flex-wrap:wrap;gap:7px;margin-top:3px}
+.suspc-acoes button{font:inherit;font-size:13.5px;padding:7px 12px;border-radius:8px;border:none;background:var(--texto);color:#fff;cursor:pointer}
+.suspc-acoes .leve{background:transparent;border:1px solid var(--linha);color:var(--mudo)}
 .proc-bloco{background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:10px 12px;margin-top:8px;display:grid;gap:6px}
 .proc-tit{font-family:var(--disp);font-size:16px}
 .proc-linha{font-size:13.5px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}

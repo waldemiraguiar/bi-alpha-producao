@@ -82,7 +82,7 @@
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
   let terremotos = [], conferencia = [], heranca = []
-  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', triPer = 'abertos', saidas = [], saidaPer = 'abertas', saidaSemTabela = false, cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = (() => { try { return localStorage.getItem('inc_som') === '1' } catch { return false } })(), periodo = 'dia'
+  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', triPer = 'abertos', saidas = [], saidaPer = 'abertas', suspCancel = [], saidaSemTabela = false, cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = (() => { try { return localStorage.getItem('inc_som') === '1' } catch { return false } })(), periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -132,6 +132,10 @@
       npsConvites = nc.error ? [] : (nc.data || [])
       // 🚫 cancelamentos (Fúlvio, 24/set). Se a tabela ainda não existe — o SQL roda separado —
       // a aba aparece vazia e explica, em vez de o painel inteiro quebrar no erro do select.
+      try {
+        const sc = await SB.from('inc_cancel_suspeitas').select('*').eq('estado', 'aberta').order('quando', { ascending: false }).range(0, 199)
+        suspCancel = sc.error ? [] : (sc.data || [])
+      } catch { suspCancel = [] }
       try {
         const sd = await SB.from('inc_saidas').select('*').order('saiu_em', { ascending: false }).range(0, 999)
         if (sd.error) throw sd.error
@@ -432,6 +436,7 @@
     try { desenharConferencia() } catch {}
     try { desenharCancelamentos() } catch {}
     try { desenharTriagem() } catch {}
+    try { desenharRastCancel() } catch {}
     try { cancelDoSetor(setor) } catch {}
     try { desenharSaidas() } catch {}
     if (hist) return desenharHistorico()
@@ -763,6 +768,25 @@
     return trilha + `<div class="can-acoes">
       <button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>
       <button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>`
+  }
+
+  // ── 🔎 rastreador: pedido do cliente que não virou cartão (Fúlvio 28/set 20h00) ──
+  function desenharRastCancel() {
+    const el = $('rastCancel'); if (!el) return
+    el.hidden = !suspCancel.length
+    if (!suspCancel.length) { $('rastCancelLista').innerHTML = ''; return }
+    $('rastCancelLista').innerHTML = suspCancel.map(x => `
+      <div class="suspc" data-susp="${esc(x.msg_id)}">
+        <div class="suspc-cab">
+          <b class="suspc-grupo">${esc(nomeClinica(x.grupo) || x.grupo || '?')}</b>
+          <span class="suspc-t">${quandoDia(x.quando)}${x.autor ? ' · ' + esc(x.autor) : ''}</span>
+        </div>
+        <div class="suspc-txt">💬 ${esc(x.texto)}</div>
+        <div class="suspc-acoes">
+          <button data-suspreg="${esc(x.msg_id)}">Abrir o cancelamento</button>
+          <button class="leve" data-suspnada="${esc(x.msg_id)}">Não era pedido / já resolvido</button>
+        </div>
+      </div>`).join('')
   }
 
   // ── os cancelamentos DENTRO da aba de cada setor (Fúlvio 28/set 19h51 e 19h53) ──
@@ -2770,6 +2794,7 @@
   // ── 🚫 cancelamentos: abrir, registrar, completar, dar desfecho ──────────────────────────
   // Fúlvio 25/set: o diálogo deixou de ser um formulário e virou dois caminhos.
   // camCancel = por onde a pessoa começou · hfCancel = o que o HF devolveu · exCancel = exame escolhido
+  let pendenteSusp = null
   let camCancel = null, hfCancel = null, exCancel = null, forcarDigitado = false, alvoCancel = null, sugestoes = null
   function cancelPasso(qual) {
     camCancel = qual
@@ -3052,7 +3077,13 @@
     }
     $('cSalvar').disabled = true
     try {
-      await rpc('inc_cancel_abrir', args)
+      const novoId = await rpc('inc_cancel_abrir', args)
+      // veio do rastreador? some de lá, apontando para o cartão que nasceu
+      if (pendenteSusp) {
+        try { await rpc('inc_cancel_susp_acao', { p_nome: sessao.nome, p_senha: sessao.senha,
+                p_msg: pendenteSusp, p_estado: 'registrada', p_cancel_id: novoId || null }) } catch {}
+        pendenteSusp = null
+      }
       $('dlgCancel').close(); toast('Registrado — foi para a Triagem e para o Escritório')
       cancelPer = 'aberto'
       await carregar(); desenhar()
@@ -3262,6 +3293,23 @@
       catch (e) { ci.disabled = false; toast(e.message) }
       return
     }
+    const sr = ev.target.closest('[data-suspreg]'), sn = ev.target.closest('[data-suspnada]')
+    if (sr || sn) {                                          // 🔎 rastreador de cancelamentos
+      if (!(await garantirLogin())) return
+      const msg = (sr || sn).dataset.suspreg || (sr || sn).dataset.suspnada
+      if (sr) {
+        // abre o diálogo já com a mensagem do cliente colada, e só marca depois que salvar
+        pendenteSusp = msg
+        $('btnNovoCancel').click()
+        setTimeout(() => { const x = suspCancel.find(y => y.msg_id === msg); if (x && $('cTexto')) $('cTexto').value = x.texto }, 400)
+        return
+      }
+      sn.disabled = true
+      try { await rpc('inc_cancel_susp_acao', { p_nome: sessao.nome, p_senha: sessao.senha, p_msg: msg, p_estado: 'nada', p_cancel_id: null })
+            toast('Tirado da lista'); await carregar(); desenhar() }
+      catch (e) { sn.disabled = false; toast(msgSqlFalta(e, '29_rastreador_cancel')) }
+      return
+    }
     const cns = ev.target.closest('[data-cconsultar]')       // ① Triagem pergunta ao setor
     if (cns) {
       if (!(await garantirLogin())) return
@@ -3420,6 +3468,13 @@
       eventos.push({ chamado_id: x.id, quando: x.etapa_desde, para: 3, acao: 'amostra_ok', por: 'DEMO' })
     // 🚫 cancelamentos do ensaio — TIRADOS DAS MENSAGENS REAIS dos 10 dias, com a clínica trocada.
     // Os três casos que a operação de verdade produz: o completo, o mudo, e o que não deu tempo.
+    // 🔎 rastreador: pedidos reais que apareceram nos grupos (texto de verdade, clínica trocada)
+    suspCancel = [
+      { msg_id: 'd1', quando: min(40), grupo: 'Alpha - Clínica de exemplo', autor: 'Luciane',
+        texto: 'eu gostaria de cancelar o exame do animal CHAN', estado: 'aberta' },
+      { msg_id: 'd2', quando: min(180), grupo: 'Alpha - Outra clínica', autor: 'Renato',
+        texto: 'Boa tarde, do dia 24 pode desconsiderar, por favor', estado: 'aberta' },
+    ]
     // 📦 saídas de exemplo: uma com amostra alterada (o caso que faz a aba existir)
     saidas = [
       { id: 201, criado_em: min(120), saiu_em: min(120), req: '644475', clinica: 'Dra. Elizabeth Coppola',
@@ -3490,6 +3545,10 @@
       return falta.length ? falta.join(', ') : 'completo'
     }
     // ── ensaio do fluxo de cancelamento com TRIAGEM (Fúlvio 25/set). Nada é gravado. ──
+    if (nome === 'inc_cancel_susp_acao') {
+      suspCancel = suspCancel.filter(x => x.msg_id !== a.p_msg)
+      return true
+    }
     if (nome === 'inc_cancel_consultar') {
       const x = cancelamentos.find(y => y.id === a.p_id)
       if (x) { x.exames_proc = { ...(x.exames_proc || {}), [a.p_exame]: { setor: a.p_setor, perguntado_em: new Date().toISOString(), perguntado_por: 'DEMO' } } }
