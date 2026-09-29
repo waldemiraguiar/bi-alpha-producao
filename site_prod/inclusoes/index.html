@@ -21,6 +21,7 @@
     <button data-setor="esc">Escritório</button>
     <button data-setor="tec">Área Técnica</button>
     <button data-setor="tri">Triagem</button>
+    <button data-setor="saida" class="aba-saida">📦 Saída de amostras</button>
     <button data-setor="todos">Todos</button>
     <button data-setor="terremoto" class="aba-terremoto calmo">🚨 TERREMOTO</button>
     <button data-setor="confere" class="aba-confere">🔍 Conferência</button>
@@ -83,6 +84,27 @@
         ele pergunta se ainda dá tempo de fazer o cancelamento." -->
   <!-- 🧭 TRIAGEM (Fúlvio 25/set 18h17). Setor novo: só trata cancelamento, e trata
        junto com o Escritório — os dois dão CIENTE ao mesmo tempo. -->
+  <!-- 📦 CONTROLE DE SAÍDA (Fúlvio, áudios 25/set 08h39–08h44).
+       NÃO é passo de processamento: é o material biológico que SAI para o apoio.
+       Hoje a bioquímica faz isso em caderno. -->
+  <section id="vSaida" hidden>
+    <div class="rast-topo">
+      <h2><span class="selo-saida">📦 SAÍDA</span> Material que saiu para o apoio</h2>
+      <p class="mudo">O que foi encaminhado para <b>Vet Lab</b> e <b>TECSA</b>: quais exames, que amostra, quanto volume
+      e como ela estava. É isto que permite confrontar o apoio quando o laudo não vier satisfatório.
+      Sai desta lista quando o <b>parceiro confirma a coleta</b>.</p>
+    </div>
+    <div class="saida-topo">
+      <button class="btn-principal" id="btnNovaSaida">+ Registrar saída</button>
+      <div class="tri-filtros" id="saidaFiltros">
+        <button data-sper="abertas" class="on">Aguardando o parceiro</button>
+        <button data-sper="dia">Coletadas hoje</button>
+        <button data-sper="semana">7 dias</button>
+      </div>
+    </div>
+    <div class="rast-lista" id="saidaLista"></div>
+  </section>
+
   <section id="vTriagem" hidden>
     <div class="rast-topo"><h2><span class="selo-tri">🧭 TRIAGEM</span> Cancelamentos para dar ciente</h2>
       <p class="mudo">O Atendimento ao Cliente registra e manda para cá <b>e para o Escritório ao mesmo tempo</b>.
@@ -208,6 +230,47 @@
      A lista NÃO vem do HF: no caso real da Nina o hf_exames está vazio, e a Babésia
      que ela precisa marcar está dentro de um parêntese no texto digitado. O sistema
      sugere a quebra; quem manda é a técnica. -->
+<!-- 📦 registrar saída de material para o apoio -->
+<dialog id="dlgSaida">
+  <form id="formSaida" method="dialog">
+    <h3>Registrar saída de amostra</h3>
+
+    <label>Número da requisição <span class="obrig">*</span></label>
+    <div class="linha-busca">
+      <input id="sReq" inputmode="numeric" autocomplete="off" placeholder="ex. 644475">
+      <button type="button" class="btn-sec" id="sBuscar">Buscar no HF</button>
+    </div>
+    <p class="erro" id="sReqErro"></p>
+    <div id="sConfere" class="cancel-confere" hidden></div>
+
+    <div id="sResto" hidden>
+      <label>Para onde vai <span class="obrig">*</span></label>
+      <div class="alvo-escolha" id="sApoio">
+        <button type="button" class="alvo" data-sapoio="vetlab">Vet Lab</button>
+        <button type="button" class="alvo" data-sapoio="tecsa">TECSA</button>
+      </div>
+
+      <label>Quais exames estão saindo <span class="obrig">*</span></label>
+      <p class="mudo dica">Só os especializados — um ou mais.</p>
+      <div class="ex-lista" id="sExLista"></div>
+
+      <label>Amostras que foram <span class="obrig">*</span></label>
+      <p class="mudo dica">Exames podem dividir a mesma amostra: descreva as amostras, não os exames.</p>
+      <div id="sAmostras"></div>
+      <button type="button" class="btn-sec" id="sAddAmostra">+ somar amostra</button>
+
+      <label>Observação</label>
+      <input id="sObs" autocomplete="off" placeholder="opcional">
+      <p class="erro" id="sErro"></p>
+    </div>
+
+    <div class="linha-botoes">
+      <button value="cancel" class="btn-sec" formnovalidate>Fechar</button>
+      <button class="btn-principal" id="sSalvar" hidden>Registrar saída</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlgExames">
   <form id="formExames" method="dialog">
     <h3>Exames liberados</h3>

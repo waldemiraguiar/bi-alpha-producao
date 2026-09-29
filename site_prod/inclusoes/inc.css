@@ -834,6 +834,24 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .cancel-do-setor h3{font-family:var(--disp);font-size:20px;margin:0;display:flex;align-items:center;gap:8px}
 .cancel-do-setor h3 .selo-cancel{background:var(--vermelho);color:#fff;border-radius:6px;padding:2px 8px;font-size:15px}
 .conf-req{font-family:var(--mono)}
+/* 📦 controle de saída para o apoio (Fúlvio 25/set) */
+.selo-saida{background:var(--moto);color:#fff;border-radius:6px;padding:2px 8px;font-family:var(--disp);letter-spacing:.02em}
+#abas button[data-setor="saida"].tem{border-color:var(--moto);color:var(--moto)}
+.saida-topo{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:12px 0}
+.saida{background:var(--painel);border-radius:12px;padding:12px 16px;border-left:6px solid var(--moto);
+       box-shadow:var(--sombra);display:grid;gap:6px;margin-bottom:8px}
+.saida.ok{border-left-color:var(--ok);opacity:.78}
+.sai-apoio{color:var(--moto)}
+.sai-exames{font-size:14px}
+.sai-amostras{display:flex;flex-wrap:wrap;gap:6px}
+.sai-amostras .am{font-size:13px;font-family:var(--mono);background:var(--painel2);border:1px solid var(--linha);border-radius:7px;padding:3px 9px}
+.sai-amostras.alerta .am{border-color:var(--amarelo)}
+.am-linha{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:center;margin-bottom:6px}
+.am-linha select,.am-linha input{font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:var(--painel);min-width:0}
+.am-linha .tira{background:none;border:none;color:var(--fraco);font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+.am-linha .tira:hover{color:var(--vermelho)}
+.dica{font-size:12.5px;margin:2px 0 6px}
+#sExLista .ex.on{border-color:var(--moto);background:var(--moto-fundo)}
 .ex-check{display:grid;gap:6px;margin:8px 0;max-height:46vh;overflow:auto}
 .ex-check label{display:flex;align-items:center;gap:10px;background:var(--painel2);border:1px solid var(--linha);border-radius:9px;padding:9px 12px;font-size:14.5px;cursor:pointer}
 .ex-check label.ok{border-color:var(--ok);background:#f0fdf4}

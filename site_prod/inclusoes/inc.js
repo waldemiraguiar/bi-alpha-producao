@@ -82,7 +82,7 @@
   // ── estado ──
   let setor = qs.get('setor') || lerLocal('inc_setor') || 'cc'
   let terremotos = [], conferencia = [], heranca = []
-  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', triPer = 'abertos', cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = (() => { try { return localStorage.getItem('inc_som') === '1' } catch { return false } })(), periodo = 'dia'
+  let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', triPer = 'abertos', saidas = [], saidaPer = 'abertas', saidaSemTabela = false, cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = (() => { try { return localStorage.getItem('inc_som') === '1' } catch { return false } })(), periodo = 'dia'
   const $ = id => document.getElementById(id)
   const T = q => q ? Date.parse(q) : 0
   const agora = () => Date.now()
@@ -132,6 +132,11 @@
       npsConvites = nc.error ? [] : (nc.data || [])
       // 🚫 cancelamentos (Fúlvio, 24/set). Se a tabela ainda não existe — o SQL roda separado —
       // a aba aparece vazia e explica, em vez de o painel inteiro quebrar no erro do select.
+      try {
+        const sd = await SB.from('inc_saidas').select('*').order('saiu_em', { ascending: false }).range(0, 999)
+        if (sd.error) throw sd.error
+        saidas = sd.data || []; saidaSemTabela = false
+      } catch (e) { saidas = []; saidaSemTabela = true }
       const cc = await SB.from('inc_cancelamentos').select('*').gte('criado_em', new Date(agora() - 60 * 864e5).toISOString()).order('criado_em', { ascending: false }).range(0, 999)
       cancelamentos = cc.error ? [] : (cc.data || [])
       cancelSemTabela = !!cc.error   // "nenhuma solicitação 👍" mentiria se a tabela nem existe
@@ -413,8 +418,8 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere', canc = setor === 'cancel', tri = setor === 'tri'
-    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan || conf || canc || tri; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf; $('vCancel').hidden = !canc; $('vTriagem').hidden = !tri
+    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere', canc = setor === 'cancel', tri = setor === 'tri', sai = setor === 'saida'
+    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan || conf || canc || tri || sai; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf; $('vCancel').hidden = !canc; $('vTriagem').hidden = !tri; $('vSaida').hidden = !sai
     desenharLegenda()
     try { desenharAbasSetor() } catch {}
     desenharRastreamento()
@@ -428,8 +433,9 @@
     try { desenharCancelamentos() } catch {}
     try { desenharTriagem() } catch {}
     try { cancelDoSetor(setor) } catch {}
+    try { desenharSaidas() } catch {}
     if (hist) return desenharHistorico()
-    if (rast || col || rot || npsv || terr || pan || conf || canc || tri) return
+    if (rast || col || rot || npsv || terr || pan || conf || canc || tri || sai) return
     const abertos = chamados.filter(ativo)
     desenharKpis(abertos)
     desenharRascunhos()
@@ -727,6 +733,62 @@
     const tit = qual === 'esc' ? 'esperando o Escritório' : 'esperando o Atendimento ao Cliente'
     el.innerHTML = `<h3><span class="selo-cancel">🚫 CANCELAMENTO</span> ${meus.length} ${tit}</h3>` +
       meus.map(c => cancelCartao(c)).join('')
+  }
+
+  // ══ 📦 CONTROLE DE SAÍDA PARA O APOIO (Fúlvio, 25/set 08h39–08h44) ══
+  // Não é passo de processamento. É o material biológico que SAI — para confrontar
+  // o apoio depois. Hoje a bioquímica anota em caderno.
+  const APOIO = { vetlab: 'Vet Lab', tecsa: 'TECSA' }
+  const TIPO_AMOSTRA = ['Soro', 'Plasma', 'Sangue total', 'Fezes', 'Urina', 'Lâmina', 'Swab', 'Fragmento', 'Outro']
+  // as três alterações que ele nomeou, mais o caso normal
+  const QUALIDADE = ['Íntegra', 'Hemólise', 'Icterícia', 'Lipemia']
+
+  function desenharSaidas() {
+    const b = document.querySelector('#abas button[data-setor="saida"]')
+    const abertas = saidas.filter(x => !x.coletado_em)
+    if (b) {
+      b.innerHTML = '📦 Saída de amostras' + (abertas.length ? ` <span class="badge">${abertas.length}</span>` : '')
+      b.classList.toggle('tem', abertas.length > 0)
+    }
+    document.querySelectorAll('#saidaFiltros button').forEach(x => x.classList.toggle('on', x.dataset.sper === saidaPer))
+    const alvo = $('saidaLista'); if (!alvo) return
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0)
+    const lim = saidaPer === 'semana' ? agora() - 7 * 864e5 : d0.getTime()
+    const lst = saidaPer === 'abertas' ? abertas
+      : saidas.filter(x => x.coletado_em && T(x.coletado_em) >= lim)
+    if (!lst.length) {
+      alvo.innerHTML = saidaSemTabela
+        ? `<div class="vazio ruim">A aba está pronta, mas a tabela ainda não existe no banco.<br>
+           Falta rodar <b>supabase_inclusoes_26_saida_amostras.sql</b> no editor SQL do Supabase.</div>`
+        : `<div class="vazio">${saidaPer === 'abertas'
+            ? 'Nenhum material aguardando o parceiro. 👍'
+            : 'Nada coletado neste período.'}</div>`
+      return
+    }
+    alvo.innerHTML = lst.map(x => {
+      const ex = Array.isArray(x.exames) ? x.exames : []
+      const am = Array.isArray(x.amostras) ? x.amostras : []
+      const idade = fmt((agora() - T(x.saiu_em)) / 60000)
+      const ruim = am.some(a => a.qualidade && a.qualidade !== 'Íntegra')
+      return `<div class="saida ${x.coletado_em ? 'ok' : ''}" data-sid="${x.id}">
+        <div class="can-cab">
+          <b class="can-clin">${esc(x.clinica || 'clínica não informada')}</b>
+          <span class="can-t">${x.coletado_em
+            ? `coletado ${quandoDia(x.coletado_em)} · ${esc(x.coletado_por || '')}`
+            : `saiu há ${idade}`}</span>
+        </div>
+        <div class="can-alvo">${x.pet ? `<b>${esc(x.pet)}</b>` : '<span class="mudo">pet não informado</span>'}${x.tutor ? ` <span class="mudo">(tutor: ${esc(x.tutor)})</span>` : ''} <span class="req">${esc(x.req)}</span>
+          → <b class="sai-apoio">${esc(APOIO[x.apoio] || x.apoio)}</b></div>
+        <div class="sai-exames">🔬 ${ex.map(esc).join(' · ') || '—'}</div>
+        <div class="sai-amostras ${ruim ? 'alerta' : ''}">${am.length
+          ? am.map(a => `<span class="am">${esc(a.tipo || '?')}${a.volume ? ` · ${esc(a.volume)}` : ''}${a.qualidade ? ` · <b>${esc(a.qualidade)}</b>` : ''}</span>`).join('')
+          : '<span class="mudo">sem amostra descrita</span>'}</div>
+        ${x.obs ? `<div class="can-txt mudo">↳ ${esc(x.obs)}</div>` : ''}
+        <div class="can-acoes">${x.coletado_em
+          ? `<button class="leve" data-sdesfazer="${x.id}">Não foi coletado — voltar</button>`
+          : `<button data-scoletado="${x.id}">O parceiro coletou</button>`}</div>
+      </div>`
+    }).join('')
   }
 
   // ── a tela do setor TRIAGEM ──
@@ -2949,6 +3011,144 @@
   })
   // ⚠️ o MESMO cartão é desenhado na aba Cancelamentos e na aba Triagem.
   // O ouvinte tem que valer nas duas, senão os botões da Triagem ficam mudos.
+  // ══ 📦 diálogo da saída de amostras ══
+  let sHF = null, sApoioSel = null, sExSel = [], sAmostras = []
+  function desenharAmostras() {
+    $('sAmostras').innerHTML = sAmostras.map((a, i) => `
+      <div class="am-linha" data-ami="${i}">
+        <select data-amc="tipo">${TIPO_AMOSTRA.map(t => `<option ${t === a.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <input data-amc="volume" value="${esc(a.volume || '')}" placeholder="volume (ex. 2 mL)" autocomplete="off">
+        <select data-amc="qualidade">${QUALIDADE.map(q => `<option ${q === a.qualidade ? 'selected' : ''}>${q}</option>`).join('')}</select>
+        <button type="button" class="tira" data-amtira="${i}" title="tirar">×</button>
+      </div>`).join('') || '<p class="mudo">Nenhuma amostra ainda. Clique em somar.</p>'
+    liberarSaida()
+  }
+  function liberarSaida() {
+    const ok = !!sApoioSel && sExSel.length > 0 && sAmostras.length > 0 && sAmostras.every(a => a.tipo)
+    $('sSalvar').hidden = !ok
+  }
+  $('btnNovaSaida')?.addEventListener('click', async () => {
+    if (!(await garantirLogin())) return
+    $('formSaida').reset()
+    sHF = null; sApoioSel = null; sExSel = []; sAmostras = []
+    $('sConfere').hidden = true; $('sResto').hidden = true; $('sSalvar').hidden = true
+    $('sReqErro').textContent = ''; $('sErro').textContent = ''
+    document.querySelectorAll('#sApoio .alvo').forEach(b => b.classList.remove('on'))
+    $('dlgSaida').showModal(); $('sReq').focus()
+  })
+  async function buscarReqSaida() {
+    if (!(await garantirLogin())) return
+    const n = $('sReq').value.replace(/\D/g, '')
+    $('sReqErro').textContent = ''; $('sResto').hidden = true; $('sSalvar').hidden = true
+    if (!n) { $('sReqErro').textContent = 'Digite o número da requisição.'; return }
+    $('sConfere').hidden = false; $('sConfere').className = 'cancel-confere'
+    $('sConfere').innerHTML = '<span class="mudo">olhando no HF…</span>'
+    let r = null
+    try { r = await rpc('inc_cancel_req', { p_nome: sessao.nome, p_senha: sessao.senha, p_num: n }) }
+    catch (e) { $('sConfere').hidden = true; $('sReqErro').textContent = e.message; return }
+    if (!r) {
+      // NUNCA BLOQUEAR: o material sai hoje, o registro não pode esperar o espelho
+      $('sConfere').className = 'cancel-confere ruim'
+      $('sConfere').innerHTML = `A requisição <b>${esc(n)}</b> não está no espelho do HF (ele guarda ~20 dias e atualiza a cada 30 min).
+        <div class="conf-acoes"><button type="button" class="btn-sec" data-ssem="1">Registrar assim mesmo</button></div>`
+      return
+    }
+    sHF = r
+    const ex = Array.isArray(r.exames) ? r.exames : []
+    $('sConfere').className = 'cancel-confere'
+    $('sConfere').innerHTML = `<div class="conf-tit">É este mesmo?</div>
+      <dl class="conf-dl">
+        <dt>Requisição</dt><dd><b class="conf-req">${esc(r.req || n)}</b></dd>
+        <dt>Clínica</dt><dd><b>${esc(r.clinica || '—')}</b></dd>
+        <dt>Pet</dt><dd><b>${esc(r.pet || '—')}</b>${r.especie ? ' · ' + esc(r.especie) : ''}</dd>
+        <dt>Tutor</dt><dd>${r.tutor ? `<b>${esc(r.tutor)}</b>` : '<span class="mudo">o HF não tem tutor nesta requisição</span>'}</dd>
+        <dt>Entrada</dt><dd>${r.entrada ? dataCurta(r.entrada) + ' ' + hm(r.entrada) : '—'}</dd>
+      </dl>
+      <div class="conf-acoes"><button type="button" class="btn-principal" data-svalida="1">É este mesmo</button></div>`
+    $('sExLista').innerHTML = ex.length
+      ? ex.map((e, i) => `<button type="button" class="ex" data-sex="${i}"><b>${esc(e.exame || '—')}</b><span>${e.digitado ? 'já digitado' : 'ainda não digitado'}</span></button>`).join('')
+      : '<p class="mudo">Nenhum exame lançado nesta requisição — some à mão depois, na observação.</p>'
+  }
+  $('sBuscar')?.addEventListener('click', buscarReqSaida)
+  $('sReq')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarReqSaida() } })
+  $('sConfere')?.addEventListener('click', ev => {
+    if (ev.target.closest('[data-svalida]') || ev.target.closest('[data-ssem]')) {
+      if (ev.target.closest('[data-ssem]')) { sHF = null; $('sExLista').innerHTML = '<p class="mudo">Requisição fora do espelho: descreva os exames na observação.</p>' }
+      $('sResto').hidden = false
+      if (!sAmostras.length) { sAmostras = [{ tipo: 'Soro', volume: '', qualidade: 'Íntegra' }] }
+      desenharAmostras()
+    }
+  })
+  $('sApoio')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-sapoio]'); if (!b) return
+    sApoioSel = b.dataset.sapoio
+    document.querySelectorAll('#sApoio .alvo').forEach(x => x.classList.toggle('on', x === b))
+    liberarSaida()
+  })
+  $('sExLista')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-sex]'); if (!b) return
+    const i = +b.dataset.sex, ex = (sHF && sHF.exames) || []
+    const nome = ex[i] && ex[i].exame; if (!nome) return
+    b.classList.toggle('on')
+    sExSel = b.classList.contains('on') ? [...new Set([...sExSel, nome])] : sExSel.filter(x => x !== nome)
+    liberarSaida()
+  })
+  $('sAddAmostra')?.addEventListener('click', () => { sAmostras.push({ tipo: 'Soro', volume: '', qualidade: 'Íntegra' }); desenharAmostras() })
+  $('sAmostras')?.addEventListener('click', ev => {
+    const t = ev.target.closest('[data-amtira]'); if (!t) return
+    sAmostras.splice(+t.dataset.amtira, 1); desenharAmostras()
+  })
+  $('sAmostras')?.addEventListener('input', ev => {
+    const c = ev.target.closest('[data-amc]'); if (!c) return
+    const i = +c.closest('[data-ami]').dataset.ami
+    sAmostras[i][c.dataset.amc] = c.value
+    liberarSaida()
+  })
+  $('sAmostras')?.addEventListener('change', ev => {
+    const c = ev.target.closest('[data-amc]'); if (!c) return
+    const i = +c.closest('[data-ami]').dataset.ami
+    sAmostras[i][c.dataset.amc] = c.value
+    desenharAmostras()
+  })
+  $('formSaida')?.addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter' || ev.target.tagName === 'TEXTAREA' || ev.target.id === 'sReq') return
+    ev.preventDefault()
+  })
+  $('formSaida')?.addEventListener('submit', async ev => {
+    if (ev.submitter && ev.submitter.value === 'cancel') return
+    ev.preventDefault()
+    if (!(await garantirLogin())) return
+    $('sSalvar').disabled = true
+    try {
+      await rpc('inc_saida_nova', {
+        p_nome: sessao.nome, p_senha: sessao.senha,
+        p_req: $('sReq').value.replace(/\D/g, ''),
+        p_clinica: (sHF && sHF.clinica) || null, p_pet: (sHF && sHF.pet) || null,
+        p_tutor: (sHF && sHF.tutor) || null, p_apoio: sApoioSel,
+        p_exames: sExSel, p_amostras: sAmostras,
+        p_obs: $('sObs').value.trim() || null, p_saiu: null,
+      })
+      $('dlgSaida').close(); toast('📦 Saída registrada'); saidaPer = 'abertas'
+      await carregar(); desenhar()
+    } catch (e) {
+      $('sErro').textContent = /PGRST202|could not find|schema cache|does not exist/i.test(e.message || '')
+        ? 'Falta rodar o SQL supabase_inclusoes_26_saida_amostras.sql no Supabase.' : e.message
+    } finally { $('sSalvar').disabled = false }
+  })
+  $('vSaida')?.addEventListener('click', async ev => {
+    const f = ev.target.closest('[data-sper]')
+    if (f) { saidaPer = f.dataset.sper; return desenharSaidas() }
+    const c = ev.target.closest('[data-scoletado]'), d = ev.target.closest('[data-sdesfazer]')
+    if (!c && !d) return
+    if (!(await garantirLogin())) return
+    const b = c || d; b.disabled = true
+    try {
+      await rpc(c ? 'inc_saida_coletada' : 'inc_saida_desfazer',
+        { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +(c ? c.dataset.scoletado : d.dataset.sdesfazer) })
+      toast(c ? 'Coleta do parceiro confirmada' : 'Voltou para a lista'); await carregar(); desenhar()
+    } catch (e) { b.disabled = false; toast(e.message) }
+  })
+
   $('cancelDoSetor')?.addEventListener('click', ev => acoesCancel(ev))
   $('vTriagem')?.addEventListener('click', ev => {
     const f = ev.target.closest('[data-tper]')
@@ -3112,6 +3312,23 @@
       eventos.push({ chamado_id: x.id, quando: x.etapa_desde, para: 3, acao: 'amostra_ok', por: 'DEMO' })
     // 🚫 cancelamentos do ensaio — TIRADOS DAS MENSAGENS REAIS dos 10 dias, com a clínica trocada.
     // Os três casos que a operação de verdade produz: o completo, o mudo, e o que não deu tempo.
+    // 📦 saídas de exemplo: uma com amostra alterada (o caso que faz a aba existir)
+    saidas = [
+      { id: 201, criado_em: min(120), saiu_em: min(120), req: '644475', clinica: 'Dra. Elizabeth Coppola',
+        pet: 'BARNEY', tutor: 'Roseli Sodre', apoio: 'vetlab',
+        exames: ['Cultura e Antibiograma'],
+        amostras: [{ tipo: 'Soro', volume: '2 mL', qualidade: 'Hemólise' }], registrado_por: 'DEMO',
+        obs: 'apoio avisado por telefone' },
+      { id: 202, criado_em: min(300), saiu_em: min(300), req: '644102', clinica: 'Clínica de exemplo',
+        pet: 'MEL', tutor: 'Joaquim', apoio: 'tecsa',
+        exames: ['PCR Leishmania', 'RIFI'],
+        amostras: [{ tipo: 'Soro', volume: '1 mL', qualidade: 'Íntegra' },
+                   { tipo: 'Sangue total', volume: '3 mL', qualidade: 'Íntegra' }], registrado_por: 'DEMO' },
+      { id: 203, criado_em: min(1500), saiu_em: min(1500), req: '643880', clinica: 'Outra clínica de exemplo',
+        pet: 'THOR', tutor: 'Bruna', apoio: 'vetlab', exames: ['T4 livre'],
+        amostras: [{ tipo: 'Soro', volume: '1 mL', qualidade: 'Lipemia' }],
+        coletado_em: min(1400), coletado_por: 'DEMO', registrado_por: 'DEMO' },
+    ]
     cancelamentos = [
       { id: 1, criado_em: min(12), quando_pedido: min(12), clinica: 'Clínica de exemplo', autor: 'Viviane',
         texto: 'Boa tarde! Solicito o cancelamento do exame Check-up felino da paciente Artemísia. O sangue acabou de ser enviado mas a paciente foi a óbito agora mesmo.',
@@ -3165,6 +3382,21 @@
       return falta.length ? falta.join(', ') : 'completo'
     }
     // ── ensaio do fluxo de cancelamento com TRIAGEM (Fúlvio 25/set). Nada é gravado. ──
+    if (nome === 'inc_saida_nova') {
+      saidas.unshift({ id: saidas.length + 200, criado_em: new Date().toISOString(), saiu_em: new Date().toISOString(),
+        req: a.p_req, clinica: a.p_clinica, pet: a.p_pet, tutor: a.p_tutor, apoio: a.p_apoio,
+        exames: a.p_exames, amostras: a.p_amostras, obs: a.p_obs, registrado_por: 'DEMO' })
+      return saidas[0].id
+    }
+    if (nome === 'inc_saida_coletada') {
+      const x = saidas.find(y => y.id === a.p_id)
+      if (x) { x.coletado_em = new Date().toISOString(); x.coletado_por = 'DEMO' }
+      return true
+    }
+    if (nome === 'inc_saida_desfazer') {
+      const x = saidas.find(y => y.id === a.p_id); if (x) { x.coletado_em = null; x.coletado_por = null }
+      return true
+    }
     if (nome === 'inc_exames_lib') {
       const x = chamados.find(y => y.id === a.p_id)
       const v = { itens: a.p_itens || [], ok: (a.p_ok || []).filter(o => (a.p_itens || []).includes(o)), por: 'DEMO', quando: new Date().toISOString() }
