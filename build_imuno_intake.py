@@ -20,7 +20,7 @@ SQL = (
     "GROUP_CONCAT(DISTINCT s.Exame SEPARATOR ' | ') AS exames "
     "FROM TabExameNumeroSolicitado s "
     "JOIN `TabExameNumeroRequisiçao` r ON r.CodNumeroSequencialTela = s.CodNumeroSequencialTela "
-    "WHERE s.CodCategoria = 15 AND s.Exame LIKE 'Imuno%%' "
+    "WHERE s.CodCategoria = 15 AND (s.Exame LIKE 'Imuno%%' OR s.Exame LIKE 'PARR%%') "
     "AND s.Exame NOT LIKE 'Solicita%%' AND r.CodNumeroSequencialTela > %s "
     "GROUP BY r.CodNumeroSequencialTela"
 )
