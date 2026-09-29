@@ -86,8 +86,13 @@ def enviar(itens):
     req = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_cancel_susp_pop", data=body, method="POST",
                                  headers={"apikey": ANON, "Authorization": f"Bearer {ANON}",
                                           "Content-Type": "application/json"})
-    print("enviado:", json.loads(urllib.request.urlopen(req, timeout=90).read() or "null"))
+    r = json.loads(urllib.request.urlopen(req, timeout=90).read() or "null")
+    print("enviado:", r)
+    if not (isinstance(r, dict) and r.get("ok")):
+        raise RuntimeError("o banco recusou: %s" % r)
 
+
+BATIDA = os.path.expanduser("~/Claude BI Alpha/.rastreador_cancel_ok")
 
 if __name__ == "__main__":
     itens, lidos = achar()
@@ -95,3 +100,11 @@ if __name__ == "__main__":
     for i in itens[:10]:
         print("  •", (i["grupo"] or "?")[:34], "|", i["texto"][:70].replace("\n", " "))
     enviar(itens)
+    # ⭐ a batida só é gravada depois que o banco ACEITOU. "Rodou" não é "entregou":
+    # se o token cair ou o Supabase estiver fora, o arquivo envelhece e o vigia acusa.
+    # Sem itens novos também conta como entrega: ler 12 mil mensagens e não achar
+    # cancelamento é o resultado normal, não falha.
+    with open(BATIDA, "w", encoding="utf-8") as f:
+        json.dump({"quando": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                   "lidos": lidos, "achados": len(itens)}, f)
+    print("batida gravada")
