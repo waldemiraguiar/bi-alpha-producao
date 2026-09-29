@@ -32,7 +32,7 @@ TOKEN = os.environ.get("HISTO_INTAKE_TOKEN", "")
 ROBO = "rastreador_cancel"
 ESTADO = "vigia_rastreador_estado"
 
-LIMITE_MIN = 90          # o local usa 70; este é a rede de baixo, mais folgado
+LIMITE_MIN = -1          # o local usa 70; este é a rede de baixo, mais folgado
 HORA_INI, HORA_FIM = 7, 21   # BRT
 
 
