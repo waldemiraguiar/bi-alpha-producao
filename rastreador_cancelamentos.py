@@ -104,7 +104,20 @@ if __name__ == "__main__":
     # se o token cair ou o Supabase estiver fora, o arquivo envelhece e o vigia acusa.
     # Sem itens novos também conta como entrega: ler 12 mil mensagens e não achar
     # cancelamento é o resultado normal, não falha.
+    det = {"quando": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           "lidos": lidos, "achados": len(itens)}
     with open(BATIDA, "w", encoding="utf-8") as f:
-        json.dump({"quando": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                   "lidos": lidos, "achados": len(itens)}, f)
+        json.dump(det, f)
+    # e bate também no banco, para o vigia da NUVEM enxergar mesmo com este Mac
+    # desligado — que é o furo do FileVault
+    if TOKEN:
+        try:
+            b = json.dumps({"p_token": TOKEN, "p_nome": "rastreador_cancel",
+                            "p_detalhe": {"lidos": lidos, "achados": len(itens)}}).encode()
+            rq = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_batida", data=b, method="POST",
+                                        headers={"apikey": ANON, "Authorization": f"Bearer {ANON}",
+                                                 "Content-Type": "application/json"})
+            print("batida no banco:", json.loads(urllib.request.urlopen(rq, timeout=45).read() or "null"))
+        except Exception as e:
+            print("batida no banco falhou:", type(e).__name__, str(e)[:80])
     print("batida gravada")

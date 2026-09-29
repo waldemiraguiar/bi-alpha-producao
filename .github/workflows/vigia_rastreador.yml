@@ -1,0 +1,30 @@
+# Vigia do rastreador de cancelamentos — roda NA NUVEM.
+# Existe porque o Mac tem FileVault ligado e sem autologin: depois de um reboot
+# nenhum LaunchAgent sobe até alguém digitar a senha, então o vigia de lá não
+# avisa justamente quando mais precisa. Este roda com o Mac desligado.
+name: Vigia do Rastreador de Cancelamentos
+
+on:
+  schedule:
+    - cron: '20 10-23 * * *'   # de hora em hora, ~07h-20h BRT (UTC = BRT+3)
+  workflow_dispatch:
+
+concurrency:
+  group: vigia-rastreador
+  cancel-in-progress: true
+
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Conferir a batida do rastreador
+        env:
+          HISTO_INTAKE_TOKEN: ${{ secrets.HISTO_INTAKE_TOKEN }}
+          CALLMEBOT_PHONE:    ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY:   ${{ secrets.CALLMEBOT_APIKEY }}
+        run: python3 vigia_rastreador_nuvem.py
