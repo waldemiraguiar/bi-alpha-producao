@@ -2895,8 +2895,11 @@
       // só guarda ~20 dias, então requisição antiga nunca esteve lá. A tela diz isso.
       $('cConfere').className = 'cancel-confere ruim'
       $('cConfere').innerHTML = `A requisição <b>${esc(n)}</b> não está no espelho do HF.
-        <div class="conf-obs">O espelho guarda só os últimos ~20 dias e atualiza a cada 30 min. Requisição mais antiga que isso não aparece aqui.</div>
-        <div class="conf-acoes"><button type="button" class="btn-sec" data-csem="1">Seguir assim mesmo e preencher à mão</button></div>`
+        <div class="conf-obs">O espelho guarda só os últimos ~20 dias. Dá para mandar buscar direto no HF — ela chega aqui na próxima atualização (até 30 min) e fica guardada.</div>
+        <div class="conf-acoes">
+          <button type="button" class="btn-principal" data-cpedir="${esc(n)}">Buscar esta no HF</button>
+          <button type="button" class="btn-sec" data-csem="1">Seguir assim mesmo e preencher à mão</button>
+        </div>`
       return
     }
     hfCancel = r
@@ -3049,8 +3052,11 @@
     if (!r) {
       // NUNCA BLOQUEAR: o material sai hoje, o registro não pode esperar o espelho
       $('sConfere').className = 'cancel-confere ruim'
-      $('sConfere').innerHTML = `A requisição <b>${esc(n)}</b> não está no espelho do HF (ele guarda ~20 dias e atualiza a cada 30 min).
-        <div class="conf-acoes"><button type="button" class="btn-sec" data-ssem="1">Registrar assim mesmo</button></div>`
+      $('sConfere').innerHTML = `A requisição <b>${esc(n)}</b> não está no espelho do HF (ele guarda ~20 dias).
+        <div class="conf-acoes">
+          <button type="button" class="btn-principal" data-cpedir="${esc(n)}">Buscar esta no HF</button>
+          <button type="button" class="btn-sec" data-ssem="1">Registrar assim mesmo</button>
+        </div>`
       return
     }
     sHF = r
@@ -3147,6 +3153,23 @@
         { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +(c ? c.dataset.scoletado : d.dataset.sdesfazer) })
       toast(c ? 'Coleta do parceiro confirmada' : 'Voltou para a lista'); await carregar(); desenhar()
     } catch (e) { b.disabled = false; toast(e.message) }
+  })
+
+  // Fúlvio 25/set: a requisição 626526, de 29/07, "não foi achada". Não era busca ruim —
+  // o espelho guarda ~20 dias. Agora dá para mandar buscar aquela requisição no HF; o sync
+  // vai lá pegar sem filtro de data, e ela fica guardada daqui em diante.
+  document.addEventListener('click', async ev => {
+    const b = ev.target.closest('[data-cpedir]'); if (!b) return
+    if (!(await garantirLogin())) return
+    b.disabled = true
+    try {
+      await rpc('inc_hf_pedir', { p_nome: sessao.nome, p_senha: sessao.senha, p_num: b.dataset.cpedir })
+      b.outerHTML = '<span class="pedido-ok">✅ pedido feito — ela chega aqui em até 30 min</span>'
+    } catch (e) {
+      b.disabled = false
+      toast(/PGRST202|could not find|schema cache/i.test(e.message || '')
+        ? 'Falta rodar o SQL supabase_inclusoes_27_buscar_antiga.sql' : e.message)
+    }
   })
 
   $('cancelDoSetor')?.addEventListener('click', ev => acoesCancel(ev))
@@ -3382,6 +3405,7 @@
       return falta.length ? falta.join(', ') : 'completo'
     }
     // ── ensaio do fluxo de cancelamento com TRIAGEM (Fúlvio 25/set). Nada é gravado. ──
+    if (nome === 'inc_hf_pedir') return true
     if (nome === 'inc_saida_nova') {
       saidas.unshift({ id: saidas.length + 200, criado_em: new Date().toISOString(), saiu_em: new Date().toISOString(),
         req: a.p_req, clinica: a.p_clinica, pet: a.p_pet, tutor: a.p_tutor, apoio: a.p_apoio,

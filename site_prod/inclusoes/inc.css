@@ -850,6 +850,7 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .am-linha select,.am-linha input{font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:var(--painel);min-width:0}
 .am-linha .tira{background:none;border:none;color:var(--fraco);font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
 .am-linha .tira:hover{color:var(--vermelho)}
+.pedido-ok{display:inline-block;font-size:13.5px;color:var(--ok);font-weight:700}
 .dica{font-size:12.5px;margin:2px 0 6px}
 #sExLista .ex.on{border-color:var(--moto);background:var(--moto-fundo)}
 .ex-check{display:grid;gap:6px;margin:8px 0;max-height:46vh;overflow:auto}

@@ -74,6 +74,63 @@ def ler():
     return reqs, exames
 
 
+def pedidos_abertos():
+    """Requisições que alguém procurou no painel e não estavam no espelho.
+    Fúlvio, 25/set: ele testou a 626526, de 29/07, e o sistema não achou. Não era busca
+    ruim — o espelho guarda ~20 dias. Agora o painel registra o pedido e o sync vai
+    buscar essa requisição específica no HF, sem janela de data."""
+    if not TOKEN:
+        return []
+    try:
+        body = json.dumps({"p_token": TOKEN}).encode()
+        r = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_hf_pedidos_abertos", data=body, method="POST",
+                                   headers={"apikey": ANON, "Authorization": f"Bearer {ANON}", "Content-Type": "application/json"})
+        return [str(x) for x in (json.loads(urllib.request.urlopen(r, timeout=60).read() or "[]") or [])]
+    except Exception as e:
+        print("pedidos: não consegui ler —", type(e).__name__)
+        return []
+
+
+def ler_avulsas(numeros):
+    """Busca requisições específicas pelo NÚMERO, sem filtro de data. É um IN sobre a
+    chave, então não varre a tabela — não trava o banco que a equipe usa."""
+    if not numeros:
+        return [], []
+    con = pymysql.connect(**SRC)
+    c = con.cursor()
+    marcas = ",".join(["%s"] * len(numeros))
+    c.execute("SELECT NumeroSequencial, Cliente, Animal, Especie, DataEntrada, UsuarioHoraEntrada, DataTransmissao, Proprietario "
+              f"FROM `TabExameNumeroRequisiçao` WHERE NumeroSequencial IN ({marcas})", numeros)
+    reqs = [{"numero": str(r[0]), "cliente": r[1], "animal": r[2], "especie": r[3], "entrada": iso(r[4], r[5]),
+             "transmitido": r[6].isoformat() if r[6] else None, "tutor": r[7],
+             "atualizado": datetime.datetime.now(BRT).isoformat()}
+            for r in c.fetchall() if r[0]]
+    achados = [r["numero"] for r in reqs]
+    exames = []
+    if achados:
+        marcas2 = ",".join(["%s"] * len(achados))
+        c.execute("SELECT CodExameSolicitado, NumeroSequencial, Exame, CodCategoria, EntradaMaquina, EntradaUsuario, "
+                  f"Digitado, DataExame, DataModificacao FROM TabExameNumeroSolicitado WHERE NumeroSequencial IN ({marcas2})", achados)
+        exames = [{"id": r[0], "numero": str(r[1]), "exame": r[2], "categoria": r[3], "entrada_ts": iso(r[4], r[5]),
+                   "entrada_usuario": r[5], "digitado": bool(r[6]) if r[6] is not None else None,
+                   "data_exame": r[7].isoformat() if r[7] else None,
+                   "modificado": r[8].isoformat() if r[8] else None} for r in c.fetchall() if r[0]]
+    con.close()
+    return reqs, exames
+
+
+def marcar_atendidos(numeros):
+    if not TOKEN or not numeros:
+        return
+    try:
+        body = json.dumps({"p_token": TOKEN, "p_nums": numeros}).encode()
+        r = urllib.request.Request(f"{SB_URL}/rest/v1/rpc/inc_hf_pedido_ok", data=body, method="POST",
+                                   headers={"apikey": ANON, "Authorization": f"Bearer {ANON}", "Content-Type": "application/json"})
+        print("pedidos atendidos:", json.loads(urllib.request.urlopen(r, timeout=60).read() or "null"))
+    except Exception as e:
+        print("pedidos: não consegui marcar —", type(e).__name__)
+
+
 def enviar(reqs, exames):
     """Grava pelo RPC inc_hf_upsert (validado pelo mesmo token do intake da Histotécnica) — o repo não tem service key."""
     if not TOKEN:
@@ -93,6 +150,14 @@ if __name__ == "__main__":
     r, e = ler()
     print("requisições:", len(r), "· exames:", len(e))
     enviar(r, e)
+    # requisições antigas que alguém procurou no painel e não estavam no espelho
+    pend = pedidos_abertos()
+    if pend:
+        ra, ea = ler_avulsas(pend)
+        print("pedidos avulsos:", len(pend), "· achados:", len(ra), "· exames:", len(ea))
+        if ra:
+            enviar(ra, ea)
+            marcar_atendidos([x["numero"] for x in ra])
     # Fase 2: confere os cartões do Quadro de Inclusões com o HF (avança sozinho / acusa divergência)
     if TOKEN:
         body = json.dumps({"p_token": TOKEN}).encode()
