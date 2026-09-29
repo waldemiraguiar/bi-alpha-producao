@@ -84,10 +84,20 @@
   let terremotos = [], conferencia = [], heranca = []
   let suspeitas = [], coletas = [], regras = [], rotasVivo = [], nps = [], npsConvites = [], chamados = [], eventos = [], cancelamentos = [], cancelPer = 'aberto', triPer = 'abertos', saidas = [], saidaPer = 'abertas', suspCancel = [], saidaSemTabela = false, cancelSemTabela = false, sessao = lerSessao(), explodeCalado = new Set(), somLiberado = (() => { try { return localStorage.getItem('inc_som') === '1' } catch { return false } })(), periodo = 'dia'
   const $ = id => document.getElementById(id)
-  const T = q => q ? Date.parse(q) : 0
+  // ⛔ 29/set: `diaLabel(Date.now())` mandou "Invalid Date, Invalid Date" para 3 clínicas.
+  //    Date.parse() só aceita STRING — número vira NaN, e NaN vira "Invalid Date" no texto
+  //    que o cliente lê. Agora T() aceita string, número e objeto Date.
+  const T = q => {
+    if (!q) return 0
+    if (q instanceof Date) return q.getTime()
+    if (typeof q === 'number') return q
+    return Date.parse(q) || 0
+  }
   const agora = () => Date.now()
   const hm = q => new Date(T(q)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  const dataCurta = q => new Date(T(q)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  // ⛔ data ausente virava "31/12" (epoch 1970) no texto do cliente. Sem data válida, uso AGORA:
+  //    a mensagem é sobre uma coleta de hoje — 31/12 seria mentira, e o cliente percebe.
+  const dataCurta = q => new Date(T(q) || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
   // quando + DIA. "às 20:54" num cartão de 3 dias não diz nada (Thailan 28/set).
   const quandoDia = q => {
     const d = new Date(T(q)), h = new Date(); h.setHours(0, 0, 0, 0)
@@ -1369,7 +1379,7 @@
   const hLabel = min => { const h = Math.floor(min / 60), m = min % 60; return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}hrs` }
   // Wal 18/set: a clínica precisa ver o DIA e o "hrs" do lado da hora
   const diaLabel = q => {
-    const d = new Date(T(q)), hoje = new Date()
+    const d = new Date(T(q) || Date.now()), hoje = new Date()
     const dd = x => x.toLocaleDateString('sv-SE')
     const amanha = new Date(hoje.getTime() + 864e5)
     const sem = d.toLocaleDateString('pt-BR', { weekday: 'long' })
