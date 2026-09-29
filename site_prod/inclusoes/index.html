@@ -62,6 +62,10 @@
         <div class="bloco-lat"><h3>Concluídas hoje</h3><div class="lista-outros" id="concluidas"></div></div>
       </aside>
     </div>
+    <!-- 🚫 Fúlvio 28/set 19h51 e 19h53: "a aba da triagem apareceu, mas a do escritório não.
+         A mensagem para a RESOLUÇÃO tem que ser dada dentro do escritório." E a finalização
+         tem que estar no Atendimento ao Cliente — "ele não vai ficar olhando os cancelamentos". -->
+    <div class="cancel-do-setor" id="cancelDoSetor" hidden></div>
     <div class="kanban" id="kanban" hidden></div>
   </section>
 
@@ -286,8 +290,12 @@
     </div>
 
     <div id="cFim" hidden>
-      <label>Quem fez a triagem <span class="obrig">*</span></label>
-      <input id="cColab" autocomplete="off" placeholder="nome do colaborador">
+      <!-- Fúlvio 28/set 20h03: "se a requisição já foi cadastrada, não faz sentido
+           perguntar quem fez a triagem — se está cadastrada, a triagem já foi feita." -->
+      <div id="cColabBox">
+        <label>Quem fez a triagem <span class="obrig">*</span></label>
+        <input id="cColab" autocomplete="off" placeholder="nome do colaborador">
+      </div>
       <label>O que o cliente escreveu</label>
       <textarea id="cTexto" rows="2" placeholder="cole a mensagem do WhatsApp"></textarea>
       <p class="erro" id="cErro"></p>

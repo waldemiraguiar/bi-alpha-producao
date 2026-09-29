@@ -427,6 +427,7 @@
     try { desenharConferencia() } catch {}
     try { desenharCancelamentos() } catch {}
     try { desenharTriagem() } catch {}
+    try { cancelDoSetor(setor) } catch {}
     if (hist) return desenharHistorico()
     if (rast || col || rot || npsv || terr || pan || conf || canc || tri) return
     const abertos = chamados.filter(ativo)
@@ -706,6 +707,26 @@
     return trilha + `<div class="can-acoes">
       <button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>
       <button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>`
+  }
+
+  // ── os cancelamentos DENTRO da aba de cada setor (Fúlvio 28/set 19h51 e 19h53) ──
+  // "a aba da triagem apareceu, mas a do escritório não. A mensagem para a RESOLUÇÃO
+  //  tem que ser dada dentro do escritório." E a finalização, dentro do Atendimento
+  //  ao Cliente — "ele não vai ficar olhando os cancelamentos".
+  function cancelDoSetor(qual) {
+    const el = $('cancelDoSetor'); if (!el) return
+    if (qual !== 'cc' && qual !== 'esc') { el.hidden = true; el.innerHTML = ''; return }
+    const meus = cancelamentos.filter(c => {
+      if (c.status !== 'aberto') return false
+      const et = cancelEtapa(c); if (!et) return false
+      if (qual === 'esc') return (et.n === 1 && !c.esc_ciente_em) || et.n === 2
+      return et.n === 3                                   // cc: avisar o cliente e encerrar
+    })
+    el.hidden = !meus.length
+    if (!meus.length) { el.innerHTML = ''; return }
+    const tit = qual === 'esc' ? 'esperando o Escritório' : 'esperando o Atendimento ao Cliente'
+    el.innerHTML = `<h3><span class="selo-cancel">🚫 CANCELAMENTO</span> ${meus.length} ${tit}</h3>` +
+      meus.map(c => cancelCartao(c)).join('')
   }
 
   // ── a tela do setor TRIAGEM ──
@@ -2646,6 +2667,8 @@
     // pela requisição, o alvo só aparece depois de validar o pet/clínica
     $('cAlvo').hidden = qual !== 'sem_amostra'
     $('cFim').hidden  = qual !== 'sem_amostra'
+    // pela requisição a triagem JÁ foi feita — não se pergunta de novo (Fúlvio 20h03)
+    if ($('cColabBox')) $('cColabBox').hidden = qual === 'req'
     $('cSalvar').hidden = true
     if (qual === 'req') $('cReq').focus()
     else if (qual === 'sem_amostra') $('cClinica').focus()
@@ -2774,9 +2797,22 @@
     if (al) { alvoPasso(al.dataset.calvo); return }
   })
   $('cExame')?.addEventListener('input', liberarSalvar)
+  // Enter em campo de texto do diálogo não pode SUBMETER: o Fúlvio digitou o nome do
+  // colaborador, deu Enter e o cartão foi registrado pela metade. Enter agora só anda de campo.
+  $('formCancel')?.addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter' || ev.target.tagName === 'TEXTAREA') return
+    if (ev.target.id === 'cReq') return                      // ali Enter é "buscar no HF"
+    ev.preventDefault()
+    const campos = [...$('formCancel').querySelectorAll('input:not([type=hidden]), textarea')].filter(x => x.offsetParent)
+    const i = campos.indexOf(ev.target)
+    if (i >= 0 && campos[i + 1]) campos[i + 1].focus()
+  })
 
   // ① busca a requisição e devolve TUDO para a pessoa validar
   async function buscarReqCancel() {
+    // sem isto, quem clica "Buscar no HF" antes de entrar recebe um erro cru de
+    // JavaScript na cara em vez do pedido de login (achado testando, 29/set)
+    if (!(await garantirLogin())) return
     const n = $('cReq').value.replace(/\D/g, '')
     $('cReqErro').textContent = ''; $('cExames').hidden = true; $('cDigitado').hidden = true
     exCancel = null; forcarDigitado = false; alvoCancel = null
@@ -2806,8 +2842,10 @@
     $('cConfere').className = 'cancel-confere'
     $('cConfere').innerHTML = `<div class="conf-tit">É este mesmo?</div>
       <dl class="conf-dl">
+        <dt>Requisição</dt><dd><b class="conf-req">${esc(r.req || n)}</b></dd>
         <dt>Clínica</dt><dd><b>${esc(r.clinica || '—')}</b></dd>
         <dt>Pet</dt><dd><b>${esc(r.pet || '—')}</b>${r.especie ? ' · ' + esc(r.especie) : ''}</dd>
+        <dt>Tutor</dt><dd>${r.tutor ? `<b>${esc(r.tutor)}</b>` : '<span class="mudo">o HF não tem tutor nesta requisição</span>'}</dd>
         <dt>Entrada</dt><dd>${r.entrada ? dataCurta(r.entrada) + ' ' + hm(r.entrada) : '—'}</dd>
         <dt>Exames</dt><dd>${ex.length}</dd>
       </dl>
@@ -2815,7 +2853,7 @@
         <button type="button" class="btn-principal" data-cvalida="sim">É este mesmo</button>
         <button type="button" class="btn-sec" data-cvalida="nao">Não é este</button>
       </div>
-      <p class="mudo conf-obs">O tutor não aparece aqui: o espelho do HF não traz esse campo.</p>`
+      <p class="mudo conf-obs">Confira se é o cliente e o pet certos antes de seguir.</p>`
   }
   $('cBuscar')?.addEventListener('click', buscarReqCancel)
   $('cReq')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarReqCancel() } })
@@ -2871,8 +2909,9 @@
     if (!(await garantirLogin())) return
     const pelaReq = camCancel === 'req' && hfCancel
     const colab = $('cColab').value.trim()
-    // Fúlvio 18h18: "obrigatoriamente tem que ser escrito o nome desse colaborador"
-    if (!colab) { $('cErro').textContent = 'Diga quem fez a triagem.'; $('cColab').focus(); return }
+    // obrigatório só no caminho SEM requisição: quando veio da requisição, a triagem
+    // já aconteceu no cadastro (Fúlvio 28/set 20h03)
+    if (!pelaReq && !colab) { $('cErro').textContent = 'Diga quem fez a triagem.'; $('cColab').focus(); return }
     if (!alvoCancel) { $('cErro').textContent = 'Diga se é a requisição toda ou um exame.'; return }
     const clinica = pelaReq ? (hfCancel.clinica || '') : $('cClinica').value.trim()
     const pet     = pelaReq ? (hfCancel.pet || '')     : $('cPet').value.trim()
@@ -2887,11 +2926,11 @@
       p_nome: sessao.nome, p_senha: sessao.senha,
       p_caminho: pelaReq ? 'req' : 'sem_amostra',
       p_clinica: clinica || null, p_pet: pet || null,
-      p_tutor: pelaReq ? null : ($('cTutor').value.trim() || null),
+      p_tutor: pelaReq ? (hfCancel.tutor || null) : ($('cTutor').value.trim() || null),
       p_req: pelaReq ? String(hfCancel.req || '') : null,
       p_alvo: alvoCancel, p_exame: exame,
       p_digitado: pelaReq ? (alvoCancel === 'tudo' ? (hfCancel.exames || []).some(e => e.digitado) : !!(exCancel && exCancel.digitado)) : null,
-      p_colaborador: colab,
+      p_colaborador: colab || null,
       p_texto: $('cTexto').value.trim() || null,
       p_autor: null, p_grupo: null, p_quando: null, p_msg_id: null,
       p_hf: pelaReq ? `HF: ${hfCancel.pet || ''} · ${hfCancel.clinica || ''} · ${(hfCancel.exames || []).length} exame(s)` : null,
@@ -2910,6 +2949,7 @@
   })
   // ⚠️ o MESMO cartão é desenhado na aba Cancelamentos e na aba Triagem.
   // O ouvinte tem que valer nas duas, senão os botões da Triagem ficam mudos.
+  $('cancelDoSetor')?.addEventListener('click', ev => acoesCancel(ev))
   $('vTriagem')?.addEventListener('click', ev => {
     const f = ev.target.closest('[data-tper]')
     if (f) { triPer = f.dataset.tper; return desenharTriagem() }
@@ -3138,12 +3178,12 @@
     if (nome === 'inc_cancel_req') {
       const n = String(a.p_num || '').replace(/\D/g, '')
       const banco = {
-        '640537': { req: '640537', clinica: 'Veterinária Caotinho', pet: 'LILITH', especie: 'Canina',
+        '640537': { req: '640537', clinica: 'Veterinária Caotinho', pet: 'LILITH', especie: 'Canina', tutor: 'Marina Souza',
                     entrada: new Date(agora() - 3 * 3600e3).toISOString(),
                     exames: [{ id: 1, exame: 'ALT (TGP)', digitado: true,  data_exame: null },
                              { id: 2, exame: 'Fosfatase alcalina', digitado: false, data_exame: null },
                              { id: 3, exame: 'Ureia', digitado: false, data_exame: null }] },
-        '640921': { req: '640921', clinica: 'Clínica de exemplo', pet: 'NINA', especie: 'Felina',
+        '640921': { req: '640921', clinica: 'Clínica de exemplo', pet: 'NINA', especie: 'Felina', tutor: 'Paulo Reis',
                     entrada: new Date(agora() - 26 * 3600e3).toISOString(),
                     exames: [{ id: 4, exame: 'PCR Erliquiose', digitado: false, data_exame: null }] },
       }

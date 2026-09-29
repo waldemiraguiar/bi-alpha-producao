@@ -51,10 +51,13 @@ def ler():
     c = con.cursor()
     c.execute("SELECT MAX(CodNumeroSequencialTela) FROM `TabExameNumeroRequisiçao`")
     topo_r = c.fetchone()[0] or 0
-    c.execute("SELECT NumeroSequencial, Cliente, Animal, Especie, DataEntrada, UsuarioHoraEntrada, DataTransmissao "
+    # 28/set (Fúlvio, testando o cancelamento): o TUTOR existe no HF e o espelho não trazia.
+    # A coluna é Proprietario — build_cito_intake / build_histo_intake / build_imuno_intake
+    # já a leem desta mesma tabela. Eu tinha dito que "o HF não traz esse campo": estava errado.
+    c.execute("SELECT NumeroSequencial, Cliente, Animal, Especie, DataEntrada, UsuarioHoraEntrada, DataTransmissao, Proprietario "
               "FROM `TabExameNumeroRequisiçao` WHERE CodNumeroSequencialTela > %s", (topo_r - JANELA_REQ,))
     reqs = [{"numero": str(r[0]), "cliente": r[1], "animal": r[2], "especie": r[3], "entrada": iso(r[4], r[5]),
-             "transmitido": r[6].isoformat() if r[6] else None,
+             "transmitido": r[6].isoformat() if r[6] else None, "tutor": r[7],
              "atualizado": datetime.datetime.now(BRT).isoformat()}
             for r in c.fetchall() if r[0] and r[4] and r[4] >= ini]
     nums = {r["numero"] for r in reqs}
