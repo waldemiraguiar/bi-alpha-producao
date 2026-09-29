@@ -643,11 +643,27 @@
   // registrar/validar → perguntar ao setor (5 min) → [confirmar com o cliente] e
   // [escritório cria o cancelado no HF] AO MESMO TEMPO → conferir no HF.
   const PRAZO_CANCEL_MIN = 5
+  const msgSqlFalta = (e, arq) => /PGRST202|could not find|schema cache|does not exist/i.test(e.message || '')
+    ? `Falta rodar o SQL supabase_inclusoes_${arq}.sql no Supabase.` : e.message
   const meuSetor = () => (sessao && sessao.setorInc) || ''
   const podeAgir = dono => { const m = meuSetor(); return !m || m === 'admin' || m === dono }
   // Fúlvio 25/set 18h18 e 18h21. A ordem final é a do COMPLEMENTO, que manda por cima
   // da primeira leva: registrar → Triagem E Escritório dão CIENTE ao mesmo tempo →
   // Escritório cria o exame cancelado no HF → Atendimento ao Cliente avisa o cliente.
+  // Fúlvio 28/set 20h04: exame digitado já era barrado. Falta o meio-termo — não
+  // digitado mas JÁ EM PROCESSAMENTO, que também não se cancela. Quem descobre isso
+  // é a Triagem, indo ao setor que faz o exame.
+  const procDe = c => (c && c.exames_proc && typeof c.exames_proc === 'object') ? c.exames_proc : {}
+  function examesDoCartao(c) {
+    // o que precisa ser consultado: os exames do cartão, um por linha
+    if (c.alvo === 'tudo') {
+      const L = Object.keys(procDe(c))
+      return L.length ? L : (c.hf_estado ? [] : [])
+    }
+    return c.exame ? [c.exame] : []
+  }
+  const semAmostraEsperando = c => c.caminho === 'sem_amostra' && !c.req && !c.req_nova
+
   function cancelEtapa(c) {
     if (c.status !== 'aberto') return null
     if (!c.tri_ciente_em || !c.esc_ciente_em) return { n: 1, nome: 'Ciente da Triagem e do Escritório' }
@@ -684,6 +700,40 @@
     const trilha = `<div class="can-trilha">${[1, 2, 3].map(n =>
       `<i class="${n < et.n ? 'ok' : n === et.n ? 'aqui' : ''}"></i>`).join('')}<span>${esc(et.nome)}</span></div>`
 
+    // ── a consulta aos setores (Fúlvio 20h04/20h06) e a espera da amostra (20h48) ──
+    const proc = procDe(c)
+    const lista = examesDoCartao(c)
+    const consulta = (() => {
+      if (!c.tri_ciente_em) return ''
+      const linhas = lista.map(nome => {
+        const p = proc[nome] || {}
+        if (p.resposta) {
+          const bom = p.resposta === 'nao_iniciou'
+          return `<div class="proc-linha ${bom ? 'ok' : 'ruim'}">${bom ? '✅' : '⛔'} <b>${esc(nome)}</b> —
+            ${bom ? 'ainda não começou: pode cancelar' : 'JÁ ESTÁ SENDO PROCESSADO: não se cancela'}
+            <span class="mudo">${esc(SETOR_EXAME[p.setor] || p.setor || '')} · ${esc(p.resp_por || '')}</span></div>`
+        }
+        if (p.perguntado_em) {
+          return `<div class="proc-linha espera"><b>${esc(nome)}</b> — perguntado à ${esc(SETOR_EXAME[p.setor] || p.setor)}, aguardando
+            ${podeAgir('tec') ? `<span class="proc-resp">
+              <button data-cproc="nao_iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Ainda não comecei</button>
+              <button class="nao" data-cproc="iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Já comecei</button>
+            </span>` : ''}</div>`
+        }
+        if (!podeAgir('tri')) return `<div class="proc-linha espera"><b>${esc(nome)}</b> — <span class="mudo">a Triagem ainda não consultou o setor</span></div>`
+        return `<div class="proc-linha"><b>${esc(nome)}</b> — perguntar a:
+          <span class="proc-setores">${Object.keys(SETOR_EXAME).map(k =>
+            `<button class="leve" data-cconsultar="${k}" data-cid="${c.id}" data-cex="${esc(nome)}">${SETOR_ICONE[k]} ${esc(SETOR_EXAME[k])}</button>`).join('')}</span></div>`
+      })
+      return linhas.length ? `<div class="proc-bloco"><div class="proc-tit">🔎 Já começaram a processar?</div>${linhas.join('')}</div>` : ''
+    })()
+
+    const esperaAmostra = semAmostraEsperando(c) ? `<div class="can-espera">
+      📦 A amostra ainda não chegou ao laboratório. O Escritório só dá ciente quando ela chegar.
+      ${podeAgir('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
+    </div>` : ''
+    const reqNova = c.req_nova ? `<div class="can-hf ok">📥 requisição informada pela Triagem: <b>${esc(c.req_nova)}</b> · ${esc(c.req_nova_por || '')}</div>` : ''
+
     // ── etapa 1: os DOIS cientes, ao mesmo tempo ──
     if (et.n === 1) {
       const rel = `<div class="can-relogio ${estourou ? 'ruim' : ''}">esperando ciente há ${fmt(esperando)}${estourou ? ` — passou dos ${PRAZO_CANCEL_MIN} min` : ` de ${PRAZO_CANCEL_MIN} min`}</div>`
@@ -695,16 +745,16 @@
       const cobranca = estourou && podeAgir('cc') && !c.cobrado_em
         ? `<div class="can-acoes"><button class="nao" data-ccobrar="${c.id}">Ninguém deu ciente — vou sinalizar</button></div>` : ''
       const jaCobrou = c.cobrado_em ? `<div class="can-hf">📣 Atendimento ao Cliente já sinalizou às ${hm(c.cobrado_em)}</div>` : ''
-      return trilha + rel + jaCobrou + `<div class="can-paralelo">
+      return trilha + rel + jaCobrou + reqNova + esperaAmostra + `<div class="can-paralelo">
         ${lado(c.tri_ciente_em, c.tri_ciente_por, c.tri_ciente_em, 'tri', 'Triagem', 'tri')}
         ${lado(c.esc_ciente_em, c.esc_ciente_por, c.esc_ciente_em, 'esc', 'Escritório', 'esc')}
-      </div>` + cobranca
+      </div>` + consulta + cobranca
     }
 
     // ── etapa 2: o Escritório cria o exame de cancelamento no HF ──
     if (et.n === 2) {
-      if (!podeAgir('esc')) return trilha + `<span class="so-setor">ação do ESCRITÓRIO</span>`
-      return trilha + `<div class="can-acoes">
+      if (!podeAgir('esc')) return trilha + consulta + `<span class="so-setor">ação do ESCRITÓRIO</span>`
+      return trilha + consulta + `<div class="can-acoes">
         <button data-chf="${c.id}">Criei o exame cancelado no HF</button></div>`
     }
 
@@ -3212,6 +3262,38 @@
       catch (e) { ci.disabled = false; toast(e.message) }
       return
     }
+    const cns = ev.target.closest('[data-cconsultar]')       // ① Triagem pergunta ao setor
+    if (cns) {
+      if (!(await garantirLogin())) return
+      cns.disabled = true
+      try { await rpc('inc_cancel_consultar', { p_nome: sessao.nome, p_senha: sessao.senha,
+              p_id: +cns.dataset.cid, p_exame: cns.dataset.cex, p_setor: cns.dataset.cconsultar })
+            toast(`Perguntado à ${SETOR_EXAME[cns.dataset.cconsultar]}`); await carregar(); desenhar() }
+      catch (e) { cns.disabled = false; toast(msgSqlFalta(e, '28_triagem_setores')) }
+      return
+    }
+    const prc = ev.target.closest('[data-cproc]')            // ① o setor responde
+    if (prc) {
+      if (!(await garantirLogin())) return
+      prc.disabled = true
+      try { await rpc('inc_cancel_proc', { p_nome: sessao.nome, p_senha: sessao.senha,
+              p_id: +prc.dataset.cid, p_exame: prc.dataset.cex, p_resposta: prc.dataset.cproc })
+            toast(prc.dataset.cproc === 'iniciou' ? '⛔ Já em processamento — este exame não se cancela' : '✅ Ainda não começou — pode cancelar')
+            await carregar(); desenhar() }
+      catch (e) { prc.disabled = false; toast(msgSqlFalta(e, '28_triagem_setores')) }
+      return
+    }
+    const rq = ev.target.closest('[data-creqchegou]')        // ② a amostra chegou
+    if (rq) {
+      if (!(await garantirLogin())) return
+      const num = await pedirMotivo('A amostra chegou — qual o número da requisição?', 'Número')
+      if (num == null || !String(num).replace(/\D/g, '')) return
+      rq.disabled = true
+      try { await rpc('inc_cancel_req_chegou', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +rq.dataset.creqchegou, p_req: num })
+            toast('Requisição informada — o Escritório já pode dar ciente'); await carregar(); desenhar() }
+      catch (e) { rq.disabled = false; toast(msgSqlFalta(e, '28_triagem_setores')) }
+      return
+    }
     const cob = ev.target.closest('[data-ccobrar]')          // ① passou dos 5 min
     if (cob) {
       if (!(await garantirLogin())) return
@@ -3225,8 +3307,11 @@
     if (chf) {
       if (!(await garantirLogin())) return
       chf.disabled = true
-      try { await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf })
-            toast('Registrado — volta para o Atendimento ao Cliente'); await carregar(); desenhar() }
+      // Fúlvio 19h52: "eu cliquei e não gerei, e você não notificou nada". A conferência
+      // agora acontece no MESMO gesto — o Escritório descobre na hora se não salvou.
+      try { const r = await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf })
+            toast(r && r.ok ? '✅ ' + r.txt : '⚠️ ' + ((r && r.txt) || 'não consegui conferir agora'))
+            await carregar(); desenhar() }
       catch (e) { chf.disabled = false; toast(e.message) }
       return
     }
@@ -3239,7 +3324,7 @@
       catch (e) { cli.disabled = false; toast(e.message) }
       return
     }
-    const conf = ev.target.closest('[data-cconferir]')       // a conferência no HF
+    const conf = ev.target.closest('[data-cconferir]')       // conferência manual (continua, como reforço)
     if (conf) {
       if (!(await garantirLogin())) return
       conf.disabled = true
@@ -3405,6 +3490,23 @@
       return falta.length ? falta.join(', ') : 'completo'
     }
     // ── ensaio do fluxo de cancelamento com TRIAGEM (Fúlvio 25/set). Nada é gravado. ──
+    if (nome === 'inc_cancel_consultar') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.exames_proc = { ...(x.exames_proc || {}), [a.p_exame]: { setor: a.p_setor, perguntado_em: new Date().toISOString(), perguntado_por: 'DEMO' } } }
+      return x ? x.exames_proc : {}
+    }
+    if (nome === 'inc_cancel_proc') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x && x.exames_proc && x.exames_proc[a.p_exame]) {
+        x.exames_proc = { ...x.exames_proc, [a.p_exame]: { ...x.exames_proc[a.p_exame], resposta: a.p_resposta, resp_em: new Date().toISOString(), resp_por: 'DEMO' } }
+      }
+      return x ? x.exames_proc : {}
+    }
+    if (nome === 'inc_cancel_req_chegou') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.req_nova = String(a.p_req).replace(/\D/g, ''); x.req_nova_em = new Date().toISOString(); x.req_nova_por = 'DEMO'; x.req = x.req || x.req_nova }
+      return true
+    }
     if (nome === 'inc_hf_pedir') return true
     if (nome === 'inc_saida_nova') {
       saidas.unshift({ id: saidas.length + 200, criado_em: new Date().toISOString(), saiu_em: new Date().toISOString(),
@@ -3467,8 +3569,10 @@
     }
     if (nome === 'inc_cancel_hf_feito') {
       const x = cancelamentos.find(y => y.id === a.p_id)
-      if (x) { x.hf_feito_em = new Date().toISOString(); x.hf_feito_por = 'DEMO' }
-      return true
+      const r = { ok: false, txt: 'ainda NÃO apareceu exame cancelado no HF — confira se salvou' }
+      if (x) { x.hf_feito_em = new Date().toISOString(); x.hf_feito_por = 'DEMO'
+               x.hf_conferido_em = new Date().toISOString(); x.hf_conferido_ok = r.ok; x.hf_conferido_txt = r.txt }
+      return r
     }
     if (nome === 'inc_cancel_cliente_ok') {
       const x = cancelamentos.find(y => y.id === a.p_id)

@@ -916,6 +916,21 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .can-relogio.ruim{color:var(--vermelho);background:#fef2f2;font-weight:700}
 .cancel.aberto.estourou{border-left-color:var(--vermelho)}
 /* os dois lados que correm ao mesmo tempo depois do "pode cancelar" */
+/* a Triagem consultando os setores (Fúlvio 28/set 20h04) */
+.proc-bloco{background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:10px 12px;margin-top:8px;display:grid;gap:6px}
+.proc-tit{font-family:var(--disp);font-size:16px}
+.proc-linha{font-size:13.5px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.proc-linha.ok{color:var(--ok)}
+.proc-linha.ruim{color:var(--vermelho);font-weight:700}
+.proc-linha.espera{color:var(--mudo)}
+.proc-setores{display:flex;flex-wrap:wrap;gap:5px}
+.proc-setores button{font:inherit;font-size:12.5px;padding:4px 9px;border-radius:7px;border:1px solid var(--linha);background:transparent;color:var(--mudo);cursor:pointer}
+.proc-setores button:hover{border-color:var(--tri);color:var(--tri)}
+.proc-resp{display:flex;gap:5px}
+.proc-resp button{font:inherit;font-size:12.5px;padding:4px 10px;border-radius:7px;border:none;background:var(--texto);color:#fff;cursor:pointer}
+.proc-resp .nao{background:transparent;border:1px solid var(--vermelho);color:var(--vermelho)}
+/* a amostra que ainda não chegou (Fúlvio 28/set 20h48) */
+.can-espera{background:var(--moto-fundo);border:1px solid var(--moto);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px}
 .can-paralelo{display:grid;gap:8px;margin-top:6px}
 @media(min-width:620px){.can-paralelo{grid-template-columns:1fr 1fr}}
 .can-lado{background:var(--painel2);border:1px solid var(--linha);border-radius:10px;padding:10px 12px;font-size:13.5px}
