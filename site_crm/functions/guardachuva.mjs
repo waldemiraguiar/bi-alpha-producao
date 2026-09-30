@@ -6,14 +6,14 @@
    POST {acao:'upsert', senha, id?, nome, estado, motivo, responsavel, ativo}
    POST {acao:'remove', senha, id}
    Escrita exige a senha do time (SECRET). Token do Supabase fica só no servidor. */
-import { SECRET } from "./secret.mjs";
+import { SECRET, HISTO_TOKEN } from "./secret.mjs";
 
 const SUPA_URL = "https://lrwjcdvporaivxvfuiwt.supabase.co";
 const ANON = "sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8";
 // 19/set: o token estava escrito aqui dentro, num repositorio PUBLICO. Trocado e removido.
 // Agora vem SO da variavel de ambiente HISTO_TOKEN (Netlify). Sem ela, a funcao recusa a escrita
 // em vez de cair num valor de reserva — falhar barulhento e melhor que rodar com segredo no codigo.
-const TOKEN = (process.env.HISTO_TOKEN || "").trim();  // .trim() = defende contra espaço/newline no env (causava lista vazia)
+const TOKEN = ((HISTO_TOKEN || process.env.HISTO_TOKEN) || "").trim();  // embutido no secret.mjs (env do site nao chega na function) + .trim()
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
