@@ -1,4 +1,3 @@
-// redeploy 2026-09-30: força re-bundle p/ pegar HISTO_TOKEN atual (env estava baked antigo)
 /* Função serverless: 🌂 GUARDA-CHUVA HISTOPATOLOGIA.
    Ponte CRM ↔ produção da histotécnica (Supabase). Fonte única = clinicas_reconquista.
    GET  ?acao=list     -> {clinicas}          (classificação atual)
@@ -36,7 +35,6 @@ export default async (req) => {
   try {
     if (req.method === "GET") {
       const acao = new URL(req.url).searchParams.get("acao") || "list";
-      if (acao === "diag") return Response.json({ tokLen: TOKEN.length, tokPref: TOKEN.slice(0,4), hasSecret: !!SECRET, secLen: (SECRET||"").length }, { headers: cors });
       if (acao === "esteira") return Response.json({ esteira: (await rpc("guarda_chuva_esteira", { p_token: TOKEN })) || [] }, { headers: cors });
       return Response.json({ clinicas: (await rpc("guarda_chuva_list", { p_token: TOKEN })) || [] }, { headers: cors });
     }
