@@ -1,3 +1,4 @@
+// redeploy 2026-09-30: força re-bundle p/ pegar HISTO_TOKEN atual (env estava baked antigo)
 /* Função serverless: 🌂 GUARDA-CHUVA HISTOPATOLOGIA.
    Ponte CRM ↔ produção da histotécnica (Supabase). Fonte única = clinicas_reconquista.
    GET  ?acao=list     -> {clinicas}          (classificação atual)
