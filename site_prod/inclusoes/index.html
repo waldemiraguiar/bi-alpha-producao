@@ -27,6 +27,7 @@
     <button data-setor="confere" class="aba-confere">🔍 Conferência</button>
     <button data-setor="rast" class="aba-ia">🤖 Rastreamento de Inclusões</button>
     <button data-setor="cancel" class="aba-cancel">🚫 Cancelamentos</button>
+    <button data-setor="comprov" class="aba-comprov">💳 Comprovantes</button>
     <button data-setor="coleta" class="aba-moto">🛵 Agendamentos</button>
     <button data-setor="rotas" class="aba-rota">🛵 BI Rotas</button>
     <button data-setor="nps" class="aba-nps">⭐ NPS</button>
@@ -111,6 +112,21 @@
       Cada lado dá o seu ciente. O prazo é de <b>5 minutos</b> — cancelamento é corrida contra o exame ser processado.</p></div>
     <div class="tri-filtros"><button data-tper="abertos" class="on">Esperando ciente</button><button data-tper="dia">Meus cientes de hoje</button></div>
     <div class="rast-lista" id="triLista"></div>
+  </section>
+
+  <!-- 💳 COMPROVANTES — Fúlvio 02/out 19h10: "eu ainda assim quero uma aba dentro daquele
+       quadro de inclusões sobre comprovantes, mesmo que seja algo que a gente não precise
+       interagir. A gente pode fazer das duas maneiras: deixar uma obrigação de alguém mexer,
+       e se você for mais rápido e conseguir conciliar e colocar como resolvido."
+       ⭐ Só os SEM número de requisição — o material ainda está a caminho. -->
+  <section id="vComprov" hidden>
+    <div class="rast-topo">
+      <h2><span class="selo-ia">🌸 JUREMA</span> Comprovantes aguardando requisição</h2>
+      <p class="mudo">Comprovante que chegou antes do material. Quando a requisição entrar no HF,
+      a Jurema confere o valor sozinha e marca como resolvido — se alguém chegar antes, também vale.</p>
+    </div>
+    <div class="comprov-kpis" id="comprovKpis"></div>
+    <div id="comprovLista"></div>
   </section>
 
   <section id="vCancel" hidden>

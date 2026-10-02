@@ -122,6 +122,9 @@
     return all
   }
   async function carregar() {
+    // 💳 os comprovantes pendentes vêm junto, mas NUNCA travam o resto: se falhar, o quadro
+    //    carrega igual. ([[regra-sempre-permitir-nunca-bloquear-so-alerta]])
+    carregarComprovantes().catch(() => {})
     if (DEMO) { if (!chamados.length) demoDados(); return }   // demo: dados em memória (inclusive os terremotos do ensaio)
     try {
       const lim = new Date(agora() - 31 * 864e5).toISOString()
@@ -432,11 +435,12 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere', canc = setor === 'cancel', tri = setor === 'tri', sai = setor === 'saida'
-    $('vQuadro').hidden = hist || rast || col || rot || npsv || terr || pan || conf || canc || tri || sai; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf; $('vCancel').hidden = !canc; $('vTriagem').hidden = !tri; $('vSaida').hidden = !sai
+    const comprov = setor === 'comprov', hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere', canc = setor === 'cancel', tri = setor === 'tri', sai = setor === 'saida'
+    $('vQuadro').hidden = comprov || hist || rast || col || rot || npsv || terr || pan || conf || canc || tri || sai; if ($('vComprov')) $('vComprov').hidden = !comprov; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf; $('vCancel').hidden = !canc; $('vTriagem').hidden = !tri; $('vSaida').hidden = !sai
     desenharLegenda()
     try { desenharAbasSetor() } catch {}
     desenharRastreamento()
+    try { desenharComprovantes() } catch (e) { console.warn('comprovantes:', e.message) }
     desenharColetas()
     try { desenharHeranca() } catch {}
     desenharRotas()
@@ -629,6 +633,60 @@
     desistiu:         { rot: '↩️ cliente desistiu',            cls: 'mudo' },
   }
   function cancelAbertos() { return cancelamentos.filter(c => c.status === 'aberto') }
+  // 💳 COMPROVANTES aguardando requisição (Fúlvio 02/out)
+  // ⭐ "deixar uma obrigação de alguém mexer, E se você for mais rápido, conciliar e marcar
+  //    resolvido" — humano e robô na mesma pista: quem chegar primeiro fecha.
+  let comprovCache = []
+  async function carregarComprovantes() {
+    // ⚠️ SB é o CLIENTE do Supabase, não a URL — usar .from(), como o resto do arquivo.
+    if (DEMO) { comprovCache = []; return }
+    try {
+      const r = await SB.from('comprovante_pendente').select('*').order('quando', { ascending: false }).limit(200)
+      comprovCache = r.error ? [] : (r.data || [])
+      if (r.error) console.warn('comprovantes:', r.error.message)
+    } catch (e) { comprovCache = []; console.warn('comprovantes:', e.message) }
+  }
+
+  function desenharComprovantes() {
+    const el = $('comprovLista'); if (!el) return
+    const L = comprovCache || []
+    const abertos = L.filter(c => !c.fechado_em)
+    const fechados = L.filter(c => c.fechado_em)
+    const porJurema = fechados.filter(c => (c.resultado || '').includes('jurema'))
+    const k = $('comprovKpis')
+    if (k) k.innerHTML = `
+      <div class="kpi"><b>${abertos.length}</b><span>aguardando requisição</span></div>
+      <div class="kpi"><b>${fechados.length}</b><span>conciliados</span></div>
+      <div class="kpi"><b>${porJurema.length}</b><span>a Jurema resolveu sozinha</span></div>`
+    if (!L.length) {
+      el.innerHTML = `<p class="mudo">Nenhum comprovante aguardando. Quando chegar um sem número de
+        requisição, ele aparece aqui — e some sozinho quando a requisição entrar no HF.</p>`
+      return
+    }
+    const cartao = c => {
+      const esperaH = Math.round((Date.now() - Date.parse(c.quando || c.criado_em)) / 36e5)
+      const resolvido = !!c.fechado_em
+      return `<article class="can-card ${resolvido ? 'feito' : ''}">
+        <div class="can-topo">
+          <b>${esc(c.clinica || '—')}</b>
+          <span class="can-valor">R$ ${esc(c.valor || '?')}</span>
+          <span class="mudo">${esc(c.data_pagamento || '')} · ${esc(c.tipo || '')} ${esc(c.banco || '')}</span>
+        </div>
+        ${c.pagador ? `<div class="mudo">👤 ${esc(c.pagador)}</div>` : ''}
+        ${c.quem_mandou ? `<div class="mudo">mandou: ${esc(c.quem_mandou)}</div>` : ''}
+        ${resolvido
+          ? `<div class="can-ok">✅ ${esc(c.resultado || 'conciliado')} ${c.requisicao ? '· req ' + esc(c.requisicao) : ''}</div>`
+          : `<div class="comprov-acao">
+               <span class="mudo">esperando a requisição há ${esperaH}h</span>
+               <input class="comprov-req" data-creq="${c.id}" placeholder="nº da requisição" inputmode="numeric">
+               <button data-cconcil="${c.id}">Conciliar</button>
+             </div>`}
+      </article>`
+    }
+    el.innerHTML = (abertos.length ? `<h3>⏳ Aguardando (${abertos.length})</h3>` + abertos.map(cartao).join('') : '')
+      + (fechados.length ? `<h3 class="mudo">✅ Conciliados (${fechados.length})</h3>` + fechados.slice(0, 20).map(cartao).join('') : '')
+  }
+
   function desenharCancelamentos() {
     const b = document.querySelector('#abas button[data-setor="cancel"]')
     if (b) {
@@ -3378,6 +3436,24 @@
       try { await rpc('inc_cancel_cobrar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +cob.dataset.ccobrar })
             toast('Registrado que ninguém deu ciente'); await carregar(); desenhar() }
       catch (e) { cob.disabled = false; toast(e.message) }
+      return
+    }
+    // 💳 conciliar um comprovante pendente: a pessoa informa a requisição que chegou
+    const cnc = ev.target.closest('[data-cconcil]')
+    if (cnc) {
+      if (!(await garantirLogin())) return
+      const id = +cnc.dataset.cconcil
+      const inp = document.querySelector(`[data-creq="${id}"]`)
+      const req = (inp && inp.value || '').replace(/\D/g, '')
+      // ⛔ nunca bloquear: sem número eu aviso, mas não impeço de tentar de novo
+      if (!req) { toast('Digite o número da requisição'); inp && inp.focus(); return }
+      cnc.disabled = true
+      try {
+        const r = await rpc('comprovante_pendente_conciliar',
+          { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_requisicao: req })
+        toast(r && r.ok ? '✅ ' + (r.txt || 'conciliado') : '⚠️ ' + ((r && r.txt) || 'não consegui conciliar'))
+        await carregarComprovantes(); desenharComprovantes()
+      } catch (e) { cnc.disabled = false; toast(e.message) }
       return
     }
     const chf = ev.target.closest('[data-chf]')              // ② Escritório cria no HF
