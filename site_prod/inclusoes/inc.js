@@ -725,14 +725,14 @@
         if (p.resposta) {
           const bom = p.resposta === 'nao_iniciou'
           return `<div class="proc-linha ${bom ? 'ok' : 'ruim'}">${bom ? '✅' : '⛔'} <b>${esc(nome)}</b> —
-            ${bom ? 'ainda não começou: pode cancelar' : 'JÁ ESTÁ SENDO PROCESSADO: não se cancela'}
+            ${bom ? 'EXAME CANCELADO' : 'JÁ ESTÁ EM PROCESSAMENTO: não se cancela'}
             <span class="mudo">${esc(SETOR_EXAME[p.setor] || p.setor || '')} · ${esc(p.resp_por || '')}</span></div>`
         }
         if (p.perguntado_em) {
           return `<div class="proc-linha espera"><b>${esc(nome)}</b> — perguntado à ${esc(SETOR_EXAME[p.setor] || p.setor)}, aguardando
             ${podeAgir('tec') ? `<span class="proc-resp">
-              <button data-cproc="nao_iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Ainda não comecei</button>
-              <button class="nao" data-cproc="iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Já comecei</button>
+              <button data-cproc="nao_iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Exame cancelado</button>
+              <button class="nao" data-cproc="iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Já está em processamento</button>
             </span>` : ''}</div>`
         }
         if (!podeAgir('tri')) return `<div class="proc-linha espera"><b>${esc(nome)}</b> — <span class="mudo">a Triagem ainda não consultou o setor</span></div>`
@@ -769,8 +769,13 @@
     // ── etapa 2: o Escritório cria o exame de cancelamento no HF ──
     if (et.n === 2) {
       if (!podeAgir('esc')) return trilha + consulta + `<span class="so-setor">ação do ESCRITÓRIO</span>`
-      return trilha + consulta + `<div class="can-acoes">
-        <button data-chf="${c.id}">Criei o exame cancelado no HF</button></div>`
+      // ⭐ THAILAN 02/out: "as respostas em relação ao escritório, quando o exame já está no
+      //    laboratório: o exame foi cancelado, foi criado um exame com cancelamento, ou o exame
+      //    já foi processado / liberado." Era um botão só — agora são os três desfechos reais.
+      return trilha + consulta + `<div class="can-acoes can-esc">
+        <button data-chf="${c.id}" data-cdesf="criado">Criei o exame de cancelamento no HF</button>
+        <button data-chf="${c.id}" data-cdesf="cancelado" class="leve">Exame cancelado no HF</button>
+        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button></div>`
     }
 
     // ── etapa 3: o Atendimento ao Cliente avisa e encerra ──
@@ -2805,7 +2810,7 @@
   // Fúlvio 25/set: o diálogo deixou de ser um formulário e virou dois caminhos.
   // camCancel = por onde a pessoa começou · hfCancel = o que o HF devolveu · exCancel = exame escolhido
   let pendenteSusp = null
-  let camCancel = null, hfCancel = null, exCancel = null, forcarDigitado = false, alvoCancel = null, sugestoes = null
+  let camCancel = null, hfCancel = null, exCancel = null, exCancelLista = [], forcarDigitado = false, alvoCancel = null, sugestoes = null
   function cancelPasso(qual) {
     camCancel = qual
     $('cPasso1').hidden   = !!qual
@@ -2815,7 +2820,12 @@
     $('cAlvo').hidden = qual !== 'sem_amostra'
     $('cFim').hidden  = qual !== 'sem_amostra'
     // pela requisição a triagem JÁ foi feita — não se pergunta de novo (Fúlvio 20h03)
-    if ($('cColabBox')) $('cColabBox').hidden = qual === 'req'
+    // ⭐ THAILAN 02/out: "preciso que tenha um espaço para identificar, da mesma maneira que a
+    //    gente faz sobre as inclusões, qual é o colaborador que está na triagem."
+    // ⛔ O campo sumia justamente quando a requisição JÁ estava cadastrada (`qual === 'req'`) —
+    //    que é o caso em que ela trabalha. Por isso ela nunca o via. Agora aparece sempre:
+    //    saber QUEM registrou vale em qualquer caminho, e foi o que ela pediu.
+    if ($('cColabBox')) $('cColabBox').hidden = false
     $('cSalvar').hidden = true
     if (qual === 'req') $('cReq').focus()
     else if (qual === 'sem_amostra') $('cClinica').focus()
@@ -2828,7 +2838,7 @@
     const pelaReq = camCancel === 'req' && hfCancel
     $('cExames').hidden = !(qual === 'exame' && pelaReq)
     $('cExame').hidden  = !(qual === 'exame' && !pelaReq)
-    if (qual === 'tudo') { exCancel = null; forcarDigitado = false; $('cDigitado').hidden = true }
+    if (qual === 'tudo') { exCancel = null; exCancelLista = []; forcarDigitado = false; $('cDigitado').hidden = true }
     liberarSalvar()
   }
   function liberarSalvar() {
@@ -2847,7 +2857,7 @@
     const ok = alvoCancel === 'tudo'
       ? true
       : (camCancel === 'req' && hfCancel)
-        ? !!exCancel && (!exCancel.digitado || forcarDigitado)
+        ? exCancelLista.length > 0 && (!exCancelLista.some(e => e && e.digitado) || forcarDigitado)
         : !!$('cExame').value.trim()
     $('cSalvar').hidden = !(alvoCancel && ok)
   }
@@ -2914,7 +2924,7 @@
   $('btnNovoCancel')?.addEventListener('click', async () => {
     if (!(await garantirLogin())) return
     $('formCancel').reset()
-    hfCancel = null; exCancel = null; forcarDigitado = false; alvoCancel = null
+    hfCancel = null; exCancel = null; exCancelLista = []; forcarDigitado = false; alvoCancel = null
     $('cErro').textContent = ''; $('cReqErro').textContent = ''
     $('cConfere').hidden = true; $('cExames').hidden = true; $('cDigitado').hidden = true
     document.querySelectorAll('#cAlvo .alvo').forEach(b => b.classList.remove('on'))
@@ -2935,7 +2945,7 @@
     const cam = ev.target.closest('[data-cam]')
     if (cam) { cancelPasso(cam.dataset.cam); return }
     if (ev.target.closest('[data-cvoltar]')) {
-      hfCancel = null; exCancel = null; forcarDigitado = false; alvoCancel = null
+      hfCancel = null; exCancel = null; exCancelLista = []; forcarDigitado = false; alvoCancel = null
       $('cConfere').hidden = true; $('cExames').hidden = true; $('cDigitado').hidden = true
       document.querySelectorAll('#cAlvo .alvo').forEach(b => b.classList.remove('on'))
       cancelPasso(null); return
@@ -2962,7 +2972,7 @@
     if (!(await garantirLogin())) return
     const n = $('cReq').value.replace(/\D/g, '')
     $('cReqErro').textContent = ''; $('cExames').hidden = true; $('cDigitado').hidden = true
-    exCancel = null; forcarDigitado = false; alvoCancel = null
+    exCancel = null; exCancelLista = []; forcarDigitado = false; alvoCancel = null
     $('cAlvo').hidden = true; $('cFim').hidden = true; $('cSalvar').hidden = true
     if (!n) { $('cReqErro').textContent = 'Digite o número da requisição.'; return }
     $('cConfere').hidden = false; $('cConfere').className = 'cancel-confere'
@@ -3033,15 +3043,23 @@
   // ③ a trava: exame já digitado FOI REALIZADO. Com saída visível para quem pula.
   $('cExLista')?.addEventListener('click', ev => {
     const b = ev.target.closest('[data-cex]'); if (!b) return
-    $('cExLista').querySelectorAll('.ex').forEach(x => x.classList.toggle('on', x === b))
+    // ⭐ THAILAN 02/out: "eu consigo clicar em apenas um exame. O que eu preciso é que eu possa
+    //    clicar em VÁRIOS exames." O clique era exclusivo (toggle 'on', x === b) — desmarcava
+    //    todos e marcava um. Agora cada exame liga/desliga sozinho.
+    b.classList.toggle('on')
     forcarDigitado = false
     const ex = Array.isArray(hfCancel && hfCancel.exames) ? hfCancel.exames : []
-    exCancel = ex[+b.dataset.cex]
+    const idx = [...$('cExLista').querySelectorAll('.ex.on')].map(x => +x.dataset.cex)
+    exCancelLista = idx.map(i => ex[i]).filter(Boolean)
+    exCancel = exCancelLista[0] || null          // compatibilidade com o resto do fluxo
+    const digitados = exCancelLista.filter(e => e && e.digitado)
     const trava = $('cDigitado')
-    if (exCancel && exCancel.digitado) {
+    if (digitados.length) {
       trava.hidden = false
-      trava.innerHTML = `<b>Já foi digitado — este exame não pode ser cancelado.</b>
-        <span>Ele já foi realizado. Isso vira conversa de cobrança com a clínica, não cancelamento.</span>
+      const umSo = digitados.length === 1
+      trava.innerHTML = `<b>${umSo ? 'Já foi digitado — este exame não pode ser cancelado.'
+        : `${digitados.length} dos exames marcados já foram digitados — esses não se cancelam.`}</b>
+        <span>${umSo ? 'Ele já foi realizado' : `Já foram realizados: ${digitados.map(e => esc(e.exame)).join(' · ')}`}. Isso vira conversa de cobrança com a clínica, não cancelamento.</span>
         <div class="conf-acoes"><button type="button" class="btn-sec" data-cforcar="1">Registrar assim mesmo</button></div>`
     } else trava.hidden = true
     liberarSalvar()
@@ -3070,7 +3088,8 @@
       if (!pet)     { $('cErro').textContent = 'Diga o nome do pet.'; return }
     }
     const exame = alvoCancel === 'tudo' ? null
-      : pelaReq ? (exCancel && exCancel.exame) : $('cExame').value.trim()
+      // ⭐ vários exames viram uma linha só, separados por ' · ' (o banco guarda texto)
+      : pelaReq ? (exCancelLista.length ? exCancelLista.map(e => e.exame).join(' · ') : (exCancel && exCancel.exame)) : $('cExame').value.trim()
     if (alvoCancel === 'exame' && !exame) { $('cErro').textContent = 'Diga qual exame.'; return }
     const args = {
       p_nome: sessao.nome, p_senha: sessao.senha,
@@ -3079,7 +3098,7 @@
       p_tutor: pelaReq ? (hfCancel.tutor || null) : ($('cTutor').value.trim() || null),
       p_req: pelaReq ? String(hfCancel.req || '') : null,
       p_alvo: alvoCancel, p_exame: exame,
-      p_digitado: pelaReq ? (alvoCancel === 'tudo' ? (hfCancel.exames || []).some(e => e.digitado) : !!(exCancel && exCancel.digitado)) : null,
+      p_digitado: pelaReq ? (alvoCancel === 'tudo' ? (hfCancel.exames || []).some(e => e.digitado) : exCancelLista.some(e => e && e.digitado) || !!(exCancel && exCancel.digitado)) : null,
       p_colaborador: colab || null,
       p_texto: $('cTexto').value.trim() || null,
       p_autor: null, p_grupo: null, p_quando: null, p_msg_id: null,
@@ -3336,7 +3355,7 @@
       prc.disabled = true
       try { await rpc('inc_cancel_proc', { p_nome: sessao.nome, p_senha: sessao.senha,
               p_id: +prc.dataset.cid, p_exame: prc.dataset.cex, p_resposta: prc.dataset.cproc })
-            toast(prc.dataset.cproc === 'iniciou' ? '⛔ Já em processamento — este exame não se cancela' : '✅ Ainda não começou — pode cancelar')
+            toast(prc.dataset.cproc === 'iniciou' ? '⛔ Já está em processamento — este exame não se cancela' : '✅ Ainda não começou — pode cancelar')
             await carregar(); desenhar() }
       catch (e) { prc.disabled = false; toast(msgSqlFalta(e, '28_triagem_setores')) }
       return
@@ -3367,8 +3386,22 @@
       chf.disabled = true
       // Fúlvio 19h52: "eu cliquei e não gerei, e você não notificou nada". A conferência
       // agora acontece no MESMO gesto — o Escritório descobre na hora se não salvou.
-      try { const r = await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf })
-            toast(r && r.ok ? '✅ ' + r.txt : '⚠️ ' + ((r && r.txt) || 'não consegui conferir agora'))
+      // ⭐ o desfecho escolhido vai junto, para o chamado registrar O QUE aconteceu —
+      //    "já foi processado" é desfecho legítimo e precisa ficar escrito, não sumir.
+      const desf = chf.dataset.cdesf || 'criado'
+      // ⛔ a RPC antiga não conhece p_desfecho (PGRST202). Tento com, e caio para sem —
+      //    assim isto funciona ANTES e DEPOIS de o SQL novo subir, sem quebrar para ninguém.
+      let r = null
+      try { r = await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf, p_desfecho: desf }) }
+      catch (e1) {
+        try { r = await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf }) }
+        catch (e2) { chf.disabled = false; toast(e2.message); return }
+      }
+      try {
+            const txtD = desf === 'processado' ? '⛔ marcado: já foi processado — não se cancela'
+                       : desf === 'cancelado' ? '✅ marcado: exame cancelado no HF'
+                       : (r && r.ok ? '✅ ' + r.txt : '⚠️ ' + ((r && r.txt) || 'não consegui conferir agora'))
+            toast(txtD)
             await carregar(); desenhar() }
       catch (e) { chf.disabled = false; toast(e.message) }
       return
