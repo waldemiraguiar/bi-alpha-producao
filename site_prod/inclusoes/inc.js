@@ -3389,14 +3389,16 @@
       // ⭐ o desfecho escolhido vai junto, para o chamado registrar O QUE aconteceu —
       //    "já foi processado" é desfecho legítimo e precisa ficar escrito, não sumir.
       const desf = chf.dataset.cdesf || 'criado'
-      // ⛔ a RPC antiga não conhece p_desfecho (PGRST202). Tento com, e caio para sem —
-      //    assim isto funciona ANTES e DEPOIS de o SQL novo subir, sem quebrar para ninguém.
+      // ⭐ o desfecho vai numa RPC PRÓPRIA (inc_cancel_desfecho, 02/out) — a inc_cancel_hf_feito
+      //    continua intacta. ⛔ Sobrescrever uma função que já roda, sem ver o corpo dela, quebraria
+      //    o que funciona; por isso função nova com nome próprio.
       let r = null
-      try { r = await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf, p_desfecho: desf }) }
-      catch (e1) {
-        try { r = await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf }) }
-        catch (e2) { chf.disabled = false; toast(e2.message); return }
-      }
+      try { r = await rpc('inc_cancel_hf_feito', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf }) }
+      catch (e2) { chf.disabled = false; toast(e2.message); return }
+      // ⚠️ o desfecho é COMPLEMENTO: se ele falhar, o cancelamento já foi registrado e o fluxo
+      //    segue. Não travo a pessoa por causa de um campo de relatório.
+      try { await rpc('inc_cancel_desfecho', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +chf.dataset.chf, p_desfecho: desf }) }
+      catch (e3) { console.warn('desfecho não gravado:', e3.message) }
       try {
             const txtD = desf === 'processado' ? '⛔ marcado: já foi processado — não se cancela'
                        : desf === 'cancelado' ? '✅ marcado: exame cancelado no HF'
