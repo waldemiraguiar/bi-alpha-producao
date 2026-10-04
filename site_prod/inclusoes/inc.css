@@ -1047,3 +1047,8 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 
 /* ✖ saída de quem abriu a solicitação */
 .can-descartar { margin-top:8px; justify-content:flex-end }
+
+/* ✖ solicitação cancelada por quem abriu — o motivo é o que importa ler */
+.can-descartada { display:flex; flex-direction:column; gap:3px; padding:9px 12px; border-radius:9px;
+                  background:rgba(140,140,140,.12); border:1px solid rgba(140,140,140,.4); opacity:.85 }
+.can-descartada span { font-size:.9em; opacity:.85 }

@@ -977,6 +977,10 @@
       ${podeAgir('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
     </div>` : ''
     const reqNova = c.req_nova ? `<div class="can-hf ok">📥 requisição informada pela Triagem: <b>${esc(c.req_nova)}</b> · ${esc(c.req_nova_por || '')}</div>` : ''
+    // ✖ quando a solicitação foi cancelada por quem abriu, o motivo é a informação principal
+    if (c.status === 'descartado') return trilha + `<div class="can-descartada">
+      ✖ <b>Solicitação cancelada</b>${c.resolvido_por ? ' por ' + esc(c.resolvido_por) : ''}${c.resolvido_em ? ' às ' + hm(c.resolvido_em) : ''}
+      ${c.motivo ? `<span>${esc(c.motivo)}</span>` : ''}</div>`
 
     // ── etapa 1: os DOIS cientes, ao mesmo tempo ──
     if (et.n === 1) {
