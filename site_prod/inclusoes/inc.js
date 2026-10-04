@@ -982,6 +982,92 @@
       ✖ <b>Solicitação cancelada</b>${c.resolvido_por ? ' por ' + esc(c.resolvido_por) : ''}${c.resolvido_em ? ' às ' + hm(c.resolvido_em) : ''}
       ${c.motivo ? `<span>${esc(c.motivo)}</span>` : ''}</div>`
 
+    // ═══ FLUXO TRIAGEM × ESCRITÓRIO — Thailan, 9 áudios de 02/out ═══
+    // ⭐ O desfecho sai do CRUZAMENTO dos dois setores, não de um só:
+    //    triagem "em processamento" OU escritório "já digitado" → impossibilitado
+    //    triagem "não iniciado" E escritório "não digitado"     → pode cancelar
+    //    ⛔ Com só um dos dois, a resposta é "falta o outro" — nunca um palpite.
+    const vereditoCancel = (() => {
+      const triNao = c.tri_veredito === 'em_processamento'
+      const escNao = c.esc_digitado === true
+      if (triNao || escNao) {
+        const por = [triNao ? 'a Triagem viu o exame em processamento' : null,
+                     escNao ? 'o Escritório viu o exame já digitado' : null].filter(Boolean).join(' e ')
+        return { pode: false, txt: `Cancelamento impossibilitado — ${por}.` }
+      }
+      const triSim = c.tri_veredito === 'nao_iniciado'
+      const escSim = c.esc_digitado === false
+      if (triSim && escSim) return { pode: true, txt: 'Os dois setores confirmaram: o cancelamento é válido.' }
+      const falta = [!c.tri_veredito ? 'a Triagem' : null, c.esc_digitado == null ? 'o Escritório' : null].filter(Boolean)
+      return { pode: null, txt: `Falta o parecer d${falta.length > 1 ? 'os dois setores' : 'e ' + falta[0]}.` }
+    })()
+
+    // ⭐ "avisei o Gabriel da triagem" / "avisei a Marcele do escritório".
+    //    Com o NOME da pessoa: "avisei a Triagem" é vago e ninguém sabe a quem cobrar.
+    const avisar = (lado, quem, feitoEm, feitoPor) => {
+      const rot = lado === 'tri' ? 'da triagem' : 'do escritório'
+      const nome = (quem || '').trim()
+      if (feitoEm) return `<div class="can-avisei ok">✅ ${esc(nome || (lado === 'tri' ? 'Triagem' : 'Escritório'))} ${rot} avisado${feitoPor ? ' por ' + esc(feitoPor) : ''} às ${hm(feitoEm)}</div>`
+      if (!podeAgir('cc')) return ''
+      return `<div class="can-acoes"><button class="leve" data-cavisei="${lado}" data-cid="${c.id}">
+        📣 Avisei ${nome ? `<b>${esc(nome)}</b>` : 'o colaborador'} ${rot}</button></div>`
+    }
+    const avisos = c.status === 'aberto'
+      ? avisar('tri', c.colaborador, c.avisei_tri_em, c.avisei_tri_por) +
+        avisar('esc', c.colab_esc,   c.avisei_esc_em, c.avisei_esc_por)
+      : ''
+
+    // ── o parecer de cada setor (só faz sentido quando existe requisição) ──
+    const temReq = !!(c.req || c.req_nova)
+    const parecerTri = !temReq ? '' : c.tri_veredito
+      ? `<div class="can-parecer ${c.tri_veredito === 'nao_iniciado' ? 'sim' : 'nao'}">
+           🧪 <b>Triagem:</b> ${c.tri_veredito === 'nao_iniciado' ? 'o exame NÃO foi iniciado — pode cancelar' : 'o exame JÁ está em processamento — não dá para cancelar'}
+           <i>${esc(c.tri_veredito_por || '')} ${c.tri_veredito_em ? 'às ' + hm(c.tri_veredito_em) : ''}</i></div>`
+      : podeAgir('tri')
+        ? `<div class="can-parecer pede"><b>🧪 Triagem: o exame já começou a ser processado?</b>
+             <div class="can-acoes">
+               <button data-ctriv="nao_iniciado" data-cid="${c.id}">Não foi iniciado — pode cancelar</button>
+               <button class="nao" data-ctriv="em_processamento" data-cid="${c.id}">Já está em processamento</button>
+             </div></div>`
+        : `<div class="can-parecer pede"><span class="so-setor">🧪 aguardando o parecer da Triagem</span></div>`
+
+    const parecerEsc = !temReq ? '' : (c.esc_digitado != null)
+      ? `<div class="can-parecer ${c.esc_digitado ? 'nao' : 'sim'}">
+           🏢 <b>Escritório:</b> ${c.esc_digitado ? 'o exame JÁ foi digitado — não dá para cancelar' : 'o exame NÃO foi digitado'}
+           <i>${esc(c.esc_digitado_por || '')} ${c.esc_digitado_em ? 'às ' + hm(c.esc_digitado_em) : ''}</i></div>`
+      : podeAgir('esc')
+        ? `<div class="can-parecer pede"><b>🏢 Escritório: o exame foi digitado?</b>
+             <div class="can-acoes">
+               <button data-cescd="0" data-cid="${c.id}">Não foi digitado</button>
+               <button class="nao" data-cescd="1" data-cid="${c.id}">Já foi digitado</button>
+             </div></div>`
+        : `<div class="can-parecer pede"><span class="so-setor">🏢 aguardando o parecer do Escritório</span></div>`
+
+    const vereditoBox = !temReq ? '' : `<div class="can-veredito ${vereditoCancel.pode === true ? 'sim' : vereditoCancel.pode === false ? 'nao' : 'espera'}">
+      ${vereditoCancel.pode === true ? '✅' : vereditoCancel.pode === false ? '⛔' : '⏳'} ${esc(vereditoCancel.txt)}</div>`
+
+    // ── "anotado cancelamento na requisição" encerra a triagem ──
+    const triAnotado = !c.tri_anotado_em && podeAgir('tri') && c.status === 'aberto'
+      ? `<div class="can-acoes"><button class="leve" data-ctrianot="${c.id}">✍️ Anotado cancelamento na requisição</button></div>`
+      : c.tri_anotado_em
+        ? `<div class="can-avisei ok">✍️ cancelamento anotado na requisição por ${esc(c.tri_anotado_por || '?')} às ${hm(c.tri_anotado_em)}</div>`
+        : ''
+
+    // ── ⛔ a regra que a Thailan chamou de obrigatória: o valor TEM de sair zerado ──
+    const valorBox = c.status !== 'aberto' ? '' : c.valor_zerado === true
+      ? `<div class="can-valor ok">💰 valor zerado conferido por ${esc(c.valor_zerado_por || '?')} às ${hm(c.valor_zerado_em)}</div>`
+      : c.valor_zerado === false
+        ? `<div class="can-valor nao">🔴 <b>O valor NÃO está zerado.</b> Exame cancelado não pode sair cobrando — corrija no HF.
+             <div class="can-acoes"><button data-cvalor="1" data-cid="${c.id}">Corrigi — está zerado</button></div></div>`
+        : (podeAgir('esc') || podeAgir('cc'))
+          ? `<div class="can-valor pede"><b>💰 O valor ficou zerado no HF?</b>
+               <span>Exame cancelado nunca pode sair mantendo o valor.</span>
+               <div class="can-acoes">
+                 <button data-cvalor="1" data-cid="${c.id}">Sim, está zerado</button>
+                 <button class="nao" data-cvalor="0" data-cid="${c.id}">Não — ainda está cobrando</button>
+               </div></div>`
+          : ''
+
     // ── etapa 1: os DOIS cientes, ao mesmo tempo ──
     if (et.n === 1) {
       const rel = `<div class="can-relogio ${estourou ? 'ruim' : ''}">esperando ciente há ${fmt(esperando)}${estourou ? ` — passou dos ${PRAZO_CANCEL_MIN} min` : ` de ${PRAZO_CANCEL_MIN} min`}</div>`
@@ -996,7 +1082,7 @@
       return trilha + rel + jaCobrou + reqNova + esperaAmostra + `<div class="can-paralelo">
         ${lado(c.tri_ciente_em, c.tri_ciente_por, c.tri_ciente_em, 'tri', 'Triagem', 'tri')}
         ${lado(c.esc_ciente_em, c.esc_ciente_por, c.esc_ciente_em, 'esc', 'Escritório', 'esc')}
-      </div>` + consulta + cobranca + descartar
+      </div>` + avisos + parecerTri + parecerEsc + vereditoBox + triAnotado + consulta + cobranca + descartar
     }
 
     // ── etapa 2: o Escritório cria o exame de cancelamento no HF ──
@@ -1008,14 +1094,32 @@
       return trilha + consulta + `<div class="can-acoes can-esc">
         <button data-chf="${c.id}" data-cdesf="criado">Criei o exame de cancelamento no HF</button>
         <button data-chf="${c.id}" data-cdesf="cancelado" class="leve">Exame cancelado no HF</button>
-        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button></div>` + descartar
+        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button></div>`
+        + parecerEsc + vereditoBox + valorBox + descartar
     }
 
     // ── etapa 3: o Atendimento ao Cliente avisa e encerra ──
-    if (!podeAgir('cc')) return trilha + `<div class="can-acoes"><button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div><span class="so-setor">ação de ATENDIMENTO AO CLIENTE</span>`
-    return trilha + `<div class="can-acoes">
-      <button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>
-      <button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>` + descartar
+    // ⭐ THAILAN 02/out: "eu preciso que você só libere o ícone do avisei ao cliente e encerrar
+    //    depois que ele conferir no HF. Se você não conseguir encontrar no HF, peça para
+    //    conferir manualmente. Aí ele clica no conferir manualmente, e aí sim você libera."
+    // ⛔ Avisar o cliente de um cancelamento que não foi feito no HF é o pior desfecho possível:
+    //    o cliente para de cobrar e o exame continua lá.
+    const conferido = !!(c.hf_lancado_em || c.conf_manual_em)
+    const comoConferiu = c.hf_lancado_em
+      ? `<div class="can-avisei ok">🔎 conferido no espelho do HF às ${hm(c.hf_lancado_em)}</div>`
+      : c.conf_manual_em
+        ? `<div class="can-avisei ok">🔎 conferido <b>manualmente</b> por ${esc(c.conf_manual_por || '?')} às ${hm(c.conf_manual_em)}</div>`
+        : `<div class="can-parecer pede">
+             <b>🔎 Confira no HF antes de avisar o cliente</b>
+             <span>O espelho do HF ainda não mostra este cancelamento — ele atualiza a cada 30 min.
+             Se você abrir o HF e vir que está feito, use o botão de conferência manual.</span></div>`
+
+    if (!podeAgir('cc')) return trilha + valorBox + comoConferiu +
+      `<div class="can-acoes"><button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div><span class="so-setor">ação de ATENDIMENTO AO CLIENTE</span>`
+    return trilha + vereditoBox + valorBox + comoConferiu + `<div class="can-acoes">
+      ${conferido ? `<button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>` : ''}
+      <button class="leve" data-cconferir="${c.id}">Conferir no HF</button>
+      ${conferido ? '' : `<button class="leve" data-cconfman="${c.id}">✔ Conferi manualmente no HF</button>`}</div>` + descartar
   }
 
   // ── 🔎 rastreador: pedido do cliente que não virou cartão (Fúlvio 28/set 20h00) ──
@@ -3399,6 +3503,14 @@
     $('cSalvar').disabled = true
     try {
       const novoId = await rpc('inc_cancel_abrir', args)
+      // ⭐ chamada separada de propósito: inc_cancel_abrir tem 17 parâmetros e está em produção.
+      //    Mexer na assinatura dela para acrescentar UM campo arriscaria o que já funciona.
+      const colabEsc = (($('cColabEsc') && $('cColabEsc').value) || '').trim()
+      if (novoId && colabEsc) {
+        try {
+          await rpc('inc_cancel_colab_esc', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +novoId, p_colab: colabEsc })
+        } catch (e) { toast('Cartão criado, mas não gravei o colaborador do escritório: ' + e.message) }
+      }
       // veio do rastreador? some de lá, apontando para o cartão que nasceu
       if (pendenteSusp) {
         try { await rpc('inc_cancel_susp_acao', { p_nome: sessao.nome, p_senha: sessao.senha,
@@ -3819,6 +3931,79 @@
       try { await rpc('inc_cancel_cliente_ok', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +cli.dataset.ccliente })
             toast('Cancelamento encerrado'); await carregar(); desenhar() }
       catch (e) { cli.disabled = false; toast(e.message) }
+      return
+    }
+    const avi = ev.target.closest('[data-cavisei]')          // 📣 avisei o colaborador
+    if (avi) {
+      if (!(await garantirLogin())) return
+      avi.disabled = true
+      try {
+        const r = await rpc('inc_cancel_avisei', { p_nome: sessao.nome, p_senha: sessao.senha,
+          p_id: +avi.dataset.cid, p_lado: avi.dataset.cavisei })
+        toast(r && r.ok ? '📣 registrado' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregar(); desenharCancelamentos(); desenharTriagem()
+      } catch (e) { avi.disabled = false; toast(e.message) }
+      return
+    }
+    const tv = ev.target.closest('[data-ctriv]')             // 🧪 parecer da Triagem
+    if (tv) {
+      if (!(await garantirLogin())) return
+      tv.disabled = true
+      try {
+        const r = await rpc('inc_cancel_tri_veredito', { p_nome: sessao.nome, p_senha: sessao.senha,
+          p_id: +tv.dataset.cid, p_veredito: tv.dataset.ctriv })
+        toast(r && r.ok ? '🧪 parecer da Triagem registrado' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregar(); desenharCancelamentos(); desenharTriagem()
+      } catch (e) { tv.disabled = false; toast(e.message) }
+      return
+    }
+    const ta = ev.target.closest('[data-ctrianot]')          // ✍️ anotado na requisição
+    if (ta) {
+      if (!(await garantirLogin())) return
+      ta.disabled = true
+      try {
+        const r = await rpc('inc_cancel_tri_anotado', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +ta.dataset.ctrianot })
+        toast(r && r.ok ? '✍️ anotado' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregar(); desenharCancelamentos(); desenharTriagem()
+      } catch (e) { ta.disabled = false; toast(e.message) }
+      return
+    }
+    const ed = ev.target.closest('[data-cescd]')             // 🏢 parecer do Escritório
+    if (ed) {
+      if (!(await garantirLogin())) return
+      ed.disabled = true
+      try {
+        const r = await rpc('inc_cancel_esc_digitado', { p_nome: sessao.nome, p_senha: sessao.senha,
+          p_id: +ed.dataset.cid, p_digitado: ed.dataset.cescd === '1' })
+        toast(r && r.ok ? '🏢 parecer do Escritório registrado' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregar(); desenharCancelamentos(); desenharTriagem()
+      } catch (e) { ed.disabled = false; toast(e.message) }
+      return
+    }
+    const vz = ev.target.closest('[data-cvalor]')            // 💰 o valor ficou zerado?
+    if (vz) {
+      if (!(await garantirLogin())) return
+      vz.disabled = true
+      try {
+        const r = await rpc('inc_cancel_valor_zerado', { p_nome: sessao.nome, p_senha: sessao.senha,
+          p_id: +vz.dataset.cid, p_zerado: vz.dataset.cvalor === '1' })
+        toast(r && r.ok ? (vz.dataset.cvalor === '1' ? '💰 valor zerado conferido' : '🔴 anotado: ainda está cobrando') : '⚠️ não consegui')
+        await carregar(); desenharCancelamentos()
+      } catch (e) { vz.disabled = false; toast(e.message) }
+      return
+    }
+    const cm = ev.target.closest('[data-cconfman]')          // ✔ conferi manualmente no HF
+    if (cm) {
+      if (!(await garantirLogin())) return
+      // ⛔ confirmação de verdade: este clique LIBERA avisar o cliente. Se ninguém olhou o HF,
+      //    o cliente para de cobrar e o exame continua lá.
+      if (!confirm('Você abriu o HF e confirmou que o cancelamento está feito?\n\nEste clique libera avisar o cliente.')) return
+      cm.disabled = true
+      try {
+        const r = await rpc('inc_cancel_conf_manual', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +cm.dataset.cconfman })
+        toast(r && r.ok ? '✔ conferência manual registrada' : '⚠️ não consegui')
+        await carregar(); desenharCancelamentos()
+      } catch (e) { cm.disabled = false; toast(e.message) }
       return
     }
     const desc = ev.target.closest('[data-cdescartar]')      // ✖ quem abriu desiste da solicitação

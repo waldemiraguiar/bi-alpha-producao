@@ -439,6 +439,14 @@
         <label>Quem fez a triagem <span class="obrig">*</span></label>
         <input id="cColab" autocomplete="off" placeholder="nome do colaborador">
       </div>
+      <!-- ⭐ THAILAN 02/out: "eu quero que no card de criação também tenha um espaço para a
+           gente indicar o colaborador do escritório". Com o nome dos dois, o cartão mostra
+           os botões "avisei o Gabriel" e "avisei a Marcele" — sem nome, o aviso vira
+           "avisei a Triagem", que é vago e ninguém sabe a quem cobrar. -->
+      <div id="cColabEscBox">
+        <label>Quem é o colaborador do escritório</label>
+        <input id="cColabEsc" autocomplete="off" placeholder="nome do colaborador do escritório">
+      </div>
       <label>O que o cliente escreveu</label>
       <textarea id="cTexto" rows="2" placeholder="cole a mensagem do WhatsApp"></textarea>
       <p class="erro" id="cErro"></p>

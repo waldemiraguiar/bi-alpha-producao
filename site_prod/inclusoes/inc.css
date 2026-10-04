@@ -1052,3 +1052,30 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .can-descartada { display:flex; flex-direction:column; gap:3px; padding:9px 12px; border-radius:9px;
                   background:rgba(140,140,140,.12); border:1px solid rgba(140,140,140,.4); opacity:.85 }
 .can-descartada span { font-size:.9em; opacity:.85 }
+
+/* ═══ FLUXO TRIAGEM × ESCRITÓRIO no cancelamento — Thailan 02/out ═══
+   O parecer de cada setor e o veredito combinado são o que a pessoa precisa ler primeiro:
+   por isso têm cor própria e ficam acima dos botões, não escondidos no meio da trilha. */
+.can-avisei { font-size:.9em; padding:6px 10px; border-radius:7px; margin:4px 0;
+              background:rgba(255,255,255,.05) }
+.can-avisei.ok { background:rgba(30,160,90,.12); color:#7fdcae }
+
+.can-parecer { display:flex; flex-direction:column; gap:5px; padding:9px 12px; border-radius:9px; margin:6px 0 }
+.can-parecer span { font-size:.88em; opacity:.85; line-height:1.45 }
+.can-parecer i { font-style:normal; font-size:.85em; opacity:.7 }
+.can-parecer.pede { background:rgba(224,176,0,.10); border:1px solid rgba(224,176,0,.4) }
+.can-parecer.sim  { background:rgba(30,160,90,.12); border:1px solid rgba(30,160,90,.45) }
+.can-parecer.nao  { background:rgba(200,30,30,.10); border:1px solid rgba(200,30,30,.45) }
+
+/* o veredito combinado: é a frase que decide se pode cancelar ou não */
+.can-veredito { padding:9px 12px; border-radius:9px; margin:6px 0; font-weight:600 }
+.can-veredito.sim    { background:rgba(30,160,90,.16); border:1px solid rgba(30,160,90,.5); color:#7fdcae }
+.can-veredito.nao    { background:rgba(200,30,30,.14); border:2px solid #c81e1e; color:#ef8585 }
+.can-veredito.espera { background:rgba(255,255,255,.05); border:1px dashed rgba(255,255,255,.25); opacity:.85 }
+
+/* 💰 exame cancelado nunca pode sair cobrando */
+.can-valor { display:flex; flex-direction:column; gap:5px; padding:9px 12px; border-radius:9px; margin:6px 0 }
+.can-valor span { font-size:.88em; opacity:.85 }
+.can-valor.pede { background:rgba(224,176,0,.10); border:1px solid rgba(224,176,0,.4) }
+.can-valor.ok   { background:rgba(30,160,90,.12); border:1px solid rgba(30,160,90,.45); font-size:.9em }
+.can-valor.nao  { background:rgba(200,30,30,.14); border:2px solid #c81e1e }
