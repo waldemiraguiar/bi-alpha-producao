@@ -968,7 +968,7 @@
     // ficava preso para sempre esperando um ciente que nunca viria.
     // ⭐ Saída própria de quem abriu, em QUALQUER etapa. Pede o motivo, porque descartar sem
     //    dizer por quê transforma o quadro num cemitério que ninguém entende depois.
-    const descartar = podeAgir('cc') && c.status === 'aberto'
+    const descartar = podeAgir('cc') && c.status === 'aberto' && souAutorizadoACancelar()
       ? `<div class="can-acoes can-descartar"><button class="nao" data-cdescartar="${c.id}">✖ Cancelar esta solicitação</button></div>`
       : ''
 
@@ -3201,6 +3201,20 @@
         : !!($('cExame').value.trim() || mao.length)
     $('cSalvar').hidden = !(alvoCancel && ok)
   }
+  // 🔐 QUEM PODE CANCELAR UMA SOLICITAÇÃO — Thailan 02/out: "as únicas senhas autorizadas a
+  // utilizar o cancelamento é o Thailan, Fúlvio e o Waldemir".
+  // ⭐ Comparo pelo PRIMEIRO NOME, sem acento e sem caixa: o login pode estar cadastrado como
+  //    "Thailan Souza" ou "FULVIO", e travar pela grafia exata deixaria a própria pessoa de fora.
+  // ⛔ Isto aqui só ESCONDE o botão. A trava que vale é a do banco — tela não é segurança.
+  // ⚠️ Vale para CANCELAR a solicitação (a ação destrutiva). ABRIR solicitação continua com
+  //    todo o Atendimento: travar isso pararia a operação, e não foi o que ela pediu.
+  const PODE_CANCELAR = ['thailan', 'fulvio', 'waldemir']
+  function souAutorizadoACancelar() {
+    const n = String((sessao && sessao.nome) || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+    return PODE_CANCELAR.some(x => n === x || n.startsWith(x + ' ') || n.includes(x))
+  }
+
   // 🔎 BUSCA DE CLÍNICA — Thailan 02/out: "procuramos a clínica Dr. Fulvio e não foi encontrado".
   // O <datalist> nativo recebia milhares de nomes, casa só pelo começo e não ignora acento.
   // ⭐ Busca por PEDAÇO em qualquer posição, sem acento e sem caixa, e as palavras podem vir
