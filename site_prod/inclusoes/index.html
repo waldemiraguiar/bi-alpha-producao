@@ -28,6 +28,7 @@
     <button data-setor="rast" class="aba-ia">🤖 Rastreamento de Inclusões</button>
     <button data-setor="cancel" class="aba-cancel">🚫 Cancelamentos</button>
     <button data-setor="comprov" class="aba-comprov">💳 Comprovantes</button>
+    <button data-setor="raiva" class="aba-raiva">🦠 Raiva</button>
     <button data-setor="coleta" class="aba-moto">🛵 Agendamentos</button>
     <button data-setor="rotas" class="aba-rota">🛵 BI Rotas</button>
     <button data-setor="nps" class="aba-nps">⭐ NPS</button>
@@ -127,6 +128,45 @@
     </div>
     <div class="comprov-kpis" id="comprovKpis"></div>
     <div id="comprovLista"></div>
+  </section>
+
+  <!-- 🦠 LAUDO DE TRÂNSITO INTERNACIONAL DE RAIVA — Fúlvio, 03/out (5 áudios).
+       O processo leva 30 a 40 dias e passa por seis mãos. ⛔ "divergência impossibilita o PET
+       de viajar" (palavra dele) e a retificação é cobrada — por isso o checklist é a tela, não
+       um lembrete de quem atendeu. -->
+  <section id="vRaiva" hidden>
+    <div class="rast-topo">
+      <h2><span class="selo-raiva">🦠 RAIVA</span> Trânsito internacional</h2>
+    </div>
+
+    <!-- ① primeiro aviso: o valor -->
+    <div class="raiva-aviso raiva-valor">
+      <b>Valor à vista: R$ 1.465,00</b>
+      <span>Estados Unidos ou União Europeia · prazo de emissão: <b>30 a 40 dias</b></span>
+    </div>
+
+    <!-- ② a "aba de dúvidas": o país se enquadra? (o Fúlvio: "estou com dúvida se Portugal
+         faz parte da União Europeia") -->
+    <div class="raiva-duvida">
+      <label for="raivaPais">País de destino — se enquadra nesse valor?</label>
+      <input id="raivaPais" placeholder="ex.: Portugal, Alemanha, Estados Unidos" autocomplete="off">
+      <div id="raivaPaisResp" class="raiva-resp"></div>
+    </div>
+
+    <!-- ③ segundo aviso, em vermelho -->
+    <div class="raiva-aviso raiva-vermelho">
+      <b>⚠️ DE EXTREMA IMPORTÂNCIA</b>
+      <span>A passagem do pet só pode ser comprada <b>depois</b> que o laudo estiver em mãos do
+      tutor ou do veterinário. Nunca antes — comprar passagem sem o laudo pronto é o erro que
+      mais custa nesse processo.</span>
+    </div>
+
+    <div class="raiva-topo">
+      <button class="btn-principal" id="btnNovoRaiva">+ Novo caso</button>
+      <div class="raiva-filtros"><button data-rper="abertos" class="on">Em andamento</button><button data-rper="fechados">Concluídos</button></div>
+    </div>
+    <div class="raiva-kpis" id="raivaKpis"></div>
+    <div class="rast-lista" id="raivaLista"></div>
   </section>
 
   <section id="vCancel" hidden>

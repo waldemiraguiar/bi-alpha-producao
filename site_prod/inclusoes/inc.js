@@ -125,6 +125,7 @@
     // 💳 os comprovantes pendentes vêm junto, mas NUNCA travam o resto: se falhar, o quadro
     //    carrega igual. ([[regra-sempre-permitir-nunca-bloquear-so-alerta]])
     carregarComprovantes().catch(() => {})
+    carregarRaiva().catch(() => {})
     if (DEMO) { if (!chamados.length) demoDados(); return }   // demo: dados em memória (inclusive os terremotos do ensaio)
     try {
       const lim = new Date(agora() - 31 * 864e5).toISOString()
@@ -435,12 +436,13 @@
   function desenhar() {
     try { avisarNovidades() } catch {}
     document.querySelectorAll('#abas button').forEach(b => b.classList.toggle('on', b.dataset.setor === setor))
-    const comprov = setor === 'comprov', hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere', canc = setor === 'cancel', tri = setor === 'tri', sai = setor === 'saida'
-    $('vQuadro').hidden = comprov || hist || rast || col || rot || npsv || terr || pan || conf || canc || tri || sai; if ($('vComprov')) $('vComprov').hidden = !comprov; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf; $('vCancel').hidden = !canc; $('vTriagem').hidden = !tri; $('vSaida').hidden = !sai
+    const raiva = setor === 'raiva', comprov = setor === 'comprov', hist = setor === 'hist', todos = setor === 'todos', rast = setor === 'rast', col = setor === 'coleta', rot = setor === 'rotas', npsv = setor === 'nps', terr = setor === 'terremoto', pan = setor === 'panorama', conf = setor === 'confere', canc = setor === 'cancel', tri = setor === 'tri', sai = setor === 'saida'
+    $('vQuadro').hidden = raiva || comprov || hist || rast || col || rot || npsv || terr || pan || conf || canc || tri || sai; if ($('vComprov')) $('vComprov').hidden = !comprov; if ($('vRaiva')) $('vRaiva').hidden = !raiva; $('vHist').hidden = !hist; $('vRast').hidden = !rast; $('vColeta').hidden = !col; $('vRotas').hidden = !rot; $('vNps').hidden = !npsv; $('vTerremoto').hidden = !terr; $('vPanorama').hidden = !pan; $('vConfere').hidden = !conf; $('vCancel').hidden = !canc; $('vTriagem').hidden = !tri; $('vSaida').hidden = !sai
     desenharLegenda()
     try { desenharAbasSetor() } catch {}
     desenharRastreamento()
     try { desenharComprovantes() } catch (e) { console.warn('comprovantes:', e.message) }
+    try { desenharRaiva() } catch (e) { console.warn('raiva:', e.message) }
     desenharColetas()
     try { desenharHeranca() } catch {}
     desenharRotas()
@@ -685,6 +687,165 @@
     }
     el.innerHTML = (abertos.length ? `<h3>⏳ Aguardando (${abertos.length})</h3>` + abertos.map(cartao).join('') : '')
       + (fechados.length ? `<h3 class="mudo">✅ Conciliados (${fechados.length})</h3>` + fechados.slice(0, 20).map(cartao).join('') : '')
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🦠 TRÂNSITO INTERNACIONAL DE RAIVA — Fúlvio, 03/out
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ⭐ Os 27 países da União Europeia. Nasceu de uma dúvida real do Fúlvio ("estou com dúvida
+  // se Portugal faz parte da União Europeia"): em vez de responder a dele, respondo a classe.
+  // ⛔ Reino Unido NÃO está mais (Brexit). Noruega, Suíça e Islândia nunca foram — são do EEE,
+  //    e as regras de pet podem ser outras. Nesses casos eu NÃO afirmo que se enquadra.
+  const UE_27 = ['alemanha','austria','belgica','bulgaria','chequia','republica tcheca','tchequia',
+    'chipre','croacia','dinamarca','eslovaquia','eslovenia','espanha','estonia','finlandia',
+    'franca','grecia','hungria','irlanda','italia','letonia','lituania','luxemburgo','malta',
+    'paises baixos','holanda','polonia','portugal','romenia','suecia']
+  const EUA_NOMES = ['estados unidos','eua','usa','united states','america']
+  // ⚠️ europeu mas FORA da UE — aqui eu aviso em vez de dizer "não se enquadra" seco,
+  //    porque a pessoa vai achar que foi erro de digitação.
+  const EUROPA_FORA = ['reino unido','inglaterra','escocia','gales','uk','noruega','suica',
+    'islandia','servia','turquia','ucrania','russia','albania','bosnia','montenegro','moldavia']
+  const semAcento = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+
+  function paisSeEnquadra(txt) {
+    const q = semAcento(txt)
+    if (!q) return null
+    if (EUA_NOMES.some(x => q === x || q.includes(x))) return { ok: true, bloco: 'EUA', nome: 'Estados Unidos' }
+    const ue = UE_27.find(x => q === x || q.includes(x))
+    if (ue) return { ok: true, bloco: 'UE', nome: ue.replace(/(^|\s)\S/g, c => c.toUpperCase()) }
+    const fora = EUROPA_FORA.find(x => q === x || q.includes(x))
+    if (fora) return { ok: false, bloco: 'OUTRO', nome: fora.replace(/(^|\s)\S/g, c => c.toUpperCase()), europa: true }
+    return { ok: false, bloco: 'OUTRO', nome: txt }
+  }
+
+  function respostaPais(txt) {
+    const r = paisSeEnquadra(txt)
+    if (!r) return ''
+    if (r.ok) return `<div class="raiva-sim">✅ <b>${esc(r.nome)}</b> se enquadra —
+      ${r.bloco === 'UE' ? 'é da União Europeia' : 'Estados Unidos'}. Valor: <b>R$ 1.465,00</b></div>`
+    if (r.europa) return `<div class="raiva-nao">⚠️ <b>${esc(r.nome)}</b> é na Europa mas <b>não</b> é da
+      União Europeia. As exigências podem ser outras — <b>não prometa este valor</b>, consulte antes.</div>`
+    return `<div class="raiva-nao">⚠️ Não reconheci <b>${esc(txt)}</b> como União Europeia nem Estados Unidos.
+      Este laudo e este valor valem para esses dois destinos — <b>confirme antes de prometer</b>.</div>`
+  }
+
+  let raivaCache = [], raivaPer = 'abertos'
+
+  async function carregarRaiva() {
+    if (DEMO || !sessao || !sessao.nome) { raivaCache = []; return }
+    try {
+      const r = await rpc('raiva_casos_listar',
+        { p_nome: sessao.nome, p_senha: sessao.senha, p_fechados: raivaPer === 'fechados' })
+      raivaCache = (r && r.ok && r.casos) ? r.casos : []
+    } catch (e) { raivaCache = []; console.warn('raiva:', e.message) }
+  }
+
+  // ⭐ o dia em que a coleta libera: 30 dias depois da vacina, coleta a partir do 31º.
+  function raivaLiberaEm(vacinaData) {
+    if (!vacinaData) return null
+    const d = new Date(vacinaData + 'T12:00:00')
+    if (isNaN(d)) return null
+    d.setDate(d.getDate() + 31)
+    return d
+  }
+
+  function desenharRaiva() {
+    const b = document.querySelector('#abas button[data-setor="raiva"]')
+    const el = $('raivaLista'); if (!el) return
+    const L = raivaCache || []
+    if (b) {
+      const pend = L.filter(c => !c.fechado_em && c.coleta_ok && !c.amostra).length
+      b.innerHTML = '🦠 Raiva' + (pend ? ` <span class="badge">${pend}</span>` : '')
+      b.classList.toggle('tem', pend > 0)
+    }
+    const k = $('raivaKpis')
+    if (k) {
+      const esperandoBio = L.filter(c => c.coleta_ok && !c.amostra).length
+      const esperandoVac = L.filter(c => c.vacina_ok && !c.coleta_ok).length
+      const prontos = L.filter(c => c.laudo_chegou && !c.entrega_combinada).length
+      k.innerHTML = `
+        <div class="kpi"><b>${L.length}</b><span>${raivaPer === 'fechados' ? 'concluídos' : 'em andamento'}</span></div>
+        <div class="kpi ${esperandoBio ? 'alerta' : ''}"><b>${esperandoBio}</b><span>esperando a bioquímica</span></div>
+        <div class="kpi"><b>${esperandoVac}</b><span>na espera dos 30 dias</span></div>
+        <div class="kpi ${prontos ? 'alerta' : ''}"><b>${prontos}</b><span>laudo pronto, entrega a combinar</span></div>`
+    }
+    if (!L.length) {
+      el.innerHTML = `<p class="mudo">Nenhum caso ${raivaPer === 'fechados' ? 'concluído' : 'em andamento'}.
+        Use <b>+ Novo caso</b> quando uma clínica pedir laudo de trânsito internacional.</p>`
+      return
+    }
+    const tique = (caso, campo, rotulo, extra) => `<label class="raiva-tq ${caso[campo] ? 'on' : ''}">
+      <input type="checkbox" data-rtq="${caso.id}" data-rcampo="${campo}" ${caso[campo] ? 'checked' : ''}>
+      <span>${rotulo}</span>${extra || ''}</label>`
+
+    el.innerHTML = L.map(c => {
+      const lib = raivaLiberaEm(c.vacina_data)
+      const faltam = lib ? Math.ceil((lib - Date.now()) / 864e5) : null
+      // ⛔ microchip DEPOIS da vacina invalida tudo — é a regra que o Fúlvio repetiu duas vezes.
+      const ordemErrada = c.microchip_data && c.vacina_data && c.microchip_data > c.vacina_data
+      return `<article class="can-card raiva-card ${c.fechado_em ? 'feito' : ''}">
+        <div class="can-topo">
+          <b>🐾 ${esc(c.pet || '—')}</b>
+          <span class="mudo">${esc(c.clinica || '')}</span>
+          ${c.destino ? `<span class="raiva-dest">✈️ ${esc(c.destino)}</span>` : ''}
+          ${c.requisicao ? `<span class="mudo">req ${esc(c.requisicao)}</span>` : ''}
+        </div>
+        ${ordemErrada ? `<div class="raiva-nao">⛔ <b>A vacina é anterior ao microchip.</b> Vacina aplicada
+          antes do microchip <b>não tem validade internacional</b> — o pet precisa ser vacinado de novo
+          depois da microchipagem.</div>` : ''}
+
+        <div class="raiva-etapas">
+          ${tique(c, 'microchip_ok', '① Pet já microchipado',
+            c.microchip_data ? `<i class="mudo">${esc(c.microchip_data)}</i>` : '')}
+          ${!c.microchip_ok ? `<div class="raiva-dica">Se não for microchipado: microchipar <b>e vacinar depois</b>.
+            <b>Vacinas anteriores ao microchip não contam.</b></div>` : ''}
+
+          ${tique(c, 'vacina_ok', '② Vacina antirrábica aplicada',
+            c.vacina_data ? `<i class="mudo">${esc(c.vacina_data)}</i>` : '')}
+          ${c.vacina_ok && lib ? (faltam > 0
+            ? `<div class="raiva-dica">⏳ A coleta libera em <b>${lib.toLocaleDateString('pt-BR')}</b>
+                 — faltam <b>${faltam} dia(s)</b>. São 30 dias de espera; a coleta vale do 31º em diante.</div>`
+            : `<div class="raiva-ok-dica">✅ Coleta liberada desde <b>${lib.toLocaleDateString('pt-BR')}</b></div>`) : ''}
+
+          ${tique(c, 'coleta_ok', '③ Sangue coletado e enviado',
+            c.coleta_data ? `<i class="mudo">${esc(c.coleta_data)}</i>` : '')}
+          ${!c.coleta_ok ? `<div class="raiva-dica">Tubo de bioquímica (tampa vermelha ou amarela), com a
+            requisição normal <b>escrito "Raiva Trânsito Internacional"</b>.</div>` : ''}
+
+          ${c.coleta_ok ? `<div class="raiva-bio ${c.amostra || ''}">
+            <b>🧪 Bioquímica — a amostra está viável?</b>
+            <span class="mudo">Precisa de <b>mais de 500 µL</b> (meio mL) e <b>coloração normal</b>.</span>
+            ${c.amostra
+              ? `<div class="${c.amostra === 'viavel' ? 'raiva-sim' : 'raiva-nao'}">
+                   ${c.amostra === 'viavel' ? '✅ viável' : '⛔ não viável'}
+                   ${c.amostra_motivo ? '· ' + esc(c.amostra_motivo) : ''}
+                   ${c.amostra_por ? `<i class="mudo">— ${esc(c.amostra_por)}</i>` : ''}</div>`
+              : `<div class="raiva-bioacao">
+                   <input class="raiva-vol" data-rvol="${c.id}" placeholder="volume medido (ex.: 700 µL)">
+                   <button data-rviavel="${c.id}">✅ Viável</button>
+                   <input class="raiva-mot" data-rmot="${c.id}" placeholder="motivo, se não estiver viável">
+                   <button class="btn-sec" data-rinviavel="${c.id}">⛔ Não viável</button>
+                 </div>`}
+          </div>` : ''}
+
+          ${c.amostra === 'viavel' ? `
+            ${tique(c, 'avisada_ok', '④ Clínica avisada de que está viável')}
+            ${tique(c, 'word_enviado', '⑤ Formulário Word enviado para a clínica')}
+            ${!c.doc_conferida ? `<div class="raiva-dica">⛔ Reforçar com a clínica: <b>não pode haver
+              divergência</b>. Retificação de laudo <b>é cobrada</b> e divergência
+              <b>impossibilita o pet de viajar</b>.</div>` : ''}
+            ${tique(c, 'doc_carteirinha', '⑥ Carteirinha conferida (capa + página da vacina)')}
+            ${tique(c, 'doc_microchip', '⑦ Certificado de microchipagem conferido')}
+            ${tique(c, 'doc_conferida', '⑧ Documentação completa e sem divergência')}
+            ${tique(c, 'laudo_chegou', '⑨ Laudo chegou ao laboratório',
+              c.laudo_em ? `<i class="mudo">${esc(c.laudo_em)}</i>` : '')}
+            ${c.laudo_chegou ? tique(c, 'entrega_combinada', '⑩ Entrega combinada com a clínica') : ''}` : ''}
+        </div>
+        ${c.obs ? `<div class="mudo">📝 ${esc(c.obs)}</div>` : ''}
+        ${!c.fechado_em && c.entrega_combinada ? `<div class="raiva-fim">
+          <button data-rfechar="${c.id}">Concluir caso</button></div>` : ''}
+      </article>`
+    }).join('')
   }
 
   function desenharCancelamentos() {
@@ -3346,6 +3507,100 @@
     if (f) { triPer = f.dataset.tper; return desenharTriagem() }
     acoesCancel(ev)
   })
+  // 🦠 digitação do país — responde ao vivo, sem precisar salvar nada
+  $('raivaPais')?.addEventListener('input', ev => {
+    const r = $('raivaPaisResp'); if (r) r.innerHTML = respostaPais(ev.target.value)
+  })
+
+  $('vRaiva')?.addEventListener('click', async ev => {
+    // filtro em andamento / concluídos
+    const f = ev.target.closest('[data-rper]')
+    if (f) {
+      raivaPer = f.dataset.rper
+      $('vRaiva').querySelectorAll('[data-rper]').forEach(x => x.classList.toggle('on', x === f))
+      await carregarRaiva(); return desenharRaiva()
+    }
+    // os tiquezinhos do checklist
+    const tq = ev.target.closest('[data-rtq]')
+    if (tq) {
+      if (!(await garantirLogin())) { tq.checked = !tq.checked; return }
+      const id = +tq.dataset.rtq, campo = tq.dataset.rcampo
+      const caso = (raivaCache || []).find(c => c.id === id); if (!caso) return
+      const dados = { id, pet: caso.pet, clinica: caso.clinica, ...caso, [campo]: tq.checked }
+      // ⭐ ao marcar uma etapa com data, pergunto a data — sem ela o relógio dos 30 dias não anda.
+      if (tq.checked && campo === 'vacina_ok' && !caso.vacina_data) {
+        const d = prompt('Data da vacina antirrábica (dd/mm/aaaa):')
+        const m = (d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+        if (!m) { toast('Sem a data eu não sei quando a coleta libera'); tq.checked = false; return }
+        dados.vacina_data = `${m[3]}-${m[2]}-${m[1]}`
+      }
+      if (tq.checked && campo === 'microchip_ok' && !caso.microchip_data) {
+        const d = prompt('Data da microchipagem (dd/mm/aaaa) — precisa ser ANTES da vacina:')
+        const m = (d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+        if (m) dados.microchip_data = `${m[3]}-${m[2]}-${m[1]}`
+      }
+      if (tq.checked && campo === 'coleta_ok' && !caso.coleta_data)
+        dados.coleta_data = new Date().toISOString().slice(0, 10)
+      if (tq.checked && campo === 'laudo_chegou' && !caso.laudo_em)
+        dados.laudo_em = new Date().toISOString().slice(0, 10)
+      await salvarRaiva(dados); return
+    }
+    // bioquímica: viável / não viável
+    const vi = ev.target.closest('[data-rviavel]'), nv = ev.target.closest('[data-rinviavel]')
+    if (vi || nv) {
+      if (!(await garantirLogin())) return
+      const id = +(vi || nv).dataset[vi ? 'rviavel' : 'rinviavel']
+      const caso = (raivaCache || []).find(c => c.id === id); if (!caso) return
+      const vol = (document.querySelector(`[data-rvol="${id}"]`) || {}).value || ''
+      const mot = (document.querySelector(`[data-rmot="${id}"]`) || {}).value || ''
+      // ⛔ "sinalizar o motivo" é exigência do Fúlvio: sem o motivo o Atendimento não tem o
+      //    que dizer à clínica. Aviso e deixo tentar de novo — não bloqueio a tela.
+      if (nv && !mot.trim()) { toast('Escreva o motivo — é o que o Atendimento vai falar com a clínica'); return }
+      await salvarRaiva({ ...caso, id, amostra: vi ? 'viavel' : 'inviavel',
+        amostra_volume: vol.trim() || null, amostra_motivo: mot.trim() || null })
+      return
+    }
+    const fc = ev.target.closest('[data-rfechar]')
+    if (fc) {
+      if (!(await garantirLogin())) return
+      try {
+        const r = await rpc('raiva_caso_fechar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +fc.dataset.rfechar })
+        toast(r && r.ok ? '✅ caso concluído' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregarRaiva(); desenharRaiva()
+      } catch (e) { toast(e.message) }
+    }
+  })
+
+  $('btnNovoRaiva')?.addEventListener('click', async () => {
+    if (!(await garantirLogin())) return
+    const pet = prompt('Nome do pet:'); if (!pet || !pet.trim()) return
+    const clinica = prompt('Clínica:'); if (!clinica || !clinica.trim()) return
+    const tutor = prompt('Tutor (opcional):') || null
+    const destino = prompt('País de destino:') || null
+    const q = destino ? paisSeEnquadra(destino) : null
+    // ⛔ não bloqueio destino desconhecido — aviso. O comercial pode ter combinado outro preço.
+    if (destino && q && !q.ok && !confirm(
+      `"${destino}" não é União Europeia nem Estados Unidos.\n\nEste laudo de R$ 1.465,00 vale para esses dois destinos.\n\nAbrir o caso mesmo assim?`)) return
+    await salvarRaiva({ pet: pet.trim(), clinica: clinica.trim(), tutor, destino, bloco: q ? q.bloco : null })
+  })
+
+  async function salvarRaiva(dados) {
+    try {
+      // ⛔ só os campos que a função conhece — mandar a linha inteira do banco (com criado_em,
+      //    mexido_em, fechado_em) faria o jsonb_populate reclamar ou sobrescrever governança.
+      const limpo = {}
+      for (const k of ['id','pet','tutor','clinica','destino','bloco','requisicao',
+        'microchip_ok','microchip_data','vacina_ok','vacina_data','coleta_ok','coleta_data',
+        'amostra','amostra_motivo','amostra_volume','avisada_ok','word_enviado',
+        'doc_carteirinha','doc_microchip','doc_conferida','laudo_chegou','laudo_em',
+        'entrega_combinada','obs'])
+        if (dados[k] !== undefined && dados[k] !== null) limpo[k] = dados[k]
+      const r = await rpc('raiva_caso_salvar', { p_nome: sessao.nome, p_senha: sessao.senha, p_dados: limpo })
+      if (!r || !r.ok) { toast('⚠️ ' + ((r && r.erro) || 'não consegui salvar')); return false }
+      await carregarRaiva(); desenharRaiva(); return true
+    } catch (e) { toast(e.message); return false }
+  }
+
   $('vCancel')?.addEventListener('click', ev => {
     const f = ev.target.closest('[data-cper]')
     if (f) { cancelPer = f.dataset.cper; $('vCancel').querySelectorAll('[data-cper]').forEach(x => x.classList.toggle('on', x === f)); return desenharCancelamentos() }
