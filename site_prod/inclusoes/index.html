@@ -393,8 +393,13 @@
     <div id="cPassoSem" hidden>
       <button type="button" class="lnk cam-voltar" data-cvoltar="1">← escolher outro começo</button>
       <label>Clínica <span class="obrig">*</span></label>
-      <input id="cClinica" list="listaClinicas" autocomplete="off" placeholder="digite e escolha — as opções vêm do HF">
-      <datalist id="listaClinicas"></datalist>
+      <!-- 🔴 THAILAN 02/out: "tentamos procurar a clínica Dr. Fulvio e não foi encontrado".
+           O <datalist> do navegador recebia MILHARES de opções do espelho e só casa pelo começo
+           do texto, sem ignorar acento nem caixa. Troquei por uma busca minha, que casa por
+           pedaço em qualquer posição — e o campo continua aceitando digitar livre. -->
+      <input id="cClinica" autocomplete="off" placeholder="digite um pedaço do nome — ex.: fulvio">
+      <div id="cClinicaSug" class="sug-lista" hidden></div>
+      <div id="cClinicaNota" class="mudo"></div>
       <div class="linha2">
         <div><label>Pet <span class="obrig">*</span></label><input id="cPet" autocomplete="off"></div>
         <div><label>Tutor</label><input id="cTutor" autocomplete="off"></div>
@@ -411,6 +416,15 @@
       <div id="cAlvoExame" hidden>
         <div id="cExames" hidden>
           <div class="ex-lista" id="cExLista"></div>
+          <!-- 🔴 THAILAN 02/out: "independente se você consiga encontrar ou não, me dá a opção
+               de escrever manualmente e seguir. Eu só consigo seguir se eu cancelar a requisição
+               toda." O espelho do HF atualiza a cada 30 min; quando ele não tem os exames, ela
+               ficava PRESA. Agora escreve à mão — e pode escrever VÁRIOS. -->
+          <div id="cExMao" class="ex-mao" hidden>
+            <label for="cExManual">Escreva o que vai ser cancelado — um por linha</label>
+            <textarea id="cExManual" rows="3" placeholder="Hemograma 2&#10;ALT/TGP&#10;Creatinina Sérica"></textarea>
+            <span class="mudo">O espelho do HF atualiza a cada 30 min. O que você escrever aqui vale igual.</span>
+          </div>
         </div>
         <input id="cExame" list="listaExames" autocomplete="off" placeholder="digite e escolha — as opções vêm do HF" hidden>
         <datalist id="listaExames"></datalist>

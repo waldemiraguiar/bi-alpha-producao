@@ -962,6 +962,16 @@
       return linhas.length ? `<div class="proc-bloco"><div class="proc-tit">🔎 Já começaram a processar?</div>${linhas.join('')}</div>` : ''
     })()
 
+    // 🔴 THAILAN 02/out: "a gente não consegue fazer o cancelamento — crie um ícone que a
+    // gente consiga cancelar". CAUSA: o único encerramento (inc_cancel_cliente_ok) exige
+    // hf_feito_em, que é ação do ESCRITÓRIO. Cartão aberto por engano, ou cliente que desistiu,
+    // ficava preso para sempre esperando um ciente que nunca viria.
+    // ⭐ Saída própria de quem abriu, em QUALQUER etapa. Pede o motivo, porque descartar sem
+    //    dizer por quê transforma o quadro num cemitério que ninguém entende depois.
+    const descartar = podeAgir('cc') && c.status === 'aberto'
+      ? `<div class="can-acoes can-descartar"><button class="nao" data-cdescartar="${c.id}">✖ Cancelar esta solicitação</button></div>`
+      : ''
+
     const esperaAmostra = semAmostraEsperando(c) ? `<div class="can-espera">
       📦 A amostra ainda não chegou ao laboratório. O Escritório só dá ciente quando ela chegar.
       ${podeAgir('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
@@ -982,7 +992,7 @@
       return trilha + rel + jaCobrou + reqNova + esperaAmostra + `<div class="can-paralelo">
         ${lado(c.tri_ciente_em, c.tri_ciente_por, c.tri_ciente_em, 'tri', 'Triagem', 'tri')}
         ${lado(c.esc_ciente_em, c.esc_ciente_por, c.esc_ciente_em, 'esc', 'Escritório', 'esc')}
-      </div>` + consulta + cobranca
+      </div>` + consulta + cobranca + descartar
     }
 
     // ── etapa 2: o Escritório cria o exame de cancelamento no HF ──
@@ -994,14 +1004,14 @@
       return trilha + consulta + `<div class="can-acoes can-esc">
         <button data-chf="${c.id}" data-cdesf="criado">Criei o exame de cancelamento no HF</button>
         <button data-chf="${c.id}" data-cdesf="cancelado" class="leve">Exame cancelado no HF</button>
-        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button></div>`
+        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button></div>` + descartar
     }
 
     // ── etapa 3: o Atendimento ao Cliente avisa e encerra ──
     if (!podeAgir('cc')) return trilha + `<div class="can-acoes"><button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div><span class="so-setor">ação de ATENDIMENTO AO CLIENTE</span>`
     return trilha + `<div class="can-acoes">
       <button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>
-      <button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>`
+      <button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>` + descartar
   }
 
   // ── 🔎 rastreador: pedido do cliente que não virou cartão (Fúlvio 28/set 20h00) ──
@@ -3073,13 +3083,50 @@
         $('cSalvar').hidden = true; return
       }
     }
+    // ⭐ o que foi escrito à mão vale igual ao que veio do espelho (Thailan 02/out)
+    const mao = (($('cExManual') && $('cExManual').value) || '').split('\n').map(x => x.trim()).filter(Boolean)
     const ok = alvoCancel === 'tudo'
       ? true
       : (camCancel === 'req' && hfCancel)
-        ? exCancelLista.length > 0 && (!exCancelLista.some(e => e && e.digitado) || forcarDigitado)
-        : !!$('cExame').value.trim()
+        ? (exCancelLista.length > 0 || mao.length > 0) &&
+          (!exCancelLista.some(e => e && e.digitado) || forcarDigitado)
+        : !!($('cExame').value.trim() || mao.length)
     $('cSalvar').hidden = !(alvoCancel && ok)
   }
+  // 🔎 BUSCA DE CLÍNICA — Thailan 02/out: "procuramos a clínica Dr. Fulvio e não foi encontrado".
+  // O <datalist> nativo recebia milhares de nomes, casa só pelo começo e não ignora acento.
+  // ⭐ Busca por PEDAÇO em qualquer posição, sem acento e sem caixa, e as palavras podem vir
+  //    fora de ordem ("fulvio martins" acha "Dr. Fulvio Martins Ambrosio").
+  // ⛔ É sugestão, nunca trava: o que a pessoa digitar vale, mesmo que não esteja na lista.
+  let clinicasHF = []
+  const nzc = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
+  function buscarClinicas(q, lista) {
+    const termos = nzc(q).split(' ').filter(Boolean)
+    if (!termos.length) return []
+    return (lista || []).filter(c => { const n = nzc(c); return termos.every(t => n.includes(t)) })
+      // nome mais curto primeiro: quem digita "fulvio" quer o cadastro, não o mais comprido
+      .sort((a, b) => a.length - b.length).slice(0, 8)
+  }
+  function desenharSugClinica() {
+    const inp = $('cClinica'), cx = $('cClinicaSug'), nota = $('cClinicaNota')
+    if (!inp || !cx) return
+    const q = inp.value.trim()
+    const achados = buscarClinicas(q, clinicasHF)
+    cx.innerHTML = achados.map(c => `<button type="button" class="sug" data-csug="${esc(c)}">${esc(c)}</button>`).join('')
+    cx.hidden = !achados.length
+    if (nota) nota.textContent = (q.length >= 3 && !achados.length)
+      // ⛔ "não achei" não é "não existe": o espelho do HF guarda 20 dias.
+      ? 'Não achei esse nome no espelho do HF (ele guarda 20 dias) — pode escrever assim mesmo.'
+      : ''
+  }
+  $('cClinica')?.addEventListener('input', desenharSugClinica)
+  $('cClinicaSug')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-csug]'); if (!b) return
+    $('cClinica').value = b.dataset.csug
+    $('cClinicaSug').hidden = true
+    if ($('cClinicaNota')) $('cClinicaNota').textContent = ''
+  })
+
   // ── 🧪 diálogo dos exames liberados ──
   let exId = null, exItens = [], exOk = []
   function desenharExames() {
@@ -3150,12 +3197,11 @@
     // campos INTELIGENTES (Fúlvio 18h16): clínica e exame reconhecidos pelo que existe no HF
     try {
       sugestoes = sugestoes || await rpc('inc_cancel_sugestoes', { p_nome: sessao.nome, p_senha: sessao.senha })
-      $('listaClinicas').innerHTML = (sugestoes.clinicas || []).map(x => `<option value="${esc(x)}">`).join('')
+      clinicasHF = sugestoes.clinicas || []
       $('listaExames').innerHTML   = (sugestoes.exames   || []).map(x => `<option value="${esc(x)}">`).join('')
     } catch {
       // sem as sugestões do HF a pessoa ainda digita à mão — não bloqueia ninguém
-      const nomes = [...new Set([...chamados.map(c => c.clinica), ...cancelamentos.map(c => c.clinica)].filter(Boolean))].sort()
-      $('listaClinicas').innerHTML = nomes.map(x => `<option value="${esc(x)}">`).join('')
+      clinicasHF = [...new Set([...chamados.map(c => c.clinica), ...cancelamentos.map(c => c.clinica)].filter(Boolean))].sort()
     }
     cancelPasso(null)
     $('dlgCancel').showModal()
@@ -3255,7 +3301,12 @@
       ? ex.map((e, i) => `<button type="button" class="ex ${e.digitado ? 'feito' : ''}" data-cex="${i}">
            <b>${esc(e.exame || '—')}</b>
            <span>${e.digitado ? '✅ já digitado' : '⏳ ainda não digitado'}</span></button>`).join('')
-      : `<p class="mudo">Nenhum exame lançado nesta requisição no espelho do HF.</p>`
+      : `<p class="mudo">O espelho do HF não mostra exame nenhum nesta requisição —
+           ele atualiza a cada 30 minutos. <b>Escreva abaixo o que precisa cancelar.</b></p>`
+    // ⭐ o campo manual fica SEMPRE disponível: mesmo com a lista cheia, a clínica pode pedir
+    //    um exame que ainda não apareceu no espelho. ⛔ nunca prender quem precisa seguir.
+    if ($('cExMao')) $('cExMao').hidden = false
+    if ($('cExManual') && !ex.length) setTimeout(() => $('cExManual').focus(), 50)
     $('cAlvo').hidden = false; $('cFim').hidden = false
   })
 
@@ -3283,6 +3334,10 @@
     } else trava.hidden = true
     liberarSalvar()
   })
+  // ⛔ sem isto a pessoa escreve o exame à mão e o botão de salvar continua escondido —
+  //    foi exatamente a queixa da Thailan: "estou tentando seguir e não consigo".
+  $('cExManual')?.addEventListener('input', () => liberarSalvar())
+
   $('cDigitado')?.addEventListener('click', ev => {
     if (!ev.target.closest('[data-cforcar]')) return
     forcarDigitado = true; liberarSalvar()
@@ -3306,9 +3361,18 @@
       if (!clinica) { $('cErro').textContent = 'Diga a clínica.'; return }
       if (!pet)     { $('cErro').textContent = 'Diga o nome do pet.'; return }
     }
-    const exame = alvoCancel === 'tudo' ? null
+    // ⭐ o que foi escrito à mão entra junto do que veio do espelho, sem duplicar.
+    //    Thailan 02/out: "pode ser que a clínica peça para cancelar mais de um exame".
+    const exMao = (($('cExManual') && $('cExManual').value) || '').split('\n').map(x => x.trim()).filter(Boolean)
+    const exame = alvoCancel === 'tudo' ? null : (() => {
+      const doEspelho = pelaReq
+        ? (exCancelLista.length ? exCancelLista.map(e => e.exame) : (exCancel ? [exCancel.exame] : []))
+        : ($('cExame').value.trim() ? [$('cExame').value.trim()] : [])
+      const nz = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
+      const vistos = new Set(doEspelho.map(nz))
       // ⭐ vários exames viram uma linha só, separados por ' · ' (o banco guarda texto)
-      : pelaReq ? (exCancelLista.length ? exCancelLista.map(e => e.exame).join(' · ') : (exCancel && exCancel.exame)) : $('cExame').value.trim()
+      return [...doEspelho, ...exMao.filter(x => !vistos.has(nz(x)))].filter(Boolean).join(' · ')
+    })()
     if (alvoCancel === 'exame' && !exame) { $('cErro').textContent = 'Diga qual exame.'; return }
     const args = {
       p_nome: sessao.nome, p_senha: sessao.senha,
@@ -3321,7 +3385,12 @@
       p_colaborador: colab || null,
       p_texto: $('cTexto').value.trim() || null,
       p_autor: null, p_grupo: null, p_quando: null, p_msg_id: null,
-      p_hf: pelaReq ? `HF: ${hfCancel.pet || ''} · ${hfCancel.clinica || ''} · ${(hfCancel.exames || []).length} exame(s)` : null,
+      // ⭐ deixo registrado quando o exame foi escrito à mão: quem for conferir no HF precisa
+      //    saber que o espelho não tinha aquilo, senão vai achar que o cartão está errado.
+      p_hf: pelaReq
+        ? `HF: ${hfCancel.pet || ''} · ${hfCancel.clinica || ''} · ${(hfCancel.exames || []).length} exame(s) no espelho` +
+          (exMao.length ? ` · ⚠️ ${exMao.length} escrito(s) à mão (não estavam no espelho)` : '')
+        : (exMao.length ? `⚠️ ${exMao.length} exame(s) escrito(s) à mão` : null),
     }
     $('cSalvar').disabled = true
     try {
@@ -3748,6 +3817,23 @@
       catch (e) { cli.disabled = false; toast(e.message) }
       return
     }
+    const desc = ev.target.closest('[data-cdescartar]')      // ✖ quem abriu desiste da solicitação
+    if (desc) {
+      if (!(await garantirLogin())) return
+      const motivo = prompt('Por que esta solicitação está sendo cancelada?\n(ex.: aberta por engano · o cliente desistiu · requisição errada)')
+      // ⛔ sem motivo não descarto — mas também não brigo: é só não fazer e dizer por quê.
+      if (motivo === null) return
+      if (!motivo.trim()) { toast('Escreva o motivo — quem ler o quadro amanhã precisa entender'); return }
+      desc.disabled = true
+      try {
+        const r = await rpc('inc_cancel_descartar',
+          { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +desc.dataset.cdescartar, p_motivo: motivo.trim() })
+        toast(r && r.ok ? '✖ solicitação cancelada' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregar(); desenharCancelamentos()
+      } catch (e) { desc.disabled = false; toast(e.message) }
+      return
+    }
+
     const conf = ev.target.closest('[data-cconferir]')       // conferência manual (continua, como reforço)
     if (conf) {
       if (!(await garantirLogin())) return

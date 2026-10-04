@@ -1032,3 +1032,18 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
   .raiva-bioacao input { min-width:0; width:100% }
   .raiva-dica, .raiva-ok-dica { padding-left:12px }
 }
+
+/* 🔎 busca de clínica (Thailan 02/out) — o datalist nativo não achava "Dr. Fulvio" */
+.sug-lista { display:flex; flex-direction:column; gap:3px; margin:4px 0 2px;
+             max-height:220px; overflow-y:auto }
+.sug-lista .sug { text-align:left; padding:7px 10px; border-radius:7px; font-size:.93em;
+                  background:rgba(255,255,255,.05); cursor:pointer }
+.sug-lista .sug:hover { background:rgba(120,170,255,.18) }
+
+/* ✍️ escrever o exame à mão quando o espelho do HF não tem */
+.ex-mao { display:flex; flex-direction:column; gap:5px; margin-top:8px; padding:10px 12px;
+          border-radius:9px; background:rgba(224,176,0,.09); border:1px solid rgba(224,176,0,.4) }
+.ex-mao textarea { width:100%; padding:7px 9px; border-radius:7px; resize:vertical; font:inherit }
+
+/* ✖ saída de quem abriu a solicitação */
+.can-descartar { margin-top:8px; justify-content:flex-end }
