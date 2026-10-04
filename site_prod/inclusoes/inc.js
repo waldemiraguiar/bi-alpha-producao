@@ -3201,6 +3201,44 @@
         : !!($('cExame').value.trim() || mao.length)
     $('cSalvar').hidden = !(alvoCancel && ok)
   }
+  // 🔁 JÁ EXISTE CARTÃO PARA ISSO? — pedido do VÍDEO da Thailan (02/out):
+  // "crie uma sugestão de que já foi criado o cartão de inclusão, para que quando já tiver o
+  //  cartão eu não faça duplicado — só confirmar que já foi enviado."
+  // ⛔ NUNCA bloqueia: pode haver dois pedidos legítimos na mesma requisição (a clínica pediu
+  //    para cancelar um exame hoje e outro amanhã). Eu mostro o que já existe e deixo escolher.
+  const nzj = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ').trim()
+  function cartoesParecidos({ req, pet, clinica }) {
+    const r = String(req || '').replace(/\D/g, '')
+    const p = nzj(pet), c = nzj(clinica)
+    return (cancelamentos || []).filter(x => {
+      if (x.status !== 'aberto') return false
+      // ⭐ mesma REQUISIÇÃO é o sinal forte — é o número que identifica o material
+      const xr = String(x.req || x.req_nova || '').replace(/\D/g, '')
+      if (r && xr && r === xr) return true
+      // sem requisição, o par pet+clínica é o que o Wal já usa de cabeça para reconhecer
+      if (p && c && nzj(x.pet) === p && nzj(x.clinica).includes(c.split(' ')[0])) return true
+      return false
+    })
+  }
+  function avisoDuplicado(alvo) {
+    const achados = cartoesParecidos(alvo)
+    const cx = $('cDuplicado'); if (!cx) return
+    if (!achados.length) { cx.hidden = true; cx.innerHTML = ''; return }
+    cx.hidden = false
+    cx.innerHTML = `<b>🔁 Já existe cartão aberto para isso</b>
+      <span>Confira antes de criar outro — dois cartões para o mesmo pedido fazem a Triagem e o
+      Escritório trabalharem duas vezes no mesmo caso.</span>
+      ${achados.slice(0, 3).map(x => `<div class="dup-item">
+        <b>${esc(x.pet || '—')}</b> · ${esc(x.clinica || '')}
+        ${x.req || x.req_nova ? `· req ${esc(x.req || x.req_nova)}` : ''}
+        ${x.exame ? `<br><span class="mudo">${esc(x.exame)}</span>` : ''}
+        <br><span class="mudo">aberto ${x.criado_em ? 'às ' + hm(x.criado_em) : ''} ${x.aberto_por ? 'por ' + esc(x.aberto_por) : ''}</span>
+        <button type="button" class="leve" data-cdupver="${x.id}">É este — ver o cartão</button>
+      </div>`).join('')}
+      <span class="mudo">Se o pedido for outro, pode criar assim mesmo.</span>`
+  }
+
   // 🔐 QUEM PODE CANCELAR UMA SOLICITAÇÃO — Thailan 02/out: "as únicas senhas autorizadas a
   // utilizar o cancelamento é o Thailan, Fúlvio e o Waldemir".
   // ⭐ Comparo pelo PRIMEIRO NOME, sem acento e sem caixa: o login pode estar cadastrado como
@@ -3242,6 +3280,10 @@
       : ''
   }
   $('cClinica')?.addEventListener('input', desenharSugClinica)
+  // 🔁 no caminho SEM requisição a identificação é pet + clínica — aviso assim que os dois existem
+  const checarDup = () => avisoDuplicado({ pet: ($('cPet') && $('cPet').value) || '', clinica: ($('cClinica') && $('cClinica').value) || '' })
+  $('cClinica')?.addEventListener('input', checarDup)
+  $('cPet')?.addEventListener('input', checarDup)
   $('cClinicaSug')?.addEventListener('click', ev => {
     const b = ev.target.closest('[data-csug]'); if (!b) return
     $('cClinica').value = b.dataset.csug
@@ -3314,6 +3356,7 @@
     $('formCancel').reset()
     hfCancel = null; exCancel = null; exCancelLista = []; forcarDigitado = false; alvoCancel = null
     $('cErro').textContent = ''; $('cReqErro').textContent = ''
+    if ($('cDuplicado')) { $('cDuplicado').hidden = true; $('cDuplicado').innerHTML = '' }
     $('cConfere').hidden = true; $('cExames').hidden = true; $('cDigitado').hidden = true
     document.querySelectorAll('#cAlvo .alvo').forEach(b => b.classList.remove('on'))
     // campos INTELIGENTES (Fúlvio 18h16): clínica e exame reconhecidos pelo que existe no HF
@@ -3385,6 +3428,8 @@
       return
     }
     hfCancel = r
+    // 🔁 antes de qualquer coisa: já existe cartão aberto para esta requisição?
+    avisoDuplicado({ req: r.req || n, pet: r.pet, clinica: r.clinica })
     const ex = Array.isArray(r.exames) ? r.exames : []
     $('cConfere').className = 'cancel-confere'
     $('cConfere').innerHTML = `<div class="conf-tit">É este mesmo?</div>
@@ -3458,6 +3503,18 @@
   })
   // ⛔ sem isto a pessoa escreve o exame à mão e o botão de salvar continua escondido —
   //    foi exatamente a queixa da Thailan: "estou tentando seguir e não consigo".
+  $('cDuplicado')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-cdupver]'); if (!b) return
+    // ⭐ fecho o modal e levo ao cartão que já existe: o pedido era "só confirmar que já foi
+    //    enviado", então o caminho natural é ver o que já está lá, não criar outro.
+    try { $('dlgCancel').close() } catch {}
+    const alvo = document.querySelector(`[data-cid="${b.dataset.cdupver}"]`)
+      || document.querySelector(`[data-cdescartar="${b.dataset.cdupver}"]`)
+    const card = alvo && alvo.closest('.can-card')
+    if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.classList.add('piscar'); setTimeout(() => card.classList.remove('piscar'), 2600) }
+    else toast('O cartão está na aba Cancelamentos')
+  })
+
   $('cExManual')?.addEventListener('input', () => liberarSalvar())
 
   $('cDigitado')?.addEventListener('click', ev => {

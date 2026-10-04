@@ -1079,3 +1079,17 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .can-valor.pede { background:rgba(224,176,0,.10); border:1px solid rgba(224,176,0,.4) }
 .can-valor.ok   { background:rgba(30,160,90,.12); border:1px solid rgba(30,160,90,.45); font-size:.9em }
 .can-valor.nao  { background:rgba(200,30,30,.14); border:2px solid #c81e1e }
+
+/* 🔁 "já existe cartão para isso" — vídeo da Thailan 02/out.
+   Amarelo e não vermelho de propósito: duplicata é um ALERTA, não um impedimento.
+   Dois pedidos legítimos na mesma requisição acontecem. */
+.cancel-dup { display:flex; flex-direction:column; gap:6px; padding:11px 13px; border-radius:10px;
+              margin:10px 0; background:rgba(224,176,0,.11); border:1px solid rgba(224,176,0,.5) }
+.cancel-dup > span { font-size:.88em; line-height:1.45; opacity:.88 }
+.dup-item { padding:8px 10px; border-radius:8px; background:rgba(255,255,255,.05); font-size:.93em }
+.dup-item button { margin-top:6px }
+
+/* o cartão que a pessoa foi ver pisca, senão ela não acha onde parou a tela */
+@keyframes piscaCard { 0%,100% { box-shadow:none } 50% { box-shadow:0 0 0 3px rgba(224,176,0,.75) } }
+.can-card.piscar { animation: piscaCard 1.3s ease-in-out 2 }
+@media (prefers-reduced-motion: reduce) { .can-card.piscar { animation:none; box-shadow:0 0 0 3px rgba(224,176,0,.75) } }
