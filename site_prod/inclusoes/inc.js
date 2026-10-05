@@ -1168,7 +1168,6 @@
       📦 A amostra ainda não chegou ao laboratório. O Escritório só dá ciente quando ela chegar.
       ${podeAgir('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
     </div>` : ''
-    const reqNova = c.req_nova ? `<div class="can-hf ok">📥 requisição informada pela Triagem: <b>${esc(c.req_nova)}</b> · ${esc(c.req_nova_por || '')}</div>` : ''
     // ✖ quando a solicitação foi cancelada por quem abriu, o motivo é a informação principal
     if (c.status === 'descartado') return trilha + `<div class="can-descartada">
       ✖ <b>Solicitação cancelada</b>${c.resolvido_por ? ' por ' + esc(c.resolvido_por) : ''}${c.resolvido_em ? ' às ' + hm(c.resolvido_em) : ''}
@@ -1238,12 +1237,30 @@
     const vereditoBox = !temReq ? '' : `<div class="can-veredito ${vereditoCancel.pode === true ? 'sim' : vereditoCancel.pode === false ? 'nao' : 'espera'}">
       ${vereditoCancel.pode === true ? '✅' : vereditoCancel.pode === false ? '⛔' : '⏳'} ${esc(vereditoCancel.txt)}</div>`
 
-    // ── "anotado cancelamento na requisição" encerra a triagem ──
-    const triAnotado = !c.tri_anotado_em && podeAgir('tri') && c.status === 'aberto'
-      ? `<div class="can-acoes"><button class="leve" data-ctrianot="${c.id}">✍️ Anotado cancelamento na requisição</button></div>`
-      : c.tri_anotado_em
-        ? `<div class="can-avisei ok">✍️ cancelamento anotado na requisição por ${esc(c.tri_anotado_por || '?')} às ${hm(c.tri_anotado_em)}</div>`
-        : ''
+    // ═══ 🧪 AS TAREFAS DA TRIAGEM — Fúlvio, 05/out 18h18 e 18h19 ═══
+    // ⛔ *"essa etapa 'anotado cancelamento na requisição' NÃO é uma etapa do cancelamento, é uma
+    //    etapa da TRIAGEM. Aí ele dá o ciente e DEPOIS ele fala que foi anotado."*
+    // ⛔ *"identificar que a amostra chegou e informar o número de requisição... essa obrigação é
+    //    da triagem, EXCLUSIVAMENTE dela. A única coisa que o escritório faz é só dar a ciência."*
+    // ⭐ As duas moravam soltas no cartão, em lugares diferentes, parecendo etapas do processo.
+    //    Agora são UM bloco só, que é da Triagem e diz isso — e a anotação só abre DEPOIS do
+    //    ciente dela, na ordem que ele ditou.
+    const anotEl = c.tri_anotado_em
+      ? `<div class="can-avisei ok">✍️ cancelamento anotado na requisição por ${esc(c.tri_anotado_por || '?')} às ${hm(c.tri_anotado_em)}</div>`
+      : c.status !== 'aberto' ? ''
+        : !c.tri_ciente_em
+          ? `<div class="tri-espera">✍️ anotar o cancelamento na requisição — <i>abre depois do ciente da Triagem</i></div>`
+          : podeAgir('tri')
+            ? `<div class="can-acoes"><button class="leve" data-ctrianot="${c.id}">✍️ Anotado cancelamento na requisição</button></div>`
+            : `<div class="tri-espera">✍️ aguardando a Triagem anotar o cancelamento na requisição</div>`
+
+    // ⭐ C3/C6: o bloco é o MESMO com e sem número de requisição. A única diferença é que, sem
+    //    requisição, a primeira tarefa da Triagem é justamente informá-la.
+    const tarefasTri = c.status !== 'aberto' ? '' : `<div class="tri-bloco">
+      <div class="tri-cab">🧪 Tarefas da Triagem <span class="mudo">— o Escritório só dá a ciência</span></div>
+      ${esperaAmostra || (c.req_nova || c.req ? `<div class="can-avisei ok">📥 requisição informada: <b>${esc(c.req_nova || c.req)}</b></div>` : '')}
+      ${anotEl}
+    </div>`
 
     // ── ⛔ a regra que a Thailan chamou de obrigatória: o valor TEM de sair zerado ──
     const valorBox = c.status !== 'aberto' ? '' : c.valor_zerado === true
@@ -1271,10 +1288,10 @@
       const cobranca = estourou && podeAgir('cc') && !c.cobrado_em
         ? `<div class="can-acoes"><button class="nao" data-ccobrar="${c.id}">Ninguém deu ciente — vou sinalizar</button></div>` : ''
       const jaCobrou = c.cobrado_em ? `<div class="can-hf">📣 Atendimento ao Cliente já sinalizou às ${hm(c.cobrado_em)}</div>` : ''
-      return trilha + rel + jaCobrou + reqNova + esperaAmostra + `<div class="can-paralelo">
+      return trilha + rel + jaCobrou + `<div class="can-paralelo">
         ${lado(c.tri_ciente_em, c.tri_ciente_por, c.tri_ciente_em, 'tri', 'Triagem', 'tri')}
         ${lado(c.esc_ciente_em, c.esc_ciente_por, c.esc_ciente_em, 'esc', 'Escritório', 'esc')}
-      </div>` + avisos + parecerTri + parecerEsc + vereditoBox + triAnotado + consulta + cobranca + descartar
+      </div>` + avisos + tarefasTri + parecerTri + parecerEsc + vereditoBox + consulta + cobranca + descartar
     }
 
     // ── etapa 2: o Escritório cria o exame de cancelamento no HF ──
@@ -3340,6 +3357,7 @@
   // camCancel = por onde a pessoa começou · hfCancel = o que o HF devolveu · exCancel = exame escolhido
   let pendenteSusp = null
   let camCancel = null, hfCancel = null, exCancel = null, exCancelLista = [], forcarDigitado = false, alvoCancel = null, sugestoes = null
+  let cancelSemEsc = false   // ⭐ o 2º clique que deixa seguir sem o colaborador do escritório
   function cancelPasso(qual) {
     camCancel = qual
     $('cPasso1').hidden   = !!qual
@@ -3347,14 +3365,20 @@
     $('cPassoSem').hidden = qual !== 'sem_amostra'
     // pela requisição, o alvo só aparece depois de validar o pet/clínica
     $('cAlvo').hidden = qual !== 'sem_amostra'
-    $('cFim').hidden  = qual !== 'sem_amostra'
-    // pela requisição a triagem JÁ foi feita — não se pergunta de novo (Fúlvio 20h03)
-    // ⭐ THAILAN 02/out: "preciso que tenha um espaço para identificar, da mesma maneira que a
-    //    gente faz sobre as inclusões, qual é o colaborador que está na triagem."
-    // ⛔ O campo sumia justamente quando a requisição JÁ estava cadastrada (`qual === 'req'`) —
-    //    que é o caso em que ela trabalha. Por isso ela nunca o via. Agora aparece sempre:
-    //    saber QUEM registrou vale em qualquer caminho, e foi o que ela pediu.
+    // 🔴🔴 05/out 18h14, Fúlvio: *"quando tem número de requisição, você não coloca a
+    //    identificação do colaborador do escritório. Preciso que os passos sejam os mesmos.
+    //    SEMPRE OS DOIS."* — e, medindo, era pior: com requisição sumiam OS DOIS.
+    // ⛔ CAUSA, e é a lição: o conserto anterior (para a Thailan) pôs `cColabBox.hidden = false`
+    //    e escreveu "agora aparece sempre" — mas os dois campos moram DENTRO de `#cFim`, que
+    //    continuava oculto no caminho da requisição. **Mostrar o filho não adianta enquanto o
+    //    pai esconde.** Por isso ela nunca viu o campo, mesmo depois de "corrigido".
+    // ⭐ `#cFim` só tem os 3 campos que servem aos DOIS caminhos (colaborador da triagem, do
+    //    escritório e o que o cliente escreveu). Não havia razão para escondê-lo: ele some
+    //    apenas no passo 1, antes de a pessoa escolher o caminho.
+    $('cFim').hidden  = !qual
+    cancelSemEsc = false
     if ($('cColabBox')) $('cColabBox').hidden = false
+    if ($('cColabEscBox')) $('cColabEscBox').hidden = false
     $('cSalvar').hidden = true
     if (qual === 'req') $('cReq').focus()
     else if (qual === 'sem_amostra') $('cClinica').focus()
@@ -3722,9 +3746,20 @@
     if (!(await garantirLogin())) return
     const pelaReq = camCancel === 'req' && hfCancel
     const colab = $('cColab').value.trim()
-    // obrigatório só no caminho SEM requisição: quando veio da requisição, a triagem
-    // já aconteceu no cadastro (Fúlvio 28/set 20h03)
-    if (!pelaReq && !colab) { $('cErro').textContent = 'Diga quem fez a triagem.'; $('cColab').focus(); return }
+    const colabEscPre = (($('cColabEsc') && $('cColabEsc').value) || '').trim()
+    // ⭐ 05/out, Fúlvio: *"os passos têm de ser os mesmos em relação à identificação das pessoas
+    //    que vão ajudar no processo. SEMPRE OS DOIS."* — isso REVERTE a decisão de 28/set, que
+    //    dispensava o colaborador quando a solicitação vinha pela requisição.
+    // ⚖️ Peço os dois nos dois caminhos, mas NÃO tranco a pessoa (regra do Wal): quem não souber
+    //    o nome agora clica de novo e segue. Sem nome, porém, não há a quem cobrar o ciente —
+    //    por isso o aviso é explícito sobre o que se perde, não um "campo obrigatório" seco.
+    if (!colab) { $('cErro').textContent = 'Diga quem fez a triagem.'; $('cColab').focus(); return }
+    if (!colabEscPre && !cancelSemEsc) {
+      cancelSemEsc = true
+      $('cErro').innerHTML = '⚠️ Falta <b>o colaborador do escritório</b>. Sem o nome, o cartão não tem a quem cobrar o ciente. <b>Clique em Registrar de novo</b> para seguir assim mesmo.'
+      $('cColabEsc') && $('cColabEsc').focus()
+      return
+    }
     if (!alvoCancel) { $('cErro').textContent = 'Diga se é a requisição toda ou um exame.'; return }
     const clinica = pelaReq ? (hfCancel.clinica || '') : $('cClinica').value.trim()
     const pet     = pelaReq ? (hfCancel.pet || '')     : $('cPet').value.trim()
@@ -4624,6 +4659,13 @@
         hf_estado: 'HF: ARTEMÍSIA · Clínica de exemplo · 6 exame(s) lançado(s): Hemograma, ALT, FAL, Creatinina, Ureia, Glicose' },
       { id: 2, criado_em: min(34), quando_pedido: min(34), clinica: 'Outra clínica de exemplo', autor: 'Luciana',
         texto: 'Desconsidere.', status: 'aberto' },
+      // ⭐ 05/out: faltava no demo o caminho "a amostra AINDA NÃO chegou" — e sem ele não dava
+      //    para treinar (nem provar) que as tarefas da Triagem são as MESMAS nos dois caminhos,
+      //    que é o que o Fúlvio cobrou. Sem requisição, a 1ª tarefa dela é justamente informá-la.
+      { id: 3, criado_em: min(8), quando_pedido: min(8), clinica: 'Veterinária Caotinho', autor: 'Dra. Marina',
+        texto: 'O material da Pepita sai hoje à tarde, mas a tutora desistiu. Dá para cancelar antes de chegar aí?',
+        pet: 'PEPITA', alvo: 'req', status: 'aberto', caminho: 'sem_amostra',
+        colaborador: 'Thailan', colab_esc: 'Marcelle' },
       // ── o fluxo do Fúlvio em cada etapa, para treinar o gesto sem esperar ──
       { id: 4, criado_em: min(3), quando_pedido: min(3), clinica: 'Veterinária Caotinho', autor: 'Dra. Marina',
         texto: 'Consegue cancelar a fosfatase da Lilith? Pedimos sem querer.',
