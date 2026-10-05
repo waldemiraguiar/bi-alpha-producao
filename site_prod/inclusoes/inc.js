@@ -1154,7 +1154,13 @@
     // ficava preso para sempre esperando um ciente que nunca viria.
     // ⭐ Saída própria de quem abriu, em QUALQUER etapa. Pede o motivo, porque descartar sem
     //    dizer por quê transforma o quadro num cemitério que ninguém entende depois.
-    const descartar = podeAgir('cc') && c.status === 'aberto' && souAutorizadoACancelar()
+    // 🔴 05/out 18h11, Fúlvio: *"você afirmou numa mensagem pro Thailan que conseguiria
+    //    cancelar a qualquer momento. NÃO TEM."* — ele tinha razão e o erro foi meu: eu descrevi
+    //    a ETAPA (status aberto cobre qualquer etapa) e esqueci do SETOR. O `podeAgir('cc')`
+    //    escondia o botão de quem não estivesse no Atendimento ao Cliente, e ele testa a partir
+    //    da Área Técnica e da Triagem. ⭐ A trava de verdade é a LISTA DE NOMES, que continua:
+    //    quem está nela cancela de onde estiver. A trava de setor era redundante e cega.
+    const descartar = c.status === 'aberto' && souAutorizadoACancelar()
       ? `<div class="can-acoes can-descartar"><button class="nao" data-cdescartar="${c.id}">✖ Cancelar esta solicitação</button></div>`
       : ''
 
