@@ -1155,3 +1155,45 @@ button.kpi.on{border-color:var(--tinta);box-shadow:0 0 0 2px color-mix(in srgb,v
 .tri-cab .mudo{font-weight:400;letter-spacing:0}
 .tri-espera{font-size:13px;color:var(--mudo);padding:4px 0}
 .tri-espera i{opacity:.75}
+
+/* ═══ 🎨 SAÍDA DE AMOSTRAS: uma cor por laboratório — Fúlvio 05/out ═══
+   "qual laboratório, qual exame e qual amostra representa esse encaminhamento"
+   Vet Lab verde · TECSA cinza (ele trocou de azul) · Alpha Labs azul (somos nós) */
+:root{--ap-verde:#1f8a4c; --ap-cinza:#6b7280; --ap-azul:#2d6cdf}
+
+#sApoio .alvo.ap-verde.on,#sApoio .alvo.ap-verde.usado{border-color:var(--ap-verde);color:var(--ap-verde);background:color-mix(in srgb,var(--ap-verde) 12%,transparent)}
+#sApoio .alvo.ap-cinza.on,#sApoio .alvo.ap-cinza.usado{border-color:var(--ap-cinza);color:var(--ap-cinza);background:color-mix(in srgb,var(--ap-cinza) 14%,transparent)}
+#sApoio .alvo.ap-azul.on,#sApoio .alvo.ap-azul.usado{border-color:var(--ap-azul);color:var(--ap-azul);background:color-mix(in srgb,var(--ap-azul) 12%,transparent)}
+/* o ATIVO (o que está pintando agora) tem anel; o apenas "usado" só fica colorido */
+#sApoio .alvo.on{box-shadow:0 0 0 2px color-mix(in srgb,currentColor 35%,transparent)}
+
+#sExLista .ex.ap-verde{border-color:var(--ap-verde);background:color-mix(in srgb,var(--ap-verde) 10%,transparent)}
+#sExLista .ex.ap-verde b{color:var(--ap-verde)}
+#sExLista .ex.ap-cinza{border-color:var(--ap-cinza);background:color-mix(in srgb,var(--ap-cinza) 12%,transparent)}
+#sExLista .ex.ap-cinza b{color:var(--ap-cinza)}
+#sExLista .ex.ap-azul{border-color:var(--ap-azul);background:color-mix(in srgb,var(--ap-azul) 10%,transparent)}
+#sExLista .ex.ap-azul b{color:var(--ap-azul)}
+
+.am-linha.ap-verde{border-left:4px solid var(--ap-verde)}
+.am-linha.ap-cinza{border-left:4px solid var(--ap-cinza)}
+.am-linha.ap-azul{border-left:4px solid var(--ap-azul)}
+.am-linha{border-left:4px solid transparent;padding-left:6px}
+
+.ap-bolas{display:inline-flex;gap:4px;align-items:center}
+.ap-bola{width:24px;height:24px;border-radius:50%;border:2px solid var(--linha);background:var(--painel);
+  cursor:pointer;font-size:11px;font-weight:800;line-height:1;color:var(--mudo);padding:0}
+.ap-bola.ap-verde.on{background:var(--ap-verde);border-color:var(--ap-verde);color:#fff}
+.ap-bola.ap-cinza.on{background:var(--ap-cinza);border-color:var(--ap-cinza);color:#fff}
+.ap-bola.ap-azul.on{background:var(--ap-azul);border-color:var(--ap-azul);color:#fff}
+.ap-bola:hover{border-color:var(--tinta)}
+
+/* 🔎 o resumo: o pareamento inteiro numa olhada, que é o que ele pediu para conferir */
+.ap-resumos{display:grid;gap:8px;margin:12px 0 4px}
+.ap-resumo{border:1px solid var(--linha);border-left:4px solid var(--linha);border-radius:10px;
+  padding:8px 11px;display:grid;gap:3px;font-size:13px}
+.ap-resumo.ap-verde{border-left-color:var(--ap-verde)} .ap-resumo.ap-verde b{color:var(--ap-verde)}
+.ap-resumo.ap-cinza{border-left-color:var(--ap-cinza)} .ap-resumo.ap-cinza b{color:var(--ap-cinza)}
+.ap-resumo.ap-azul{border-left-color:var(--ap-azul)}   .ap-resumo.ap-azul b{color:var(--ap-azul)}
+.ap-resumo span{color:var(--mudo)}
+.ap-resumo.incompleto{background:color-mix(in srgb,#c9a227 8%,transparent)}
+.ap-falta{color:#8a6508;font-style:normal;font-size:12px}

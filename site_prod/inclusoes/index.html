@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=71">
+<link rel="stylesheet" href="inc.css?v=73">
 </head>
 <body>
 <header class="topo">
@@ -313,19 +313,27 @@
 
     <div id="sResto" hidden>
       <label>Para onde vai <span class="obrig">*</span></label>
+      <!-- 🎨 05/out: a mesma amostra pode se dividir entre laboratorios. Cada um tem UMA cor, e
+           tudo que pertence a ele fica dela — e o terceiro destino somos nos. -->
       <div class="alvo-escolha" id="sApoio">
         <button type="button" class="alvo" data-sapoio="vetlab">Vet Lab</button>
         <button type="button" class="alvo" data-sapoio="tecsa">TECSA</button>
+        <button type="button" class="alvo" data-sapoio="alpha">Alpha Labs</button>
       </div>
+      <p class="mudo dica" id="sApoioDica">Escolha o laboratório primeiro: o que você marcar depois fica na cor dele.</p>
 
       <label>Quais exames estão saindo <span class="obrig">*</span></label>
-      <p class="mudo dica">Só os especializados — um ou mais.</p>
+      <p class="mudo dica">Só os especializados — um ou mais. Cada exame fica na cor do laboratório que o recebeu.</p>
       <div class="ex-lista" id="sExLista"></div>
 
       <label>Amostras que foram <span class="obrig">*</span></label>
       <p class="mudo dica">Exames podem dividir a mesma amostra: descreva as amostras, não os exames.</p>
       <div id="sAmostras"></div>
       <button type="button" class="btn-sec" id="sAddAmostra">+ somar amostra</button>
+
+      <!-- 🔎 o que responde "qual amostra foi para qual laboratorio e se condiz com o exame" -->
+      <div id="sResumo" class="ap-resumos"></div>
+      <p class="erro" id="sAviso"></p>
 
       <label>Observação</label>
       <input id="sObs" autocomplete="off" placeholder="opcional">
@@ -617,6 +625,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=71"></script>
+<script src="inc.js?v=73"></script>
 </body>
 </html>

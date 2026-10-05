@@ -1373,7 +1373,14 @@
   // ══ 📦 CONTROLE DE SAÍDA PARA O APOIO (Fúlvio, 25/set 08h39–08h44) ══
   // Não é passo de processamento. É o material biológico que SAI — para confrontar
   // o apoio depois. Hoje a bioquímica anota em caderno.
-  const APOIO = { vetlab: 'Vet Lab', tecsa: 'TECSA' }
+  // 🎨 05/out, Fúlvio: *"a amostra vai ser dividida para dois laboratórios diferentes. A gente
+  //    tem que entender qual laboratório, qual exame e qual amostra representa esse
+  //    encaminhamento."* ⭐ Cada laboratório tem UMA cor, e tudo que pertence a ele fica dela:
+  //    o botão, os exames e as amostras. É o pareamento que a tela não dava.
+  // ⚠️ Ele corrigiu a cor da TECSA no áudio seguinte: *"eu falei que o Texa era azul, mas eu
+  //    quero mudar o Texa para CINZA"* — e o azul passou a ser do terceiro laboratório, nós.
+  const APOIO = { vetlab: 'Vet Lab', tecsa: 'TECSA', alpha: 'Alpha Labs' }
+  const APOIO_COR = { vetlab: 'verde', tecsa: 'cinza', alpha: 'azul' }
   const TIPO_AMOSTRA = ['Soro', 'Plasma', 'Sangue total', 'Fezes', 'Urina', 'Lâmina', 'Swab', 'Fragmento', 'Outro']
   // as três alterações que ele nomeou, mais o caso normal
   const QUALIDADE = ['Íntegra', 'Hemólise', 'Icterícia', 'Lipemia']
@@ -3827,25 +3834,65 @@
   // ⚠️ o MESMO cartão é desenhado na aba Cancelamentos e na aba Triagem.
   // O ouvinte tem que valer nas duas, senão os botões da Triagem ficam mudos.
   // ══ 📦 diálogo da saída de amostras ══
-  let sHF = null, sApoioSel = null, sExSel = [], sAmostras = []
+  // ⭐ sApoioAtivo = o laboratório que está "pintando" agora. sExSel deixou de ser uma lista de
+  //    nomes e virou um mapa { 'nome do exame': 'vetlab' }: o exame não é mais só "escolhido",
+  //    ele pertence a um destino. Idem a amostra, que ganhou o campo `apoio`.
+  let sHF = null, sApoioAtivo = null, sExSel = {}, sAmostras = []
+  const labsUsados = () => [...new Set([...Object.values(sExSel), ...sAmostras.map(a => a.apoio)].filter(Boolean))]
   function desenharAmostras() {
+    // ⭐ cada amostra diz PARA ONDE foi. As bolinhas são os mesmos 3 laboratórios, na mesma cor:
+    //    clicar numa já marcada desmarca (*"vai clicar numa cor que já está marcada e
+    //    automaticamente ele vai perder a marcação"*).
+    const bolas = (i, a) => Object.keys(APOIO).map(k =>
+      `<button type="button" class="ap-bola ap-${APOIO_COR[k]} ${a.apoio === k ? 'on' : ''}"
+        data-amlab="${k}" data-ami2="${i}" title="${esc(APOIO[k])}">${esc(APOIO[k].slice(0, 1))}</button>`).join('')
     $('sAmostras').innerHTML = sAmostras.map((a, i) => `
-      <div class="am-linha" data-ami="${i}">
+      <div class="am-linha ${a.apoio ? 'ap-' + APOIO_COR[a.apoio] : ''}" data-ami="${i}">
         <select data-amc="tipo">${TIPO_AMOSTRA.map(t => `<option ${t === a.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <input data-amc="volume" value="${esc(a.volume || '')}" placeholder="volume (ex. 2 mL)" autocomplete="off">
         <select data-amc="qualidade">${QUALIDADE.map(q => `<option ${q === a.qualidade ? 'selected' : ''}>${q}</option>`).join('')}</select>
+        <span class="ap-bolas">${bolas(i, a)}</span>
         <button type="button" class="tira" data-amtira="${i}" title="tirar">×</button>
       </div>`).join('') || '<p class="mudo">Nenhuma amostra ainda. Clique em somar.</p>'
     liberarSaida()
   }
+
+  // 🔎 o resumo que responde a pergunta dele: *"qual amostra foi para qual laboratório e se
+  //    condiz com o exame"*. Sem isso as cores seriam enfeite; com ele, viram conferência.
+  function resumoSaida() {
+    const el = $('sResumo'); if (!el) return
+    const labs = labsUsados()
+    if (!labs.length) { el.innerHTML = ''; return }
+    el.innerHTML = labs.map(k => {
+      const ex = Object.keys(sExSel).filter(n => sExSel[n] === k)
+      const am = sAmostras.filter(a => a.apoio === k)
+      const falta = !ex.length ? 'falta escolher o exame' : !am.length ? 'falta dizer a amostra' : ''
+      return `<div class="ap-resumo ap-${APOIO_COR[k]} ${falta ? 'incompleto' : ''}">
+        <b>${esc(APOIO[k])}</b>
+        <span>${ex.length ? ex.map(esc).join(' · ') : '—'}</span>
+        <span>${am.length ? am.map(a => `${esc(a.tipo)}${a.volume ? ' ' + esc(a.volume) : ''} (${esc(a.qualidade || '')})`).join(' · ') : '—'}</span>
+        ${falta ? `<i class="ap-falta">⚠️ ${falta}</i>` : ''}</div>`
+    }).join('')
+  }
+
   function liberarSaida() {
-    const ok = !!sApoioSel && sExSel.length > 0 && sAmostras.length > 0 && sAmostras.every(a => a.tipo)
+    // ⛔ Cada laboratório marcado precisa do par COMPLETO: exame E amostra. Registrar um destino
+    //    sem saber o que foi para lá é exatamente o que ele quer evitar.
+    const labs = labsUsados()
+    const ok = labs.length > 0 && sAmostras.every(a => a.tipo) && labs.every(k =>
+      Object.values(sExSel).includes(k) && sAmostras.some(a => a.apoio === k))
     $('sSalvar').hidden = !ok
+    const av = $('sAviso')
+    if (av) av.textContent = (!labs.length || ok) ? ''
+      : 'Cada laboratório marcado precisa de pelo menos um exame e uma amostra.'
+    resumoSaida()
   }
   $('btnNovaSaida')?.addEventListener('click', async () => {
     if (!(await garantirLogin())) return
     $('formSaida').reset()
-    sHF = null; sApoioSel = null; sExSel = []; sAmostras = []
+    sHF = null; sApoioAtivo = null; sExSel = {}; sAmostras = []
+    if ($('sResumo')) $('sResumo').innerHTML = ''
+    if ($('sAviso')) $('sAviso').textContent = ''
     $('sConfere').hidden = true; $('sResto').hidden = true; $('sSalvar').hidden = true
     $('sReqErro').textContent = ''; $('sErro').textContent = ''
     document.querySelectorAll('#sApoio .alvo').forEach(b => b.classList.remove('on'))
@@ -3893,25 +3940,72 @@
     if (ev.target.closest('[data-svalida]') || ev.target.closest('[data-ssem]')) {
       if (ev.target.closest('[data-ssem]')) { sHF = null; $('sExLista').innerHTML = '<p class="mudo">Requisição fora do espelho: descreva os exames na observação.</p>' }
       $('sResto').hidden = false
-      if (!sAmostras.length) { sAmostras = [{ tipo: 'Soro', volume: '', qualidade: 'Íntegra' }] }
-      desenharAmostras()
+      if (!sAmostras.length) { sAmostras = [{ tipo: 'Soro', volume: '', qualidade: 'Íntegra', apoio: null }] }
+      pintarApoio(); desenharAmostras()
     }
   })
+  // 🎨 pintar o botão do laboratório e os exames já marcados com a cor dele
+  function pintarApoio() {
+    document.querySelectorAll('#sApoio [data-sapoio]').forEach(x => {
+      const k = x.dataset.sapoio
+      x.classList.toggle('on', sApoioAtivo === k)
+      x.classList.toggle('usado', labsUsados().includes(k))
+      Object.values(APOIO_COR).forEach(c => x.classList.remove('ap-' + c))
+      x.classList.add('ap-' + APOIO_COR[k])
+    })
+    const ex = (sHF && sHF.exames) || []
+    document.querySelectorAll('#sExLista [data-sex]').forEach(b => {
+      const nome = (ex[+b.dataset.sex] || {}).exame
+      const lab = nome ? sExSel[nome] : null
+      Object.values(APOIO_COR).forEach(c => b.classList.remove('ap-' + c))
+      b.classList.toggle('on', !!lab)
+      if (lab) b.classList.add('ap-' + APOIO_COR[lab])
+    })
+    const d = $('sApoioDica')
+    if (d) d.innerHTML = sApoioAtivo
+      ? `Marcando para <b>${esc(APOIO[sApoioAtivo])}</b> — escolha os exames e as amostras que vão para lá.`
+      : 'Escolha o laboratório primeiro: o que você marcar depois fica na cor dele.'
+  }
+
   $('sApoio')?.addEventListener('click', ev => {
     const b = ev.target.closest('[data-sapoio]'); if (!b) return
-    sApoioSel = b.dataset.sapoio
-    document.querySelectorAll('#sApoio .alvo').forEach(x => x.classList.toggle('on', x === b))
-    liberarSaida()
+    const k = b.dataset.sapoio
+    // ⛔ *"se eu fizer isso no nome do laboratório e desmarcá-los, as marcações também têm que
+    //    SUBIR para a gente reiniciar o processo."* — clicar no laboratório já ativo não só o
+    //    desmarca: devolve todo exame e toda amostra que estavam pintados com a cor dele.
+    if (sApoioAtivo === k) {
+      const tinha = labsUsados().includes(k)
+      sApoioAtivo = null
+      if (tinha) {
+        for (const n of Object.keys(sExSel)) if (sExSel[n] === k) delete sExSel[n]
+        sAmostras.forEach(a => { if (a.apoio === k) a.apoio = null })
+        toast(`${APOIO[k]} desmarcado — o que estava na cor dele voltou a ficar livre`)
+      }
+    } else sApoioAtivo = k
+    pintarApoio(); desenharAmostras()
   })
+
   $('sExLista')?.addEventListener('click', ev => {
     const b = ev.target.closest('[data-sex]'); if (!b) return
     const i = +b.dataset.sex, ex = (sHF && sHF.exames) || []
     const nome = ex[i] && ex[i].exame; if (!nome) return
-    b.classList.toggle('on')
-    sExSel = b.classList.contains('on') ? [...new Set([...sExSel, nome])] : sExSel.filter(x => x !== nome)
-    liberarSaida()
+    // clicar num exame já marcado NA COR ATIVA desmarca; marcado em outra cor, troca de dono
+    if (sExSel[nome] && (sExSel[nome] === sApoioAtivo || !sApoioAtivo)) delete sExSel[nome]
+    else if (!sApoioAtivo) return toast('Escolha primeiro o laboratório — o exame fica na cor dele')
+    else sExSel[nome] = sApoioAtivo
+    pintarApoio(); liberarSaida()
   })
-  $('sAddAmostra')?.addEventListener('click', () => { sAmostras.push({ tipo: 'Soro', volume: '', qualidade: 'Íntegra' }); desenharAmostras() })
+
+  // as bolinhas de laboratório dentro da linha da amostra
+  $('sAmostras')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-amlab]'); if (!b) return
+    const i = +b.dataset.ami2, k = b.dataset.amlab
+    sAmostras[i].apoio = sAmostras[i].apoio === k ? null : k
+    desenharAmostras()
+  })
+  // ⭐ *"quando eu clicar embaixo no soro... assim que eu preencher, automaticamente ele vai
+  //    ficar verde também"* — a amostra nasce já na cor do laboratório ativo, sem clique extra.
+  $('sAddAmostra')?.addEventListener('click', () => { sAmostras.push({ tipo: 'Soro', volume: '', qualidade: 'Íntegra', apoio: sApoioAtivo }); desenharAmostras() })
   $('sAmostras')?.addEventListener('click', ev => {
     const t = ev.target.closest('[data-amtira]'); if (!t) return
     sAmostras.splice(+t.dataset.amtira, 1); desenharAmostras()
@@ -3920,6 +4014,14 @@
     const c = ev.target.closest('[data-amc]'); if (!c) return
     const i = +c.closest('[data-ami]').dataset.ami
     sAmostras[i][c.dataset.amc] = c.value
+    // ⭐ "assim que eu preencher" — digitar numa amostra sem dono a pinta com o laboratório ativo
+    if (!sAmostras[i].apoio && sApoioAtivo) {
+      sAmostras[i].apoio = sApoioAtivo
+      const ln = c.closest('[data-ami]')
+      Object.values(APOIO_COR).forEach(x => ln.classList.remove('ap-' + x))
+      ln.classList.add('ap-' + APOIO_COR[sApoioAtivo])
+      ln.querySelectorAll('[data-amlab]').forEach(x => x.classList.toggle('on', x.dataset.amlab === sApoioAtivo))
+    }
     liberarSaida()
   })
   $('sAmostras')?.addEventListener('change', ev => {
@@ -3938,15 +4040,38 @@
     if (!(await garantirLogin())) return
     $('sSalvar').disabled = true
     try {
-      await rpc('inc_saida_nova', {
+      // ⭐ UM REGISTRO POR LABORATÓRIO. A tela virou uma só porque a amostra é uma só, mas
+      //    "foi para a Vet Lab" e "foi para a TECSA" são encaminhamentos diferentes, com
+      //    coletas e confirmações diferentes — então cada um é a sua própria saída.
+      // ⛔ Isso também evita mexer na tabela: `apoio` continua sendo uma coluna só.
+      const labs = labsUsados()
+      const base = {
         p_nome: sessao.nome, p_senha: sessao.senha,
         p_req: $('sReq').value.replace(/\D/g, ''),
         p_clinica: (sHF && sHF.clinica) || null, p_pet: (sHF && sHF.pet) || null,
-        p_tutor: (sHF && sHF.tutor) || null, p_apoio: sApoioSel,
-        p_exames: sExSel, p_amostras: sAmostras,
+        p_tutor: (sHF && sHF.tutor) || null,
         p_obs: $('sObs').value.trim() || null, p_saiu: null,
-      })
-      $('dlgSaida').close(); toast('📦 Saída registrada'); saidaPer = 'abertas'
+      }
+      const feitos = [], falhou = []
+      for (const k of labs) {
+        try {
+          await rpc('inc_saida_nova', { ...base, p_apoio: k,
+            p_exames: Object.keys(sExSel).filter(n => sExSel[n] === k),
+            p_amostras: sAmostras.filter(a => a.apoio === k) })
+          feitos.push(APOIO[k])
+        } catch (e) { falhou.push(`${APOIO[k]}: ${e.message}`) }
+      }
+      // ⛔ não digo "registrado" quando parte falhou — o pior desfecho aqui é a pessoa achar
+      //    que os dois destinos foram e só um ter ido.
+      if (falhou.length) {
+        $('sErro').textContent = (feitos.length ? `Registrei ${feitos.join(' e ')}, mas falhou — ` : 'Não registrei — ')
+          + falhou.join(' · ')
+          + (/laboratorio|apoio/i.test(falhou.join(' ')) ? ' (falta rodar o SQL 35 no Supabase)' : '')
+        return
+      }
+      $('dlgSaida').close()
+      toast(feitos.length > 1 ? `📦 ${feitos.length} saídas registradas: ${feitos.join(' e ')}` : '📦 Saída registrada')
+      saidaPer = 'abertas'
       await carregar(); desenhar()
     } catch (e) {
       $('sErro').textContent = /PGRST202|could not find|schema cache|does not exist/i.test(e.message || '')
@@ -4770,6 +4895,13 @@
         '640921': { req: '640921', clinica: 'Clínica de exemplo', pet: 'NINA', especie: 'Felina', tutor: 'Paulo Reis',
                     entrada: new Date(agora() - 26 * 3600e3).toISOString(),
                     exames: [{ id: 4, exame: 'PCR Erliquiose', digitado: false, data_exame: null }] },
+        // ⭐ 05/out: o caso REAL que o Fúlvio mandou em foto, para treinar (e provar) a divisão
+        //    da mesma amostra entre DOIS laboratórios: a imunoglobulina vai para um, a
+        //    eletroforese para outro, e os dois tubos de soro saem da mesma coleta.
+        '646327': { req: '646327', clinica: 'Vet Service', pet: 'Kiara', especie: 'Canino', tutor: 'Thaina Gomes',
+                    entrada: new Date(agora() - 5 * 3600e3).toISOString(),
+                    exames: [{ id: 5, exame: 'Imunoglobulina A', digitado: false, data_exame: null },
+                             { id: 6, exame: 'Proteínas - ELETROFORESE', digitado: false, data_exame: null }] },
       }
       return banco[n] || null    // 626526 cai aqui: é o caso do Fúlvio, fora da janela do espelho
     }
