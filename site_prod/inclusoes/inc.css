@@ -1093,3 +1093,56 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 @keyframes piscaCard { 0%,100% { box-shadow:none } 50% { box-shadow:0 0 0 3px rgba(224,176,0,.75) } }
 .can-card.piscar { animation: piscaCard 1.3s ease-in-out 2 }
 @media (prefers-reduced-motion: reduce) { .can-card.piscar { animation:none; box-shadow:0 0 0 3px rgba(224,176,0,.75) } }
+
+/* 🦠 cancelar um caso de raiva (Fúlvio, 05/out) — discreto: é saída, não ação principal */
+.raiva-cancelar { margin-top: 10px; text-align: right }
+.raiva-cancelar button { font-size: 12px; opacity: .72 }
+.raiva-cancelar button:hover { opacity: 1; color: #a32d2d; border-color: #a32d2d }
+
+/* ═══ 🦠 RAIVA · 05/out — os ajustes dos 34 áudios do Fúlvio ═══ */
+
+/* 👁️ o contador que ABRE: o KPI virou botão, e precisa PARECER clicável */
+button.kpi{cursor:pointer;text-align:left;font:inherit;color:inherit;transition:transform .08s,border-color .12s}
+button.kpi:hover:not(:disabled){transform:translateY(-1px);border-color:var(--tinta)}
+button.kpi:disabled{cursor:default;opacity:.45}
+button.kpi.on{border-color:var(--tinta);box-shadow:0 0 0 2px color-mix(in srgb,var(--tinta) 30%,transparent)}
+.raiva-gaveta{background:var(--painel);border:1px solid var(--linha);border-radius:12px;padding:10px 12px;margin:8px 0 14px}
+.raiva-gaveta .gav-cab{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  font-weight:600;font-size:13px;margin-bottom:6px;color:var(--mudo)}
+
+/* 🏷️ os 3 estados que ele definiu, cada um com a sua cor */
+.raiva-estado{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;border:1px solid var(--linha);white-space:nowrap}
+.raiva-estado.e-andamento{background:color-mix(in srgb,#2d6cdf 12%,transparent);border-color:#2d6cdf;color:#2d6cdf}
+.raiva-estado.e-cadastro{background:color-mix(in srgb,#b8860b 14%,transparent);border-color:#b8860b;color:#8a6508}
+.raiva-estado.e-concluido{background:color-mix(in srgb,#1f8a4c 12%,transparent);border-color:#1f8a4c;color:#1f8a4c}
+
+/* ⏸️ aguardando o cliente: a bola não está com a gente */
+.raiva-card.esperando{border-left:4px solid #b8860b}
+.raiva-espera{background:color-mix(in srgb,#b8860b 10%,transparent);border:1px dashed #b8860b;
+  border-radius:10px;padding:8px 11px;margin:8px 0;font-size:13px}
+
+/* 📋 o fluxo de 17 passos: fases para o cartão não virar um paredão */
+.raiva-fase{margin:14px 0 6px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--mudo);border-top:1px solid var(--linha);padding-top:9px}
+
+/* ⑨ᵃ o desvio do gov.br: visualmente É um desvio, recuado e marcado */
+.raiva-saidas{margin:4px 0 8px}
+.raiva-desvio{border-left:3px solid #b8860b;padding:8px 0 8px 11px;margin:6px 0 8px}
+.raiva-desvio>b{display:block;font-size:13px;margin-bottom:4px}
+
+/* ⑬⑭ os campos de texto do rastreio */
+.raiva-campo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 0;font-size:13px}
+.raiva-campo>b{font-weight:600}
+.raiva-cod{font-family:var(--mono,ui-monospace,monospace);font-weight:700;letter-spacing:.04em;
+  background:var(--painel);border:1px solid var(--linha);border-radius:6px;padding:2px 8px}
+
+/* ✏️ corrigir sem desmarcar — o pedido que ele repetiu */
+.raiva-lapis{background:none;border:0;cursor:pointer;font-size:13px;opacity:.5;padding:1px 5px;border-radius:6px}
+.raiva-lapis:hover{opacity:1;background:var(--painel)}
+
+/* 🪟 o formulário que substituiu os 4 prompt() */
+#dlgRaiva .r-duas{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){#dlgRaiva .r-duas{grid-template-columns:1fr}}
+#dlgRaiva .raiva-resp:empty{display:none}
+#dlgRaiva .raiva-resp{margin:6px 0 2px}

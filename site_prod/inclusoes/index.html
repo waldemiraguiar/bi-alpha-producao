@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=66">
+<link rel="stylesheet" href="inc.css?v=69">
 </head>
 <body>
 <header class="topo">
@@ -149,7 +149,7 @@
          faz parte da União Europeia") -->
     <div class="raiva-duvida">
       <label for="raivaPais">País de destino — se enquadra nesse valor?</label>
-      <input id="raivaPais" placeholder="ex.: Portugal, Alemanha, Estados Unidos" autocomplete="off">
+      <input id="raivaPais" placeholder="escreva aqui o local de destino" autocomplete="off">
       <div id="raivaPaisResp" class="raiva-resp"></div>
     </div>
 
@@ -166,6 +166,8 @@
       <div class="raiva-filtros"><button data-rper="abertos" class="on">Em andamento</button><button data-rper="fechados">Concluídos</button></div>
     </div>
     <div class="raiva-kpis" id="raivaKpis"></div>
+    <!-- 👁️ Fúlvio: o contador "1 na espera" nao abria — ele precisa ver QUAIS pets -->
+    <div class="raiva-gaveta" id="raivaGaveta" hidden></div>
     <div class="rast-lista" id="raivaLista"></div>
   </section>
 
@@ -351,6 +353,48 @@
       <button value="cancel" class="btn-sec" formnovalidate>Fechar</button>
       <button class="btn-principal" id="exSalvar">Salvar</button>
     </div>
+  </form>
+</dialog>
+
+<!-- ⛔ 05/out: os 4 ajustes de tela do Fúlvio (autocompletar do HF, pais verde/vermelho,
+     placeholder, mascara de data) eram IMPOSSIVEIS no prompt() do navegador. A causa dos
+     quatro era uma so: o formulario nao existia. Aqui esta. -->
+<dialog id="dlgRaiva">
+  <form id="formRaiva" method="dialog">
+    <h3>🦠 Novo caso — Raiva trânsito internacional</h3>
+
+    <label>Nome do pet <span class="obrig">*</span></label>
+    <input id="rPet" autocomplete="off" placeholder="escreva aqui o nome do pet">
+
+    <label>Clínica <span class="obrig">*</span></label>
+    <input id="rClinica" autocomplete="off" placeholder="comece a escrever e escolha na lista">
+    <div class="sug-cx" id="rClinicaSug" hidden></div>
+    <p class="mudo" id="rClinicaNota"></p>
+
+    <label>Tutor</label>
+    <input id="rTutor" autocomplete="off" placeholder="escreva aqui o nome do tutor (opcional)">
+
+    <label>País de destino</label>
+    <input id="rDestino" autocomplete="off" placeholder="escreva aqui o local de destino">
+    <div id="rDestinoResp" class="raiva-resp"></div>
+
+    <div class="r-duas">
+      <div>
+        <label>Data do microchip</label>
+        <input id="rMicrochip" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10">
+      </div>
+      <div>
+        <label>Data da vacina antirrábica</label>
+        <input id="rVacina" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10">
+      </div>
+    </div>
+    <div id="rOrdemResp" class="raiva-resp"></div>
+
+    <p class="erro" id="rErro"></p>
+    <menu>
+      <button type="button" class="btn-sec" id="rFechar">Cancelar</button>
+      <button type="button" class="btn-principal" id="rSalvar">Abrir o caso</button>
+    </menu>
   </form>
 </dialog>
 
@@ -573,6 +617,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=66"></script>
+<script src="inc.js?v=69"></script>
 </body>
 </html>
