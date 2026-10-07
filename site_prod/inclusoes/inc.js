@@ -645,10 +645,16 @@
   async function carregarComprovantes() {
     // ⚠️ SB é o CLIENTE do Supabase, não a URL — usar .from(), como o resto do arquivo.
     if (DEMO) { comprovCache = []; return }
+    // 🔴🔴 06/out — A SEGUNDA CAUSA da aba zerada, achada provando o conserto por fora.
+    // `comprovante_pendente` tem RLS SEM POLICY de leitura: por anon ela responde */0, enquanto
+    // `inc_chamados` devolve 122 linhas. Lendo com SB.from(...) a aba NUNCA mostraria nada —
+    // nem depois de eu ligar o fio que faltava no ouvinte. Eram DOIS defeitos, não um.
+    // ⛔ Não abri policy para anon: isso exporia os pagamentos a quem tiver a chave pública.
+    // ⭐ Leio por função com login, que é como as outras abas (raiva, saídas) já faziam.
+    if (!sessao || !sessao.nome) { comprovCache = []; return }
     try {
-      const r = await SB.from('comprovante_pendente').select('*').order('quando', { ascending: false }).limit(200)
-      comprovCache = r.error ? [] : (r.data || [])
-      if (r.error) console.warn('comprovantes:', r.error.message)
+      const r = await rpc('comprovante_pendentes_listar', { p_nome: sessao.nome, p_senha: sessao.senha })
+      comprovCache = (r && r.ok && r.itens) ? r.itens : []
     } catch (e) { comprovCache = []; console.warn('comprovantes:', e.message) }
   }
 
