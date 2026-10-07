@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="inc.css?v=74">
+<link rel="stylesheet" href="inc.css?v=76">
 </head>
 <body>
 <header class="topo">
@@ -168,6 +168,8 @@
     <div class="raiva-kpis" id="raivaKpis"></div>
     <!-- 👁️ Fúlvio: o contador "1 na espera" nao abria — ele precisa ver QUAIS pets -->
     <div class="raiva-gaveta" id="raivaGaveta" hidden></div>
+    <!-- ⏪ o desfazer do cancelamento, na janela em que o erro e percebido -->
+    <div class="raiva-desfazer" id="raivaDesfazer" hidden></div>
     <div class="rast-lista" id="raivaLista"></div>
   </section>
 
@@ -625,6 +627,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../supabase-js.min.js"></script>
-<script src="inc.js?v=74"></script>
+<script src="inc.js?v=76"></script>
 </body>
 </html>

@@ -739,6 +739,18 @@
   }
 
   let raivaCache = [], raivaPer = 'abertos', raivaGaveta = null
+  // ⏪ o desfazer do cancelamento: vale por 2 minutos, que é a janela em que a pessoa percebe
+  //    que clicou errado. Depois disso o caso fica cancelado mesmo — e nada se perde, porque a
+  //    linha continua no banco com quem cancelou e por quê.
+  let raivaDesfazer = null, raivaDesfeito = null
+  function desenharDesfazer() {
+    const el = $('raivaDesfazer'); if (!el) return
+    const vale = raivaDesfazer && (Date.now() - raivaDesfazer.quando) < 120000
+    el.hidden = !vale
+    if (vale) el.innerHTML = `⏪ <b>${esc(raivaDesfazer.pet)}</b> foi cancelado.
+      <button class="lnk" data-rdesfazer="${raivaDesfazer.id}">desfazer</button>
+      <span class="mudo">— dá para desfazer por 2 minutos</span>`
+  }
 
   async function carregarRaiva() {
     // ⭐ 05/out: o demo não tinha caso de raiva, então só dava para testar em PRODUÇÃO — e foi
@@ -4145,6 +4157,25 @@
 
   $('vRaiva')?.addEventListener('click', async ev => {
     // filtro em andamento / concluídos
+    // ⏪ desfazer o cancelamento recém-feito
+    const df = ev.target.closest('[data-rdesfazer]')
+    if (df) {
+      if (!(await garantirLogin())) return
+      const id = +df.dataset.rdesfazer
+      if (DEMO) {
+        if (raivaDesfeito) { raivaCache.unshift(raivaDesfeito); raivaDesfeito = null }
+        raivaDesfazer = null; desenharDesfazer(); desenharRaiva()
+        return toast('⏪ cancelamento desfeito — o caso voltou (demo)')
+      }
+      try {
+        const r = await rpc('raiva_caso_descancelar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id })
+        toast(r && r.ok ? '⏪ cancelamento desfeito — o caso voltou' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        raivaDesfazer = null; desenharDesfazer()
+        await carregarRaiva(); desenharRaiva()
+      } catch (e) { toast(e.message) }
+      return
+    }
+
     // 👁️ a gaveta dos contadores: clicar no número mostra QUAIS pets estão ali
     const gv = ev.target.closest('[data-rgav]')
     if (gv) { const id = gv.dataset.rgav; raivaGaveta = (raivaGaveta === id || !id) ? null : id; return desenharRaiva() }
@@ -4277,7 +4308,12 @@
       if (DEMO) {
         const mot0 = prompt(`Cancelar o caso de ${caso ? caso.pet : 'este pet'}?\n\nEscreva o motivo:`)
         if (mot0 === null) return
+        // ⭐ guardo o caso inteiro para o DESFAZER funcionar também no treino: quem aprende aqui
+        //    precisa ver que errar o clique tem volta, senão hesita na operação real.
+        raivaDesfeito = raivaCache.find(c => c.id === id) || null
         raivaCache = raivaCache.filter(c => c.id !== id); desenharRaiva()
+        raivaDesfazer = { id, pet: (caso && caso.pet) || 'o caso', quando: Date.now() }
+        desenharDesfazer()
         toast('✅ caso cancelado (demo)'); return
       }
       const mot = prompt(`Cancelar o caso de ${caso ? caso.pet : 'este pet'}?\n\nEscreva o motivo (ajuda quem for olhar depois):`)
@@ -4285,7 +4321,15 @@
       try {
         const r = await rpc('raiva_caso_cancelar',
           { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_motivo: (mot || '').trim() || null })
-        toast(r && r.ok ? '✅ caso cancelado' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        // ⛔ 07/out: eu tinha criado o DESFAZER no banco e nenhum botão na tela. Como o caso
+        //    cancelado some das duas listas, era um caminho sem saída: errou o clique, acabou.
+        // ⭐ O desfazer aparece onde o erro acontece — no instante seguinte ao clique — em vez
+        //    de exigir uma lista de cancelados que ninguém abriria.
+        if (r && r.ok) {
+          raivaDesfazer = { id, pet: (caso && caso.pet) || 'o caso', quando: Date.now() }
+          toast(`✅ caso cancelado — ${caso ? caso.pet : ''}`)
+          desenharDesfazer()
+        } else toast('⚠️ ' + ((r && r.erro) || 'não consegui'))
         await carregarRaiva(); desenharRaiva()
       } catch (e) { toast(e.message) }
       return
