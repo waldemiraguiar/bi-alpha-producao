@@ -153,7 +153,9 @@
       try {
         const sd = await SB.from('inc_saidas').select('*').order('saiu_em', { ascending: false }).range(0, 999)
         if (sd.error) throw sd.error
-        saidas = sd.data || []; saidaSemTabela = false
+        // ⛔ cancelada SOME da tela (mas fica no banco, com quem cancelou e por quê) — mesma
+        //    regra da Raiva e do cancelamento: a trilha não se apaga, a lista de trabalho sim.
+        saidas = (sd.data || []).filter(x => !x.cancelado_em); saidaSemTabela = false
       } catch (e) { saidas = []; saidaSemTabela = true }
       const cc = await SB.from('inc_cancelamentos').select('*').gte('criado_em', new Date(agora() - 60 * 864e5).toISOString()).order('criado_em', { ascending: false }).range(0, 999)
       cancelamentos = cc.error ? [] : (cc.data || [])
@@ -394,7 +396,20 @@
   const ROTULO = { 's-a1': 'no prazo', 's-a2': 'atenção', 's-v1': 'estourou · protocolado', 's-v2': 'estourado', 's-x': 'EXPLODIU', 's-p': 'aguardando cliente' }
   function botoes(c) {
     const dono = donoAtual(c)
-    if (sessao && sessao.setorInc && sessao.setorInc !== 'admin' && sessao.setorInc !== dono) return `<span class="so-setor">ação de ${SETORES[dono].nome}</span>`
+    // 🔴🔴 05/out, Fúlvio: *"percebi que em VÁRIAS ABAS, independente de qual seja, quando a gente
+    //    cria uma inclusão, você não coloca opção de cancelamento. Eu posso estar fazendo um
+    //    processo e no meio do caminho resolver cancelar."*
+    // ⛔ CAUSA, a mesma do botão da aba Cancelamentos: esta linha corta TODOS os botões de quem
+    //    não está no setor dono do cartão — e o Cancelar ia junto. Ele navega por fora dos
+    //    setores, então para ele não havia botão nenhum, em aba nenhuma.
+    // ⭐ As ações de ANDAR o processo continuam só do setor dono (é o certo: quem faz, marca).
+    //    Mas DESISTIR não é andar — é parar, e quem pode parar é quem responde pelo processo.
+    //    A trava de verdade continua sendo a lista de nomes (PODE_CANCELAR), não o setor.
+    if (sessao && sessao.setorInc && sessao.setorInc !== 'admin' && sessao.setorInc !== dono) {
+      return `<span class="so-setor">ação de ${SETORES[dono].nome}</span>` +
+        (c.status === 'aberto' && souAutorizadoACancelar()
+          ? `<button class="leve" data-acao="cancelar">Cancelar</button>` : '')
+    }
     if (c.status === 'enviado') return `<button data-acao="avisou_envio">Clínica avisada do envio · concluir</button>`
     if (c.status === 'especializado') return `<button data-acao="avisou_especializado">Clínica avisada da entrada · aguardando resultado</button>`
     if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Clínica avisada · encerrar</button>`
@@ -1403,6 +1418,18 @@
   // as três alterações que ele nomeou, mais o caso normal
   const QUALIDADE = ['Íntegra', 'Hemólise', 'Icterícia', 'Lipemia']
 
+  // ⏪ a mesma janela de 2 min da Raiva: errar o clique tem volta, e a volta fica onde o erro
+  //    acontece — não numa lista de canceladas que ninguém abriria.
+  let saidaDesfazer = null, saidaCancelada = null
+  function desenharDesfazerSaida() {
+    const el = $('saidaDesfazer'); if (!el) return
+    const vale = saidaDesfazer && (Date.now() - saidaDesfazer.quando) < 120000
+    el.hidden = !vale
+    if (vale) el.innerHTML = `⏪ <b>${esc(saidaDesfazer.pet)}</b> — saída cancelada.
+      <button class="lnk" data-sdesfazercancel="${saidaDesfazer.id}">desfazer</button>
+      <span class="mudo">— dá para desfazer por 2 minutos</span>`
+  }
+
   function desenharSaidas() {
     const b = document.querySelector('#abas button[data-setor="saida"]')
     const abertas = saidas.filter(x => !x.coletado_em)
@@ -1446,7 +1473,15 @@
         ${x.obs ? `<div class="can-txt mudo">↳ ${esc(x.obs)}</div>` : ''}
         <div class="can-acoes">${x.coletado_em
           ? `<button class="leve" data-sdesfazer="${x.id}">Não foi coletado — voltar</button>`
-          : `<button data-scoletado="${x.id}">O parceiro coletou</button>`}</div>
+          : `<button data-scoletado="${x.id}">O parceiro coletou</button>`}
+          ${/* 🔴 Fúlvio 05/out: "em VÁRIAS ABAS... você não coloca opção de cancelamento".
+                Aqui existia só o desfazer da COLETA — que não anula uma saída registrada errado.
+                ⛔ Só aparece ANTES de o parceiro coletar: depois disso a amostra saiu de verdade,
+                   e sumir com o registro seria apagar da tela um encaminhamento que existe. */''}
+          ${/* ⭐ No DEMO o botão aparece para qualquer um: é laboratório de treino, e quem aprende
+                precisa ver que errar tem volta. Na operação vale a lista de nomes, como no resto. */''}
+          ${!x.coletado_em && (DEMO || souAutorizadoACancelar())
+            ? `<button class="leve" data-scancelar="${x.id}">Cancelar esta saída</button>` : ''}</div>
       </div>`
     }).join('')
   }
@@ -4099,6 +4134,46 @@
   $('vSaida')?.addEventListener('click', async ev => {
     const f = ev.target.closest('[data-sper]')
     if (f) { saidaPer = f.dataset.sper; return desenharSaidas() }
+    // ⏪ cancelar a saída inteira (criou errado) — com desfazer de 2 min, como na Raiva
+    const sc = ev.target.closest('[data-scancelar]'), sd = ev.target.closest('[data-sdesfazercancel]')
+    if (sc || sd) {
+      if (!(await garantirLogin())) return
+      const id = +(sc || sd).dataset[sc ? 'scancelar' : 'sdesfazercancel']
+      if (sc) {
+        const x = (saidas || []).find(y => y.id === id)
+        if (DEMO) {
+          const mot0 = prompt(`Cancelar a saída de ${x ? (x.pet || 'este material') : 'este material'}?\n\nEscreva o motivo:`)
+          if (mot0 === null) return
+          saidaCancelada = x || null
+          saidas = saidas.filter(y => y.id !== id)
+          saidaDesfazer = { id, pet: (x && x.pet) || 'a saída', quando: Date.now() }
+          desenharDesfazerSaida(); desenharSaidas(); return toast('✅ saída cancelada (demo)')
+        }
+        const mot = prompt(`Cancelar a saída de ${x ? (x.pet || 'este material') : 'este material'}?\n\nEscreva o motivo (ajuda quem olhar depois):`)
+        if (mot === null) return          // ⭐ Cancelar no prompt não cancela a saída
+        try {
+          const r = await rpc('inc_saida_cancelar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_motivo: (mot || '').trim() || null })
+          if (r && r.ok) {
+            saidaDesfazer = { id, pet: (x && x.pet) || 'a saída', quando: Date.now() }
+            toast('✅ saída cancelada'); desenharDesfazerSaida()
+          } else toast('⚠️ ' + ((r && r.erro) || 'não consegui'))
+          await carregar(); desenhar()
+        } catch (e) { toast(e.message) }
+      } else {
+        if (DEMO) {
+          if (saidaCancelada) { saidas.unshift(saidaCancelada); saidaCancelada = null }
+          saidaDesfazer = null; desenharDesfazerSaida(); desenharSaidas()
+          return toast('⏪ cancelamento desfeito — a saída voltou (demo)')
+        }
+        try {
+          const r = await rpc('inc_saida_descancelar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id })
+          toast(r && r.ok ? '⏪ cancelamento desfeito — a saída voltou' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+          saidaDesfazer = null; desenharDesfazerSaida()
+          await carregar(); desenhar()
+        } catch (e) { toast(e.message) }
+      }
+      return
+    }
     const c = ev.target.closest('[data-scoletado]'), d = ev.target.closest('[data-sdesfazer]')
     if (!c && !d) return
     if (!(await garantirLogin())) return
