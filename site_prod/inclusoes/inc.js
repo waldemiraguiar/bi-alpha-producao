@@ -706,6 +706,7 @@
                <span class="mudo">esperando a requisição há ${esperaH}h</span>
                <input class="comprov-req" data-creq="${c.id}" placeholder="nº da requisição" inputmode="numeric">
                <button data-cconcil="${c.id}">Conciliar</button>
+               <button class="nao" data-cdescartcomp="${c.id}" title="descartar este comprovante (duplicado, não é nosso, cliente cancelou…)">✖ Descartar</button>
              </div>`}
       </article>`
     }
@@ -3419,6 +3420,7 @@
   let pendenteSusp = null
   let camCancel = null, hfCancel = null, exCancel = null, exCancelLista = [], forcarDigitado = false, alvoCancel = null, sugestoes = null
   let cancelSemEsc = false   // ⭐ o 2º clique que deixa seguir sem o colaborador do escritório
+  let cancelExBate = false   // ⭐ Fúlvio [30]: 2º clique quando o exame marcado não bate com o que o cliente escreveu
   function cancelPasso(qual) {
     camCancel = qual
     $('cPasso1').hidden   = !!qual
@@ -3438,6 +3440,7 @@
     //    apenas no passo 1, antes de a pessoa escolher o caminho.
     $('cFim').hidden  = !qual
     cancelSemEsc = false
+    cancelExBate = false
     if ($('cColabBox')) $('cColabBox').hidden = false
     if ($('cColabEscBox')) $('cColabEscBox').hidden = false
     $('cSalvar').hidden = true
@@ -3841,6 +3844,21 @@
       return [...doEspelho, ...exMao.filter(x => !vistos.has(nz(x)))].filter(Boolean).join(' · ')
     })()
     if (alvoCancel === 'exame' && !exame) { $('cErro').textContent = 'Diga qual exame.'; return }
+    // ⭐ Fúlvio [30] 09/out: avisar quando o exame MARCADO não bate com o que o cliente ESCREVEU.
+    //    Alerta, NÃO bloqueia (regra do Wal): o 2º clique em Registrar segue mesmo assim.
+    if (alvoCancel === 'exame' && exame && !cancelExBate) {
+      const nz2 = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
+      const txtCli = nz2($('cTexto') && $('cTexto').value)
+      if (txtCli) {
+        const marcados = String(exame).split(' · ').map(nz2).filter(Boolean)
+        const foraDoTexto = marcados.filter(m => m && !txtCli.includes(m) && !m.split(' ').some(w => w.length > 3 && txtCli.includes(w)))
+        if (foraDoTexto.length) {
+          cancelExBate = true
+          $('cErro').innerHTML = '⚠️ <b>O que você marcou não aparece no que o cliente escreveu:</b> ' + foraDoTexto.map(esc).join(', ') + '. Confira se são os exames certos. <b>Clique em Registrar de novo</b> para seguir assim mesmo.'
+          return
+        }
+      }
+    }
     const args = {
       p_nome: sessao.nome, p_senha: sessao.senha,
       p_caminho: pelaReq ? 'req' : 'sem_amostra',
@@ -4230,6 +4248,14 @@
     return iso
   }
   const dataBR = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : '' }
+  // 📅 Fúlvio [07][13] 09/out: ele QUER ver a barrinha aparecendo enquanto digita (01012026 → 01/01/2026).
+  //    Mantém o save flexível (dataISO tira tudo que não é dígito), só acrescenta a barra ao vivo.
+  function mascaraDataAoVivo(e) {
+    const el = e.target; const n = el.value.replace(/\D/g, '').slice(0, 8)
+    el.value = n.length > 4 ? `${n.slice(0,2)}/${n.slice(2,4)}/${n.slice(4)}`
+             : n.length > 2 ? `${n.slice(0,2)}/${n.slice(2)}` : n
+  }
+  ;['rMicrochip', 'rVacina'].forEach(id => $(id)?.addEventListener('input', mascaraDataAoVivo))
 
   $('vRaiva')?.addEventListener('click', async ev => {
     // filtro em andamento / concluídos
@@ -4654,6 +4680,27 @@
         toast(r && r.ok ? '✅ ' + (r.txt || 'conciliado') : '⚠️ ' + ((r && r.txt) || 'não consegui conciliar'))
         await carregarComprovantes(); desenharComprovantes()
       } catch (e) { cnc.disabled = false; toast(e.message) }
+      return
+    }
+    // ✖ Fúlvio [04] 09/out: descartar um comprovante em aberto (duplicado, não é nosso, cliente cancelou).
+    //    Pede o motivo, igual ao descartar do cancelamento. Degrada com aviso claro se o SQL ainda não rodou.
+    const dsc = ev.target.closest('[data-cdescartcomp]')
+    if (dsc) {
+      if (!(await garantirLogin())) return
+      const id = +dsc.dataset.cdescartcomp
+      const motivo = prompt('Descartar este comprovante — por quê?\n(ex.: duplicado · não é nosso · cliente cancelou)')
+      if (motivo === null) return
+      dsc.disabled = true
+      try {
+        const r = await rpc('comprovante_pendente_descartar',
+          { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_motivo: (motivo || '').trim() || null })
+        toast(r && r.ok ? '✅ comprovante descartado' : '⚠️ ' + ((r && r.txt) || 'não consegui descartar'))
+        await carregarComprovantes(); desenharComprovantes()
+      } catch (e) {
+        dsc.disabled = false
+        toast(/PGRST|schema cache|does not exist|could not find/i.test(e.message)
+          ? 'Falta rodar o SQL comprovante_descartar no Supabase.' : e.message)
+      }
       return
     }
     const chf = ev.target.closest('[data-chf]')              // ② Escritório cria no HF
@@ -5138,4 +5185,30 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inc_eventos' }, () => {}).subscribe()
     setInterval(() => carregar().then(desenhar), 5 * 60000)   // rede de segurança se o tempo real cair
   }
+})()
+
+// 🔔 Fúlvio [12] 09/out: avisar quando sai versão nova (igual ao financeiro), sem depender de Cmd+Shift+R.
+//    Usa o carimbo ?v= que o deploy grava no index.html. Em demo/local (sem carimbo) não faz nada.
+;(function avisaVersaoNova () {
+  'use strict'
+  const meu = ([...document.scripts].map(s => s.src).find(s => /inc\.js\?v=/.test(s)) || '').match(/v=([a-z0-9]+)/)
+  const minha = meu ? meu[1] : ''
+  if (!minha) return
+  function banner () {
+    if (document.getElementById('verNova')) return
+    const b = document.createElement('div'); b.id = 'verNova'
+    b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#1b3a5c;color:#dbeafe;padding:10px 14px;display:flex;gap:12px;align-items:center;justify-content:center;font:600 13px system-ui;box-shadow:0 -4px 16px rgba(0,0,0,.4)'
+    b.innerHTML = '🔄 Saiu uma versão nova do quadro. <button id="verNovaBtn" style="background:#dbeafe;color:#1b3a5c;border:0;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer">Recarregar agora</button>'
+    document.body.appendChild(b)
+    document.getElementById('verNovaBtn').onclick = () => location.reload(true)
+  }
+  async function checa () {
+    try {
+      const r = await fetch('index.html?_=' + Date.now(), { cache: 'no-store' })
+      const m = (await r.text()).match(/inc\.js\?v=([a-z0-9]+)/)
+      if (m && m[1] !== minha) banner()
+    } catch (e) {}
+  }
+  setTimeout(checa, 15000)
+  setInterval(checa, 120000)
 })()
