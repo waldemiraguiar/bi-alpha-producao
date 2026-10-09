@@ -873,7 +873,7 @@
       const g = GRUPOS[raivaGaveta]
       const lst = g ? L.filter(g.f) : []
       gav.hidden = !g
-      if (g) gav.innerHTML = `<div class="gav-cab">${esc(g.rot)} — ${lst.length} caso(s)
+      if (g) gav.innerHTML = `<div class="gav-cab">${esc(g.rot)} — ${lst.length} solicitação(ões)
         <button class="lnk" data-rgav="">fechar</button></div>` + (lst.length
         ? `<div class="linhas">${lst.map(c => {
             const lib = raivaLiberaEm(c.vacina_data)
@@ -889,8 +889,8 @@
         : '<div class="lin mudo">—</div>')
     }
     if (!L.length) {
-      el.innerHTML = `<p class="mudo">Nenhum caso ${raivaPer === 'fechados' ? 'concluído' : 'em andamento'}.
-        Use <b>+ Novo caso</b> quando uma clínica pedir laudo de trânsito internacional.</p>`
+      el.innerHTML = `<p class="mudo">Nenhuma solicitação ${raivaPer === 'fechados' ? 'concluída' : 'em andamento'}.
+        Use <b>+ Nova solicitação</b> quando uma clínica pedir laudo de trânsito internacional.</p>`
       return
     }
     // ⭐⭐ Fúlvio: *"em cada um deles a gente possa fazer correção"* · *"desmarquei e marquei de
@@ -957,7 +957,7 @@
 
           ${c.coleta_ok ? `<div class="raiva-bio ${c.amostra || ''}">
             <b>🧪 A amostra está viável?</b>
-            <span class="mudo">Precisa de <b>mais de 500 µL</b> (meio mL) e <b>coloração normal</b>.</span>
+            <span class="mudo">Precisa de <b>no mínimo 500 µL</b> (meio mL). Coloração: aceita <b>no máximo 1 cruz</b> de alteração (hemólise, lipemia ou icterícia).</span>
             ${c.amostra
               ? `<div class="${c.amostra === 'viavel' ? 'raiva-sim' : 'raiva-nao'}">
                    ${c.amostra === 'viavel' ? '✅ viável' : '⛔ não viável'}
@@ -1198,7 +1198,7 @@
       : ''
 
     const esperaAmostra = semAmostraEsperando(c) ? `<div class="can-espera">
-      📦 A amostra ainda não chegou ao laboratório. O Escritório só dá ciente quando ela chegar.
+      📦 A amostra ainda não chegou ao laboratório. O Escritório PODE dar ciente mesmo assim — o processo só não AVANÇA enquanto ela não chega.
       ${podeAgir('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
     </div>` : ''
     // ✖ quando a solicitação foi cancelada por quem abriu, o motivo é a informação principal
@@ -1243,7 +1243,8 @@
 
     // ── o parecer de cada setor (só faz sentido quando existe requisição) ──
     const temReq = !!(c.req || c.req_nova)
-    const parecerTri = !temReq ? '' : c.tri_veredito
+    // ⭐ Fúlvio 09/out [26]: sequencial — a pergunta de parecer só aparece DEPOIS do ciente do setor
+    const parecerTri = !temReq ? '' : !c.tri_ciente_em ? '' : c.tri_veredito
       ? `<div class="can-parecer ${c.tri_veredito === 'nao_iniciado' ? 'sim' : 'nao'}">
            🧪 <b>Triagem:</b> ${c.tri_veredito === 'nao_iniciado' ? 'o exame NÃO foi iniciado — pode cancelar' : 'o exame JÁ está em processamento — não dá para cancelar'}
            <i>${esc(c.tri_veredito_por || '')} ${c.tri_veredito_em ? 'às ' + hm(c.tri_veredito_em) : ''}</i></div>`
@@ -1255,7 +1256,7 @@
              </div></div>`
         : `<div class="can-parecer pede"><span class="so-setor">🧪 aguardando o parecer da Triagem</span></div>`
 
-    const parecerEsc = !temReq ? '' : (c.esc_digitado != null)
+    const parecerEsc = !temReq ? '' : !c.esc_ciente_em ? '' : (c.esc_digitado != null)
       ? `<div class="can-parecer ${c.esc_digitado ? 'nao' : 'sim'}">
            🏢 <b>Escritório:</b> ${c.esc_digitado ? 'o exame JÁ foi digitado — não dá para cancelar' : 'o exame NÃO foi digitado'}
            <i>${esc(c.esc_digitado_por || '')} ${c.esc_digitado_em ? 'às ' + hm(c.esc_digitado_em) : ''}</i></div>`
@@ -3813,7 +3814,7 @@
     // ⚖️ Peço os dois nos dois caminhos, mas NÃO tranco a pessoa (regra do Wal): quem não souber
     //    o nome agora clica de novo e segue. Sem nome, porém, não há a quem cobrar o ciente —
     //    por isso o aviso é explícito sobre o que se perde, não um "campo obrigatório" seco.
-    if (!colab) { $('cErro').textContent = 'Diga quem fez a triagem.'; $('cColab').focus(); return }
+    if (!colab) { $('cErro').textContent = 'Diga quem é o colaborador da triagem.'; $('cColab').focus(); return }
     if (!colabEscPre && !cancelSemEsc) {
       cancelSemEsc = true
       $('cErro').innerHTML = '⚠️ Falta <b>o colaborador do escritório</b>. Sem o nome, o cartão não tem a quem cobrar o ciente. <b>Clique em Registrar de novo</b> para seguir assim mesmo.'
@@ -4363,7 +4364,7 @@
       if (vi) {
         const num = parseFloat(String(vol).replace(/[^\d.,]/g, '').replace(',', '.'))
         if (!vol.trim() || !isFinite(num)) { toast('Escreva o volume medido em µL — sem ele eu não sei se a amostra serve'); return }
-        if (num <= 500) { toast(`⛔ ${num} µL não dá: a amostra precisa de MAIS de 500 µL. Marque como não viável e diga o motivo.`); return }
+        if (num < 500) { toast(`⛔ ${num} µL não dá: a amostra precisa de NO MÍNIMO 500 µL. Marque como não viável e diga o motivo.`); return }
       }
       if (nv && !mot.trim()) { toast('Escreva o motivo — é o que o Atendimento vai falar com a clínica'); return }
       await salvarRaiva({ ...caso, id, amostra: vi ? 'viavel' : 'inviavel',
@@ -4389,7 +4390,7 @@
         raivaCache = raivaCache.filter(c => c.id !== id); desenharRaiva()
         raivaDesfazer = { id, pet: (caso && caso.pet) || 'o caso', quando: Date.now() }
         desenharDesfazer()
-        toast('✅ caso cancelado (demo)'); return
+        toast('✅ solicitação cancelada (demo)'); return
       }
       const mot = prompt(`Cancelar o caso de ${caso ? caso.pet : 'este pet'}?\n\nEscreva o motivo (ajuda quem for olhar depois):`)
       if (mot === null) return          // ⭐ Cancelar no prompt não cancela o caso
@@ -4402,7 +4403,7 @@
         //    de exigir uma lista de cancelados que ninguém abriria.
         if (r && r.ok) {
           raivaDesfazer = { id, pet: (caso && caso.pet) || 'o caso', quando: Date.now() }
-          toast(`✅ caso cancelado — ${caso ? caso.pet : ''}`)
+          toast(`✅ solicitação cancelada — ${caso ? caso.pet : ''}`)
           desenharDesfazer()
         } else toast('⚠️ ' + ((r && r.erro) || 'não consegui'))
         await carregarRaiva(); desenharRaiva()
@@ -4512,7 +4513,7 @@
     if (mc) { dados.microchip_data = mc; dados.microchip_ok = true }
     if (vc) { dados.vacina_data = vc; dados.vacina_ok = !(mc && mc > vc) }
     const ok = await salvarRaiva(dados)
-    if (ok !== false) { $('dlgRaiva').close(); toast('✅ caso aberto') }
+    if (ok !== false) { $('dlgRaiva').close(); toast('✅ solicitação aberta') }
   })
 
   async function salvarRaiva(dados) {
