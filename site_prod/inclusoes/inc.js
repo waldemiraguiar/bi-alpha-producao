@@ -3420,7 +3420,43 @@
   let pendenteSusp = null
   let camCancel = null, hfCancel = null, exCancel = null, exCancelLista = [], forcarDigitado = false, alvoCancel = null, sugestoes = null
   let cancelSemEsc = false   // ⭐ o 2º clique que deixa seguir sem o colaborador do escritório
-  let cancelExBate = false   // ⭐ Fúlvio [30]: 2º clique quando o exame marcado não bate com o que o cliente escreveu
+  let cancelExBate = false   // (legado) — substituído pela trava de equivalência abaixo
+  // ⭐ Fúlvio 11/out: quando o exame MARCADO não bate com o que o cliente ESCREVEU, NÃO deixa registrar.
+  //    Ou corrige a marcação, ou CONFIRMA a equivalência (ex.: "HG" = "hemograma 1"). Uma solicitação de
+  //    cancelamento errada é destrutiva — por isso trava de verdade (com saída à vista: o botão de confirmar).
+  //    E revalida a cada edição do texto/marcação (toda alteração zera as equivalências confirmadas).
+  let cancelEquivOK = new Set()   // exames cuja equivalência o operador já confirmou PARA O ESTADO ATUAL
+  const _nzc = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
+  function examesMarcadosCancel() {
+    const pelaReq = camCancel === 'req' && hfCancel
+    const exMao = (($('cExManual') && $('cExManual').value) || '').split('\n').map(x => x.trim()).filter(Boolean)
+    const doEspelho = pelaReq
+      ? (exCancelLista.length ? exCancelLista.map(e => e.exame) : (exCancel ? [exCancel.exame] : []))
+      : ($('cExame') && $('cExame').value.trim() ? [$('cExame').value.trim()] : [])
+    return [...doEspelho, ...exMao].map(_nzc).filter(Boolean)
+  }
+  function foraDoTextoCancel() {
+    if (alvoCancel !== 'exame') return []
+    const txtCli = _nzc($('cTexto') && $('cTexto').value)
+    if (!txtCli) return []   // sem texto do cliente não há como comparar — não trava
+    return examesMarcadosCancel().filter(m =>
+      m && !txtCli.includes(m) && !m.split(' ').some(w => w.length > 3 && txtCli.includes(w)) && !cancelEquivOK.has(m))
+  }
+  function mostrarEquivCancel(lista) {
+    if (!$('cErro')) return
+    if (!lista.length) { $('cErro').innerHTML = ''; return }
+    $('cErro').innerHTML = '<div data-equiv="1" style="text-align:left;line-height:1.5">'
+      + '<b>⚠️ Não dá pra registrar ainda — confira o que vai cancelar.</b><br>'
+      + 'Você marcou exame(s) que <b>não aparecem</b> no que o cliente escreveu. '
+      + '<b>Corrija a marcação</b> — ou, se o cliente usou outro nome/abreviação (ex.: “HG” = “hemograma 1”), <b>confirme a equivalência</b>:'
+      + lista.map(m => '<div style="margin-top:7px">• você marcou <b>' + esc(m) + '</b> '
+          + '<button type="button" class="btn-sec" data-cequiv="' + esc(m).replace(/"/g, '&quot;') + '">✓ é este exame mesmo</button></div>').join('')
+      + '</div>'
+  }
+  function _resetEquivCancel() {   // qualquer edição zera as confirmações e, se a janelinha está à vista, revalida
+    cancelEquivOK.clear(); cancelExBate = false
+    if ($('cErro') && $('cErro').querySelector('[data-equiv]')) mostrarEquivCancel(foraDoTextoCancel())
+  }
   function cancelPasso(qual) {
     camCancel = qual
     $('cPasso1').hidden   = !!qual
@@ -3441,6 +3477,7 @@
     $('cFim').hidden  = !qual
     cancelSemEsc = false
     cancelExBate = false
+    cancelEquivOK.clear()
     if ($('cColabBox')) $('cColabBox').hidden = false
     if ($('cColabEscBox')) $('cColabEscBox').hidden = false
     $('cSalvar').hidden = true
@@ -3765,6 +3802,7 @@
     //    todos e marcava um. Agora cada exame liga/desliga sozinho.
     b.classList.toggle('on')
     forcarDigitado = false
+    _resetEquivCancel()   // ⭐ Fúlvio 11/out: mudou a marcação → revalida do zero
     const ex = Array.isArray(hfCancel && hfCancel.exames) ? hfCancel.exames : []
     const idx = [...$('cExLista').querySelectorAll('.ex.on')].map(x => +x.dataset.cex)
     exCancelLista = idx.map(i => ex[i]).filter(Boolean)
@@ -3795,7 +3833,18 @@
     else toast('O cartão está na aba Cancelamentos')
   })
 
-  $('cExManual')?.addEventListener('input', () => liberarSalvar())
+  $('cExManual')?.addEventListener('input', () => { _resetEquivCancel(); liberarSalvar() })
+  // ⭐ Fúlvio 11/out: editou o que o cliente escreveu → revalida (toda alteração pede verificação nova)
+  $('cTexto')?.addEventListener('input', () => _resetEquivCancel())
+  $('cExame')?.addEventListener('input', () => _resetEquivCancel())
+  // ⭐ confirmar a equivalência de UM exame (ex.: "HG" = "hemograma 1") → libera aquele; revalida o resto
+  $('cErro')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-cequiv]'); if (!b) return
+    cancelEquivOK.add(b.dataset.cequiv)
+    const resto = foraDoTextoCancel()
+    if (resto.length) mostrarEquivCancel(resto)
+    else $('cErro').innerHTML = '<span style="color:#1b8055">✓ Equivalência confirmada. Agora clique em <b>Registrar</b>.</span>'
+  })
 
   $('cDigitado')?.addEventListener('click', ev => {
     if (!ev.target.closest('[data-cforcar]')) return
@@ -3846,18 +3895,12 @@
     if (alvoCancel === 'exame' && !exame) { $('cErro').textContent = 'Diga qual exame.'; return }
     // ⭐ Fúlvio [30] 09/out: avisar quando o exame MARCADO não bate com o que o cliente ESCREVEU.
     //    Alerta, NÃO bloqueia (regra do Wal): o 2º clique em Registrar segue mesmo assim.
-    if (alvoCancel === 'exame' && exame && !cancelExBate) {
-      const nz2 = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
-      const txtCli = nz2($('cTexto') && $('cTexto').value)
-      if (txtCli) {
-        const marcados = String(exame).split(' · ').map(nz2).filter(Boolean)
-        const foraDoTexto = marcados.filter(m => m && !txtCli.includes(m) && !m.split(' ').some(w => w.length > 3 && txtCli.includes(w)))
-        if (foraDoTexto.length) {
-          cancelExBate = true
-          $('cErro').innerHTML = '⚠️ <b>O que você marcou não aparece no que o cliente escreveu:</b> ' + foraDoTexto.map(esc).join(', ') + '. Confira se são os exames certos. <b>Clique em Registrar de novo</b> para seguir assim mesmo.'
-          return
-        }
-      }
+    // ⭐ Fúlvio 11/out: TRAVA de verdade. Exame marcado que não bate com o que o cliente escreveu NÃO
+    //    registra — ou corrige a marcação, ou confirma a equivalência na janelinha (HG = hemograma 1).
+    //    Sem 2º clique cego. A saída fica à vista (botão de confirmar), então não é um beco sem saída.
+    if (alvoCancel === 'exame') {
+      const fora = foraDoTextoCancel()
+      if (fora.length) { mostrarEquivCancel(fora); try { $('cErro').scrollIntoView({ block: 'nearest' }) } catch {}; return }
     }
     const args = {
       p_nome: sessao.nome, p_senha: sessao.senha,
