@@ -1210,7 +1210,7 @@
       : ''
 
     const esperaAmostra = semAmostraEsperando(c) ? `<div class="can-espera">
-      📦 A amostra ainda não chegou ao laboratório. O Escritório PODE dar ciente mesmo assim — o processo só não AVANÇA enquanto ela não chega.
+      📦 A amostra ainda não chegou ao laboratório. O Escritório E a Triagem PODEM dar ciente mesmo assim (depois do aviso) — o processo só não AVANÇA enquanto ela não chega.
       ${podeAgir('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
     </div>` : ''
     // ✖ quando a solicitação foi cancelada por quem abriu, o motivo é a informação principal
@@ -1244,7 +1244,8 @@
       const rot = lado === 'tri' ? 'da triagem' : 'do escritório'
       const nome = (quem || '').trim()
       if (feitoEm) return `<div class="can-avisei ok">✅ ${esc(nome || (lado === 'tri' ? 'Triagem' : 'Escritório'))} ${rot} avisado${feitoPor ? ' por ' + esc(feitoPor) : ''} às ${hm(feitoEm)}</div>`
-      if (!podeAgir('cc')) return ''
+      // ⭐ Fúlvio 12/out: avisar a triagem/escritório é ação do CANCELAMENTO — não aparece DENTRO das abas de setor (tri/esc/tec).
+      if (!podeAgir('cc') || ['tri', 'esc', 'tec'].includes(setor)) return ''
       return `<div class="can-acoes"><button class="leve" data-cavisei="${lado}" data-cid="${c.id}">
         📣 Avisei ${nome ? `<b>${esc(nome)}</b>` : 'o colaborador'} ${rot}</button></div>`
     }
@@ -1326,11 +1327,16 @@
     // ── etapa 1: os DOIS cientes, ao mesmo tempo ──
     if (et.n === 1) {
       const rel = `<div class="can-relogio ${estourou ? 'ruim' : ''}">esperando ciente há ${fmt(esperando)}${estourou ? ` — passou dos ${PRAZO_CANCEL_MIN} min` : ` de ${PRAZO_CANCEL_MIN} min`}</div>`
-      const lado = (feito, quem, quando, dono, rot, lad) => feito
-        ? `<div class="can-lado ok">✅ ${rot} · ${esc(quem || '')} ${quando ? 'às ' + hm(quando) : ''}</div>`
-        : podeAgir(dono)
+      const lado = (feito, quem, quando, dono, rot, lad) => {
+        if (feito) return `<div class="can-lado ok">✅ ${rot} · ${esc(quem || '')} ${quando ? 'às ' + hm(quando) : ''}</div>`
+        // ⭐ Fúlvio 12/out (fluxograma): o ciente fica SOMBREADO até o cancelamento AVISAR esse setor.
+        //    Só depois do "📣 Avisei …" (que seta avisei_tri_em/avisei_esc_em) o ciente habilita.
+        const avisadoEm = lad === 'tri' ? c.avisei_tri_em : c.avisei_esc_em
+        if (!avisadoEm) return `<div class="can-lado"><button class="ciente-sombra" disabled style="opacity:.45;cursor:not-allowed" title="O ciente só abre depois que o cancelamento avisar ${rot}.">Ciente — ${rot} <span class="mudo">(aguardando o aviso)</span></button></div>`
+        return podeAgir(dono)
           ? `<div class="can-lado"><button data-cciente="${lad}" data-cid="${c.id}">Ciente — ${rot}</button></div>`
           : `<div class="can-lado"><span class="so-setor">${rot}: aguardando ${SETORES[dono].nome}</span></div>`
+      }
       const cobranca = estourou && podeAgir('cc') && !c.cobrado_em
         ? `<div class="can-acoes"><button class="nao" data-ccobrar="${c.id}">Ninguém deu ciente — vou sinalizar</button></div>` : ''
       const jaCobrou = c.cobrado_em ? `<div class="can-hf">📣 Atendimento ao Cliente já sinalizou às ${hm(c.cobrado_em)}</div>` : ''
