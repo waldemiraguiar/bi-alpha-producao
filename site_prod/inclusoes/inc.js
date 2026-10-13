@@ -121,12 +121,22 @@
     }
     return all
   }
+  let ultimaCarga = 0   // ⭐ Fúlvio 12/out: hora da última leitura do banco (selo "atualizado", igual ao Cérebro Cobrança)
+  function pintarAtualiz() {
+    const el = $('seloAtualiz'); if (!el) return
+    if (!ultimaCarga) { el.textContent = ''; return }
+    const min = Math.round((Date.now() - ultimaCarga) / 60000)
+    const cor = min <= 2 ? '#2a9d50' : (min <= 12 ? '#c9821f' : '#d64545')
+    const txt = min < 1 ? 'agora' : ('há ' + min + ' min')
+    const av = min > 12 ? ' ⚠️ pode estar parado' : ''
+    el.innerHTML = '<span style="color:' + cor + ';font-weight:700" title="Quando o quadro puxou os dados do banco. Atualiza sozinho.">● atualizado ' + txt + av + '</span>'
+  }
   async function carregar() {
     // 💳 os comprovantes pendentes vêm junto, mas NUNCA travam o resto: se falhar, o quadro
     //    carrega igual. ([[regra-sempre-permitir-nunca-bloquear-so-alerta]])
     carregarComprovantes().catch(() => {})
     carregarRaiva().catch(() => {})
-    if (DEMO) { if (!chamados.length) demoDados(); return }   // demo: dados em memória (inclusive os terremotos do ensaio)
+    if (DEMO) { if (!chamados.length) demoDados(); ultimaCarga = agora(); return }   // demo: dados em memória (inclusive os terremotos do ensaio)
     try {
       const lim = new Date(agora() - 31 * 864e5).toISOString()
       const abertos = await SB.from('inc_chamados').select('*').in('status', ['aberto', 'sem_amostra', 'enviado', 'rascunho'])
@@ -184,6 +194,7 @@
       const sp = await SB.from('inc_suspeitas').select('*').gte('quando', new Date(agora() - 8 * 864e5).toISOString()).order('quando', { ascending: false }).range(0, 999)
       suspeitas = sp.error ? [] : (sp.data || [])
       $('conexao').textContent = ''
+      ultimaCarga = agora()   // ⭐ Fúlvio 12/out: marca quando o quadro puxou os dados (pro selo "atualizado em")
     } catch (e) {
       $('conexao').textContent = /does not exist|42P01/.test(e.message || e.code || '') ? 'Banco ainda não criado (rodar o SQL). Abra com ?demo=1 para ver o exemplo.' : 'Sem conexão com o banco — tentando de novo…'
     }
@@ -4908,7 +4919,7 @@
   function modoTV(on) { document.body.classList.toggle('tv', on); $('btnTV').textContent = on ? 'Sair do modo TV' : 'Modo TV'; if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}) }
   $('btnTV').addEventListener('click', () => modoTV(!document.body.classList.contains('tv')))
   if (qs.get('tv') === '1') modoTV(true)
-  setInterval(() => { $('relogio').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }, 1000)
+  setInterval(() => { $('relogio').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); pintarAtualiz() }, 1000)
 
   // ── DEMO (não grava nada) ──
   function demoDados() {
