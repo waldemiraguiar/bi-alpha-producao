@@ -1169,7 +1169,7 @@
     const proc = procDe(c)
     const lista = examesDoCartao(c)
     const consulta = (() => {
-      if (!c.tri_ciente_em) return ''
+      if (!c.tri_ciente_em || c.caminho === 'sem_amostra') return ''   // ⭐ Fúlvio 13/out: sem amostra = exame não pôde ser processado; não pergunta
       const linhas = lista.map(nome => {
         const p = proc[nome] || {}
         if (p.resposta) {
@@ -1257,7 +1257,7 @@
     // ── o parecer de cada setor (só faz sentido quando existe requisição) ──
     const temReq = !!(c.req || c.req_nova)
     // ⭐ Fúlvio 09/out [26]: sequencial — a pergunta de parecer só aparece DEPOIS do ciente do setor
-    const parecerTri = !temReq ? '' : !c.tri_ciente_em ? '' : c.tri_veredito
+    const parecerTri = (!temReq || c.caminho === 'sem_amostra') ? '' : !c.tri_ciente_em ? '' : c.tri_veredito
       ? `<div class="can-parecer ${c.tri_veredito === 'nao_iniciado' ? 'sim' : 'nao'}">
            🧪 <b>Triagem:</b> ${c.tri_veredito === 'nao_iniciado' ? 'o exame NÃO foi iniciado — pode cancelar' : 'o exame JÁ está em processamento — não dá para cancelar'}
            <i>${esc(c.tri_veredito_por || '')} ${c.tri_veredito_em ? 'às ' + hm(c.tri_veredito_em) : ''}</i></div>`
@@ -1269,7 +1269,7 @@
              </div></div>`
         : `<div class="can-parecer pede"><span class="so-setor">🧪 aguardando o parecer da Triagem</span></div>`
 
-    const parecerEsc = !temReq ? '' : !c.esc_ciente_em ? '' : (c.esc_digitado != null)
+    const parecerEsc = (!temReq || c.caminho === 'sem_amostra') ? '' : !c.esc_ciente_em ? '' : (c.esc_digitado != null)
       ? `<div class="can-parecer ${c.esc_digitado ? 'nao' : 'sim'}">
            🏢 <b>Escritório:</b> ${c.esc_digitado ? 'o exame JÁ foi digitado — não dá para cancelar' : 'o exame NÃO foi digitado'}
            <i>${esc(c.esc_digitado_por || '')} ${c.esc_digitado_em ? 'às ' + hm(c.esc_digitado_em) : ''}</i></div>`
@@ -1281,7 +1281,7 @@
              </div></div>`
         : `<div class="can-parecer pede"><span class="so-setor">🏢 aguardando o parecer do Escritório</span></div>`
 
-    const vereditoBox = !temReq ? '' : `<div class="can-veredito ${vereditoCancel.pode === true ? 'sim' : vereditoCancel.pode === false ? 'nao' : 'espera'}">
+    const vereditoBox = (!temReq || c.caminho === 'sem_amostra') ? '' : `<div class="can-veredito ${vereditoCancel.pode === true ? 'sim' : vereditoCancel.pode === false ? 'nao' : 'espera'}">
       ${vereditoCancel.pode === true ? '✅' : vereditoCancel.pode === false ? '⛔' : '⏳'} ${esc(vereditoCancel.txt)}</div>`
 
     // ═══ 🧪 AS TAREFAS DA TRIAGEM — Fúlvio, 05/out 18h18 e 18h19 ═══
@@ -1333,17 +1333,19 @@
         //    Só depois do "📣 Avisei …" (que seta avisei_tri_em/avisei_esc_em) o ciente habilita.
         const avisadoEm = lad === 'tri' ? c.avisei_tri_em : c.avisei_esc_em
         if (!avisadoEm) return `<div class="can-lado"><button class="ciente-sombra" disabled style="opacity:.45;cursor:not-allowed" title="O ciente só abre depois que o cancelamento avisar ${rot}.">Ciente — ${rot} <span class="mudo">(aguardando o aviso)</span></button></div>`
-        return podeAgir(dono)
-          ? `<div class="can-lado"><button data-cciente="${lad}" data-cid="${c.id}">Ciente — ${rot}</button></div>`
-          : `<div class="can-lado"><span class="so-setor">${rot}: aguardando ${SETORES[dono].nome}</span></div>`
+        // ⭐ Fúlvio 13/out (padrão ouro): cada setor marca o SEU ciente, e SÓ DENTRO da aba dele. No cancelamento
+        //    (ou em qualquer outra aba) o botão mostra só o ESTADO — não dá pra clicar o ciente do outro setor.
+        if (setor === dono && podeAgir(dono)) return `<div class="can-lado"><button data-cciente="${lad}" data-cid="${c.id}">Ciente — ${rot}</button></div>`
+        return `<div class="can-lado"><span class="so-setor">${rot}: aguardando o ciente ${dono === 'tri' ? 'da Triagem' : 'do Escritório'} <span class="mudo">(marca na aba ${esc(SETORES[dono].nome)})</span></span></div>`
       }
       const cobranca = estourou && podeAgir('cc') && !c.cobrado_em
         ? `<div class="can-acoes"><button class="nao" data-ccobrar="${c.id}">Ninguém deu ciente — vou sinalizar</button></div>` : ''
       const jaCobrou = c.cobrado_em ? `<div class="can-hf">📣 Atendimento ao Cliente já sinalizou às ${hm(c.cobrado_em)}</div>` : ''
-      return trilha + rel + jaCobrou + `<div class="can-paralelo">
+      // ⭐ Fúlvio 13/out (padrão ouro): o AVISAR vem PRIMEIRO (em cima). Só depois as barras de ciente.
+      return trilha + rel + jaCobrou + avisos + `<div class="can-paralelo">
         ${lado(c.tri_ciente_em, c.tri_ciente_por, c.tri_ciente_em, 'tri', 'Triagem', 'tri')}
         ${lado(c.esc_ciente_em, c.esc_ciente_por, c.esc_ciente_em, 'esc', 'Escritório', 'esc')}
-      </div>` + avisos + tarefasTri + parecerTri + parecerEsc + vereditoBox + consulta + cobranca + descartar
+      </div>` + tarefasTri + parecerTri + parecerEsc + vereditoBox + consulta + cobranca + descartar
     }
 
     // ── etapa 2: o Escritório cria o exame de cancelamento no HF ──
