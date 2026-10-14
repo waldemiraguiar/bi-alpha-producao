@@ -5277,9 +5277,11 @@
   ;(function selo() {
     const el = document.createElement('div')
     el.className = DEMO ? 'selo-modo demo' : 'selo-modo real'
+    // ⭐ Fúlvio 13/out: não dizer "AO VIVO" aqui — confundia com o selo "atualizado" (frescor do dado).
+    //    Esta barra diz só se é o quadro REAL ou a DEMO. O frescor do dado é o selo no topo (ao lado do relógio).
     el.innerHTML = DEMO
       ? '🧪 MODO DEMONSTRAÇÃO — tudo nesta tela é EXEMPLO inventado. Nada é gravado. <a href="?setor=' + setor + '">ir para o quadro real</a>'
-      : '● AO VIVO — inclusões reais da equipe'
+      : '✓ Quadro REAL da equipe — não é demonstração (o frescor dos dados fica no selo “atualizado”, lá em cima)'
     document.body.prepend(el)
   })()
 
