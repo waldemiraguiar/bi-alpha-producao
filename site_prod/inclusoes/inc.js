@@ -1377,12 +1377,28 @@
              <span>O espelho do HF ainda não mostra este cancelamento — ele atualiza a cada 30 min.
              Se você abrir o HF e vir que está feito, use o botão de conferência manual.</span></div>`
 
-    if (!podeAgir('cc')) return trilha + valorBox + comoConferiu +
-      `<div class="can-acoes"><button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div><span class="so-setor">ação de ATENDIMENTO AO CLIENTE</span>`
-    return trilha + vereditoBox + valorBox + comoConferiu + `<div class="can-acoes">
-      ${conferido ? `<button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>` : ''}
-      <button class="leve" data-cconferir="${c.id}">Conferir no HF</button>
-      ${conferido ? '' : `<button class="leve" data-cconfman="${c.id}">✔ Conferi manualmente no HF</button>`}</div>` + descartar
+    // ⭐ Fúlvio 13/out (padrão ouro): o Escritório AVISA o Atendimento colocando o NOME do colaborador.
+    //    Só DEPOIS disso o Atendimento vê o card e confirma "avisado ao cliente".
+    const avisouCC = !!c.avisei_cc_em
+    const aviseAtend = avisouCC
+      ? `<div class="can-avisei ok">📣 Atendimento ao Cliente avisado — colaborador <b>${esc(c.avisei_cc_por || '')}</b>${c.avisei_cc_em ? ' às ' + hm(c.avisei_cc_em) : ''}</div>`
+      : (podeAgir('esc') || podeAgir('cc'))
+        ? `<div class="can-parecer pede"><b>📣 Avise o Atendimento ao Cliente</b>
+             <div class="can-acoes" style="flex-wrap:wrap;gap:6px">
+               <input class="cc-colab" data-cid="${c.id}" placeholder="nome do colaborador do atendimento" style="flex:1;min-width:160px;background:#0b1119;color:var(--txt,#e8ecf3);border:1px solid var(--line,#273041);border-radius:6px;padding:5px 8px;font:inherit;font-size:12px">
+               <button data-caviseicc="${c.id}">Avisei o atendimento</button>
+             </div></div>`
+        : `<div class="can-parecer pede"><span class="so-setor">📣 aguardando o Escritório avisar o Atendimento ao Cliente</span></div>`
+
+    if (!podeAgir('cc')) return trilha + valorBox + comoConferiu + aviseAtend +
+      `<div class="can-acoes"><button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>`
+    return trilha + vereditoBox + valorBox + comoConferiu + aviseAtend
+      + (avisouCC ? `<div class="can-acoes">
+          ${conferido ? `<button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>` : ''}
+          <button class="leve" data-cconferir="${c.id}">Conferir no HF</button>
+          ${conferido ? '' : `<button class="leve" data-cconfman="${c.id}">✔ Conferi manualmente no HF</button>`}</div>`
+        : `<div class="can-parecer pede"><span class="so-setor">⏳ o Atendimento confirma depois que o Escritório avisar (acima)</span></div>`)
+      + descartar
   }
 
   // ── 🔎 rastreador: pedido do cliente que não virou cartão (Fúlvio 28/set 20h00) ──
@@ -4814,6 +4830,23 @@
       } catch (e) { avi.disabled = false; toast(e.message) }
       return
     }
+    const avicc = ev.target.closest('[data-caviseicc]')      // 📣 avisei o ATENDIMENTO (com o nome do colaborador, Fúlvio 13/out)
+    if (avicc) {
+      if (!(await garantirLogin())) return
+      const inp = document.querySelector('.cc-colab[data-cid="' + avicc.dataset.caviseicc + '"]')
+      const colab = inp ? inp.value.trim() : ''
+      if (!colab) { toast('Diga o nome do colaborador do atendimento'); if (inp) inp.focus(); return }
+      avicc.disabled = true
+      try {
+        const r = await rpc('inc_cancel_avisei_cc', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +avicc.dataset.caviseicc, p_colab: colab })
+        toast(r && r.ok ? '📣 atendimento avisado' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregar(); desenharCancelamentos()
+      } catch (e) {
+        avicc.disabled = false
+        toast(/PGRST202|does not exist|schema cache/i.test(e.message || '') ? 'Falta rodar o SQL supabase_inclusoes_42_cancel_avise_atendimento.sql no Supabase.' : e.message)
+      }
+      return
+    }
     const tv = ev.target.closest('[data-ctriv]')             // 🧪 parecer da Triagem
     if (tv) {
       if (!(await garantirLogin())) return
@@ -5156,6 +5189,19 @@
         else { x.esc_ciente_em = new Date().toISOString(); x.esc_ciente_por = 'DEMO' }
       }
       return true
+    }
+    if (nome === 'inc_cancel_avisei') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) {
+        if (a.p_lado === 'tri') { x.avisei_tri_em = new Date().toISOString(); x.avisei_tri_por = 'DEMO' }
+        else { x.avisei_esc_em = new Date().toISOString(); x.avisei_esc_por = 'DEMO' }
+      }
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_avisei_cc') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.avisei_cc_em = new Date().toISOString(); x.avisei_cc_por = a.p_colab || 'DEMO' }
+      return { ok: true }
     }
     if (nome === 'inc_cancel_cobrar') {
       const x = cancelamentos.find(y => y.id === a.p_id); if (x) x.cobrado_em = new Date().toISOString(); return true
