@@ -800,13 +800,24 @@
         { id: 9003, pet: 'nina', clinica: 'meta zoa', tutor: 'demo', destino: 'alemanha', bloco: 'UE',
           microchip_ok: true, microchip_data: '2025-09-01', vacina_ok: true, vacina_data: '2025-10-05',
           coleta_ok: true, coleta_data: '2025-11-10', amostra: 'viavel', amostra_volume: '800 µL',
-          avisada_ok: true, word_enviado: true, doc_carteirinha: true, doc_microchip: true,
+          avisada_ok: true, pagamento: 'realizado', word_enviado: true, doc_carteirinha: true, doc_microchip: true,
           doc_conferida: true, gov_enviado: true, devolvido_ok: true, nucleo_site_ok: true,
           correios_ok: true, correios_em: '2025-11-20', rastreio: 'AA123456789BR',
+          rastreio_hist: [
+            { txt: 'Objeto postado', em: '2025-11-20T09:10:00', por: 'demo' },
+            { txt: 'Objeto em trânsito para a unidade de distribuição', em: '2025-11-22T14:30:00', por: 'demo' },
+            { txt: 'Objeto entregue ao destinatário', em: '2025-11-25T11:05:00', por: 'demo' }],
           rastreio_situacao: 'Objeto entregue ao destinatário',
           nucleo_pagto_ok: true, comprovante_ok: true,
           comprovante_em: new Date(Date.now() - 22 * 864e5).toISOString().slice(0, 10),
+          passos_em: { avisada_ok: '2025-11-12T10:00:00', word_enviado: '2025-11-12T10:05:00',
+            doc_conferida: '2025-11-13T09:00:00', correios_ok: '2025-11-20T09:00:00' },
           laudo_chegou: false, entrega_combinada: false, fechado_em: null },
+        // ⭐ 4º caso: vacina de 2020 — fora da validade anual. Prova o crivo novo (CH2): a tela
+        //    tem que ACUSAR "vacina vencida", não dizer "coleta liberada desde 2020".
+        { id: 9004, pet: 'thor', clinica: 'meta zoa', tutor: 'demo', destino: 'portugal', bloco: 'UE',
+          microchip_ok: true, microchip_data: '2020-01-01', vacina_ok: true, vacina_data: '2020-03-05',
+          coleta_ok: false, amostra: null, avisada_ok: false, fechado_em: null },
       ]
       return
     }
@@ -835,6 +846,16 @@
     d.setDate(d.getDate() + RAIVA_ESPERA_DIAS + 1)
     return d
   }
+  // ⭐ Fúlvio 14/out: validade da antirrábica é ANUAL. A dose vale 1 ano a partir do dia da
+  //    aplicação. Depois disso está vencida — e vacina vencida não serve para o trânsito.
+  const RAIVA_VALIDADE_DIAS = 365
+  function raivaVacinaVence(vacinaData) {
+    if (!vacinaData) return null
+    const d = new Date(vacinaData + 'T12:00:00')
+    if (isNaN(d)) return null
+    d.setDate(d.getDate() + RAIVA_VALIDADE_DIAS)
+    return d
+  }
 
   // 🏷️ OS 3 ESTADOS, nas palavras do Fúlvio (áudio 17:01):
   //    Concluído = processo todo feito, incluindo o encaminhamento do laudo
@@ -847,6 +868,53 @@
     const cadastroCompleto = c.pet && c.clinica && c.destino && c.microchip_data && c.vacina_data
     if (!cadastroCompleto) return { k: 'cadastro', nome: 'Cadastro em andamento' }
     return { k: 'andamento', nome: 'Em andamento' }
+  }
+
+  // ⭐ Fúlvio 14/out: data E HORA em todos os passos, e sem poder editar. O "quando" de cada passo
+  //    vem do banco (passos_em: campo → timestamp gravado no momento da marcação) e aparece só-leitura.
+  //    É diferente das datas-fato (vacina, coleta): essas descrevem o mundo e o ✏️ corrige; o carimbo
+  //    do passo descreve o nosso trabalho e é prova — por isso imutável.
+  const dtBR = ts => { if (!ts) return ''; const d = new Date(ts); return isNaN(d) ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+
+  // ⑬ Fúlvio 14/out: botão para baixar o formulário Word padrão (ele vai mandar o arquivo). Enquanto
+  //    o arquivo não chega, o botão simplesmente não aparece — não prometo um download que não existe.
+  const FORM_WORD_URL = ''   // ⏳ preencher com a URL do Word quando o Fúlvio enviar o arquivo
+  const formWordBtn = () => FORM_WORD_URL
+    ? `<a class="lnk raiva-word-dl" href="${FORM_WORD_URL}" target="_blank" rel="noopener" download>⬇️ baixar o formulário</a>` : ''
+
+  // ⑨/⑳ anexos imutáveis (CH12 PDF do formulário; CH10 foto do comprovante de entrega). Guardados no
+  //    Supabase Storage; a referência fica no caso e pode ser aberta mesmo depois de concluído, e não
+  //    some — foi o que o Fúlvio pediu ("não pode ser excluído, nem editado").
+  const anexoVisto = (url, rot) => `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener">📎 ver ${rot}</a>
+    <span class="mudo">— anexado, não pode ser apagado</span>`
+  function anexoDocBox(c) {
+    if (!c.doc_conferida && !c.doc_anexo_url) return ''
+    return `<div class="raiva-anexo">${c.doc_anexo_url
+      ? anexoVisto(c.doc_anexo_url, 'o formulário anexado (PDF)')
+      : `<label class="raiva-upload"><input type="file" accept="application/pdf" data-ranexo="doc" data-rid="${c.id}" hidden>
+           <span class="btn-sec">📎 anexar o formulário (PDF)</span></label>`}</div>`
+  }
+  function anexoEntregaBox(c) {
+    return `<div class="raiva-anexo">${c.entrega_anexo_url
+      ? anexoVisto(c.entrega_anexo_url, 'o comprovante de entrega')
+      : `<label class="raiva-upload"><input type="file" accept="image/*,application/pdf" data-ranexo="entrega" data-rid="${c.id}" hidden>
+           <span class="btn-sec">📎 anexar foto do comprovante</span></label>`}</div>`
+  }
+
+  // ⛔ CH11: o que ainda falta para concluir. Mesma régua do banco (raiva_caso_fechar confere de novo).
+  function raivaFaltando(c) {
+    const f = [], need = (cond, rot) => { if (!cond) f.push(rot) }
+    need(c.microchip_ok, 'microchipagem'); need(c.vacina_ok, 'vacina')
+    need(c.coleta_ok, 'coleta recebida'); need(c.amostra === 'viavel', 'amostra viável')
+    need(c.avisada_ok, 'clínica avisada'); need(c.pagamento, 'pagamento')
+    need(c.word_enviado, 'formulário Word'); need(c.doc_carteirinha, 'carteirinha')
+    need(c.doc_microchip, 'certificado do microchip'); need(c.doc_conferida, 'documentação completa')
+    need(c.gov_enviado || c.fisico_enviado, 'documento p/ assinatura'); need(c.devolvido_ok, 'documento devolvido')
+    need(c.nucleo_site_ok, 'preenchido na Núcleo'); need(c.correios_ok, 'enviado pelos Correios')
+    need(c.nucleo_pagto_ok, 'pagamento solicitado à Núcleo'); need(c.comprovante_ok, 'comprovante à Núcleo')
+    need(c.laudo_chegou, 'laudo chegou'); need(c.entrega_combinada, 'entrega combinada')
+    need(c.entrega_comprovada, 'comprovante de entrega')
+    return f
   }
 
   function desenharRaiva() {
@@ -910,7 +978,8 @@
     //    era a única saída que ele tinha. Agora cada linha com data ou texto tem o seu ✏️.
     const tique = (caso, campo, rotulo, extra, edita) => `<label class="raiva-tq ${caso[campo] ? 'on' : ''}">
       <input type="checkbox" data-rtq="${caso.id}" data-rcampo="${campo}" ${caso[campo] ? 'checked' : ''}>
-      <span>${rotulo}</span>${extra || ''}${edita
+      <span>${rotulo}</span>${extra || ''}${caso.passos_em && caso.passos_em[campo]
+        ? `<i class="raiva-quando mudo" title="registrado automaticamente — não editável">🕑 ${dtBR(caso.passos_em[campo])}</i>` : ''}${edita
         ? `<button type="button" class="raiva-lapis" data-redita="${caso.id}" data-rcampo2="${edita.campo}"
              data-rtipo="${edita.tipo || 'data'}" data-rlabel="${esc(edita.label || rotulo)}"
              title="corrigir">✏️</button>` : ''}</label>`
@@ -918,6 +987,12 @@
     el.innerHTML = L.map(c => {
       const lib = raivaLiberaEm(c.vacina_data)
       const faltam = lib ? Math.ceil((lib - Date.now()) / 864e5) : null
+      // ⭐ Fúlvio 14/out: a antirrábica vale 1 ANO. "Coleta liberada desde 05/03/2020" estava
+      //    errado — vacina de 2020, fora da validade, não libera coleta nenhuma. O crivo da
+      //    liberação tem que olhar a data da vacina contra o tempo PRESENTE: válida se a última
+      //    dose foi há no máximo 1 ano. Mais que isso: vencida, precisa revacinar.
+      const venceVac = raivaVacinaVence(c.vacina_data)
+      const vacVencida = venceVac && Date.now() > venceVac.getTime()
       // ⛔ microchip DEPOIS da vacina invalida tudo — é a regra que o Fúlvio repetiu duas vezes.
       const ordemErrada = c.microchip_data && c.vacina_data && c.microchip_data > c.vacina_data
       const st = raivaEstado(c)
@@ -944,7 +1019,7 @@
 
         <div class="raiva-etapas">
           ${tique(c, 'microchip_ok', '① Pet já microchipado',
-            c.microchip_data ? `<i class="mudo">${esc(c.microchip_data)}</i>` : '',
+            c.microchip_data ? `<i class="mudo">${dataBR(c.microchip_data)}</i>` : '',
             { campo: 'microchip_data', label: 'data do microchip' })}
           ${!c.microchip_ok ? `<div class="raiva-dica">Se não for microchipado: microchipar <b>e vacinar depois</b>.
             <b>Vacinas anteriores ao microchip não contam.</b></div>` : ''}
@@ -954,22 +1029,29 @@
                 vinha riscado. ⭐ Com a ordem errada eu desenho o passo COMO NÃO FEITO, seja qual
                 for o valor no banco: o que está na tela nunca afirma que a vacina vale. */''}
           ${tique(ordemErrada ? { ...c, vacina_ok: false } : c, 'vacina_ok', '② Vacina antirrábica aplicada',
-            c.vacina_data ? `<i class="mudo">${esc(c.vacina_data)}</i>` : '',
+            c.vacina_data ? `<i class="mudo">${dataBR(c.vacina_data)}</i>` : '',
             { campo: 'vacina_data', label: 'data da vacina' })}
-          ${c.vacina_ok && lib ? (faltam > 0
+          ${c.vacina_ok && lib ? (
+            vacVencida
+            ? `<div class="raiva-nao">⛔ <b>Vacina fora da validade.</b> A antirrábica vale <b>1 ano</b> —
+                 esta venceu em <b>${venceVac.toLocaleDateString('pt-BR')}</b>. Vacina vencida <b>não libera
+                 a coleta</b> nem serve para o trânsito: o pet precisa ser <b>revacinado</b>, e a nova dose
+                 abre outra espera de 30 dias.</div>`
+            : faltam > 0
             ? `<div class="raiva-dica">⏳ A coleta libera em <b>${lib.toLocaleDateString('pt-BR')}</b>
                  — faltam <b>${faltam} dia(s)</b>. São 30 dias de espera; a coleta vale do 31º em diante.</div>`
-            : `<div class="raiva-ok-dica">✅ Coleta liberada desde <b>${lib.toLocaleDateString('pt-BR')}</b></div>`) : ''}
+            : `<div class="raiva-ok-dica">✅ Coleta liberada desde <b>${lib.toLocaleDateString('pt-BR')}</b>
+                 — vacina válida até <b>${venceVac ? venceVac.toLocaleDateString('pt-BR') : '—'}</b>.</div>`) : ''}
 
           ${tique(c, 'coleta_ok', '③ Sangue coletado e recebido no Alpha Labs',
-            c.coleta_data ? `<i class="mudo">${esc(c.coleta_data)}</i>` : '',
+            c.coleta_data ? `<i class="mudo">${dataBR(c.coleta_data)}</i>` : '',
             { campo: 'coleta_data', label: 'data do recebimento' })}
           ${!c.coleta_ok ? `<div class="raiva-dica">Tubo de bioquímica (tampa vermelha ou amarela), com a
             requisição normal <b>escrito "Raiva Trânsito Internacional"</b>.</div>` : ''}
 
           ${c.coleta_ok ? `<div class="raiva-bio ${c.amostra || ''}">
             <b>🧪 A amostra está viável?</b>
-            <span class="mudo">Precisa de <b>no mínimo 500 µL</b> (meio mL). Coloração: aceita <b>no máximo 1 cruz</b> de alteração (hemólise, lipemia ou icterícia).</span>
+            <span class="mudo">Volume <b>igual ou superior a 500 µL</b> (meio mL) já serve. Coloração: aceita <b>no máximo 1 cruz</b> de hemólise ou lipemia.</span>
             ${c.amostra
               ? `<div class="${c.amostra === 'viavel' ? 'raiva-sim' : 'raiva-nao'}">
                    ${c.amostra === 'viavel' ? '✅ viável' : '⛔ não viável'}
@@ -985,13 +1067,28 @@
 
           ${c.amostra === 'viavel' ? `
             ${tique(c, 'avisada_ok', '④ Clínica avisada de que está viável')}
-            ${tique(c, 'word_enviado', '⑤ Formulário Word enviado para a clínica')}
+            ${/* ⑤ NOVO (Fúlvio 14/out): o pagamento do serviço, com DUAS respostas exclusivas —
+                  "pagamento realizado" OU "exame faturado". É o novo item 5; tudo abaixo desceu
+                  um nível. ⛔ Não é checkbox: é uma escolha entre duas, por isso botões. */''}
+            <div class="raiva-tq raiva-pag ${c.pagamento ? 'on' : ''}">
+              <span>⑤ Pagamento</span>
+              ${c.pagamento
+                ? `<b class="raiva-pag-feito">${c.pagamento === 'realizado' ? '✅ pagamento realizado' : '🧾 exame faturado'}</b>
+                   ${c.passos_em && c.passos_em.pagamento ? `<i class="raiva-quando mudo" title="registrado automaticamente — não editável">🕑 ${dtBR(c.passos_em.pagamento)}</i>` : ''}
+                   <button type="button" class="lnk" data-rpag="" data-rid="${c.id}">trocar</button>`
+                : `<span class="raiva-saidas raiva-pag-ops">
+                     <button type="button" class="btn-sec" data-rpag="realizado" data-rid="${c.id}">Pagamento realizado</button>
+                     <button type="button" class="btn-sec" data-rpag="faturado" data-rid="${c.id}">Exame faturado</button>
+                   </span>`}
+            </div>
+            ${tique(c, 'word_enviado', '⑥ Formulário Word enviado para a clínica', formWordBtn())}
             ${!c.doc_conferida ? `<div class="raiva-dica">⛔ Reforçar com a clínica: <b>não pode haver
               divergência</b>. Retificação de laudo <b>é cobrada</b> e divergência
               <b>impossibilita o pet de viajar</b>.</div>` : ''}
-            ${tique(c, 'doc_carteirinha', '⑥ Carteirinha conferida — <b>capa com os dados do pet</b> + página da vacina')}
-            ${tique(c, 'doc_microchip', '⑦ Certificado de microchipagem conferido — <b>data anterior à da vacinação</b>')}
-            ${tique(c, 'doc_conferida', '⑧ Documentação completa e sem divergência <i class="mudo">(o formulário Word enviado à clínica)</i>')}
+            ${tique(c, 'doc_carteirinha', '⑦ Carteirinha conferida — <b>capa com os dados do pet</b> + página da vacina')}
+            ${tique(c, 'doc_microchip', '⑧ Certificado de microchipagem conferido — <b>data anterior à da vacinação</b>')}
+            ${tique(c, 'doc_conferida', '⑨ Documentação completa e sem divergência <i class="mudo">(o formulário Word enviado à clínica)</i>')}
+            ${anexoDocBox(c)}
 
             <div class="raiva-fase">Assinatura e envio</div>
 
@@ -999,28 +1096,28 @@
                   pelo gov. Aí aparece um novo caminho: documento físico para assinatura e
                   carimbo com o CRMV". ⛔ As duas saídas são exclusivas — marcar uma apaga a outra. */''}
             ${c.gov_impossivel ? '' : tique(c, 'gov_enviado',
-              '⑨ Documento conferido e enviado para a clínica assinar pelo <b>gov.br</b>')}
+              '⑩ Documento conferido e enviado para a clínica assinar pelo <b>gov.br</b>')}
             ${!c.gov_enviado && !c.gov_impossivel ? `<div class="raiva-saidas">
               <button class="btn-sec" data-rgovnao="${c.id}">A clínica não consegue assinar pelo gov.br</button>
               </div>` : ''}
             ${c.gov_impossivel ? `<div class="raiva-desvio">
-              <b>⑨ᵃ A clínica não assina pelo gov.br</b> — segue o caminho físico.
+              <b>⑩ᵃ A clínica não assina pelo gov.br</b> — segue o caminho físico.
               <button class="lnk" data-rgovvolta="${c.id}">voltar para o gov.br</button>
               ${tique(c, 'fisico_enviado', 'Documento <b>físico</b> enviado para assinatura e <b>carimbo com o CRMV</b>')}
             </div>` : ''}
 
             ${(c.gov_enviado || c.fisico_enviado) ? tique(c, 'devolvido_ok',
-              `⑩ A clínica devolveu o documento ${c.gov_impossivel ? 'preenchido e carimbado' : 'assinado pelo gov.br'}`) : ''}
+              `⑪ A clínica devolveu o documento ${c.gov_impossivel ? 'preenchido e carimbado' : 'assinado pelo gov.br'}`) : ''}
 
             ${c.devolvido_ok ? `
-              ${tique(c, 'nucleo_site_ok', '⑪ Preenchido no site da <b>Núcleo</b>')}
+              ${tique(c, 'nucleo_site_ok', '⑫ Preenchido no site da <b>Núcleo</b>')}
 
               <div class="raiva-fase">Correios</div>
-              ${tique(c, 'correios_ok', '⑫ Amostra enviada pelos <b>Correios</b>',
-                c.correios_em ? `<i class="mudo">${esc(c.correios_em)}</i>` : '',
+              ${tique(c, 'correios_ok', '⑬ Amostra enviada pelos <b>Correios</b>',
+                c.correios_em ? `<i class="mudo">${dataBR(c.correios_em)}</i>` : '',
                 { campo: 'correios_em', label: 'data do envio' })}
               ${c.correios_ok ? `<div class="raiva-campo">
-                <b>⑬ Código de rastreamento</b>
+                <b>⑭ Código de rastreamento</b>
                 ${c.rastreio
                   ? `<span class="raiva-cod">${esc(c.rastreio)}</span>
                      <a class="lnk" target="_blank" rel="noopener"
@@ -1036,20 +1133,30 @@
                     é pior que não ter nenhuma. Então: o link abre o rastreio oficial num clique e
                     a pessoa cola o que leu, com a hora em que leu. O que está na tela é
                     verificável; o que eu chutaria, não. */''}
+              ${/* ⑮ Fúlvio 14/out: "cada vez que atualizar, a mensagem anterior NÃO se perde — vai
+                    descendo e gerando um histórico". ⛔ Antes a situação era um campo só, sobrescrito:
+                    a leitura de ontem sumia. Agora cada atualização é empilhada (mais nova no topo)
+                    e nada é apagado — o rastro inteiro do objeto fica à vista. */''}
               <div class="raiva-campo">
-                <b>⑭ Situação nos Correios</b>
-                ${c.rastreio_situacao
-                  ? `<span>${esc(c.rastreio_situacao)}</span>
-                     <i class="mudo">${c.rastreio_em ? 'lido em ' + new Date(c.rastreio_em).toLocaleString('pt-BR') : ''}</i>`
-                  : '<span class="mudo">ninguém anotou ainda</span>'}
-                <button type="button" class="btn-sec" data-redita="${c.id}" data-rcampo2="rastreio_situacao"
-                        data-rtipo="texto" data-rlabel="situação lida nos Correios">atualizar</button>
+                <b>⑮ Situação nos Correios</b>
+                ${(() => {
+                  const h = Array.isArray(c.rastreio_hist) ? c.rastreio_hist.slice()
+                    : (c.rastreio_situacao ? [{ txt: c.rastreio_situacao, em: c.rastreio_em }] : [])
+                  if (!h.length) return '<span class="mudo">ninguém anotou ainda</span>'
+                  return `<div class="raiva-hist">${h.slice().reverse().map((x, i) =>
+                    `<div class="raiva-hist-l ${i === 0 ? 'nova' : ''}"><span>${i === 0 ? '📍 ' : ''}${esc(x.txt)}</span>
+                       <i class="mudo">${x.em ? new Date(x.em).toLocaleString('pt-BR') : ''}${x.por ? ' · ' + esc(x.por) : ''}</i></div>`).join('')}</div>`
+                })()}
+                <div class="raiva-bioacao">
+                  <input class="raiva-sit" data-rsit="${c.id}" placeholder="colar a situação lida nos Correios">
+                  <button type="button" class="btn-sec" data-rsitadd="${c.id}">adicionar atualização</button>
+                </div>
               </div>` : ''}
 
               <div class="raiva-fase">Pagamento à Núcleo</div>
-              ${tique(c, 'nucleo_pagto_ok', '⑮ Contato com a Núcleo para <b>solicitação de pagamento</b>')}
-              ${tique(c, 'comprovante_ok', '⑯ <b>Comprovante</b> encaminhado para a Núcleo',
-                c.comprovante_em ? `<i class="mudo">${esc(c.comprovante_em)}</i>` : '',
+              ${tique(c, 'nucleo_pagto_ok', '⑯ Contato com a Núcleo para <b>solicitação de pagamento</b>')}
+              ${tique(c, 'comprovante_ok', '⑰ <b>Comprovante</b> encaminhado para a Núcleo',
+                c.comprovante_em ? `<i class="mudo">${dataBR(c.comprovante_em)}</i>` : '',
                 { campo: 'comprovante_em', label: 'data do comprovante' })}
               ${/* ⏰ áudio 16:55:38: "após 15 dias do comprovante, fique sinalizando de 5 em 5
                     dias para verificar se o laudo já foi liberado" */''}
@@ -1058,20 +1165,42 @@
                 const d = Math.floor((Date.now() - new Date(c.comprovante_em + 'T12:00:00')) / 864e5)
                 if (d < 15) return `<div class="raiva-dica">⏳ Cobrança da Núcleo começa a ser lembrada
                   em <b>${15 - d} dia(s)</b> — 15 dias depois do comprovante, e depois de 5 em 5.</div>`
+                // ⭐ Fúlvio 14/out: "por onde você vai me sinalizar isso?". A partir dos 15 dias o
+                //    lembrete não some mais — fica na tela com a contagem, dispara o aviso automático
+                //    pro Atendimento (de 5 em 5) e acende o KPI vermelho "laudo atrasado na Núcleo".
+                const prox = 15 + Math.ceil(Math.max(d - 15, 0.0001) / 5) * 5   // próximo marco de 5 em 5
                 return `<div class="raiva-nao">⏰ <b>${d} dias</b> desde o comprovante e o laudo não chegou.
-                  <b>Verificar com a Núcleo se já foi liberado.</b></div>`
+                  <b>Verificar com a Núcleo se já foi liberado.</b>
+                  <span class="mudo">Lembrete automático pro Atendimento de 5 em 5 dias${d >= prox ? ' — <b>hoje</b>' : ` — próximo no ${prox}º dia`}. Também aparece no botão vermelho <b>“laudo atrasado na Núcleo”</b> aqui em cima.</span></div>`
               })()}
 
               <div class="raiva-fase">Entrega</div>
-              ${tique(c, 'laudo_chegou', '⑰ Laudo chegou ao laboratório',
-                c.laudo_em ? `<i class="mudo">${esc(c.laudo_em)}</i>` : '',
+              ${tique(c, 'laudo_chegou', '⑱ Laudo chegou ao laboratório',
+                c.laudo_em ? `<i class="mudo">${dataBR(c.laudo_em)}</i>` : '',
                 { campo: 'laudo_em', label: 'data em que o laudo chegou' })}
-              ${c.laudo_chegou ? tique(c, 'entrega_combinada', 'Entrega combinada com a clínica') : ''}
+              ${c.laudo_chegou ? tique(c, 'entrega_combinada', '⑲ Entrega combinada com a clínica') : ''}
+              ${/* ⑳ NOVO (Fúlvio 14/out): o comprovante de ENTREGA do laudo é o último passo antes de
+                    concluir. Além de marcar, dá para anexar a foto/arquivo do comprovante — que fica
+                    anexado ao caso e pode ser visto mesmo depois de concluído, sem poder apagar. */''}
+              ${c.entrega_combinada ? `
+                ${tique(c, 'entrega_comprovada', '⑳ Comprovante de entrega do laudo')}
+                ${anexoEntregaBox(c)}
+              ` : ''}
             ` : ''}` : ''}
         </div>
         ${c.obs ? `<div class="mudo">📝 ${esc(c.obs)}</div>` : ''}
-        ${!c.fechado_em && c.entrega_combinada ? `<div class="raiva-fim">
-          <button data-rfechar="${c.id}">Concluir caso</button></div>` : ''}
+        ${!c.fechado_em ? (() => {
+          // ⛔ CH11 (Fúlvio 14/out): "não dá para concluir sem todos os passos preenchidos. Se
+          //    tentar, você trava e sinaliza qual passo não foi feito." A trava mora aqui (botão)
+          //    E no banco (raiva_caso_fechar confere de novo) — a tela é um cliente, a verdade é o banco.
+          const falta = raivaFaltando(c)
+          if (!falta.length) return `<div class="raiva-fim"><button data-rfechar="${c.id}">✅ Concluir caso</button></div>`
+          if (!(c.laudo_chegou || c.entrega_combinada)) return ''   // longe do fim: não polui com a lista
+          return `<div class="raiva-fim trava">
+            <button data-rfechar="${c.id}">Concluir caso</button>
+            <div class="raiva-nao">⛔ Não dá para concluir — ainda falta: ${falta.map(f => `<b>${esc(f)}</b>`).join(' · ')}</div>
+          </div>`
+        })() : ''}
         ${!c.fechado_em ? `<div class="raiva-cancelar">
           ${!c.aguardando_cliente ? `<button class="leve" data-respera="${c.id}" data-rval="1">⏸️ Aguardando retorno do cliente</button>` : ''}
           <button class="leve" data-rcancelar="${c.id}">Cancelar este caso</button></div>` : ''}
@@ -4368,6 +4497,37 @@
       return void await salvarRaiva({ ...caso, id, aguardando_cliente: esp.dataset.rval === '1' })
     }
 
+    // ⑤ pagamento — duas respostas exclusivas (realizado / faturado); '' volta a perguntar
+    const pg = ev.target.closest('[data-rpag]')
+    if (pg) {
+      if (!(await garantirLogin())) return
+      const id = +pg.dataset.rid, caso = (raivaCache || []).find(c => c.id === id); if (!caso) return
+      return void await salvarRaiva({ ...caso, id, pagamento: pg.dataset.rpag || null })
+    }
+
+    // ⑮ situação nos Correios — EMPILHA (não sobrescreve): cada atualização entra no histórico
+    const sa = ev.target.closest('[data-rsitadd]')
+    if (sa) {
+      if (!(await garantirLogin())) return
+      const id = +sa.dataset.rsitadd, caso = (raivaCache || []).find(c => c.id === id); if (!caso) return
+      const inp = document.querySelector(`[data-rsit="${id}"]`)
+      const txt = (inp && inp.value || '').trim()
+      if (!txt) { toast('Cole a situação lida nos Correios antes de adicionar'); return }
+      if (DEMO) {
+        const h = Array.isArray(caso.rastreio_hist) ? caso.rastreio_hist.slice() : []
+        h.push({ txt, em: new Date().toISOString(), por: (sessao && sessao.nome) || 'demo' })
+        return void await salvarRaiva({ ...caso, id, rastreio_hist: h, rastreio_situacao: txt })
+      }
+      try {
+        const r = await rpc('raiva_correios_atualizar',
+          { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_txt: txt })
+        if (r && r.ok) { toast('✅ situação registrada no histórico') }
+        else toast('⚠️ ' + ((r && r.erro) || msgSqlFalta({ message: (r && r.erro) || '' }, '43_raiva_14out')))
+        await carregarRaiva(); desenharRaiva()
+      } catch (e) { toast(msgSqlFalta(e, '43_raiva_14out')) }
+      return
+    }
+
     // ⑨ᵃ a clínica não assina pelo gov.br → abre o caminho do documento físico
     // ⛔ As duas saídas são EXCLUSIVAS: ligar uma apaga a outra, senão o cartão mostraria os dois
     //    caminhos andando ao mesmo tempo e ninguém saberia qual documento está com a clínica.
@@ -4624,8 +4784,17 @@
     // ⭐ no demo tudo acontece em memória: dá para exercitar as travas sem tocar no banco real
     if (DEMO) {
       const i = raivaCache.findIndex(c => c.id === dados.id)
-      if (i >= 0) raivaCache[i] = { ...raivaCache[i], ...dados }
-      else raivaCache.unshift({ id: Date.now(), fechado_em: null, ...dados })
+      const alvo = i >= 0 ? { ...raivaCache[i], ...dados } : { id: Date.now(), fechado_em: null, ...dados }
+      // ⭐ espelho do trigger raiva_passos_carimbo (CH8/CH9): no demo também carimbo cada passo que
+      //    vira feito, para quem testar em ?demo=1 ver a data e hora aparecer como na produção.
+      const pe = { ...(alvo.passos_em || {}) }
+      ;['microchip_ok','vacina_ok','coleta_ok','avisada_ok','word_enviado','doc_carteirinha',
+        'doc_microchip','doc_conferida','gov_enviado','fisico_enviado','devolvido_ok','nucleo_site_ok',
+        'correios_ok','nucleo_pagto_ok','comprovante_ok','laudo_chegou','entrega_combinada',
+        'entrega_comprovada'].forEach(k => { if (alvo[k] && !pe[k]) pe[k] = new Date().toISOString(); else if (!alvo[k]) delete pe[k] })
+      if (alvo.pagamento && !pe.pagamento) pe.pagamento = new Date().toISOString(); else if (!alvo.pagamento) delete pe.pagamento
+      alvo.passos_em = pe
+      if (i >= 0) raivaCache[i] = alvo; else raivaCache.unshift(alvo)
       desenharRaiva(); return true
     }
     try {
@@ -4639,16 +4808,51 @@
         'gov_enviado','gov_impossivel','fisico_enviado','devolvido_ok','nucleo_site_ok',
         'correios_ok','correios_em','rastreio','rastreio_situacao',
         'nucleo_pagto_ok','comprovante_ok','comprovante_em','aguardando_cliente',
-        'laudo_chegou','laudo_em','entrega_combinada','obs'])
+        'laudo_chegou','laudo_em','entrega_combinada','entrega_comprovada','pagamento','obs'])
         // ⛔ Para APAGAR um campo pelo ✏️ eu mando string vazia, que o nullif() do banco converte
         //    de volta para null. ⚠️ SÓ em texto e data: mandar '' num boolean faria o Postgres
         //    tentar ''::boolean e estourar a função inteira.
-        if (dados[k] !== undefined) limpo[k] = (dados[k] === null && !/_ok$|^aguardando_cliente$|_enviado$|_impossivel$|_chegou$|_combinada$/.test(k)) ? '' : dados[k]
+        if (dados[k] !== undefined) limpo[k] = (dados[k] === null && !/_ok$|^aguardando_cliente$|_enviado$|_impossivel$|_chegou$|_combinada$|_comprovada$/.test(k)) ? '' : dados[k]
       const r = await rpc('raiva_caso_salvar', { p_nome: sessao.nome, p_senha: sessao.senha, p_dados: limpo })
       if (!r || !r.ok) { toast('⚠️ ' + ((r && r.erro) || 'não consegui salvar')); return false }
       await carregarRaiva(); desenharRaiva(); return true
     } catch (e) { toast(e.message); return false }
   }
+
+  // ⑨/⑳ upload de anexo (CH10 foto do comprovante de entrega; CH12 PDF do formulário). Vai para o
+  //    bucket 'raiva-anexos' do Supabase Storage e a URL é gravada por uma função que SÓ grava se o
+  //    campo ainda estiver vazio — por construção o anexo não é sobrescrito nem editado.
+  $('vRaiva')?.addEventListener('change', async ev => {
+    const fi = ev.target.closest('[data-ranexo]')
+    if (!fi || !fi.files || !fi.files[0]) return
+    if (!(await garantirLogin())) { fi.value = ''; return }
+    const id = +fi.dataset.rid, tipo = fi.dataset.ranexo, file = fi.files[0]
+    const caso = (raivaCache || []).find(c => c.id === id)
+    if (!caso) { fi.value = ''; return }
+    if (file.size > 10 * 1024 * 1024) { toast('Arquivo muito grande — máximo 10 MB'); fi.value = ''; return }
+    const campo = tipo === 'doc' ? 'doc_anexo_url' : 'entrega_anexo_url'
+    if (DEMO) {
+      await salvarRaiva({ ...caso, id, [campo]: URL.createObjectURL(file) })
+      toast('✅ anexado (demo)'); fi.value = ''; return
+    }
+    if (!SB || !SB.storage) { toast('⚠️ upload indisponível aqui'); fi.value = ''; return }
+    try {
+      toast('⏳ enviando o anexo…')
+      const ext = (String(file.name).split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5)
+      const path = `${id}/${tipo}_${Date.now()}.${ext}`
+      const up = await SB.storage.from('raiva-anexos').upload(path, file, { upsert: false, contentType: file.type || undefined })
+      if (up.error) {
+        toast(/bucket|not found|exist/i.test(up.error.message || '')
+          ? 'Falta criar o bucket raiva-anexos no Supabase (SQL 43).' : '⚠️ ' + up.error.message)
+        fi.value = ''; return
+      }
+      const url = SB.storage.from('raiva-anexos').getPublicUrl(path)?.data?.publicUrl
+      const r = await rpc('raiva_anexo_salvar', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: id, p_tipo: tipo, p_url: url })
+      if (r && r.ok) toast('✅ anexado — fica no caso, não pode ser apagado')
+      else toast('⚠️ ' + ((r && r.erro) || msgSqlFalta({ message: '' }, '43_raiva_14out')))
+      await carregarRaiva(); desenharRaiva()
+    } catch (e) { toast(msgSqlFalta(e, '43_raiva_14out')) } finally { fi.value = '' }
+  })
 
   $('vCancel')?.addEventListener('click', ev => {
     const f = ev.target.closest('[data-cper]')
