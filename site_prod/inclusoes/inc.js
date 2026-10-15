@@ -878,9 +878,11 @@
 
   // ⑬ Fúlvio 14/out: botão para baixar o formulário Word padrão (ele vai mandar o arquivo). Enquanto
   //    o arquivo não chega, o botão simplesmente não aparece — não prometo um download que não existe.
-  const FORM_WORD_URL = ''   // ⏳ preencher com a URL do Word quando o Fúlvio enviar o arquivo
+  // ⑬ o formulário Word oficial que o Fúlvio mandou 14/out ("Dados obrigatórios para trânsito
+  //    internacional de raiva.docx"), guardado no Storage. Um toque baixa o arquivo pronto.
+  const FORM_WORD_URL = 'https://lrwjcdvporaivxvfuiwt.supabase.co/storage/v1/object/public/raiva-anexos/_formulario/dados_obrigatorios_raiva_transito_internacional.docx'
   const formWordBtn = () => FORM_WORD_URL
-    ? `<a class="lnk raiva-word-dl" href="${FORM_WORD_URL}" target="_blank" rel="noopener" download>⬇️ baixar o formulário</a>` : ''
+    ? `<a class="lnk raiva-word-dl" href="${FORM_WORD_URL}" target="_blank" rel="noopener" download>⬇️ baixar o formulário Word</a>` : ''
 
   // ⑨/⑳ anexos imutáveis (CH12 PDF do formulário; CH10 foto do comprovante de entrega). Guardados no
   //    Supabase Storage; a referência fica no caso e pode ser aberta mesmo depois de concluído, e não
