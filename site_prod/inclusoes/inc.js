@@ -407,6 +407,10 @@
   const ROTULO = { 's-a1': 'no prazo', 's-a2': 'atenção', 's-v1': 'estourou · protocolado', 's-v2': 'estourado', 's-x': 'EXPLODIU', 's-p': 'aguardando cliente' }
   function botoes(c) {
     const dono = donoAtual(c)
+    // ⭐ Fúlvio 14/out: "a qualquer momento, de qualquer etapa, a gente TEM que conseguir cancelar."
+    //    O botão Cancelar faltava na etapa 3 e nos status enviado/especializado/sem_amostra. Defino
+    //    aqui no topo e acrescento em TODAS as saídas (desistir não é andar o processo — é parar).
+    const cancelar = (c.status !== 'concluido' && c.status !== 'cancelado') ? `<button class="leve" data-acao="cancelar">Cancelar</button>` : ''
     // 🔴🔴 05/out, Fúlvio: *"percebi que em VÁRIAS ABAS, independente de qual seja, quando a gente
     //    cria uma inclusão, você não coloca opção de cancelamento. Eu posso estar fazendo um
     //    processo e no meio do caminho resolver cancelar."*
@@ -421,10 +425,9 @@
         (c.status === 'aberto' && souAutorizadoACancelar()
           ? `<button class="leve" data-acao="cancelar">Cancelar</button>` : '')
     }
-    if (c.status === 'enviado') return `<button data-acao="avisou_envio">Clínica avisada do envio · concluir</button>`
-    if (c.status === 'especializado') return `<button data-acao="avisou_especializado">Clínica avisada da entrada · aguardando resultado</button>`
-    if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Clínica avisada · encerrar</button>`
-    const cancelar = `<button class="leve" data-acao="cancelar">Cancelar</button>`
+    if (c.status === 'enviado') return `<button data-acao="avisou_envio">Clínica avisada do envio · concluir</button>${cancelar}`
+    if (c.status === 'especializado') return `<button data-acao="avisou_especializado">Clínica avisada da entrada · aguardando resultado</button>${cancelar}`
+    if (c.status === 'sem_amostra') return `<button data-acao="cliente_avisado">Clínica avisada · encerrar</button>${cancelar}`
     switch (c.etapa) {
       // ⚠️ Thailan, 24/set 21h22 (áudio): "o pessoal da bioquímica confirmou que tem amostra,
       // só que pro pessoal da hematologia NÃO APARECEU A OPÇÃO. Quando a bioquímica validou,
@@ -440,7 +443,7 @@
           ? `<button class="setor-ok" disabled>✅ ${esc(SETOR_EXAME[k] || k)} — tem amostra</button>`
           : `<button data-amostra-setor="${esc(k)}">${SETOR_ICONE[k] || '🧪'} ${esc(SETOR_EXAME[k] || k)} — tem amostra</button>`).join('') + semAmostra + cancelar
       }
-      case 3: return `<button data-acao="clinica_confirmou">${c.cliente_status === 'autorizou' ? 'Clínica avisada · seguir' : 'Clínica autorizou · seguir'}</button><button class="leve" data-acao="aguardando_clinica">${c.pausado ? 'Cobrei a clínica de novo' : 'Mensagem enviada · aguardando clínica'}</button><button class="nao" data-acao="clinica_desistiu">Clínica não quer · cancelar</button>`
+      case 3: return `<button data-acao="clinica_confirmou">${c.cliente_status === 'autorizou' ? 'Clínica avisada · seguir' : 'Clínica autorizou · seguir'}</button><button class="leve" data-acao="aguardando_clinica">${c.pausado ? 'Cobrei a clínica de novo' : 'Mensagem enviada · aguardando clínica'}</button><button class="nao" data-acao="clinica_desistiu">Clínica não quer · cancelar</button>${cancelar}`
       case 4: return `<button data-acao="escritorio_ok">${c.novo_numero ? 'Lançado no HF com NOVO número' : 'Lançado no HF'}</button>${cancelar}`
       case 5: {
         const lista = (c.setores || c.setor || '').split(',').map(x => x.trim()).filter(Boolean)
@@ -5512,7 +5515,7 @@
     //    Esta barra diz só se é o quadro REAL ou a DEMO. O frescor do dado é o selo no topo (ao lado do relógio).
     el.innerHTML = DEMO
       ? '🧪 MODO DEMONSTRAÇÃO — tudo nesta tela é EXEMPLO inventado. Nada é gravado. <a href="?setor=' + setor + '">ir para o quadro real</a>'
-      : '✓ Quadro REAL da equipe — não é demonstração (o frescor dos dados fica no selo “atualizado”, lá em cima)'
+      : '✅ Este é o quadro de verdade da equipe — o que você faz aqui vale e fica salvo (não é treino)'
     document.body.prepend(el)
   })()
 
