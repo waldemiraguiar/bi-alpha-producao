@@ -1015,6 +1015,14 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .raiva-tq.on { background:rgba(30,160,90,.12) }
 .raiva-tq.on span { opacity:.75; text-decoration:line-through }
 .raiva-tq i { margin-left:auto; font-style:normal; font-size:.86em }
+/* ⑤ Pagamento (Fúlvio 15/out): quadradinho à esquerda igual aos outros itens, pra não parecer parte do ④ */
+.raiva-check { width:19px; height:19px; flex:0 0 auto; border:2px solid var(--line); border-radius:5px;
+               display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box }
+.raiva-check.on { background:#1ea05a; border-color:#1ea05a }
+.raiva-check.on::after { content:'✓'; color:#fff; font-size:12px; font-weight:800; line-height:1 }
+.raiva-pag.feito { background:rgba(30,160,90,.12) }
+.raiva-pag-lbl { margin-right:auto }
+.raiva-pag-lbl i { margin-left:0; font-size:.86em }
 
 .raiva-dica { font-size:.88em; line-height:1.45; opacity:.9; padding:2px 10px 6px 38px }
 .raiva-ok-dica { font-size:.88em; padding:2px 10px 6px 38px; color:#4cd08a }

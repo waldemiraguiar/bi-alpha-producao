@@ -800,7 +800,7 @@
         { id: 9003, pet: 'nina', clinica: 'meta zoa', tutor: 'demo', destino: 'alemanha', bloco: 'UE',
           microchip_ok: true, microchip_data: '2025-09-01', vacina_ok: true, vacina_data: '2025-10-05',
           coleta_ok: true, coleta_data: '2025-11-10', amostra: 'viavel', amostra_volume: '800 µL',
-          avisada_ok: true, pagamento: 'realizado', word_enviado: true, doc_carteirinha: true, doc_microchip: true,
+          avisada_ok: true, pagamento: 'avista:2025-11-12', word_enviado: true, doc_carteirinha: true, doc_microchip: true,
           doc_conferida: true, gov_enviado: true, devolvido_ok: true, nucleo_site_ok: true,
           correios_ok: true, correios_em: '2025-11-20', rastreio: 'AA123456789BR',
           rastreio_hist: [
@@ -1054,6 +1054,17 @@
           ${c.coleta_ok ? `<div class="raiva-bio ${c.amostra || ''}">
             <b>🧪 A amostra está viável?</b>
             <span class="mudo">Volume <b>igual ou superior a 500 µL</b> (meio mL) já serve. Coloração: aceita <b>no máximo 1 cruz</b> de hemólise ou lipemia.</span>
+            ${/* ⭐ Fúlvio 15/out: além do volume, um espaço pra identificar o Nº de registro no HF
+                  (a requisição do exame de raiva). Reuso o campo requisicao — aparece no topo do card. */''}
+            <div class="raiva-campo raiva-hfreg">
+              <b>Nº de registro no HF</b>
+              ${c.requisicao
+                ? `<span class="raiva-cod">${esc(c.requisicao)}</span>
+                   <button type="button" class="raiva-lapis" data-redita="${c.id}" data-rcampo2="requisicao"
+                           data-rtipo="texto" data-rlabel="número de registro do HF" title="corrigir">✏️</button>`
+                : `<button class="btn-sec" data-redita="${c.id}" data-rcampo2="requisicao"
+                     data-rtipo="texto" data-rlabel="número de registro do HF">anotar o nº do HF</button>`}
+            </div>
             ${c.amostra
               ? `<div class="${c.amostra === 'viavel' ? 'raiva-sim' : 'raiva-nao'}">
                    ${c.amostra === 'viavel' ? '✅ viável' : '⛔ não viável'}
@@ -1069,20 +1080,26 @@
 
           ${c.amostra === 'viavel' ? `
             ${tique(c, 'avisada_ok', '④ Clínica avisada de que está viável')}
-            ${/* ⑤ NOVO (Fúlvio 14/out): o pagamento do serviço, com DUAS respostas exclusivas —
-                  "pagamento realizado" OU "exame faturado". É o novo item 5; tudo abaixo desceu
-                  um nível. ⛔ Não é checkbox: é uma escolha entre duas, por isso botões. */''}
-            <div class="raiva-tq raiva-pag ${c.pagamento ? 'on' : ''}">
-              <span>⑤ Pagamento</span>
-              ${c.pagamento
-                ? `<b class="raiva-pag-feito">${c.pagamento === 'realizado' ? '✅ pagamento realizado' : '🧾 exame faturado'}</b>
-                   ${c.passos_em && c.passos_em.pagamento ? `<i class="raiva-quando mudo" title="registrado automaticamente — não editável">🕑 ${dtBR(c.passos_em.pagamento)}</i>` : ''}
-                   <button type="button" class="lnk" data-rpag="" data-rid="${c.id}">trocar</button>`
-                : `<span class="raiva-saidas raiva-pag-ops">
-                     <button type="button" class="btn-sec" data-rpag="realizado" data-rid="${c.id}">Pagamento realizado</button>
-                     <button type="button" class="btn-sec" data-rpag="faturado" data-rid="${c.id}">Exame faturado</button>
-                   </span>`}
-            </div>
+            ${/* ⑤ Pagamento do serviço — a CLÍNICA paga este exame pra avançar (≠ pagamento à Núcleo
+                  lá embaixo). Fúlvio 15/out: (1) ganhou o QUADRADINHO à esquerda pra não parecer parte
+                  do ④; (2) "à vista" pede a DATA do pagamento; (3) "na fatura" no lugar de "exame
+                  faturado" (ele pediu sinônimo melhor). A data do à vista vai no próprio campo
+                  (pagamento="avista:AAAA-MM-DD") pra não precisar de coluna nova. */''}
+            ${(() => {
+              const [pgTipo, pgData] = String(c.pagamento || '').split(':')
+              const feito = pgTipo === 'avista' || pgTipo === 'fatura'
+              return `<div class="raiva-tq raiva-pag${feito ? ' feito' : ''}">
+                <span class="raiva-check${feito ? ' on' : ''}"></span>
+                <span class="raiva-pag-lbl">⑤ Pagamento <i class="mudo">— a clínica paga o exame pra avançar</i></span>
+                ${feito
+                  ? `<b class="raiva-pag-feito">${pgTipo === 'avista' ? '💵 pago à vista' + (pgData ? ' em ' + dataBR(pgData) : '') : '🧾 na fatura'}</b>
+                     <button type="button" class="lnk" data-rpag="" data-rid="${c.id}">trocar</button>`
+                  : `<span class="raiva-saidas raiva-pag-ops">
+                       <button type="button" class="btn-sec" data-rpag="avista" data-rid="${c.id}">💵 Pago à vista</button>
+                       <button type="button" class="btn-sec" data-rpag="fatura" data-rid="${c.id}">🧾 Na fatura</button>
+                     </span>`}
+              </div>`
+            })()}
             ${tique(c, 'word_enviado', '⑥ Formulário Word enviado para a clínica', formWordBtn())}
             ${!c.doc_conferida ? `<div class="raiva-dica">⛔ Reforçar com a clínica: <b>não pode haver
               divergência</b>. Retificação de laudo <b>é cobrada</b> e divergência
@@ -4499,12 +4516,20 @@
       return void await salvarRaiva({ ...caso, id, aguardando_cliente: esp.dataset.rval === '1' })
     }
 
-    // ⑤ pagamento — duas respostas exclusivas (realizado / faturado); '' volta a perguntar
+    // ⑤ pagamento — à vista (pede data) / na fatura; '' volta a perguntar
     const pg = ev.target.closest('[data-rpag]')
     if (pg) {
       if (!(await garantirLogin())) return
       const id = +pg.dataset.rid, caso = (raivaCache || []).find(c => c.id === id); if (!caso) return
-      return void await salvarRaiva({ ...caso, id, pagamento: pg.dataset.rpag || null })
+      let val = pg.dataset.rpag || null
+      if (val === 'avista') {
+        const hoje = new Date().toISOString().slice(0, 10)
+        const d = prompt('Pago à vista — data do pagamento (dd/mm/aaaa):', dataBR(hoje))
+        if (d === null) return
+        const m = (d || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+        val = m ? `avista:${m[3]}-${m[2]}-${m[1]}` : 'avista'   // sem data válida, guarda só 'avista'
+      }
+      return void await salvarRaiva({ ...caso, id, pagamento: val })
     }
 
     // ⑮ situação nos Correios — EMPILHA (não sobrescreve): cada atualização entra no histórico
