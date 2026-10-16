@@ -803,7 +803,7 @@
         { id: 9003, pet: 'nina', clinica: 'meta zoa', tutor: 'demo', destino: 'alemanha', bloco: 'UE',
           microchip_ok: true, microchip_data: '2025-09-01', vacina_ok: true, vacina_data: '2025-10-05',
           coleta_ok: true, coleta_data: '2025-11-10', amostra: 'viavel', amostra_volume: '800 µL',
-          avisada_ok: true, pagamento: 'avista:2025-11-12', word_enviado: true, doc_carteirinha: true, doc_microchip: true,
+          avisada_ok: true, pagamento: 'avista|2025-11-12|1465,00|Clínica Meta Zoa', word_enviado: true, doc_carteirinha: true, doc_microchip: true,
           doc_conferida: true, gov_enviado: true, devolvido_ok: true, nucleo_site_ok: true,
           correios_ok: true, correios_em: '2025-11-20', rastreio: 'AA123456789BR',
           rastreio_hist: [
@@ -1089,19 +1089,25 @@
                   faturado" (ele pediu sinônimo melhor). A data do à vista vai no próprio campo
                   (pagamento="avista:AAAA-MM-DD") pra não precisar de coluna nova. */''}
             ${(() => {
-              const [pgTipo, pgData] = String(c.pagamento || '').split(':')
+              // Fúlvio 16/out: (1) quadradinho IGUAL aos outros (checkbox de verdade, vazio ANTES);
+              //   (2) botões à ESQUERDA, perto da frase; (3) "pago à vista" pede DATA + VALOR + NOME
+              //   e isso fica VISÍVEL depois. Campo: pagamento="avista|AAAA-MM-DD|VALOR|NOME" ou "fatura".
+              const partes = String(c.pagamento || '').split('|')
+              const pgTipo = partes[0], pgData = partes[1] || '', pgValor = partes[2] || '', pgNome = partes[3] || ''
               const feito = pgTipo === 'avista' || pgTipo === 'fatura'
-              return `<div class="raiva-tq raiva-pag${feito ? ' feito' : ''}">
-                <span class="raiva-check${feito ? ' on' : ''}"></span>
-                <span class="raiva-pag-lbl">⑤ Pagamento <i class="mudo">— a clínica paga o exame pra avançar</i></span>
+              return `<label class="raiva-tq raiva-pag${feito ? ' on' : ''}">
+                <input type="checkbox" class="raiva-pag-box" ${feito ? 'checked' : ''} disabled>
+                <span>⑤ Pagamento <i class="raiva-pag-sub mudo">— a clínica paga o exame pra avançar</i></span>
                 ${feito
-                  ? `<b class="raiva-pag-feito">${pgTipo === 'avista' ? '💵 pago à vista' + (pgData ? ' em ' + dataBR(pgData) : '') : '🧾 na fatura'}</b>
+                  ? `<b class="raiva-pag-feito">${pgTipo === 'avista'
+                       ? '💵 pago à vista' + (pgData ? ' · ' + dataBR(pgData) : '') + (pgValor ? ' · R$ ' + esc(pgValor) : '') + (pgNome ? ' · ' + esc(pgNome) : '')
+                       : '🧾 na fatura'}</b>
                      <button type="button" class="lnk" data-rpag="" data-rid="${c.id}">trocar</button>`
-                  : `<span class="raiva-saidas raiva-pag-ops">
+                  : `<span class="raiva-pag-ops">
                        <button type="button" class="btn-sec" data-rpag="avista" data-rid="${c.id}">💵 Pago à vista</button>
                        <button type="button" class="btn-sec" data-rpag="fatura" data-rid="${c.id}">🧾 Na fatura</button>
                      </span>`}
-              </div>`
+              </label>`
             })()}
             ${tique(c, 'word_enviado', '⑥ Formulário Word enviado para a clínica', formWordBtn())}
             ${!c.doc_conferida ? `<div class="raiva-dica">⛔ Reforçar com a clínica: <b>não pode haver
@@ -4527,10 +4533,14 @@
       let val = pg.dataset.rpag || null
       if (val === 'avista') {
         const hoje = new Date().toISOString().slice(0, 10)
-        const d = prompt('Pago à vista — data do pagamento (dd/mm/aaaa):', dataBR(hoje))
+        const d = prompt('Pago à vista — DATA do pagamento (dd/mm/aaaa):', dataBR(hoje))
         if (d === null) return
         const m = (d || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-        val = m ? `avista:${m[3]}-${m[2]}-${m[1]}` : 'avista'   // sem data válida, guarda só 'avista'
+        const iso = m ? `${m[3]}-${m[2]}-${m[1]}` : ''
+        const valor = (prompt('VALOR pago à vista (ex.: 1465,00):', '') || '').trim().replace(/[^\d,.]/g, '')
+        const nome = (prompt('NOME de quem pagou:', '') || '').trim()
+        // campo: avista|data|valor|nome  (partes vazias toleradas)
+        val = ['avista', iso, valor, nome].join('|').replace(/\|+$/, '')
       }
       return void await salvarRaiva({ ...caso, id, pagamento: val })
     }
