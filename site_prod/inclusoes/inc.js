@@ -130,6 +130,8 @@
     const txt = min < 1 ? 'agora' : ('há ' + min + ' min')
     const av = min > 12 ? ' ⚠️ pode estar parado' : ''
     el.innerHTML = '<span style="color:' + cor + ';font-weight:700" title="Quando o quadro puxou os dados do banco. Atualiza sozinho.">● atualizado ' + txt + av + '</span>'
+    // ⭐ Fúlvio 16/out: o botão Atualizar avisa (pulsa) quando o dado está velho (precisa atualizar)
+    const ba = $('btnAtualizar'); if (ba) ba.classList.toggle('precisa', min > 12)
   }
   async function carregar() {
     // 💳 os comprovantes pendentes vêm junto, mas NUNCA travam o resto: se falhar, o quadro
@@ -5214,6 +5216,13 @@
   document.querySelectorAll('.rast-filtros button').forEach(b => b.addEventListener('click', () => { periodoRast = b.dataset.per; desenhar() }))
   function modoTV(on) { document.body.classList.toggle('tv', on); $('btnTV').textContent = on ? 'Sair do modo TV' : 'Modo TV'; if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}) }
   $('btnTV').addEventListener('click', () => modoTV(!document.body.classList.contains('tv')))
+  // ⭐ Fúlvio 16/out: botão Atualizar — puxa os dados mais recentes na hora (sem recarregar a página toda)
+  $('btnAtualizar')?.addEventListener('click', async () => {
+    const b = $('btnAtualizar'); if (b) { b.disabled = true; b.textContent = '⏳…'; b.classList.remove('precisa') }
+    try { await carregar(); desenhar() } catch (e) { toast(e.message) }
+    if (b) { b.disabled = false; b.textContent = '🔄 Atualizar' }
+    toast('✅ Atualizado'); pintarAtualiz()
+  })
   if (qs.get('tv') === '1') modoTV(true)
   setInterval(() => { $('relogio').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); pintarAtualiz() }, 1000)
 
