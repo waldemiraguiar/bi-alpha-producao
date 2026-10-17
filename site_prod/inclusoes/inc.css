@@ -1021,6 +1021,12 @@ button.qc.on{border-color:var(--cc);color:var(--cc);background:#eff6ff}
 .raiva-pag-sub { margin-left:0 !important; font-size:.86em }
 .raiva-pag-ops { display:inline-flex; gap:6px; flex-wrap:wrap }
 .raiva-pag-feito { margin-left:6px }
+/* ⭐ Fúlvio 16/out: formulário recolhível — 1 aberto por vez, o resto só o cabeçalho */
+.raiva-card .can-topo { cursor:pointer; user-select:none }
+.raiva-chevron { flex:0 0 auto; opacity:.55; font-size:.9em; margin-right:2px }
+.raiva-card.recolhido > *:not(.can-topo) { display:none }
+.raiva-card.recolhido { opacity:.82 }
+.raiva-card.recolhido:hover { opacity:1 }
 
 .raiva-dica { font-size:.88em; line-height:1.45; opacity:.9; padding:2px 10px 6px 38px }
 .raiva-ok-dica { font-size:.88em; padding:2px 10px 6px 38px; color:#4cd08a }

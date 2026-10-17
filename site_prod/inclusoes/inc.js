@@ -768,7 +768,7 @@
       Este laudo e este valor valem para esses dois destinos — <b>confirme antes de prometer</b>.</div>`
   }
 
-  let raivaCache = [], raivaPer = 'abertos', raivaGaveta = null
+  let raivaCache = [], raivaPer = 'abertos', raivaGaveta = null, raivaAberto = null   // ⭐ Fúlvio 16/out: 1 formulário aberto por vez; o resto recolhido
   // ⏪ o desfazer do cancelamento: vale por 2 minutos, que é a janela em que a pessoa percebe
   //    que clicou errado. Depois disso o caso fica cancelado mesmo — e nada se perde, porque a
   //    linha continua no banco com quem cancelou e por quê.
@@ -1001,8 +1001,13 @@
       // ⛔ microchip DEPOIS da vacina invalida tudo — é a regra que o Fúlvio repetiu duas vezes.
       const ordemErrada = c.microchip_data && c.vacina_data && c.microchip_data > c.vacina_data
       const st = raivaEstado(c)
-      return `<article class="can-card raiva-card ${c.fechado_em ? 'feito' : ''} ${c.aguardando_cliente ? 'esperando' : ''}">
-        <div class="can-topo">
+      // ⭐ Fúlvio 16/out: "tá confuso saber onde começa e acaba uma solicitação". Agora cada
+      //   formulário RECOLHE — clica no cabeçalho e só o que você está trabalhando fica aberto;
+      //   os outros ficam recolhidos (só o cabeçalho) e você abre conforme a necessidade.
+      const recolhido = raivaAberto !== c.id && L.length > 1
+      return `<article class="can-card raiva-card ${recolhido ? 'recolhido' : ''} ${c.fechado_em ? 'feito' : ''} ${c.aguardando_cliente ? 'esperando' : ''}">
+        <div class="can-topo" data-rtoggle="${c.id}" title="${recolhido ? 'abrir' : 'recolher'} este formulário">
+          <span class="raiva-chevron">${recolhido ? '▸' : '▾'}</span>
           <b>🐾 ${esc(c.pet || '—')}</b>
           <span class="mudo">${esc(c.clinica || '')}</span>
           ${c.destino ? `<span class="raiva-dest">✈️ ${esc(c.destino)}</span>` : ''}
@@ -4511,6 +4516,12 @@
         await carregarRaiva(); desenharRaiva()
       } catch (e) { toast(e.message) }
       return
+    }
+
+    // ⭐ Fúlvio 16/out: clicar no cabeçalho RECOLHE/ABRE o formulário (1 aberto por vez)
+    const tg = ev.target.closest('[data-rtoggle]')
+    if (tg && !ev.target.closest('button, a, input, label, .lnk, .raiva-lapis')) {
+      const id = +tg.dataset.rtoggle; raivaAberto = (raivaAberto === id ? null : id); return desenharRaiva()
     }
 
     // 👁️ a gaveta dos contadores: clicar no número mostra QUAIS pets estão ali
