@@ -204,7 +204,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
           if(!j||!j.v) return;
           if(String(j.v)!==BUILD){
             var k="alpha_build_"+j.v;
-            if(!sessionStorage.getItem(k)){ sessionStorage.setItem(k,"1"); location.reload(); }
+            if(!sessionStorage.getItem(k)){ sessionStorage.setItem(k,"1"); location.replace(location.origin+location.pathname+"?r="+Date.now()); }
           }
         }).catch(function(){});
     }catch(e){}
