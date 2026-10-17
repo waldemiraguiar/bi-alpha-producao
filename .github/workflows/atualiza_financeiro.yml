@@ -65,6 +65,13 @@ jobs:
         run: |
           node -e "const fs=require('fs');const q=s=>JSON.stringify(s||'');const e=process.env;fs.writeFileSync('site/functions/secret.mjs',['export const SECRET='+q(e.BI_PWD),'export const GMAIL_USER='+q(e.GMAIL_USER),'export const GMAIL_APP_PASSWORD='+q(e.GMAIL_APP_PASSWORD),'export const EMAIL_TO='+q(e.EMAIL_TO||e.GMAIL_USER)].join(';\n')+';\n')"
           cd site/functions && npm install >/dev/null 2>&1 && npm install @netlify/blobs >/dev/null 2>&1 && echo "func e-mail+enc pronta"
+      - name: Bump de versão (auto-atualização — força o navegador a pegar o build novo)
+        if: env.DEPLOY_FULL == 'true'
+        run: |
+          NV=$(date -u +%y%m%d%H%M)
+          printf '{"v":"%s"}\n' "$NV" > site/version.json
+          perl -pi -e "s/var BUILD=\"[0-9]+\";/var BUILD=\"$NV\";/" site/index.html
+          echo "BUILD/version.json -> $NV"; grep -n 'var BUILD=' site/index.html
       - name: Publicar no Netlify (site admin)
         if: env.DEPLOY_FULL == 'true'
         env:
