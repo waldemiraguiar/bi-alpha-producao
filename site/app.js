@@ -1863,11 +1863,39 @@ function renderManual(){
   } else {
     sliceHtml=`<div style="margin-top:12px;color:var(--mut);font-size:12px;border-top:1px solid var(--line);padding-top:10px">💡 Selecione um intervalo <b>dentro de um mesmo mês</b> (ex.: atalho "Este mês") para comparar o mesmo trecho de dias com os meses anteriores. Para meses inteiros, veja o quadro "📊 Meses desde jan/26" abaixo.</div>`;
   }
+  // ---- DIA EM ANDAMENTO (parcial): o valor do dia corrente ainda está enchendo (resultados saem ao longo do dia/madrugada) ----
+  const OPEN=(((_AD&&_AD.meta&&_AD.meta.max_data)||Object.keys(_dayMap).sort().pop()||ate)+'').slice(0,10);
+  const incluiHoje=(ate===OPEN);                 // a seleção termina no dia ainda aberto
+  const _WD=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+  const _wd=s=>new Date(s+'T12:00:00').getDay();
+  const _diasF=Object.keys(_dayMap).filter(k=>_dayMap[k].f>0).sort();   // dias COM produção (fechados ou não)
+  const closedRef=_diasF.filter(k=>k<OPEN).pop();                       // último dia FECHADO com produção
+  let hojeBox='';
+  if(incluiHoje){
+    const hojeF=(_dayMap[OPEN]||{}).f||0, hojeQ=(_dayMap[OPEN]||{}).q||0;
+    const wdO=_wd(OPEN);
+    const mesmoDia=_diasF.filter(k=>k<OPEN && _wd(k)===wdO).slice(-8);  // últimas 8 ocorrências do mesmo dia da semana (fechadas)
+    const avgWd=mesmoDia.length?mesmoDia.reduce((a,k)=>a+_dayMap[k].f,0)/mesmoDia.length:0;
+    const pct=avgWd>0?Math.round(100*hojeF/avgWd):null;
+    const pcol=pct==null?'var(--mut)':(pct>=85?'var(--green)':pct>=60?'var(--amber)':'#FF5470');
+    const refTxt=closedRef?`${_dmy(closedRef)} (${_WD[_wd(closedRef)]}) fechou <b>${brl(_dayMap[closedRef].f)}</b>`:'—';
+    const avgTxt=avgWd>0?`${_WD[wdO]} típica fecha <b>${brl(avgWd)}</b> <span style="color:var(--mut)">(média das últimas ${mesmoDia.length})</span>`:'ainda sem base p/ média do dia da semana';
+    const pctTxt=pct!=null?` · hoje está em <b style="color:${pcol}">${pct}%</b> disso`:'';
+    hojeBox=`<div style="margin:2px 0 12px;padding:11px 13px;border:1px solid var(--amber);border-radius:10px;background:rgba(245,180,60,.06)">
+      <div style="font-weight:800;font-size:13px;color:var(--amber);margin-bottom:5px">⏳ Dia em andamento — valor PARCIAL</div>
+      <div style="font-size:12.5px;line-height:1.65">
+        Hoje (${_dmy(OPEN)}, ${_WD[wdO]}) <b>até agora</b>: <b>${brl(hojeF)}</b> · ${num(hojeQ)} exames.
+        O valor fecha durante a madrugada (o exame só entra no valor quando é resultado) — <b>o número real aparece amanhã de manhã</b>.<br>
+        Último dia fechado: ${refTxt}. ${avgTxt}${pctTxt}.
+      </div></div>`;
+  }
+  const selParcial=incluiHoje?' <span style="color:var(--amber);font-size:11px;font-weight:700;vertical-align:middle">parcial</span>':'';
   out.innerHTML=`
+    ${hojeBox}
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;margin-bottom:6px">
       <div style="display:flex;gap:26px;flex-wrap:wrap;flex:1;align-items:flex-start">
-        ${kpi('Produção (exames)',num(cur.q),de===ate?'no dia':`${len} dias · ${(cur.q/len).toFixed(0)}/dia`)}
-        ${kpi('Faturamento (direto)',brl(cur.f),`sem Pet Love · ticket ${cur.q?brl(cur.f/cur.q):'—'}/exame`)}
+        ${kpi('Produção (exames)',num(cur.q)+selParcial,de===ate?(incluiHoje?'no dia · parcial':'no dia'):`${len} dias · ${(cur.q/len).toFixed(0)}/dia`)}
+        ${kpi('Faturamento (direto)',brl(cur.f)+selParcial,`sem Pet Love · ticket ${cur.q?brl(cur.f/cur.q):'—'}/exame`)}
         ${kpi('Média diária',brl(cur.f/len),`${cur.n} dias com produção`)}
       </div>
       ${projbox}
