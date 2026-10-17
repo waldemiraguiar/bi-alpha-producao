@@ -1,0 +1,32 @@
+name: Captura Intradiária (curva do dia)
+
+on:
+  schedule:
+    # a cada 30 min das 06h às 22h BRT (UTC = BRT+3 => 09–01 UTC). Barato: 1 query + 1 POST, sem deploy.
+    - cron: '0,30 9-23 * * *'
+    - cron: '0,30 0-1 * * *'
+  workflow_dispatch:        # captura manual (teste)
+
+concurrency:
+  group: captura-intraday
+  cancel-in-progress: false
+
+jobs:
+  capturar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: pip install --quiet pymysql
+      - name: Capturar acumulado de hoje e postar na curva
+        env:
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PWD:  ${{ secrets.MYSQL_PWD }}
+          MYSQL_DB:   ${{ secrets.MYSQL_DB }}
+          BI_PWD:     ${{ secrets.BI_PWD }}
+          SITE_URL:   https://bi-alpha-waldemir.netlify.app
+        run: python capture_intraday.py

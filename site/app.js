@@ -1708,7 +1708,7 @@ function socReport(){
 function _rbrl(v){return (v==null||v==='')?'—':(+v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
 
 /* ===================== ABA ANÁLISES (janelas 5/10/15/20 dias + mês a mês) ===================== */
-let _AD=null, selWin='5', _achart=null, _dayMap=null, _manMetric='q', _manChart=null;
+let _AD=null, selWin='5', _achart=null, _dayMap=null, _manMetric='q', _manChart=null, _INTRA=null;
 const AZUL2='#4D9DFF';
 const INP='background:#0E1E36;border:1px solid var(--line);color:#E8EEF6;border-radius:8px;padding:7px 9px;font-size:13px';
 function gcol(v){return v==null?'var(--mut)':(v>=0?AZUL2:'var(--red)');}
@@ -1722,8 +1722,18 @@ function _ndays(a,b){return Math.round((_d1(b)-_d1(a))/864e5)+1;}
 function _dmy(s){const[y,m,d]=s.split('-');return d+'/'+m+'/'+y.slice(2);}
 function _daysInMonth(ym){const[y,m]=ym.split('-').map(Number);return new Date(y,m,0).getDate();}
 function _prevYmS(ym){let[y,m]=ym.split('-').map(Number);m--;if(m<1){m=12;y--;}return y+'-'+String(m).padStart(2,'0');}
+// curva intradiária ("a esta hora") — slots HHMM
+function _slotMin(s){return (+s.slice(0,2))*60+(+s.slice(2));}
+function _valAtSlot(day,nowMin){ if(!day||!day.slots) return 0; let best=-1,v=0; for(const s in day.slots){const m=_slotMin(s); if(m<=nowMin && m>best){best=m;v=day.slots[s].f||0;}} return v; }
+async function fetchIntra(){
+  try{ const h=window.__TK?{authorization:'Bearer '+window.__TK}:{};
+    const r=await fetch('/api/intraday?_='+Date.now(),{headers:h});
+    if(r.ok){ const j=await r.json(); return (j&&j.days)?j:{days:{}}; } }catch(e){}
+  return {days:{}};
+}
 function renderAnalises(D){
   _AD=D; const wrap=document.getElementById('analises'); if(!wrap) return;
+  if(_INTRA===null){ fetchIntra().then(j=>{_INTRA=j; if(document.getElementById('anManualOut')) renderManual();}); }
   const wins=[['5','5 dias'],['10','10 dias'],['15','15 dias'],['20','20 dias'],['mes','Mês a mês']];
   _dayMap={}; (D.serie_diaria||[]).forEach(x=>_dayMap[x.d]={q:x.q,f:x.f});
   const days=(D.serie_diaria||[]).map(x=>x.d); const dMin=days[0]||'2023-01-01', dMax=days[days.length-1]||'';
@@ -1881,12 +1891,28 @@ function renderManual(){
     const refTxt=closedRef?`${_dmy(closedRef)} (${_WD[_wd(closedRef)]}) fechou <b>${brl(_dayMap[closedRef].f)}</b>`:'—';
     const avgTxt=avgWd>0?`${_WD[wdO]} típica fecha <b>${brl(avgWd)}</b> <span style="color:var(--mut)">(média das últimas ${mesmoDia.length})</span>`:'ainda sem base p/ média do dia da semana';
     const pctTxt=pct!=null?` · hoje está em <b style="color:${pcol}">${pct}%</b> disso`:'';
+    // 📍 A ESTA HORA — curva intradiária (compara "hoje às HH:MM" com o mesmo dia da semana à mesma hora)
+    let horaLinha='';
+    if(_INTRA&&_INTRA.days){
+      const now=new Date(); const nowMin=now.getHours()*60+now.getMinutes();
+      const hhmm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+      const pts=Object.keys(_INTRA.days).filter(d=>d<OPEN && _INTRA.days[d].wd===wdO)
+                  .map(d=>_valAtSlot(_INTRA.days[d],nowMin)).filter(v=>v>0);
+      const todayH=_valAtSlot(_INTRA.days[OPEN],nowMin)||hojeF;
+      if(pts.length>=2){
+        const avgH=pts.reduce((a,b)=>a+b,0)/pts.length, pH=avgH>0?Math.round(100*todayH/avgH):null;
+        const pcH=pH==null?'var(--mut)':(pH>=95?'var(--green)':pH>=75?'var(--amber)':'#FF5470');
+        horaLinha=`<br>📍 <b>A esta hora (${hhmm})</b>: ${_WD[wdO]} típica já tinha <b>${brl(avgH)}</b> · hoje <b>${brl(todayH)}</b> · <b style="color:${pcH}">${pH}%</b> <span style="color:var(--mut)">(base de ${pts.length} ${_WD[wdO]}s)</span>`;
+      } else {
+        horaLinha=`<br>📍 <span style="color:var(--mut)">A esta hora: coletando base — a curva por hora começou agora; em algumas semanas isto compara "hoje às ${hhmm}" com o mesmo dia da semana à mesma hora.</span>`;
+      }
+    }
     hojeBox=`<div style="margin:2px 0 12px;padding:11px 13px;border:1px solid var(--amber);border-radius:10px;background:rgba(245,180,60,.06)">
       <div style="font-weight:800;font-size:13px;color:var(--amber);margin-bottom:5px">⏳ Dia em andamento — valor PARCIAL</div>
       <div style="font-size:12.5px;line-height:1.65">
         Hoje (${_dmy(OPEN)}, ${_WD[wdO]}) <b>até agora</b>: <b>${brl(hojeF)}</b> · ${num(hojeQ)} exames.
         O valor fecha durante a madrugada (o exame só entra no valor quando é resultado) — <b>o número real aparece amanhã de manhã</b>.<br>
-        Último dia fechado: ${refTxt}. ${avgTxt}${pctTxt}.
+        Último dia fechado: ${refTxt}. ${avgTxt}${pctTxt}.${horaLinha}
       </div></div>`;
   }
   const selParcial=incluiHoje?' <span style="color:var(--amber);font-size:11px;font-weight:700;vertical-align:middle">parcial</span>':'';
