@@ -195,7 +195,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 /* === AUTO-ATUALIZACAO ALPHA — todos rodam a build publicada, sem limpar cache ===
    Bump a CADA publicacao: este BUILD + (se houver) o selo de versao + o /version.json. */
 (function(){
-  var BUILD="2610170248";
+  var BUILD="2610170248"; window.__BUILD=BUILD;
   function ver(){
     try{
       fetch("version.json?_="+Date.now(),{cache:"no-store"})
@@ -294,6 +294,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
     <div class="ftab" data-v="voz">🗣️ Voz do Cliente</div>
     <div class="ftab" data-v="socios" style="border-color:rgba(255,106,213,.5)">🔐 Sócios</div>
     <div class="tools">
+      <span id="verBadge" title="Build que você está vendo agora. Se a data/hora estiver atrasada, clique em 🔄 Atualizar." style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:rgba(0,212,255,.12);border:1px solid var(--cyan,#00D4FF);color:var(--cyan,#00D4FF);font-size:12px;font-weight:800;white-space:nowrap">● versão —</span>
       <button class="toolbtn" id="btnReload" title="Baixa a versão mais nova, sem precisar limpar cache">🔄 Atualizar</button>
       <button class="toolbtn" id="btnTV">📺 Modo TV</button>
       <button class="toolbtn" id="btnPrint">📄 Resumo PDF</button>
@@ -322,5 +323,18 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:v
 </div>
 <script src="bio.js"></script>
 <script src="app.js?v=110"></script>
+<script>(function(){try{
+  var b=String(window.__BUILD||""), el=document.getElementById('verBadge'); if(!el) return;
+  var p=function(n){return String(n).padStart(2,'0');}, txt=b, velho=false;
+  if(/^\d{10}$/.test(b)){
+    // BUILD = AAMMDDHHMM em UTC -> exibe em horário de Brasília (UTC-3), independente do fuso do navegador
+    var inst=Date.UTC(2000+ +b.slice(0,2), +b.slice(2,4)-1, +b.slice(4,6), +b.slice(6,8), +b.slice(8,10));
+    velho=(Date.now()-inst)>36*3600*1000;
+    var d=new Date(inst-3*3600*1000);   // desloca para o relógio de Brasília
+    txt=p(d.getUTCDate())+'/'+p(d.getUTCMonth()+1)+' '+p(d.getUTCHours())+':'+p(d.getUTCMinutes());
+  }
+  el.innerHTML='● versão '+txt;
+  if(velho){ el.style.color='var(--amber,#F5B43C)'; el.style.borderColor='var(--amber,#F5B43C)'; el.style.background='rgba(245,180,60,.12)'; el.title='Esta build está antiga — clique em 🔄 Atualizar para pegar a mais nova.'; }
+}catch(e){}})();</script>
 </body>
 </html>
