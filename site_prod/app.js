@@ -187,7 +187,8 @@ async function exBaixar(d){
   if(!confirm(`Dar baixa no EXAME?\n\n#${d.reg} · ${d.pac}\n${d.exm}\n\nSai da Produção (não depende do HF). Dá pra desfazer.`))return;
   const op=await pedeLogin(); if(!op) return;
   try{ await window.SUPA.prodBaixar([{chave:d.reg+'|'+d.exm,registro:d.reg,exame:d.exm,paciente:d.pac,cat:d.cat,atrasado:d.atr==='1'}],op.nome,op.senha);
-    await loadManual(); renderActive(); }
+    await loadManual(); searchTerm=''; renderActive();
+    const _sb=document.getElementById('wlsearch'); if(_sb){ _sb.value=''; try{_sb.focus();}catch(e){} } }  // limpa + refoca pra digitar o próximo nº (Dudu 19/10)
   catch(e){ if(/login|senha/i.test(e.message||''))__op=null; alert('Não foi possível: '+(e.message||e)); }
 }
 async function limparAtrasados(){
@@ -381,6 +382,7 @@ async function boot(D){
     document.getElementById('content').addEventListener('click',onContentClick);
     document.getElementById('content').addEventListener('input',onSearch);
     document.getElementById('content').addEventListener('change',onHtFilter);
+    document.getElementById('content').addEventListener('keydown',function(ev){ if(ev.key==='Enter'&&ev.target.classList&&ev.target.classList.contains('pobsinput')){ ev.preventDefault(); ev.target.blur(); } });
     window.addEventListener('hashchange',()=>{locked=resolveLock(cats());active=0;buildTabs();renderActive();startRotation();});
   }
   if(REFRESH)clearInterval(REFRESH);
@@ -544,9 +546,26 @@ function exportAmostrasCSV(){
 }
 window.exportAmostrasCSV=exportAmostrasCSV;
 // filtros de origem/status da aba Amostras (selects)
-function onHtFilter(ev){ if(ev.target.id==='htorigem'){histotecOrig=ev.target.value; renderHistotec();} else if(ev.target.id==='htstatus'){histotecStat=ev.target.value; renderHistotec();} }
+function onHtFilter(ev){ if(ev.target.classList&&ev.target.classList.contains('pobsinput')){ salvarProdObs(ev.target); return; } if(ev.target.id==='htorigem'){histotecOrig=ev.target.value; renderHistotec();} else if(ev.target.id==='htstatus'){histotecStat=ev.target.value; renderHistotec();} }
+// 📝 observação do exame na Produção (por que NÃO deu baixa). Reusa sep_marks com chave prod:REG|EXM, estado vazio (NÃO tira o exame da fila). Dudu 19/10.
+async function salvarProdObs(inp){
+  const k=inp.dataset.pobsk; if(!k) return;
+  const txt=(inp.value||'').trim();
+  const cur=(((sepMarksMap[k]||{}).obs)||'').trim();
+  if(txt===cur) return;
+  if(!(window.SUPA&&window.SUPA.ok)){ alert('A observação precisa da conexão em nuvem (Supabase).'); inp.value=cur; return; }
+  const badge=inp.parentNode&&inp.parentNode.querySelector('.pobssaved'); if(badge) badge.textContent='💾…';
+  try{
+    const body=k.replace(/^prod:/,''); const i=body.indexOf('|'); const reg=i>=0?body.slice(0,i):body; const exm=i>=0?body.slice(i+1):'';
+    if(sepMarksMap[k]) await window.SUPA.updateMark(k,{obs:txt||null});
+    else await window.SUPA.upsertMark({chave:k, req:reg, exame:exm, estado:'', por:'equipe', obs:txt||null, ts_sep:Date.now()});
+    sepMarksMap[k]=Object.assign(sepMarksMap[k]||{chave:k}, {obs:txt||null});
+    inp.classList.toggle('has', !!txt);
+    if(badge){ badge.textContent='✓ salvo'; setTimeout(()=>{ if(badge) badge.textContent=''; },1600); }
+  }catch(e){ if(badge) badge.textContent='⚠'; alert('Não consegui salvar a observação: '+(e.message||e)); }
+}
 // true enquanto o cursor está numa BUSCA (não deixar o auto-refresh apagar o que se digita)
-function typingSearch(){const a=document.activeElement;return !!(a&&(a.id==='htsearch'||a.id==='wlsearch'));}
+function typingSearch(){const a=document.activeElement;return !!(a&&(a.id==='htsearch'||a.id==='wlsearch'||(a.classList&&a.classList.contains('pobsinput'))));}
 // busca da aba Histotécnica: mostra/esconde linhas (com e sem acento), sem re-render (não perde o foco)
 function filterHistotec(){
   const t=normAcc(histotecQ.trim()); let vis=0;
@@ -620,7 +639,7 @@ function renderActive(){
         </div>
         <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
-            <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div>${travHistLine(e)}</div>
+            <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div>${travHistLine(e)}<div class="pobswrap"><input class="pobsinput${((sepMarksMap['prod:'+e.registro+'|'+(e.exame||'')]||{}).obs)?' has':''}" data-pobsk="prod:${escA(String(e.registro))}|${escA(e.exame||'')}" value="${escA(((sepMarksMap['prod:'+e.registro+'|'+(e.exame||'')]||{}).obs)||'')}" placeholder="📝 observação / motivo de não ter dado baixa (ex.: preso com o escritório, não separado)" autocomplete="off" spellcheck="false"><span class="pobssaved"></span></div></div>
             <div class="wlact">${e._urg
               ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" data-manual="${e._manual?'1':'0'}" title="tira do alerta de urgência (o exame continua na fila)">baixa na urgência</button>`
               : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<button class="exbaixabtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" data-atr="${e.atrasado?'1':'0'}" title="baixa no EXAME — tira da Produção (não depende do HF)">✓ no exame</button><button class="travarbtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" title="travar o exame (financeiro, cadastro, problema de amostra…) — vai pra aba 🔒 Travados">🔒 Travar</button><span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
