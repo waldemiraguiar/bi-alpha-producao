@@ -931,6 +931,12 @@
   function desenharRaiva() {
     const b = document.querySelector('#abas button[data-setor="raiva"]')
     const el = $('raivaLista'); if (!el) return
+    // 🔴 Fúlvio 19/out: o render periódico (desenhar a cada 15s) apagava o que a pessoa estava
+    //   DIGITANDO (volume/coloração/motivo) — "coloco o volume e some". Se um campo da lista da
+    //   Raiva está em foco, pulo o re-render (preserva a digitação). Os re-renders após ação (clicar
+    //   botão) acontecem com o campo já desfocado, então não são afetados.
+    const ae = document.activeElement
+    if (ae && el.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return
     const L = raivaCache || []
     if (b) {
       const pend = L.filter(c => !c.fechado_em && c.coleta_ok && !c.amostra).length
@@ -1069,7 +1075,7 @@
 
           ${c.coleta_ok ? `<div class="raiva-bio ${c.amostra || ''}">
             <b>🧪 A amostra está viável?</b>
-            <span class="mudo">Volume <b>igual ou superior a 500 µL</b> (meio mL) já serve. Coloração: aceita <b>no máximo 1 cruz</b> de hemólise ou lipemia.</span>
+            <span class="mudo">Volume <b>igual ou superior a 500 µL</b> (meio mL) já serve. Coloração aceita: <b>soro normal, hemólise discreta ou lipemia discreta</b> — qualquer cruz, ictérico ou lipemia/hemólise acentuada = não viável.</span>
             ${/* ⭐ Fúlvio 15/out: além do volume, um espaço pra identificar o Nº de registro no HF
                   (a requisição do exame de raiva). Reuso o campo requisicao — aparece no topo do card. */''}
             ${/* 🔴 Fúlvio 18/out: o campo estava "muito apagado" e passava batido. Agora, quando VAZIO,
@@ -1091,15 +1097,13 @@
               : `<div class="raiva-bioacao">
                    <input class="raiva-vol" data-rvol="${c.id}" placeholder="volume medido (ex.: 700 µL)">
                    ${/* 🔴 Fúlvio 18/out: a 2ª caixinha vira "coloração do soro?", OBRIGATÓRIA pra marcar
-                        viável. Só aceita a lista abaixo; ictérico e hemólise/lipemia ++ ou +++ ficam de
-                        FORA (são "não viável"). Vira lista fechada pra ninguém digitar "cruz" errado. */''}
+                        viável. Lista fechada. 🔴 Fúlvio 19/out: SÓ 3 opções — tirar "hemólise +" e
+                        "lipemia +" (1 cruz). Qualquer cruz/ictérico/++/+++ = NÃO viável. */''}
                    <select class="raiva-cor" data-rcor="${c.id}">
                      <option value="">coloração do soro?</option>
                      <option>soro coloração normal</option>
                      <option>hemólise discreta</option>
-                     <option>hemólise +</option>
                      <option>lipemia discreta</option>
-                     <option>lipemia +</option>
                    </select>
                    <button data-rviavel="${c.id}">✅ Viável</button>
                    <input class="raiva-mot" data-rmot="${c.id}" placeholder="se NÃO viável, o motivo (ex.: ictérico, hemólise ++, lipemia +++)">
@@ -1120,8 +1124,11 @@
               //   e isso fica VISÍVEL depois. Campo: pagamento="avista|AAAA-MM-DD|VALOR|NOME" ou "fatura".
               const partes = String(c.pagamento || '').split('|')
               const pgTipo = partes[0], pgData = partes[1] || '', pgValor = partes[2] || '', pgNome = partes[3] || ''
+              // ⭐ VALIDADO = à vista OU na fatura (libera o ⑬ Correios). 🔴 Fúlvio 19/out: 3º estado
+              //   "aguardando o pagamento" — fica registrado mas NÃO valida (o ⑬ trava nele).
               const feito = pgTipo === 'avista' || pgTipo === 'fatura'
-              return `<label class="raiva-tq raiva-pag${feito ? ' on' : ''}">
+              const aguardando = pgTipo === 'aguardando'
+              return `<label class="raiva-tq raiva-pag${feito ? ' on' : ''}${aguardando ? ' aguardando' : ''}">
                 <input type="checkbox" class="raiva-pag-box" ${feito ? 'checked' : ''} disabled>
                 <span>⑤ Pagamento <i class="raiva-pag-sub mudo">— a clínica paga o exame pra avançar</i></span>
                 ${feito
@@ -1129,9 +1136,13 @@
                        ? '💵 pago à vista' + (pgData ? ' · ' + dataBR(pgData) : '') + (pgValor ? ' · R$ ' + esc(pgValor) : '') + (pgNome ? ' · ' + esc(pgNome) : '')
                        : '🧾 na fatura'}</b>
                      <button type="button" class="lnk" data-rpag="" data-rid="${c.id}">trocar</button>`
+                  : aguardando
+                  ? `<b class="raiva-pag-aguard" style="color:#c9821f">⏳ aguardando o pagamento</b>
+                     <button type="button" class="lnk" data-rpag="" data-rid="${c.id}">trocar</button>`
                   : `<span class="raiva-pag-ops">
                        <button type="button" class="btn-sec" data-rpag="avista" data-rid="${c.id}">💵 Pago à vista</button>
                        <button type="button" class="btn-sec" data-rpag="fatura" data-rid="${c.id}">🧾 Na fatura</button>
+                       <button type="button" class="btn-sec" data-rpag="aguardando" data-rid="${c.id}">⏳ Aguardando pagamento</button>
                      </span>`}
               </label>`
             })()}
