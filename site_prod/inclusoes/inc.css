@@ -251,10 +251,14 @@ body.tv main{padding-bottom:90px}
 .selo.novo{color:var(--amarelo);background:#3a2a0c}
 .cli{color:var(--amarelo);font-weight:700}
 
-.selo-modo{font-size:13px;font-weight:700;padding:6px 28px;letter-spacing:.03em}
+.selo-modo{font-size:13px;font-weight:700;padding:6px 28px;letter-spacing:.03em;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .selo-modo.demo{background:#f5c84b;color:#1a1400;font-size:15px}
 .selo-modo.demo a{color:#1a1400;margin-left:10px}
 .selo-modo.real{background:#0f2a1c;color:#6fe39a}
+/* 🔴 Fúlvio 18/out: hora + atualizado + Atualizar vêm pra cá (barra preta do topo), do lado da frase */
+.selo-fer{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.selo-fer .relogio{color:inherit;opacity:.85;font-variant-numeric:tabular-nums}
+.selo-fer #btnAtualizar{padding:3px 10px;font-size:12px;line-height:1.4}
 
 .hf{font-size:13px;color:var(--mudo);margin-top:3px}
 .hf.ok{color:var(--ok)}
@@ -1146,6 +1150,12 @@ button.kpi.on{border-color:var(--tinta);box-shadow:0 0 0 2px color-mix(in srgb,v
 /* ⑬⑭ os campos de texto do rastreio */
 .raiva-campo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 0;font-size:13px}
 .raiva-campo>b{font-weight:600}
+/* 🔴 Fúlvio 18/out: o Nº de registro no HF estava "muito apagado" — quando vazio, destaque âmbar */
+.raiva-hfreg.falta{background:#3a2a0a;border:1px solid #c9821f;border-radius:9px;padding:9px 12px;margin:4px 0}
+.raiva-hfreg.falta>b{color:#f0b84a}
+.raiva-hfbtn{background:#c9821f;color:#1a1400;font-weight:700;border:0;border-radius:7px;padding:6px 12px;cursor:pointer}
+.raiva-cor{padding:6px 9px;border-radius:7px;min-width:170px}
+@media(max-width:620px){.raiva-cor{min-width:0;width:100%}}
 .raiva-cod{font-family:var(--mono,ui-monospace,monospace);font-weight:700;letter-spacing:.04em;
   background:var(--painel);border:1px solid var(--linha);border-radius:6px;padding:2px 8px}
 

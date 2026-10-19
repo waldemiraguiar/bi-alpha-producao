@@ -844,6 +844,8 @@
   //    ⭐ Deixei em UM lugar só: confirmado com ele (ou com a norma do destino), troca-se o 30
   //    aqui e a tela toda acompanha. Não escondo a pendência: ela está na resposta ao Wal.
   const RAIVA_ESPERA_DIAS = 30
+  const RAIVA_VALOR = 1465   // 🔴 Fúlvio 18/out: valor do exame de raiva — pagamento à vista não pode ser inferior
+  const fmtBR = n => Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
   function raivaLiberaEm(vacinaData) {
     if (!vacinaData) return null
     const d = new Date(vacinaData + 'T12:00:00')
@@ -913,6 +915,7 @@
     const f = [], need = (cond, rot) => { if (!cond) f.push(rot) }
     need(c.microchip_ok, 'microchipagem'); need(c.vacina_ok, 'vacina')
     need(c.coleta_ok, 'coleta recebida'); need(c.amostra === 'viavel', 'amostra viável')
+    need(c.requisicao, 'nº de registro no HF')   // 🔴 Fúlvio 18/out: não sai do processo sem o nº do HF
     need(c.avisada_ok, 'clínica avisada'); need(c.pagamento, 'pagamento')
     need(c.word_enviado, 'formulário Word'); need(c.doc_carteirinha, 'carteirinha')
     need(c.doc_microchip, 'certificado do microchip'); need(c.doc_conferida, 'documentação completa')
@@ -921,6 +924,7 @@
     need(c.nucleo_pagto_ok, 'pagamento solicitado à Núcleo'); need(c.comprovante_ok, 'comprovante à Núcleo')
     need(c.laudo_chegou, 'laudo chegou'); need(c.entrega_combinada, 'entrega combinada')
     need(c.entrega_comprovada, 'comprovante de entrega')
+    need(c.entrega_anexo_url, 'FOTO do comprovante de entrega anexada')   // 🔴 Fúlvio 18/out: só conclui depois de anexar a foto
     return f
   }
 
@@ -1006,7 +1010,9 @@
       // ⭐ Fúlvio 16/out: "tá confuso saber onde começa e acaba uma solicitação". Agora cada
       //   formulário RECOLHE — clica no cabeçalho e só o que você está trabalhando fica aberto;
       //   os outros ficam recolhidos (só o cabeçalho) e você abre conforme a necessidade.
-      const recolhido = raivaAberto !== c.id && L.length > 1
+      // 🔴 Fúlvio 18/out: "com só uma raiva não recolhe; preciso que recolha com uma também".
+      //   O `&& L.length > 1` travava o recolher quando havia 1 só. Tirado: recolhe sempre.
+      const recolhido = raivaAberto !== c.id
       return `<article class="can-card raiva-card ${recolhido ? 'recolhido' : ''} ${c.fechado_em ? 'feito' : ''} ${c.aguardando_cliente ? 'esperando' : ''}">
         <div class="can-topo" data-rtoggle="${c.id}" title="${recolhido ? 'abrir' : 'recolher'} este formulário">
           <span class="raiva-chevron">${recolhido ? '▸' : '▾'}</span>
@@ -1066,13 +1072,15 @@
             <span class="mudo">Volume <b>igual ou superior a 500 µL</b> (meio mL) já serve. Coloração: aceita <b>no máximo 1 cruz</b> de hemólise ou lipemia.</span>
             ${/* ⭐ Fúlvio 15/out: além do volume, um espaço pra identificar o Nº de registro no HF
                   (a requisição do exame de raiva). Reuso o campo requisicao — aparece no topo do card. */''}
-            <div class="raiva-campo raiva-hfreg">
-              <b>Nº de registro no HF</b>
+            ${/* 🔴 Fúlvio 18/out: o campo estava "muito apagado" e passava batido. Agora, quando VAZIO,
+                  fica em destaque âmbar com ⚠️ e o aviso de obrigatório; preenchido, fica calmo. */''}
+            <div class="raiva-campo raiva-hfreg ${c.requisicao ? '' : 'falta'}">
+              <b>${c.requisicao ? '' : '⚠️ '}Nº de registro no HF ${c.requisicao ? '' : '<i class="mudo">(obrigatório — não conclui sem)</i>'}</b>
               ${c.requisicao
                 ? `<span class="raiva-cod">${esc(c.requisicao)}</span>
                    <button type="button" class="raiva-lapis" data-redita="${c.id}" data-rcampo2="requisicao"
                            data-rtipo="texto" data-rlabel="número de registro do HF" title="corrigir">✏️</button>`
-                : `<button class="btn-sec" data-redita="${c.id}" data-rcampo2="requisicao"
+                : `<button class="btn-prim raiva-hfbtn" data-redita="${c.id}" data-rcampo2="requisicao"
                      data-rtipo="texto" data-rlabel="número de registro do HF">anotar o nº do HF</button>`}
             </div>
             ${c.amostra
@@ -1082,8 +1090,19 @@
                    ${c.amostra_por ? `<i class="mudo">— ${esc(c.amostra_por)}</i>` : ''}</div>`
               : `<div class="raiva-bioacao">
                    <input class="raiva-vol" data-rvol="${c.id}" placeholder="volume medido (ex.: 700 µL)">
+                   ${/* 🔴 Fúlvio 18/out: a 2ª caixinha vira "coloração do soro?", OBRIGATÓRIA pra marcar
+                        viável. Só aceita a lista abaixo; ictérico e hemólise/lipemia ++ ou +++ ficam de
+                        FORA (são "não viável"). Vira lista fechada pra ninguém digitar "cruz" errado. */''}
+                   <select class="raiva-cor" data-rcor="${c.id}">
+                     <option value="">coloração do soro?</option>
+                     <option>soro coloração normal</option>
+                     <option>hemólise discreta</option>
+                     <option>hemólise +</option>
+                     <option>lipemia discreta</option>
+                     <option>lipemia +</option>
+                   </select>
                    <button data-rviavel="${c.id}">✅ Viável</button>
-                   <input class="raiva-mot" data-rmot="${c.id}" placeholder="motivo, se não estiver viável">
+                   <input class="raiva-mot" data-rmot="${c.id}" placeholder="se NÃO viável, o motivo (ex.: ictérico, hemólise ++, lipemia +++)">
                    <button class="btn-sec" data-rinviavel="${c.id}">⛔ Não viável</button>
                  </div>`}
           </div>` : ''}
@@ -1145,7 +1164,8 @@
               `⑪ A clínica devolveu o documento ${c.gov_impossivel ? 'preenchido e carimbado' : 'assinado pelo gov.br'}`) : ''}
 
             ${c.devolvido_ok ? `
-              ${tique(c, 'nucleo_site_ok', '⑫ Preenchido no site da <b>Núcleo</b>')}
+              ${tique(c, 'nucleo_site_ok', '⑫ Preenchido no site da <b>Núcleo</b>',
+                ` <a class="lnk raiva-site" target="_blank" rel="noopener" href="https://www.nucleopesquisasraiva.com.br/">abrir o site da Núcleo ↗</a>`)}
 
               <div class="raiva-fase">Correios</div>
               ${tique(c, 'correios_ok', '⑬ Amostra enviada pelos <b>Correios</b>',
@@ -1197,9 +1217,12 @@
                     dias para verificar se o laudo já foi liberado" */''}
               ${(() => {
                 if (!c.comprovante_ok || !c.comprovante_em || c.laudo_chegou) return ''
-                const d = Math.floor((Date.now() - new Date(c.comprovante_em + 'T12:00:00')) / 864e5)
-                if (d < 15) return `<div class="raiva-dica">⏳ Cobrança da Núcleo começa a ser lembrada
-                  em <b>${15 - d} dia(s)</b> — 15 dias depois do comprovante, e depois de 5 em 5.</div>`
+                // 🔴 Fúlvio 18/out: dava "16 dias" quando o comprovante era do mesmo dia de manhã
+                //    (a conta ficava negativa e 15-(-1)=16). Piso em 0 dia. E o texto é o que ele ditou.
+                const d = Math.max(0, Math.floor((Date.now() - new Date(c.comprovante_em + 'T12:00:00')) / 864e5))
+                if (d < 15) return `<div class="raiva-dica">⏳ <b>Cobrança do laudo que será enviada pela NUP</b>
+                  começa a ser lembrada em <b>15 dias</b> após o envio do comprovante, e depois de <b>5 em 5</b>
+                  <span class="mudo">(faltam ${15 - d} dia${15 - d !== 1 ? 's' : ''}).</span></div>`
                 // ⭐ Fúlvio 14/out: "por onde você vai me sinalizar isso?". A partir dos 15 dias o
                 //    lembrete não some mais — fica na tela com a contagem, dispara o aviso automático
                 //    pro Atendimento (de 5 em 5) e acende o KPI vermelho "laudo atrasado na Núcleo".
@@ -4550,7 +4573,16 @@
         if (d === null) return
         const m = (d || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
         const iso = m ? `${m[3]}-${m[2]}-${m[1]}` : ''
-        const valor = (prompt('VALOR pago à vista (ex.: 1465,00):', '') || '').trim().replace(/[^\d,.]/g, '')
+        // 🔴 Fúlvio 18/out: o valor à vista NÃO pode ser inferior ao valor do exame (R$ 1.465) —
+        //    "cravado ou superior". Senão o cliente paga R$1 e a gente libera um exame caro. Bloqueia.
+        let valor = ''
+        while (true) {
+          valor = (prompt(`VALOR pago à vista — não pode ser MENOR que R$ ${esc(fmtBR(RAIVA_VALOR))} (cravado ou superior):`, '') || '').trim().replace(/[^\d,.]/g, '')
+          if (!valor) return
+          const n = parseFloat(valor.replace(/\./g, '').replace(',', '.'))
+          if (isFinite(n) && n >= RAIVA_VALOR) break
+          if (!confirm(`⛔ R$ ${valor} é MENOR que o valor do exame (R$ ${fmtBR(RAIVA_VALOR)}).\n\nO pagamento à vista tem que ser CRAVADO ou SUPERIOR.\n\nOK = digitar de novo · Cancelar = desistir`)) return
+        }
         const nome = (prompt('NOME de quem pagou:', '') || '').trim()
         // campo: avista|data|valor|nome  (partes vazias toleradas)
         val = ['avista', iso, valor, nome].join('|').replace(/\|+$/, '')
@@ -4674,18 +4706,29 @@
       const caso = (raivaCache || []).find(c => c.id === id); if (!caso) return
       const vol = (document.querySelector(`[data-rvol="${id}"]`) || {}).value || ''
       const mot = (document.querySelector(`[data-rmot="${id}"]`) || {}).value || ''
+      const cor = (document.querySelector(`[data-rcor="${id}"]`) || {}).value || ''
       // ⛔ "sinalizar o motivo" é exigência do Fúlvio: sem o motivo o Atendimento não tem o
       //    que dizer à clínica. Aviso e deixo tentar de novo — não bloqueio a tela.
       // 🔴 05/out, Fúlvio: *"escrevi 400. Se coloquei um valor MENOR que o viável, você não pode
       //    deixar avançar."* ⛔ A régua (>500 µL) estava escrita na tela e não era conferida.
+      // 🔴 Fúlvio 18/out: coloração do soro também é OBRIGATÓRIA pra marcar viável. E a mensagem
+      //    de falta vira UMA só, listando tudo que falta — era a "frase que aparecia e não funcionava".
       if (vi) {
         const num = parseFloat(String(vol).replace(/[^\d.,]/g, '').replace(',', '.'))
-        if (!vol.trim() || !isFinite(num)) { toast('Escreva o volume medido em µL — sem ele eu não sei se a amostra serve'); return }
-        if (num < 500) { toast(`⛔ ${num} µL não dá: a amostra precisa de NO MÍNIMO 500 µL. Marque como não viável e diga o motivo.`); return }
+        const faltas = []
+        if (!vol.trim() || !isFinite(num)) faltas.push('o volume medido em µL')
+        else if (num < 500) faltas.push(`volume ≥ 500 µL (você pôs ${num} — abaixo não serve)`)
+        if (!cor.trim()) faltas.push('a coloração do soro')
+        if (faltas.length) {
+          toast(`⛔ Pra marcar VIÁVEL falta: ${faltas.join(' e ')}.` +
+            (num < 500 && vol.trim() ? ' Abaixo de 500 µL, marque "⛔ Não viável".' : ''))
+          return
+        }
       }
       if (nv && !mot.trim()) { toast('Escreva o motivo — é o que o Atendimento vai falar com a clínica'); return }
       await salvarRaiva({ ...caso, id, amostra: vi ? 'viavel' : 'inviavel',
-        amostra_volume: vol.trim() || null, amostra_motivo: mot.trim() || null })
+        // viável: a coloração vira o "motivo" exibido ao lado do ✅ · não viável: o motivo digitado
+        amostra_volume: vol.trim() || null, amostra_motivo: (vi ? cor : mot).trim() || null })
       return
     }
     // 🔴 05/out, Fúlvio: *"em VÁRIAS ABAS, independente de qual seja, quando a gente cria uma
@@ -5543,10 +5586,16 @@
     el.className = DEMO ? 'selo-modo demo' : 'selo-modo real'
     // ⭐ Fúlvio 13/out: não dizer "AO VIVO" aqui — confundia com o selo "atualizado" (frescor do dado).
     //    Esta barra diz só se é o quadro REAL ou a DEMO. O frescor do dado é o selo no topo (ao lado do relógio).
-    el.innerHTML = DEMO
+    const frase = DEMO
       ? '🧪 MODO DEMONSTRAÇÃO — tudo nesta tela é EXEMPLO inventado. Nada é gravado. <a href="?setor=' + setor + '">ir para o quadro real</a>'
       : '✅ Este é o quadro de verdade da equipe — o que você faz aqui vale e fica salvo (não é treino)'
+    el.innerHTML = '<span class="selo-txt">' + frase + '</span><span class="selo-fer" id="seloFer"></span>'
     document.body.prepend(el)
+    // 🔴 Fúlvio 18/out (vídeo): ele quer a HORA + "atualizado" + "Atualizar" LÁ EM CIMA, na barra
+    //   preta, do lado da frase verde — não na linha das abas, onde eu tinha deixado ("embaixo").
+    //   Movo os MESMOS elementos (ids preservados → o relógio, o selo e os handlers continuam valendo).
+    const fer = el.querySelector('#seloFer')
+    if (fer) ['relogio', 'seloAtualiz', 'btnAtualizar'].forEach(id => { const n = document.getElementById(id); if (n) fer.appendChild(n) })
   })()
 
   // ── liga ──
