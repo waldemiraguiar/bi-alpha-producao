@@ -4701,6 +4701,17 @@
         dados.coleta_data = new Date().toISOString().slice(0, 10)
       if (tq.checked && campo === 'laudo_chegou' && !caso.laudo_em)
         dados.laudo_em = new Date().toISOString().slice(0, 10)
+      // 🔴 Fúlvio 19/out: NÃO pode marcar "amostra enviada pelos Correios" (⑬) sem o PAGAMENTO (⑤)
+      //   VALIDADO — validado = pago à vista OU na fatura. "Aguardando o pagamento" ou vazio = BLOQUEIA.
+      //   (Trava de verdade pedida pelo sócio, como o microchip×vacina acima — não é só alerta.)
+      if (tq.checked && campo === 'correios_ok') {
+        const pg = String(caso.pagamento || '').split('|')[0]
+        if (pg !== 'avista' && pg !== 'fatura') {
+          tq.checked = false
+          toast('⛔ Não dá pra marcar o envio pelos Correios sem o ⑤ Pagamento validado (pago à vista ou na fatura). Agora está ' + (pg === 'aguardando' ? '"aguardando o pagamento"' : 'sem pagamento') + '.')
+          return
+        }
+      }
       // ⭐ hoje por padrão nos passos novos; o ✏️ do lado corrige quem marcou com atraso.
       // ⛔ comprovante_em é a ÂNCORA do lembrete de 15 dias: se ficar vazio, o lembrete nunca nasce.
       if (tq.checked && campo === 'correios_ok' && !caso.correios_em)
