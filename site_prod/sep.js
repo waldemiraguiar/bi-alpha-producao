@@ -412,13 +412,27 @@
         await window.SUPA.upsertMark({ chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame || '', cat: it.cat || '', classe: it.classe || '', paciente: it.paciente || '', tutor: it.tutor || '', vet: it.vet || '', estado: '', por: me() || 'equipe', ts_sep: null, no_prazo: null, corte: null, obs: text || null });
       }
       touch(); await loadMarks(); return true;
-    } catch (e) { alert('Não consegui salvar a observação (a coluna "obs" já foi criada no banco?).'); return false; }
+    } catch (e) { alert('Não consegui salvar a forma/quantidade (coluna "obs").'); return false; }
+  }
+  // 📝 OBSERVAÇÃO LIVRE — coluna PRÓPRIA `nota` (Dudu 19/10): não colide com a forma/quantidade (que fica no `obs`).
+  async function saveNota(k, text) {
+    if (!useSupa()) { alert('A observação exige a conexão em nuvem (Supabase).'); return false; }
+    text = (text || '').trim();
+    try {
+      if (marks[k]) await window.SUPA.updateMark(k, { nota: text || null });
+      else {
+        const it = itens().find(x => chaveOf(x) === k);
+        if (!it) { alert('Não encontrei o item para anotar.'); return false; }
+        await window.SUPA.upsertMark({ chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame || '', cat: it.cat || '', classe: it.classe || '', paciente: it.paciente || '', tutor: it.tutor || '', vet: it.vet || '', estado: '', por: me() || 'equipe', ts_sep: null, no_prazo: null, corte: null, nota: text || null });
+      }
+      touch(); await loadMarks(); return true;
+    } catch (e) { alert('Não consegui salvar a observação (a coluna "nota" já existe no banco? Peça ao Wal rodar sep_nota.sql).'); return false; }
   }
   // CAMPO editável SEMPRE VISÍVEL na linha (Separar/Receber, Última Chamada, Avisar cliente).
-  // Salva no blur/Enter; o auto-refresh é blindado enquanto se digita (typingObs()).
+  // Observação LIVRE = coluna `nota` (separada da forma/quantidade, que fica no `obs`).
   function obsChunk(k) {
-    const m = marks[k]; const txt = (m && m.obs) ? String(m.obs) : '';
-    return `<div class="obswrap"><span class="obsico" title="observação da amostra">📝</span><input class="obsinput ${txt ? 'has' : ''}" data-obsk="${esc2(k)}" value="${esc2(txt)}" placeholder="observação / motivo da nova amostra (ex.: não veio a amostra, hemolisada…)" autocomplete="off" spellcheck="false"><span class="obssaved" data-obssaved="${esc2(k)}"></span></div>`;
+    const m = marks[k]; const txt = (m && m.nota) ? String(m.nota) : '';
+    return `<div class="obswrap"><span class="obsico" title="observação da amostra">📝</span><input class="obsinput ${txt ? 'has' : ''}" data-obsk="${esc2(k)}" value="${esc2(txt)}" placeholder="observação livre (ex.: material preso com o escritório, não veio a amostra, hemolisada…)" autocomplete="off" spellcheck="false"><span class="obssaved" data-obssaved="${esc2(k)}"></span></div>`;
   }
   // true enquanto o cursor está num campo de observação (não deixar o refresh apagar o texto)
   const typingObs = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('obsinput')); };
@@ -913,12 +927,12 @@
       inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } };
       inp.onblur = async () => {
         const k = inp.dataset.obsk;
-        const cur = (marks[k] && marks[k].obs) ? String(marks[k].obs) : '';
+        const cur = (marks[k] && marks[k].nota) ? String(marks[k].nota) : '';
         if (inp.value.trim() === cur.trim()) return;   // nada mudou
         const badge = el.querySelector(`[data-obssaved="${k.replace(/"/g, '\\"')}"]`);
         if (teamMode && !me()) { openLogin(); return; }
         if (badge) badge.textContent = '💾 salvando…';
-        const ok = await saveObs(k, inp.value);
+        const ok = await saveNota(k, inp.value);
         if (badge) { badge.textContent = ok ? '✓ salvo' : '❌ erro'; setTimeout(() => { if (badge) badge.textContent = ''; }, 2500); }
         inp.classList.toggle('has', !!inp.value.trim());
       };
