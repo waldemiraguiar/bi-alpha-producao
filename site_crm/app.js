@@ -3435,6 +3435,56 @@ function renderTab(){
               <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Aqui só entra <b>DINHEIRO NOVO</b>: reconquistadas/novas contam tudo (o cliente voltou/entrou); as <b>🔀 dividem material</b> só entram <b>quando convertem</b> — e só com a <b>conquista</b> (categoria nova), porque o que já mandavam (ex.: histopato) é dinheiro <b>velho</b>, não recuperação. O <b>TOTAL</b> = o quanto a carteira realmente recuperou. Acompanhe velho×novo das que dividem na seção 🎉 Conquistas abaixo.</div>`;
           }
         }
+        // 📊 RITMO DO MÊS — cada cliente vs o MESMO PONTO do mês passado (run-rate pacing). Fica FIXADO no topo.
+        let ritmoHtml="";
+        if(CLIN_FATMES){
+          const _cqm=c=>(CLIN_CONQMES&&CLIN_CONQMES[String(c)])||[];
+          const _arrOf=d=> d.x.tipo==="divide" ? _cqm(d.x.cod) : ((CLIN_FATMES[String(d.x.cod)])||[]);
+          const _now=new Date(), _p2=n=>String(n).padStart(2,"0");
+          const _curYm=_now.getFullYear()+"-"+_p2(_now.getMonth()+1);
+          const _prevLast=new Date(_now.getFullYear(), _now.getMonth(), 0);   // último dia do mês passado
+          const _prevYm=_prevLast.getFullYear()+"-"+_p2(_prevLast.getMonth()+1);
+          const _dia=_now.getDate(), _diasPrev=_prevLast.getDate(), _frac=Math.min(1, _dia/_diasPrev);
+          const _val=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?(x.fat||0):0;};
+          const _mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
+          const _tipoIc={nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'};
+          let rRows=dados.filter(d=>d.x.cod).map(d=>{ const arr=_arrOf(d); const mtd=_val(arr,_curYm), prevFull=_val(arr,_prevYm);
+            const base=prevFull*_frac, temBase=prevFull>0, delta=temBase?(mtd/base-1):null;
+            return {nome:d.x.nome,tipo:d.x.tipo,mtd,prevFull,base,delta,temBase,arr}; }).filter(r=>r.mtd>0||r.prevFull>0);
+          rRows.sort((a,b)=>{ const da=a.delta==null?99:a.delta, db=b.delta==null?99:b.delta; return da-db; });   // piores (abaixo do ritmo) no topo
+          if(rRows.length){
+            const _corD=dl=> dl==null?"#9fb2cc": dl>=0.05?"#00E5A0": dl>=-0.05?"#ffc266": dl>=-0.2?"#FF8A00":"#FF5470";
+            const _pct=dl=> dl==null?"novo": (dl>=0?"+":"")+Math.round(dl*100)+"%";
+            const totMtd=rRows.reduce((s,r)=>s+r.mtd,0), totBase=rRows.reduce((s,r)=>s+(r.temBase?r.base:0),0);
+            const paceGeral= totBase>0 ? (totMtd/totBase-1) : null;
+            const nAcima=rRows.filter(r=>r.delta!=null&&r.delta>=0.02).length, nAbaixo=rRows.filter(r=>r.delta!=null&&r.delta<=-0.1).length;
+            const _mesesT=(()=>{ const s=new Set(); rRows.forEach(r=>r.arr.forEach(a=>s.add(a.ym))); return [...s].sort().slice(-5); })();
+            const _spark=arr=>{ const vs=_mesesT.map(ym=>_val(arr,ym)), mx=Math.max(...vs,1);
+              return `<span style="display:inline-flex;gap:2px;align-items:flex-end;height:18px">${vs.map((v,i)=>`<span title="${_mlab(_mesesT[i])}: ${fmtBRL(v)}" style="width:5px;height:${Math.max(2,Math.round(v/mx*18))}px;background:${i===vs.length-1?'#7effcf':'rgba(159,230,255,.45)'};border-radius:1px"></span>`).join("")}</span>`; };
+            const _maxAbs=Math.max(0.3, ...rRows.map(r=>r.delta==null?0:Math.abs(r.delta)));
+            const _linha=r=>{ const cor=_corD(r.delta), w=r.delta==null?0:Math.round(Math.min(1,Math.abs(r.delta)/_maxAbs)*100), up=(r.delta!=null&&r.delta>=0);
+              return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,.05)">
+                <div style="flex:1;min-width:0"><div style="font-size:12.5px;color:#eaf3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_tipoIc[r.tipo]||'•'} ${esc(r.nome)}</div>
+                  <div class="t-mut" style="font-size:10.5px">${fmtBRL(r.mtd)} <span style="color:#6b7a90">· mesmo ponto mês passado ~${fmtBRL(r.base)}</span></div></div>
+                ${_spark(r.arr)}
+                <div style="width:64px;height:8px;background:rgba(255,255,255,.06);border-radius:5px;position:relative;overflow:hidden"><div style="position:absolute;top:0;height:100%;width:${Math.round(w/2)}%;background:${cor};${up?'left:50%':'right:50%'};border-radius:5px"></div><div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(255,255,255,.18)"></div></div>
+                <div style="width:52px;text-align:right;font-weight:800;font-size:12.5px;color:${cor}">${_pct(r.delta)}</div>
+              </div>`; };
+            ritmoHtml=`<div style="position:sticky;top:0;z-index:6;border:1px solid rgba(0,212,255,.5);border-radius:14px;padding:12px 14px;margin:0 0 14px;background:#0b1a2b;box-shadow:0 8px 20px rgba(0,0,0,.45)">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px">📊 Ritmo do mês — cada cliente vs o mesmo ponto do mês passado</div>
+                <div style="font-weight:900;font-size:17px;color:${_corD(paceGeral)}">${_pct(paceGeral)} <span class="t-mut" style="font-weight:500;font-size:11px">no geral</span></div>
+              </div>
+              <div class="t-mut" style="font-size:11px;margin-top:3px;line-height:1.5">Hoje é <b>dia ${_dia}</b> (${_mlab(_curYm)}). Comparo o que já entrou este mês com o <b>mesmo ponto</b> do mês passado (~${Math.round(_frac*100)}% de ${_mlab(_prevYm)}). 🟢 acima do ritmo · 🔴 abaixo. <span style="color:#6b7a90">método: run-rate pacing (acumulado parcial × proporção do mês); barrinhas = últimos 5 meses.</span></div>
+              <div style="display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 2px">
+                <span style="background:rgba(0,229,160,.14);color:#00E5A0;border-radius:20px;padding:2px 10px;font-size:11.5px;font-weight:700">🟢 ${nAcima} acima</span>
+                <span style="background:rgba(255,84,112,.14);color:#FF5470;border-radius:20px;padding:2px 10px;font-size:11.5px;font-weight:700">🔴 ${nAbaixo} abaixo</span>
+                <span class="t-mut" style="font-size:11.5px;align-self:center">este mês <b style="color:#7effcf">${fmtBRL(totMtd)}</b> · ritmo esperado ~${fmtBRL(totBase)}</span>
+              </div>
+              <div style="max-height:244px;overflow-y:auto;margin-top:2px">${rRows.map(_linha).join("")}</div>
+            </div>`;
+          }
+        }
         // 🎯 BI DA CONQUISTA — dinheiro NOVO (novos+reconquista+conversão de categoria) e % do faturamento TOTAL do lab
         const cqmSum=cod=>((CLIN_CONQMES&&CLIN_CONQMES[String(cod)])||[]).reduce((s,a)=>s+(a.fat||0),0);
         const CB={nova:{n:0,rs:0},reconquistada:{n:0,rs:0},divide:{n:0,rs:0},particular:{n:0,rs:0}};
@@ -3553,6 +3603,7 @@ function renderTab(){
             </div>${insightAq}
           </div>`:`<div class="proxhint" style="border-color:rgba(0,212,255,.35);color:#9fe6ff;margin:8px 0 12px;line-height:1.5">📡 <b>BI de Aquisição</b> aparece aqui quando os clientes tiverem <b>canal / origem / operador</b> preenchidos. Abra cada cliente (inclusive os antigos, de forma <b>retroativa</b>) e marque a chancela.</div>`;
         painel=`
+          ${ritmoHtml}
           ${biConq}
           ${biAquis}
           <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}${bioLinha()}</div>
