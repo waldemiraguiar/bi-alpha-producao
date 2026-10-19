@@ -207,7 +207,7 @@ def post_clinicas_rs(D):
     rsmap = {str(c.get("cod")): round(c.get("fat") or 0, 2) for c in full if c.get("cod") is not None}
     base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
     # R$ da carteira: marco zero (desde) + soma dos CÓDIGOS-EXTRA no principal (Faro: 989898 + 5724)
-    since_map = {}; desde = {}; fatmes = {}; conqfat = {}; conqmes = {}; lab_desde = 0; lab_marco = ""; lab_mes = {}
+    since_map = {}; desde = {}; fatmes = {}; conqfat = {}; conqmes = {}; lab_desde = 0; lab_marco = ""; lab_mes = {}; fatmtd = {}
     try:
         import urllib.request as _u
         base0 = base
@@ -220,7 +220,13 @@ def post_clinicas_rs(D):
             for e in (c.get("cods_extra") or []):
                 e = str(e).strip()
                 if e: alias[e] = str(p); extras.append(e)
-        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal, divide_conversion, lab_fat_since, lab_fat_mensal
+        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal, clinic_fat_mtd, divide_conversion, lab_fat_since, lab_fat_mensal
+        # 📊 DIA-EXATO p/ o "Ritmo do mês": faturamento até o MESMO DIA, mês atual × mês passado (TODA clínica da carteira, com ou sem marco)
+        try:
+            _allc = [str(c.get("cod")) for c in cart if c.get("cod")]
+            fatmtd = clinic_fat_mtd(_allc, alias)
+        except Exception as e:
+            print(f"clinic_fat_mtd pulado ({e})")
         if since_map:
             desde = clinic_fat_since(since_map, alias)
             fatmes = clinic_fat_mensal(since_map, alias)   # dinheiro mês a mês desde o marco zero (cifrado, diretoria)
@@ -261,10 +267,11 @@ def post_clinicas_rs(D):
                 if not lab_desde and prev.get("lab_desde"): lab_desde = prev["lab_desde"]; recuperou.append("lab_desde")
                 if not lab_mes and prev.get("lab_mes"): lab_mes = prev["lab_mes"]; recuperou.append("lab_mes")
                 if not lab_marco and prev.get("marco"): lab_marco = prev["marco"]; recuperou.append("marco")
+                if not fatmtd and prev.get("fatmtd"): fatmtd = prev["fatmtd"]; recuperou.append("fatmtd")
                 if recuperou: print(f"🛡️ blindagem: recuperado do cifrado anterior (não zerou): {', '.join(recuperou)}")
         except Exception as e:
             print(f"blindagem: não consegui recuperar o cifrado anterior ({e}) — segue com o que tem")
-    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat, "conqmes": conqmes, "lab_desde": lab_desde, "marco": lab_marco, "lab_mes": lab_mes}, ensure_ascii=False, separators=(",", ":")).encode()
+    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat, "conqmes": conqmes, "lab_desde": lab_desde, "marco": lab_marco, "lab_mes": lab_mes, "fatmtd": fatmtd}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
     ct = AESGCM(key).encrypt(iv, data, None)

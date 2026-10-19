@@ -558,7 +558,7 @@ async function loadOps(){ try{ const r=await fetch(OPS_API, {cache:"no-store"});
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
-function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; CLIN_CONQFAT=null; CLIN_CONQMES=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; CLIN_CONQFAT=null; CLIN_CONQMES=null; CLIN_FATMTD=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
 function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -692,7 +692,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null, LAB_MES=null;   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento do lab TOTAL(lab_desde) e MÊS A MÊS(lab_mes={ym:fat}) desde o marco (denominador do BI) — só diretoria
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null, LAB_MES=null, CLIN_FATMTD=null;   // CLIN_FATMTD={cod:{d,cur,prev}} dia-exato p/ o Ritmo do mês   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento do lab TOTAL(lab_desde) e MÊS A MÊS(lab_mes={ym:fat}) desde o marco (denominador do BI) — só diretoria
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -701,7 +701,7 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; LAB_MES=obj.lab_mes||null; }   // {fat, desde, fatmes, conqfat, lab_desde, marco, lab_mes}
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; LAB_MES=obj.lab_mes||null; CLIN_FATMTD=obj.fatmtd||{}; }   // {fat, desde, fatmes, conqfat, lab_desde, marco, lab_mes}
     else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; CLIN_CONQFAT={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
@@ -3448,9 +3448,13 @@ function renderTab(){
           const _val=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?(x.fat||0):0;};
           const _mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
           const _tipoIc={nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'};
-          let rRows=dados.filter(d=>d.x.cod).map(d=>{ const arr=_arrOf(d); const mtd=_val(arr,_curYm), prevFull=_val(arr,_prevYm);
-            const base=prevFull*_frac, temBase=prevFull>0, delta=temBase?(mtd/base-1):null;
-            return {nome:d.x.nome,tipo:d.x.tipo,mtd,prevFull,base,delta,temBase,arr}; }).filter(r=>r.mtd>0||r.prevFull>0);
+          const _mtdMap=CLIN_FATMTD||{}, _exato=!!(CLIN_FATMTD && Object.keys(CLIN_FATMTD).length);
+          let rRows=dados.filter(d=>d.x.cod).map(d=>{ const arr=_arrOf(d), cod=String(d.x.cod), ex=_mtdMap[cod];
+            let mtd, base, temBase;
+            if(ex){ mtd=ex.cur||0; base=ex.prev||0; temBase=base>0; }                                   // DIA-EXATO: mês até hoje × mês passado até o mesmo dia
+            else { mtd=_val(arr,_curYm); const prevFull=_val(arr,_prevYm); base=prevFull*_frac; temBase=prevFull>0; }   // fallback proporcional (até o robô publicar o fatmtd)
+            const delta=temBase?(mtd/base-1):null;
+            return {nome:d.x.nome,tipo:d.x.tipo,mtd,base,temBase,delta,arr}; }).filter(r=>r.mtd>0||r.temBase);
           rRows.sort((a,b)=>{ const da=a.delta==null?99:a.delta, db=b.delta==null?99:b.delta; return da-db; });   // piores (abaixo do ritmo) no topo
           if(rRows.length){
             const _corD=dl=> dl==null?"#9fb2cc": dl>=0.05?"#00E5A0": dl>=-0.05?"#ffc266": dl>=-0.2?"#FF8A00":"#FF5470";
@@ -3465,7 +3469,7 @@ function renderTab(){
             const _linha=r=>{ const cor=_corD(r.delta), w=r.delta==null?0:Math.round(Math.min(1,Math.abs(r.delta)/_maxAbs)*100), up=(r.delta!=null&&r.delta>=0);
               return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,.05)">
                 <div style="flex:1;min-width:0"><div style="font-size:12.5px;color:#eaf3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_tipoIc[r.tipo]||'•'} ${esc(r.nome)}</div>
-                  <div class="t-mut" style="font-size:10.5px">${fmtBRL(r.mtd)} <span style="color:#6b7a90">· mesmo ponto mês passado ~${fmtBRL(r.base)}</span></div></div>
+                  <div class="t-mut" style="font-size:10.5px">${fmtBRL(r.mtd)} <span style="color:#6b7a90">· ${_exato?"mesmo dia mês passado":"mesmo ponto mês passado ~"}${_exato?" ":""}${fmtBRL(r.base)}</span></div></div>
                 ${_spark(r.arr)}
                 <div style="width:64px;height:8px;background:rgba(255,255,255,.06);border-radius:5px;position:relative;overflow:hidden"><div style="position:absolute;top:0;height:100%;width:${Math.round(w/2)}%;background:${cor};${up?'left:50%':'right:50%'};border-radius:5px"></div><div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(255,255,255,.18)"></div></div>
                 <div style="width:52px;text-align:right;font-weight:800;font-size:12.5px;color:${cor}">${_pct(r.delta)}</div>
@@ -3475,7 +3479,7 @@ function renderTab(){
                 <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px">📊 Ritmo do mês — cada cliente vs o mesmo ponto do mês passado</div>
                 <div style="font-weight:900;font-size:17px;color:${_corD(paceGeral)}">${_pct(paceGeral)} <span class="t-mut" style="font-weight:500;font-size:11px">no geral</span></div>
               </div>
-              <div class="t-mut" style="font-size:11px;margin-top:3px;line-height:1.5">Hoje é <b>dia ${_dia}</b> (${_mlab(_curYm)}). Comparo o que já entrou este mês com o <b>mesmo ponto</b> do mês passado (~${Math.round(_frac*100)}% de ${_mlab(_prevYm)}). 🟢 acima do ritmo · 🔴 abaixo. <span style="color:#6b7a90">método: run-rate pacing (acumulado parcial × proporção do mês); barrinhas = últimos 5 meses.</span></div>
+              <div class="t-mut" style="font-size:11px;margin-top:3px;line-height:1.5">Hoje é <b>dia ${_dia}</b> (${_mlab(_curYm)}). Comparo o que já entrou este mês com ${_exato?`o <b>mesmo dia (dia ${_dia})</b> de ${_mlab(_prevYm)} — dia-exato`:`o <b>mesmo ponto</b> de ${_mlab(_prevYm)} (~${Math.round(_frac*100)}% do mês — proporcional)`}. 🟢 acima do ritmo · 🔴 abaixo. <span style="color:#6b7a90">${_exato?"faturamento real até o mesmo dia":"run-rate pacing"}; barrinhas = últimos 5 meses.</span></div>
               <div style="display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 2px">
                 <span style="background:rgba(0,229,160,.14);color:#00E5A0;border-radius:20px;padding:2px 10px;font-size:11.5px;font-weight:700">🟢 ${nAcima} acima</span>
                 <span style="background:rgba(255,84,112,.14);color:#FF5470;border-radius:20px;padding:2px 10px;font-size:11.5px;font-weight:700">🔴 ${nAbaixo} abaixo</span>

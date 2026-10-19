@@ -299,6 +299,51 @@ def clinic_fat_mensal(since_map, alias=None):
         out[p] = [{"ym": ym, "n": m[ym][0], "fat": round(m[ym][1], 2)} for ym in sorted(m)]
     return out
 
+def clinic_fat_mtd(cods, alias=None, tries=4):
+    """DIA-EXATO p/ o 'Ritmo do mês': faturamento de cada clínica ATÉ O MESMO DIA do mês,
+    neste mês (cur) e no mês passado (prev). → {cod_principal: {d, cur, prev}}.
+    Compara maçã-com-maçã (dia 20 deste mês × dia 20 do mês passado), sem proporção.
+    Soma código-extra no principal (alias). CIFRADO (diretoria). Query 1x: CodCliente IN (indexado)."""
+    alias = {str(k): str(v) for k, v in (alias or {}).items()}
+    cods = [str(c) for c in (cods or [])]
+    allcods = sorted(set(cods + list(alias.keys())))
+    if not allcods:
+        return {}
+    def prim(cod): return alias.get(str(cod), str(cod))
+    today = datetime.date.today(); d = today.day
+    cur_ym = today.strftime("%Y-%m")
+    first_cur = today.replace(day=1)
+    prev_last = first_cur - datetime.timedelta(days=1)
+    prev_ym = prev_last.strftime("%Y-%m")
+    prev_first = prev_last.replace(day=1)
+    ph = ",".join(["%s"] * len(allcods))
+    sql = (f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COALESCE(SUM(s.ValorExame),0) f "
+           f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+           f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s AND DAY(r.DataEntrada) <= %s "
+           f"GROUP BY r.CodCliente, ym")
+    params = (*allcods, prev_first.isoformat(), today.isoformat(), d)
+    rows = None
+    for t in range(tries):
+        try:
+            conn = pymysql.connect(**SRC); c = conn.cursor()
+            try:
+                c.execute(sql, params); rows = c.fetchall()
+            finally:
+                conn.close()
+            break
+        except Exception as e:
+            if t == tries - 1:
+                print(f"clinic_fat_mtd: desisti após {tries} ({e})"); return {}
+            time.sleep(2 * (t + 1))
+    acc = {}
+    for x in (rows or []):
+        cod = str(x["cod"]); ym = x["ym"]; f = float(x["f"] or 0)
+        p = prim(cod); m = acc.setdefault(p, {"cur": 0.0, "prev": 0.0})
+        if ym == cur_ym: m["cur"] += f
+        elif ym == prev_ym: m["prev"] += f
+    return {p: {"d": d, "cur": round(m["cur"], 2), "prev": round(m["prev"], 2)}
+            for p, m in acc.items() if (m["cur"] or m["prev"])}
+
 def clinics_aaa(full, nA=40, nB=60, nC=100, nD=150):
     """Clínicas por CURVA (ranking de FATURAMENTO 12m): A = as `nA` MAIORES; B/C/D = as faixas seguintes; cauda = fora.
     Faturamento do lab é cauda-longa (Pareto 80% pegaria ~190 clínicas → inútil), então o corte é por POSIÇÃO no ranking.
