@@ -890,6 +890,10 @@
   const FORM_WORD_URL = 'https://lrwjcdvporaivxvfuiwt.supabase.co/storage/v1/object/public/raiva-anexos/_formulario/dados_obrigatorios_raiva_transito_internacional.docx'
   const formWordBtn = () => FORM_WORD_URL
     ? `<a class="lnk raiva-word-dl" href="${FORM_WORD_URL}" target="_blank" rel="noopener" download>⬇️ baixar o formulário Word</a>` : ''
+  // 🔴 Fúlvio 19/out: o arquivo da Núcleo (Ficha de cadastro RAIVA.docx que ele mandou) pra baixar no item ⑩.
+  const NUCLEO_FILE_URL = 'https://lrwjcdvporaivxvfuiwt.supabase.co/storage/v1/object/public/raiva-anexos/_formulario/ficha_cadastro_raiva_nucleo.docx'
+  const nucleoFileBtn = () => NUCLEO_FILE_URL
+    ? `<a class="lnk raiva-nucleo-dl" href="${NUCLEO_FILE_URL}" target="_blank" rel="noopener" download>⬇️ baixar arquivo Núcleo</a>` : ''
 
   // ⑨/⑳ anexos imutáveis (CH12 PDF do formulário; CH10 foto do comprovante de entrega). Guardados no
   //    Supabase Storage; a referência fica no caso e pode ser aberta mesmo depois de concluído, e não
@@ -899,9 +903,9 @@
   function anexoDocBox(c) {
     if (!c.doc_conferida && !c.doc_anexo_url) return ''
     return `<div class="raiva-anexo">${c.doc_anexo_url
-      ? anexoVisto(c.doc_anexo_url, 'o formulário anexado (PDF)')
+      ? anexoVisto(c.doc_anexo_url, 'o formulário do Word anexado (PDF)')
       : `<label class="raiva-upload"><input type="file" accept="application/pdf" data-ranexo="doc" data-rid="${c.id}" hidden>
-           <span class="btn-sec">📎 anexar o formulário (PDF)</span></label>`}</div>`
+           <span class="btn-sec">📎 anexar o formulário do Word (PDF)</span></label>`}</div>`
   }
   function anexoEntregaBox(c) {
     return `<div class="raiva-anexo">${c.entrega_anexo_url
@@ -920,7 +924,7 @@
     need(c.word_enviado, 'formulário Word'); need(c.doc_carteirinha, 'carteirinha')
     need(c.doc_microchip, 'certificado do microchip'); need(c.doc_conferida, 'documentação completa')
     need(c.gov_enviado || c.fisico_enviado, 'documento p/ assinatura'); need(c.devolvido_ok, 'documento devolvido')
-    need(c.nucleo_site_ok, 'preenchido na Núcleo'); need(c.correios_ok, 'enviado pelos Correios')
+    need(c.correios_ok, 'enviado pelos Correios')   // 🔴 Fúlvio 19/out: item ⑫ "preenchido na Núcleo" removido
     need(c.nucleo_pagto_ok, 'pagamento solicitado à Núcleo'); need(c.comprovante_ok, 'comprovante à Núcleo')
     need(c.laudo_chegou, 'laudo chegou'); need(c.entrega_combinada, 'entrega combinada')
     need(c.entrega_comprovada, 'comprovante de entrega')
@@ -1064,8 +1068,10 @@
             : faltam > 0
             ? `<div class="raiva-dica">⏳ A coleta libera em <b>${lib.toLocaleDateString('pt-BR')}</b>
                  — faltam <b>${faltam} dia(s)</b>. São 30 dias de espera; a coleta vale do 31º em diante.</div>`
-            : `<div class="raiva-ok-dica">✅ Coleta liberada desde <b>${lib.toLocaleDateString('pt-BR')}</b>
-                 — vacina válida até <b>${venceVac ? venceVac.toLocaleDateString('pt-BR') : '—'}</b>.</div>`) : ''}
+            : `<div class="raiva-ok-dica">✅ <b>Coleta liberada desde ${lib.toLocaleDateString('pt-BR')}</b>
+                 — já passaram os <b>30 dias</b> após a vacina (a coleta vale do 31º dia em diante).
+                 ⏳ Lembre: a antirrábica é <b>ANUAL</b> — esta vale até <b>${venceVac ? venceVac.toLocaleDateString('pt-BR') : '—'}</b>;
+                 a última dose tem que estar <b>dentro do ano vigente</b>.</div>`) : ''}
 
           ${tique(c, 'coleta_ok', '③ Sangue coletado e recebido no Alpha Labs',
             c.coleta_data ? `<i class="mudo">${dataBR(c.coleta_data)}</i>` : '',
@@ -1124,8 +1130,8 @@
               //   e isso fica VISÍVEL depois. Campo: pagamento="avista|AAAA-MM-DD|VALOR|NOME" ou "fatura".
               const partes = String(c.pagamento || '').split('|')
               const pgTipo = partes[0], pgData = partes[1] || '', pgValor = partes[2] || '', pgNome = partes[3] || ''
-              // ⭐ VALIDADO = à vista OU na fatura (libera o ⑬ Correios). 🔴 Fúlvio 19/out: 3º estado
-              //   "aguardando o pagamento" — fica registrado mas NÃO valida (o ⑬ trava nele).
+              // ⭐ VALIDADO = à vista OU na fatura (libera o ⑫ Correios). 🔴 Fúlvio 19/out: 3º estado
+              //   "aguardando o pagamento" — fica registrado mas NÃO valida (o ⑫ trava nele).
               const feito = pgTipo === 'avista' || pgTipo === 'fatura'
               const aguardando = pgTipo === 'aguardando'
               return `<label class="raiva-tq raiva-pag${feito ? ' on' : ''}${aguardando ? ' aguardando' : ''}">
@@ -1161,7 +1167,8 @@
                   pelo gov. Aí aparece um novo caminho: documento físico para assinatura e
                   carimbo com o CRMV". ⛔ As duas saídas são exclusivas — marcar uma apaga a outra. */''}
             ${c.gov_impossivel ? '' : tique(c, 'gov_enviado',
-              '⑩ Documento conferido e enviado para a clínica assinar pelo <b>gov.br</b>')}
+              '⑩ Documento conferido e enviado para a clínica assinar pelo <b>gov.br</b>',
+              ' ' + nucleoFileBtn() + ' <a class="lnk raiva-site" target="_blank" rel="noopener" href="https://www.nucleopesquisasraiva.com.br/">abrir site da Núcleo ↗</a>')}
             ${!c.gov_enviado && !c.gov_impossivel ? `<div class="raiva-saidas">
               <button class="btn-sec" data-rgovnao="${c.id}">A clínica não consegue assinar pelo gov.br</button>
               </div>` : ''}
@@ -1175,15 +1182,14 @@
               `⑪ A clínica devolveu o documento ${c.gov_impossivel ? 'preenchido e carimbado' : 'assinado pelo gov.br'}`) : ''}
 
             ${c.devolvido_ok ? `
-              ${tique(c, 'nucleo_site_ok', '⑫ Preenchido no site da <b>Núcleo</b>',
-                ` <a class="lnk raiva-site" target="_blank" rel="noopener" href="https://www.nucleopesquisasraiva.com.br/">abrir o site da Núcleo ↗</a>`)}
-
+              ${/* 🔴 Fúlvio 19/out: item ⑫ "Preenchido no site da Núcleo" APAGADO + renumeração.
+                    O link do site da Núcleo foi pro ⑩ (junto do "baixar arquivo Núcleo"). */''}
               <div class="raiva-fase">Correios</div>
-              ${tique(c, 'correios_ok', '⑬ Amostra enviada pelos <b>Correios</b>',
+              ${tique(c, 'correios_ok', '⑫ Amostra enviada pelos <b>Correios</b>',
                 c.correios_em ? `<i class="mudo">${dataBR(c.correios_em)}</i>` : '',
                 { campo: 'correios_em', label: 'data do envio' })}
               ${c.correios_ok ? `<div class="raiva-campo">
-                <b>⑭ Código de rastreamento</b>
+                <b>⑬ Código de rastreamento</b>
                 ${c.rastreio
                   ? `<span class="raiva-cod">${esc(c.rastreio)}</span>
                      <a class="lnk" target="_blank" rel="noopener"
@@ -1204,7 +1210,7 @@
                     a leitura de ontem sumia. Agora cada atualização é empilhada (mais nova no topo)
                     e nada é apagado — o rastro inteiro do objeto fica à vista. */''}
               <div class="raiva-campo">
-                <b>⑮ Situação nos Correios</b>
+                <b>⑭ Situação nos Correios</b>
                 ${(() => {
                   const h = Array.isArray(c.rastreio_hist) ? c.rastreio_hist.slice()
                     : (c.rastreio_situacao ? [{ txt: c.rastreio_situacao, em: c.rastreio_em }] : [])
@@ -1220,8 +1226,8 @@
               </div>` : ''}
 
               <div class="raiva-fase">Pagamento à Núcleo</div>
-              ${tique(c, 'nucleo_pagto_ok', '⑯ Contato com a Núcleo para <b>solicitação de pagamento</b>')}
-              ${tique(c, 'comprovante_ok', '⑰ <b>Comprovante</b> encaminhado para a Núcleo',
+              ${tique(c, 'nucleo_pagto_ok', '⑮ Contato com a Núcleo para <b>solicitação de pagamento</b>')}
+              ${tique(c, 'comprovante_ok', '⑯ <b>Comprovante</b> encaminhado para a Núcleo',
                 c.comprovante_em ? `<i class="mudo">${dataBR(c.comprovante_em)}</i>` : '',
                 { campo: 'comprovante_em', label: 'data do comprovante' })}
               ${/* ⏰ áudio 16:55:38: "após 15 dias do comprovante, fique sinalizando de 5 em 5
@@ -1244,15 +1250,15 @@
               })()}
 
               <div class="raiva-fase">Entrega</div>
-              ${tique(c, 'laudo_chegou', '⑱ Laudo chegou ao laboratório',
+              ${tique(c, 'laudo_chegou', '⑰ Laudo chegou ao laboratório',
                 c.laudo_em ? `<i class="mudo">${dataBR(c.laudo_em)}</i>` : '',
                 { campo: 'laudo_em', label: 'data em que o laudo chegou' })}
-              ${c.laudo_chegou ? tique(c, 'entrega_combinada', '⑲ Entrega combinada com a clínica') : ''}
+              ${c.laudo_chegou ? tique(c, 'entrega_combinada', '⑱ Entrega combinada com a clínica') : ''}
               ${/* ⑳ NOVO (Fúlvio 14/out): o comprovante de ENTREGA do laudo é o último passo antes de
                     concluir. Além de marcar, dá para anexar a foto/arquivo do comprovante — que fica
                     anexado ao caso e pode ser visto mesmo depois de concluído, sem poder apagar. */''}
               ${c.entrega_combinada ? `
-                ${tique(c, 'entrega_comprovada', '⑳ Comprovante de entrega do laudo')}
+                ${tique(c, 'entrega_comprovada', '⑲ Comprovante de entrega do laudo')}
                 ${anexoEntregaBox(c)}
               ` : ''}
             ` : ''}` : ''}
@@ -4697,11 +4703,21 @@
         toast('⛔ A vacina é anterior ao microchip — essa vacina não vale para viagem. Precisa vacinar de novo DEPOIS da microchipagem.')
         return
       }
+      // 🔴 Fúlvio 19/out: a antirrábica é ANUAL — vacina VENCIDA não libera coleta. Trava de verdade:
+      //   não deixa marcar "③ sangue coletado" se a vacina passou de 1 ano.
+      if (tq.checked && campo === 'coleta_ok') {
+        const vv = (typeof raivaVacinaVence === 'function') ? raivaVacinaVence(caso.vacina_data) : null
+        if (vv && Date.now() > vv.getTime()) {
+          tq.checked = false
+          toast('⛔ A vacina antirrábica está VENCIDA (é anual; venceu em ' + vv.toLocaleDateString('pt-BR') + '). Precisa REVACINAR antes de coletar — e a nova dose abre outra espera de 30 dias.')
+          return
+        }
+      }
       if (tq.checked && campo === 'coleta_ok' && !caso.coleta_data)
         dados.coleta_data = new Date().toISOString().slice(0, 10)
       if (tq.checked && campo === 'laudo_chegou' && !caso.laudo_em)
         dados.laudo_em = new Date().toISOString().slice(0, 10)
-      // 🔴 Fúlvio 19/out: NÃO pode marcar "amostra enviada pelos Correios" (⑬) sem o PAGAMENTO (⑤)
+      // 🔴 Fúlvio 19/out: NÃO pode marcar "amostra enviada pelos Correios" (⑫) sem o PAGAMENTO (⑤)
       //   VALIDADO — validado = pago à vista OU na fatura. "Aguardando o pagamento" ou vazio = BLOQUEIA.
       //   (Trava de verdade pedida pelo sócio, como o microchip×vacina acima — não é só alerta.)
       if (tq.checked && campo === 'correios_ok') {
