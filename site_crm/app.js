@@ -934,6 +934,18 @@ function cancelVisita(){
 }
 
 let pistaView="feed";   // "feed" | "retornos"
+let pistaBiRange="tudo", pistaBiDe="", pistaBiAte="";   // 📅 filtro de DATA do BI da Pista (pedido da Luciane): hoje/semana/mês/30d/tudo + intervalo de/até
+/* janela [ini,fim] em ms a partir do filtro escolhido */
+function pistaBiJanela(){
+  if(pistaBiDe||pistaBiAte){ const ini=pistaBiDe?new Date(pistaBiDe+"T00:00:00").getTime():0;
+    const fim=pistaBiAte?new Date(pistaBiAte+"T23:59:59").getTime():Date.now(); return {ini,fim,label:"período escolhido"}; }
+  const d=new Date(); const d0=new Date(d); d0.setHours(0,0,0,0); const now=Date.now();
+  if(pistaBiRange==="hoje") return {ini:d0.getTime(), fim:now, label:"hoje"};
+  if(pistaBiRange==="semana"){ const w=new Date(d0); w.setDate(w.getDate()-((w.getDay()+6)%7)); return {ini:w.getTime(), fim:now, label:"esta semana (seg→hoje)"}; }
+  if(pistaBiRange==="mes"){ const m=new Date(d.getFullYear(),d.getMonth(),1); return {ini:m.getTime(), fim:now, label:"este mês"}; }
+  if(pistaBiRange==="30d") return {ini:now-30*864e5, fim:now, label:"últimos 30 dias"};
+  return {ini:0, fim:now, label:"tudo"};
+}
 let pautaView="atual";  // "atual" | "historico"
 let pautaHistId=null;   // pauta aberta no histórico
 let PAUTA_SEL=new Set(); // tópicos marcados p/ encaminhar à próxima
@@ -4256,15 +4268,33 @@ function renderTab(){
     }
 
     if(pistaView==="bi"){
-      const base=all, total=base.length;
+      const jan=pistaBiJanela();
+      const base=all.filter(f=>(f.ts||0)>=jan.ini && (f.ts||0)<=jan.fim);   // 📅 filtro por data (Luciane)
+      const total=base.length;
+      const usandoIntervalo=!!(pistaBiDe||pistaBiAte);
+      const biFiltro=`<div class="card" style="margin-bottom:12px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:#9fb2cc">📅 Período:</span>
+          ${[["hoje","Hoje"],["semana","Esta semana"],["mes","Este mês"],["30d","30 dias"],["tudo","Tudo"]].map(([k,l])=>{const on=!usandoIntervalo&&pistaBiRange===k;return `<button data-bir="${k}" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${on?'#00D4FF':'rgba(255,255,255,.14)'};background:${on?'rgba(0,212,255,.18)':'transparent'};color:${on?'#00D4FF':'#9fb2cc'}">${l}</button>`;}).join("")}
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px">
+          <span class="t-mut" style="font-size:11.5px">ou intervalo:</span>
+          <input type="date" id="biDe" class="m-date" style="width:auto;padding:5px 8px" value="${esc(pistaBiDe)}">
+          <span class="t-mut" style="font-size:11.5px">até</span>
+          <input type="date" id="biAte" class="m-date" style="width:auto;padding:5px 8px" value="${esc(pistaBiAte)}">
+          ${usandoIntervalo?`<button id="biLimpa" style="cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:8px;padding:5px 10px;font-size:11.5px">✕ limpar</button>`:""}
+        </div>
+        <div class="t-mut" style="font-size:11px;margin-top:7px">Mostrando: <b style="color:#9fe6ff">${jan.label}</b> · <b>${total}</b> feedback(s)${repFilter?` de ${esc(repFilter)}`:""}.</div>
+      </div>`;
       const realiz=base.filter(ehRealizada).length;   // conta check-in de chegada, não só a baixa formal
       const desm=base.filter(f=>f.baixa&&f.baixa.tipo==="desmarcado").length;
       const fechou=base.filter(f=>f.resultado==="fechou").length;
       const taxaReal=(realiz+desm)?Math.round(100*realiz/(realiz+desm)):0;
       const conv=total?Math.round(100*fechou/total):0;
       c.innerHTML=`${toggle}${repBar}
+        ${biFiltro}
         <div class="kgrid">
-          ${kpi("", total, "Feedbacks", repFilter?("de "+esc(repFilter)):"total")}
+          ${kpi("", total, "Feedbacks", jan.label)}
           ${kpi("g", realiz, "Realizadas", "com check-in")}
           ${kpi("g", taxaReal+"%", "Taxa de realização", "feitas ÷ (feitas+desmarcadas)")}
           ${kpi("g", conv+"%", "Conversão", "fecharam ÷ total")}
@@ -4284,6 +4314,10 @@ function renderTab(){
           return `<div class="seclabel" style="margin-top:18px">🏆 Clientes fechados (${fech.length})</div>${bb}`; })()}
         ${total?"":`<div class="empty">Sem dados ainda — os gráficos aparecem conforme o time registra visitas.</div>`}`;
       wirePista();
+      document.querySelectorAll("#content [data-bir]").forEach(el=>el.onclick=()=>{ pistaBiRange=el.dataset.bir; pistaBiDe=""; pistaBiAte=""; renderTab(); });
+      const _bd=document.getElementById("biDe"); if(_bd) _bd.onchange=()=>{ pistaBiDe=_bd.value; renderTab(); };
+      const _ba=document.getElementById("biAte"); if(_ba) _ba.onchange=()=>{ pistaBiAte=_ba.value; renderTab(); };
+      const _bl=document.getElementById("biLimpa"); if(_bl) _bl.onclick=()=>{ pistaBiDe=""; pistaBiAte=""; renderTab(); };
       drawPistaBI(base);
       return;
     }
