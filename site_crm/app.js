@@ -1779,6 +1779,38 @@ function openMesAMes(cod, nome){
   const cheios=serie.filter(m=>!ehParcial(m)); const uC=cheios[cheios.length-1], aC=cheios[cheios.length-2];
   const fuga=(uC&&aC&&aC.n>0 && (uC.n/aC.n-1)<=-0.25);
   const totN=serie.reduce((s,m)=>s+m.n,0), totF=serie.reduce((s,m)=>s+m.fat,0);
+  // 📆 TERCEIRA TABELA — até o dia D (dia X × dia X dos meses anteriores), comparação justa
+  const dia = CLIN_FATMESALL_DIA || (new Date()).getDate();
+  const temD = serie.some(m=>m.nd!=null);
+  let ddHtml="";
+  if(temD){
+    const sd=serie.filter(m=>m.nd!=null), atual=sd[sd.length-1], ant=sd.slice(0,-1);
+    const baseN=ant.length?ant.reduce((s,m)=>s+m.nd,0)/ant.length:0, baseF=ant.length?ant.reduce((s,m)=>s+m.fd,0)/ant.length:0;
+    const vN=baseN>0?(atual.nd/baseN-1):null, vF=baseF>0?(atual.fd/baseF-1):null, fugaD=(vN!=null&&vN<=-0.25);
+    const maxNd=Math.max(...sd.map(m=>m.nd),1), maxFd=Math.max(...sd.map(m=>m.fd),1);
+    const corH=v=> v==null?"#9fb2cc": v>=0.03?"#00E5A0": v>=-0.03?"#9fb2cc": v<=-0.25?"#FF5470":"#FF8A00";
+    const sdRows=sd.map((m,i)=>{ const pv=i>0?sd[i-1]:null;
+      const dN=(pv&&pv.nd>0)?(m.nd/pv.nd-1):null, dF=(pv&&pv.fd>0)?(m.fd/pv.fd-1):null, cur=(m===atual);
+      return `<tr style="border-top:1px solid rgba(255,255,255,.05)${cur?';background:rgba(255,194,77,.10)':''}">
+          <td style="padding:5px 8px;text-align:left;white-space:nowrap;font-weight:${cur?'800':'600'};color:${cur?'#ffd27a':'#c9d4e0'}">${mlab(m.ym)}${cur?' <span style="font-size:9px;background:#ffc266;color:#2b1e05;border-radius:4px;padding:1px 5px;font-weight:800">ESTE MÊS</span>':''}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;color:#9fe6ff">${m.nd}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;color:${corD(dN)}">${pct(dN)}</td>
+          ${dir?`<td style="padding:5px 8px;text-align:right;font-weight:700;color:#7effcf">${fmtBRL(m.fd)}</td><td style="padding:5px 8px;text-align:right;font-weight:700;color:${corD(dF)}">${pct(dF)}</td>`:""}
+          <td style="padding:5px 8px;width:56px"><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.round((dir?m.fd/maxFd:m.nd/maxNd)*100)}%;background:${dir?'#00E5A0':'#00D4FF'};border-radius:5px"></div></div></td></tr>`;
+    }).reverse().join("");
+    ddHtml=`<div style="border:1px solid rgba(255,194,77,.5);border-radius:12px;padding:11px 13px;margin-top:11px;background:linear-gradient(180deg,rgba(255,194,77,.08),rgba(255,194,77,.02))">
+        <div style="font-size:12px;font-weight:800;color:#ffd27a;text-transform:uppercase;letter-spacing:.3px">📆 Até o dia ${dia} — dia ${dia} × dia ${dia} dos meses anteriores</div>
+        <div style="font-size:12.5px;color:#eaf3ff;margin-top:6px;line-height:1.55">Este mês (<b>${mlab(atual.ym)}</b>, até o dia ${dia}) está <b style="color:${corH(vN)}">${pct(vN)}</b> em exames${dir?` e <b style="color:${corH(vF)}">${pct(vF)}</b> em R$`:""} vs a <b>média dos meses anteriores no mesmo ponto</b> (${ant.length} meses).</div>
+        ${fugaD?`<div style="margin-top:8px;background:rgba(255,45,85,.14);border:1px solid rgba(255,45,85,.5);border-radius:8px;padding:8px 11px;font-size:12.5px;color:#ffc9d2;font-weight:700">⚠️ Possível <b>desvio/fuga pro concorrente</b> — o volume neste ponto caiu <b>${Math.abs(Math.round(vN*100))}%</b> vs o normal.</div>`:(vN!=null&&vN>=0.08?`<div style="margin-top:8px;color:#7effcf;font-size:12.5px;font-weight:700">🔥 Mês quente — acima do ritmo histórico neste ponto. 👏</div>`:"")}
+        <div style="overflow-x:auto;margin-top:9px;border:1px solid rgba(255,194,77,.22);border-radius:8px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:${dir?'380':'260'}px">
+            <thead><tr style="color:var(--mut);font-size:10px;background:rgba(255,194,77,.08)">
+              <th style="padding:5px 8px;text-align:left">Mês (até dia ${dia})</th><th style="padding:5px 8px;text-align:right">Exames</th><th style="padding:5px 8px;text-align:right">Δ%</th>
+              ${dir?`<th style="padding:5px 8px;text-align:right">R$</th><th style="padding:5px 8px;text-align:right">Δ%</th>`:""}<th></th></tr></thead>
+            <tbody>${sdRows}</tbody></table></div>
+        <div class="t-mut" style="font-size:10.5px;margin-top:7px;line-height:1.5">Comparação justa: cada mês contado só até o dia ${dia}. Δ% = vs o mês anterior no mesmo ponto.</div>
+      </div>`;
+  }
   body.innerHTML=`<div class="m-head"><div><div class="m-cli">📅 ${esc(nome||"Clínica")} — mês a mês</div>
       <div class="t-mut" style="font-size:12.5px;margin-top:2px">Coligação real mês a mês · <b>% vs o mês anterior</b> (▲ sobe · ▼ cai)${dir?"":" · <span style='color:#ffc266'>R$ só diretoria</span>"}</div></div>
       <button class="m-x" id="mClose">✕</button></div>
@@ -1791,7 +1823,8 @@ function openMesAMes(cod, nome){
       ${painel("n","📊 Exames / mês","#00D4FF",v=>v)}
       ${dir?painel("fat","💰 Faturamento / mês","#00E5A0",v=>fmtBRL(v)):""}
     </div>
-    <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5"><b>Legenda:</b> 🟢 aumento · 🔴 queda · 🟠 queda leve · ⚠️ possível fuga de exames (caiu &gt;25% no mês fechado). Δ% = vs o mês anterior. O <b style="color:#ffd27a">mês atual é parcial</b> (ainda correndo), por isso não leva %. ${dir?"":"R$ é exclusivo da diretoria."}</div>`;
+    ${ddHtml}
+    <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5"><b>Legenda:</b> 🟢 aumento · 🔴 queda · 🟠 queda leve · ⚠️ possível fuga de exames (caiu &gt;25%). Δ% = vs o mês anterior. O <b style="color:#ffd27a">mês atual é parcial</b> nos painéis de cima; a <b>3ª tabela</b> faz a comparação justa até o dia ${CLIN_FATMESALL_DIA||(new Date()).getDate()}. ${dir?"":"R$ é exclusivo da diretoria."}</div>`;
   document.getElementById("modal").style.display="flex"; document.getElementById("mClose").onclick=closeModal;
 }
 function openExames(cod, nome){
