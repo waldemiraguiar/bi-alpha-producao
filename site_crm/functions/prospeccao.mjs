@@ -49,6 +49,9 @@ export default async (req) => {
         contato: String(p.contato || "").slice(0, 80),
         cidade: String(p.cidade || "").slice(0, 60),
         origem: String(p.origem || "").slice(0, 60),
+        canal: String(p.canal || (existing ? existing.canal : "") || "").slice(0, 40),         // 📡 onde o lead foi encontrado (Instagram, Google, Visita, Indicação, Pet Love…)
+        origemlead: String(p.origemlead || (existing ? existing.origemlead : "") || "").slice(0, 40), // 🎯 origem do lead (ativo/receptivo) — mesmas listas da carteira
+        operador: String(p.operador || (existing ? existing.operador : "") || "").slice(0, 40), // 🧑‍💼 operador/responsável pelo lead
         status: STATUS.includes(p.status) ? p.status : (existing ? existing.status : "novo"),
         visita: String(p.visita || "").slice(0, 20),
         feedbacks: fb.slice(-200),

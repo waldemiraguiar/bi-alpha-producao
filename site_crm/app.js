@@ -29,6 +29,7 @@ let TABS = [
   {k:"pauta",           ic:"🗓️", nm:"Pauta",           cls:"",         bcls:""},
   {k:"clinicas",        ic:"🌂", nm:"Guarda-Chuva",    cls:"",         bcls:""},
   {k:"prospeccao",      ic:"🧲", nm:"Prospecção",      cls:"",         bcls:""},
+  {k:"comercial",       ic:"📈", nm:"Comercial",       cls:"",         bcls:""},
   {k:"comparativo",     ic:"⚖️", nm:"Comparativo Tabelas", cls:"",    bcls:""},
   {k:"resultados",      ic:"📋", nm:"Resultados",      cls:"",         bcls:""},
   {k:"reativados",      ic:"♻️", nm:"Reativados",      cls:"",         bcls:""},
@@ -208,6 +209,7 @@ async function addProspInline(){
 let P_ID=null, P_STATUS="novo", P_INC=[];
 function openProsp(id){
   const p=prospOf(id); if(!p) return; P_ID=id; P_STATUS=p.status; P_INC=(p.incrementos||[]).slice();
+  let P_CANAL=p.canal||"", P_ORIGLEAD=p.origemlead||"", P_OPER=p.operador||"";   // 📡🎯🧑‍💼 classificação comercial do lead (aba Comercial)
   const fb=(p.feedbacks||[]).slice().sort((a,b)=>b.ts-a.ts);
   const fbHtml=fb.length?fb.map(f=>`<div class="hist-row"><span class="hi-ic">💬</span><div class="hi-body"><div class="hi-top t-mut">${esc(diasAtras(f.ts))} · ${esc(f.por)}</div><div class="hi-nota">"${esc(f.texto)}"</div></div></div>`).join(""):`<div class="t-mut" style="font-size:13px;padding:6px 0">Sem feedbacks ainda.</div>`;
   document.getElementById("modalBody").innerHTML=`
@@ -215,6 +217,13 @@ function openProsp(id){
     <div class="m-sec">Status (pipeline)</div>
     <div class="m-opts" id="pStatus">${PORDER.map(k=>`<button class="opt pst-${k}${k===P_STATUS?" on":""}" data-st="${k}">${PSTATUS[k].lbl}</button>`).join("")}</div>
     <div class="m-lbl">Visita agendada</div><input id="pVisita" type="date" class="m-date" value="${esc(p.visita||"")}">
+    <div class="m-sec">🎯 Classificação comercial <span class="t-mut" style="font-weight:500">— alimenta a aba 📈 Comercial</span> <button type="button" id="pCadListas" class="t-mut" style="margin-left:auto;background:transparent;border:1px solid var(--line);color:#9fe6ff;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;float:right">⚙️ listas</button></div>
+    <div class="m-lbl">📡 Canal <span class="t-mut" style="font-weight:500">— onde encontrou o lead</span></div>
+    <div class="m-opts" id="pCanal">${LISTAS.canais.map(f=>`<button class="opt${P_CANAL===f.nome?" on":""}" data-pc="${esc(f.nome)}" style="${P_CANAL===f.nome?`border-color:${f.cor};color:${f.cor}`:''}">${esc(f.nome)}</button>`).join("")}</div>
+    <div class="m-lbl">🎯 Origem do lead <span class="t-mut" style="font-weight:500">— ativo × receptivo</span></div>
+    ${["ativo","receptivo"].map(g=>{ const its=LISTAS.origens.filter(o=>o.grupo===g); if(!its.length) return ""; return `<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;color:${g==='ativo'?'#00E5A0':'#00D4FF'};margin:6px 0 3px">${g==='ativo'?'⚡ ATIVO':'📥 RECEPTIVO'}</div><div class="m-opts" id="pOrig_${g}">${its.map(f=>`<button class="opt${P_ORIGLEAD===f.nome?" on":""}" data-po="${esc(f.nome)}" style="${P_ORIGLEAD===f.nome?`border-color:${f.cor};color:${f.cor}`:''}">${esc(f.nome)}</button>`).join("")}</div>`; }).join("")}
+    <div class="m-lbl">🧑‍💼 Operador <span class="t-mut" style="font-weight:500">— responsável pelo lead</span></div>
+    <div class="m-opts" id="pOper">${LISTAS.fechadores.map(f=>`<button class="opt${P_OPER===f.nome?" on":""}" data-pop="${esc(f.nome)}" style="${P_OPER===f.nome?`border-color:${f.cor};color:${f.cor}`:''}">${esc(f.nome)}</button>`).join("")}</div>
     <div class="m-sec">Feedback do contato</div><div class="m-hist">${fbHtml}</div>
     <textarea id="pFb" class="m-ta" style="min-height:54px;margin-top:8px" placeholder="Novo feedback / o que rolou no contato…"></textarea>
     <div class="m-sec">Incrementos <span class="t-mut" style="font-weight:500">— campos extras (futuro)</span></div>
@@ -225,6 +234,11 @@ function openProsp(id){
   document.getElementById("modal").style.display="flex";
   document.getElementById("mClose").onclick=closeModal;
   document.getElementById("pStatus").onclick=e=>{const b=e.target.closest("[data-st]");if(b){P_STATUS=b.dataset.st;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));}};
+  const _ppaint=(cont,val)=>{ cont&&[...cont.children].forEach(x=>{ const on=x.dataset&&(x.dataset.pc===val||x.dataset.po===val||x.dataset.pop===val); x.classList.toggle("on",!!on); }); };
+  const _pc=document.getElementById("pCanal"); if(_pc) _pc.onclick=e=>{const b=e.target.closest("[data-pc]");if(b){ P_CANAL=(P_CANAL===b.dataset.pc)?"":b.dataset.pc; _ppaint(_pc,P_CANAL); }};
+  ["ativo","receptivo"].forEach(g=>{ const el=document.getElementById("pOrig_"+g); if(el) el.onclick=e=>{const b=e.target.closest("[data-po]");if(b){ P_ORIGLEAD=(P_ORIGLEAD===b.dataset.po)?"":b.dataset.po; _ppaint(document.getElementById("pOrig_ativo"),P_ORIGLEAD); _ppaint(document.getElementById("pOrig_receptivo"),P_ORIGLEAD); }}; });
+  const _pop=document.getElementById("pOper"); if(_pop) _pop.onclick=e=>{const b=e.target.closest("[data-pop]");if(b){ P_OPER=(P_OPER===b.dataset.pop)?"":b.dataset.pop; _ppaint(_pop,P_OPER); }};
+  const _pcl=document.getElementById("pCadListas"); if(_pcl) _pcl.onclick=()=>openListasCad(()=>openProsp(id));
   const drawInc=()=>{ document.getElementById("pIncList").innerHTML=P_INC.map((i,idx)=>`<div class="histcli"><span class="nm">${esc(i.label)}</span><span class="t-mut">${esc(i.valor)}</span><button class="hi-del" data-incdel="${idx}">✕</button></div>`).join("");
     document.querySelectorAll("[data-incdel]").forEach(b=>b.onclick=()=>{ P_INC.splice(+b.dataset.incdel,1); drawInc(); }); };
   drawInc();
@@ -232,6 +246,7 @@ function openProsp(id){
   document.getElementById("pSave").onclick=async()=>{
     const fbTxt=document.getElementById("pFb").value.trim(), por=localStorage.getItem("crm_quem")||"equipe";
     const np={...p, status:P_STATUS, visita:document.getElementById("pVisita").value, incrementos:P_INC,
+      canal:P_CANAL, origemlead:P_ORIGLEAD, operador:P_OPER,
       feedbacks:[...(p.feedbacks||[]), ...(fbTxt?[{ts:Date.now(),por,texto:fbTxt}]:[])]};
     const btn=document.getElementById("pSave"); btn.disabled=true; btn.textContent="Salvando…";
     const ok=await saveProsp(np); if(ok){ closeModal(); renderTab(); } else { btn.disabled=false; btn.textContent="Salvar prospect"; } };
@@ -935,6 +950,19 @@ function cancelVisita(){
 
 let pistaView="feed";   // "feed" | "retornos"
 let pistaBiRange="tudo", pistaBiDe="", pistaBiAte="";   // 📅 filtro de DATA do BI da Pista (pedido da Luciane): hoje/semana/mês/30d/tudo + intervalo de/até
+/* 📈 ABA COMERCIAL (funil de leads — pedido da Luciane): filtros */
+let comRange="tudo", comDe="", comAte="", comOper="", comCanal="", comTipo="", comGran="mes";   // período · operador · canal(origem) · tipo(ativo/receptivo) · granularidade do gráfico
+function comJanela(){
+  if(comDe||comAte){ const ini=comDe?new Date(comDe+"T00:00:00").getTime():0; const fim=comAte?new Date(comAte+"T23:59:59").getTime():Date.now(); return {ini,fim,label:"período escolhido"}; }
+  const d=new Date(), d0=new Date(d); d0.setHours(0,0,0,0); const now=Date.now();
+  if(comRange==="hoje") return {ini:d0.getTime(), fim:now, label:"hoje"};
+  if(comRange==="semana"){ const w=new Date(d0); w.setDate(w.getDate()-((w.getDay()+6)%7)); return {ini:w.getTime(), fim:now, label:"esta semana"}; }
+  if(comRange==="mes"){ const m=new Date(d.getFullYear(),d.getMonth(),1); return {ini:m.getTime(), fim:now, label:"este mês"}; }
+  if(comRange==="30d") return {ini:now-30*864e5, fim:now, label:"últimos 30 dias"};
+  return {ini:0, fim:now, label:"tudo"};
+}
+function leadGrupo(p){ const o=p.origemlead?origemInfo(p.origemlead):null; return o?o.grupo:""; }   // ativo | receptivo | ""
+function leadConvertido(p){ return p.status==="venda_ganha"; }   // lead virou cliente
 /* janela [ini,fim] em ms a partir do filtro escolhido */
 function pistaBiJanela(){
   if(pistaBiDe||pistaBiAte){ const ini=pistaBiDe?new Date(pistaBiDe+"T00:00:00").getTime():0;
@@ -3931,6 +3959,91 @@ function renderTab(){
     const add=document.getElementById("npAdd"); if(add) add.onclick=addProspInline;
     document.querySelectorAll("[data-prosp]").forEach(el=>el.onclick=()=>openProsp(el.dataset.prosp));
     const lp=document.getElementById("lupaP"); if(lp){ lp.addEventListener("input", e=>{ search=e.target.value; pinned=true; setPin(); const pos=lp.selectionStart; renderTab(); const l2=document.getElementById("lupaP"); if(l2){l2.focus(); try{l2.setSelectionRange(pos,pos);}catch(_){}}}); }
+    return;
+  }
+
+  if(ACTIVE==="comercial"){
+    // 📈 FUNIL COMERCIAL (leads · prospecção · conversão) — pedido da Luciane. Base: PROSPECÇÃO (leads classificados).
+    const jan=comJanela();
+    let leads=PROSP.filter(p=>{ const t=p.ts||0; return t>=jan.ini && t<=jan.fim; });
+    if(comOper)  leads=leads.filter(p=>(p.operador||"")===comOper);
+    if(comCanal) leads=leads.filter(p=>(p.canal||"")===comCanal);
+    if(comTipo)  leads=leads.filter(p=>leadGrupo(p)===comTipo);
+    const total=leads.length;
+    const ativosArr=leads.filter(p=>leadGrupo(p)==="ativo"), receptArr=leads.filter(p=>leadGrupo(p)==="receptivo");
+    const convArr=leads.filter(leadConvertido), nConv=convArr.length;
+    const _p=(a,b)=>b?Math.round(100*a/b):0;
+    const taxa=_p(nConv,total), pctA=_p(ativosArr.length,total), pctR=_p(receptArr.length,total);
+    const grp=(arr,fn)=>{ const g={}; arr.forEach(p=>{ const k=(fn(p)||"").trim()||"(não informado)"; (g[k]=g[k]||[]).push(p); }); return Object.entries(g).sort((a,b)=>b[1].length-a[1].length); };
+    const barRow=(lbl,n,tot,cor)=>`<div style="margin:5px 0"><div style="display:flex;justify-content:space-between;font-size:12px;gap:6px"><span style="font-weight:700;color:${cor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(lbl)}</span><span style="color:#eaf3ff;font-weight:700;white-space:nowrap">${n} <span class="t-mut" style="font-weight:500;font-size:10.5px">· ${_p(n,tot)}%</span></span></div><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${Math.max(2,Math.round(n/(tot||1)*100))}%;background:${cor};border-radius:5px"></div></div></div>`;
+    // 3) origem (canal)
+    const byCanal=grp(leads,p=>p.canal);
+    const canalHtml=byCanal.length?byCanal.map(([k,arr])=>barRow(k,arr.length,total,corCanal(k))).join(""):'<div class="t-mut" style="font-size:12px">Sem canal marcado nos leads ainda.</div>';
+    // 5) por operador
+    const byOper=grp(leads,p=>p.operador);
+    const operHtml=byOper.length?byOper.map(([k,arr])=>{ const a=arr.filter(p=>leadGrupo(p)==="ativo").length, r=arr.filter(p=>leadGrupo(p)==="receptivo").length, cv=arr.filter(leadConvertido).length;
+      return `<div style="border-top:1px solid rgba(255,255,255,.05);padding:6px 0"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="font-weight:700;color:${corFech(k)}">🧑‍💼 ${esc(k)}</span><span style="font-weight:800;color:#eaf3ff">${arr.length} leads</span></div><div class="t-mut" style="font-size:11px;margin-top:2px">⚡ ${a} ativos · 📥 ${r} receptivos · ✅ ${cv} clientes (${_p(cv,arr.length)}%)</div></div>`; }).join(""):'<div class="t-mut" style="font-size:12px">Sem operador marcado ainda.</div>';
+    // 6) prospecção ativa (leads ativos) por operador e por canal
+    const paOper=grp(ativosArr,p=>p.operador), paCanal=grp(ativosArr,p=>p.canal);
+    // 2) leads por período (mês/semana)
+    const pkey=p=>{ const d=new Date(p.ts||0); if(comGran==="semana"){ const o=new Date(d); o.setHours(0,0,0,0); o.setDate(o.getDate()-((o.getDay()+6)%7)); return o.getFullYear()+"-"+String(o.getMonth()+1).padStart(2,"0")+"-"+String(o.getDate()).padStart(2,"0"); } return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); };
+    const plabel=k=>{ if(comGran==="semana"){ const p=k.split("-"); return "sem "+p[2]+"/"+p[1]; } const p=k.split("-"); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2); };
+    const byPer=grp(leads,pkey).sort((a,b)=>a[0]<b[0]?-1:1); const maxPer=Math.max(...byPer.map(([k,a])=>a.length),1);
+    const perHtml=byPer.length?byPer.map(([k,arr])=>`<div style="display:flex;align-items:center;gap:7px;margin:4px 0"><div style="width:58px;font-size:11px;color:#c9d4e0">${plabel(k)}</div><div style="flex:1;height:14px;background:rgba(255,255,255,.05);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(arr.length/maxPer*100)}%;background:#00D4FF;border-radius:4px"></div></div><div style="width:60px;text-align:right;font-size:11.5px;font-weight:700;color:#9fe6ff">${arr.length} <span class="t-mut" style="font-weight:500">· ${arr.filter(leadConvertido).length}✅</span></div></div>`).join(""):'<div class="t-mut" style="font-size:12px">Sem leads no período.</div>';
+    // 8) conversão por canal · 9) por operador
+    const tbl=(rows)=>`<div style="overflow-x:auto;border:1px solid rgba(0,229,160,.22);border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:260px"><thead><tr style="color:var(--mut);font-size:10.5px;background:rgba(0,229,160,.07)"><th style="padding:5px 8px;text-align:left">—</th><th style="padding:5px 8px;text-align:right">Leads</th><th style="padding:5px 8px;text-align:right">Clientes</th><th style="padding:5px 8px;text-align:right">Taxa</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const convRow=(k,arr,cor)=>{ const cv=arr.filter(leadConvertido).length, tx=_p(cv,arr.length); return `<tr style="border-top:1px solid rgba(255,255,255,.05)"><td style="padding:5px 8px;color:${cor};font-weight:700">${esc(k)}</td><td style="padding:5px 8px;text-align:right">${arr.length}</td><td style="padding:5px 8px;text-align:right;color:#7effcf;font-weight:700">${cv}</td><td style="padding:5px 8px;text-align:right;font-weight:800;color:${tx>=20?'#00E5A0':tx>0?'#ffc266':'#8aa2bd'}">${tx}%</td></tr>`; };
+    const convCanalHtml=byCanal.length?tbl(byCanal.map(([k,arr])=>convRow(k,arr,corCanal(k))).join("")):"";
+    const convOperHtml=byOper.length?tbl(byOper.map(([k,arr])=>convRow(k,arr,corFech(k))).join("")):"";
+    // filtros
+    const canaisDistintos=[...new Set(PROSP.map(p=>p.canal).filter(Boolean))], opersDistintos=[...new Set(PROSP.map(p=>p.operador).filter(Boolean))];
+    const sel=(id,val,opts,ph)=>`<select id="${id}" class="m-date" style="width:auto;padding:5px 8px;font-size:12px"><option value="">${ph}</option>${opts.map(o=>`<option value="${esc(o)}"${o===val?" selected":""}>${esc(o)}</option>`).join("")}</select>`;
+    const usaInt=!!(comDe||comAte);
+    const card=(t,v,s,cor)=>`<div style="flex:1;min-width:120px;border:1px solid ${cor}44;border-left:3px solid ${cor};border-radius:10px;padding:9px 11px"><div style="font-size:11px;color:${cor};font-weight:700">${t}</div><div style="font-size:21px;font-weight:900;color:#eaf3ff;line-height:1.1">${v}</div><div class="t-mut" style="font-size:10.5px">${s}</div></div>`;
+    const sec=(t,inner)=>`<div class="card" style="margin:12px 0"><div class="seclabel" style="margin:0 0 6px">${t}</div>${inner}</div>`;
+    c.innerHTML=`
+      <div class="card" style="margin-bottom:12px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:#9fb2cc">📅 Período:</span>
+          ${[["hoje","Hoje"],["semana","Esta semana"],["mes","Este mês"],["30d","30 dias"],["tudo","Tudo"]].map(([k,l])=>{const on=!usaInt&&comRange===k;return `<button data-comr="${k}" style="cursor:pointer;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:800;border:1px solid ${on?'#00D4FF':'rgba(255,255,255,.14)'};background:${on?'rgba(0,212,255,.18)':'transparent'};color:${on?'#00D4FF':'#9fb2cc'}">${l}</button>`;}).join("")}
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px">
+          <input type="date" id="comDe" class="m-date" style="width:auto;padding:5px 8px" value="${esc(comDe)}"><span class="t-mut" style="font-size:11px">até</span><input type="date" id="comAte" class="m-date" style="width:auto;padding:5px 8px" value="${esc(comAte)}">
+          ${sel("comOper",comOper,opersDistintos,"👤 operador")}
+          ${sel("comCanal",comCanal,canaisDistintos,"📡 origem")}
+          <select id="comTipo" class="m-date" style="width:auto;padding:5px 8px;font-size:12px"><option value="">⚡📥 ativo/receptivo</option><option value="ativo"${comTipo==="ativo"?" selected":""}>⚡ Ativo</option><option value="receptivo"${comTipo==="receptivo"?" selected":""}>📥 Receptivo</option></select>
+          ${(comOper||comCanal||comTipo||usaInt)?`<button id="comLimpa" style="cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:8px;padding:5px 10px;font-size:11.5px">✕ limpar</button>`:""}
+        </div>
+        <div class="t-mut" style="font-size:11px;margin-top:7px">Mostrando: <b style="color:#9fe6ff">${jan.label}</b> · <b>${total}</b> leads.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+        ${card("🧲 Total de Leads",total,"no período","#00D4FF")}
+        ${card("📥 Receptivos",receptArr.length+" · "+pctR+"%","vieram até nós","#00D4FF")}
+        ${card("⚡ Ativos",ativosArr.length+" · "+pctA+"%","prospecção ativa","#00E5A0")}
+        ${card("✅ Novos Clientes",nConv,"leads convertidos","#7effcf")}
+        ${card("🎯 Taxa de Conversão",taxa+"%",nConv+" de "+total,"#ffc266")}
+      </div>
+      ${PROSP.length?"":`<div class="proxhint" style="border-color:rgba(255,194,77,.4);color:#ffc266;margin:10px 0;line-height:1.5">⏳ Ainda não há leads cadastrados. Cadastre na aba <b>🧲 Prospecção</b> e marque <b>canal · origem · operador</b> no lead — aí este funil enche sozinho.</div>`}
+      ${sec("📈 Leads por período <span class='t-mut' style='font-weight:500;font-size:11px'>(✅ = convertidos)</span> <span style='float:right'><button data-comg='mes' style='cursor:pointer;border:1px solid ${comGran==='mes'?'#00D4FF':'rgba(255,255,255,.14)'};background:transparent;color:${comGran==='mes'?'#00D4FF':'#9fb2cc'};border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700'>Mês</button> <button data-comg='semana' style='cursor:pointer;border:1px solid ${comGran==='semana'?'#00D4FF':'rgba(255,255,255,.14)'};background:transparent;color:${comGran==='semana'?'#00D4FF':'#9fb2cc'};border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700'>Semana</button></span>", perHtml)}
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:230px">${sec("📡 Origem dos leads",canalHtml)}</div>
+        <div style="flex:1;min-width:230px">${sec("⚡ Ativos × Receptivos",`<div style="display:flex;gap:8px"><div style="flex:1;text-align:center;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.4);border-radius:9px;padding:10px"><div style="font-size:11px;color:#00E5A0;font-weight:800">⚡ ATIVO</div><div style="font-size:22px;font-weight:900;color:#eaf3ff">${ativosArr.length}</div><div class="t-mut" style="font-size:11px">${pctA}%</div></div><div style="flex:1;text-align:center;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.4);border-radius:9px;padding:10px"><div style="font-size:11px;color:#00D4FF;font-weight:800">📥 RECEPTIVO</div><div style="font-size:22px;font-weight:900;color:#eaf3ff">${receptArr.length}</div><div class="t-mut" style="font-size:11px">${pctR}%</div></div></div>`)}</div>
+      </div>
+      ${sec("🧑‍💼 Leads por operador",operHtml)}
+      ${sec("⚡ Prospecção ativa <span class='t-mut' style='font-weight:500;font-size:11px'>(leads ativos: "+ativosArr.length+")</span>",`<div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><div class="t-mut" style="font-size:11px;font-weight:700;margin-bottom:3px">Por operador</div>${paOper.length?paOper.map(([k,a])=>barRow(k,a.length,ativosArr.length,corFech(k))).join(""):'<div class="t-mut" style="font-size:12px">—</div>'}</div><div style="flex:1;min-width:180px"><div class="t-mut" style="font-size:11px;font-weight:700;margin-bottom:3px">Por origem</div>${paCanal.length?paCanal.map(([k,a])=>barRow(k,a.length,ativosArr.length,corCanal(k))).join(""):'<div class="t-mut" style="font-size:12px">—</div>'}</div></div>`)}
+      ${sec("🎯 Conversão por origem <span class='t-mut' style='font-weight:500;font-size:11px'>— qual canal gera mais CLIENTES</span>",convCanalHtml||'<div class="t-mut" style="font-size:12px">—</div>')}
+      ${sec("🏅 Conversão por operador",convOperHtml||'<div class="t-mut" style="font-size:12px">—</div>')}
+      ${convArr.length?`<div class="seclabel" style="margin-top:6px">✅ Clientes convertidos (${convArr.length})</div>${convArr.sort((a,b)=>(b.ts||0)-(a.ts||0)).map(p=>`<div class="crow" data-prosp="${esc(p.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">✅</div><div><div class="nm">${esc(p.nome)}</div><div class="ci">${p.canal?"📡 "+esc(p.canal)+" · ":""}${p.operador?"🧑‍💼 "+esc(p.operador)+" · ":""}${esc(diasAtras(p.ts))}</div></div><div class="mid"></div></div>`).join("")}`:""}`;
+    // wiring
+    document.querySelectorAll("#content [data-comr]").forEach(el=>el.onclick=()=>{ comRange=el.dataset.comr; comDe=""; comAte=""; renderTab(); });
+    document.querySelectorAll("#content [data-comg]").forEach(el=>el.onclick=()=>{ comGran=el.dataset.comg; renderTab(); });
+    const _cd=document.getElementById("comDe"); if(_cd) _cd.onchange=()=>{ comDe=_cd.value; renderTab(); };
+    const _ca=document.getElementById("comAte"); if(_ca) _ca.onchange=()=>{ comAte=_ca.value; renderTab(); };
+    const _co=document.getElementById("comOper"); if(_co) _co.onchange=()=>{ comOper=_co.value; renderTab(); };
+    const _cc=document.getElementById("comCanal"); if(_cc) _cc.onchange=()=>{ comCanal=_cc.value; renderTab(); };
+    const _ct=document.getElementById("comTipo"); if(_ct) _ct.onchange=()=>{ comTipo=_ct.value; renderTab(); };
+    const _cl=document.getElementById("comLimpa"); if(_cl) _cl.onclick=()=>{ comOper="";comCanal="";comTipo="";comDe="";comAte=""; renderTab(); };
+    document.querySelectorAll("#content [data-prosp]").forEach(el=>el.onclick=()=>openProsp(el.dataset.prosp));
     return;
   }
 
