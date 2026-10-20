@@ -299,6 +299,50 @@ def clinic_fat_mensal(since_map, alias=None):
         out[p] = [{"ym": ym, "n": m[ym][0], "fat": round(m[ym][1], 2)} for ym in sorted(m)]
     return out
 
+def clinic_fat_mensal_full(cods, meses=13, alias=None, tries=4):
+    """Mês a mês (exames n + R$ fat) por clínica nos últimos `meses` meses — p/ QUALQUER clínica (A/B/C/D + carteira),
+    sem depender de marco. → {cod_principal: [{ym, n, fat}, ...]}. Soma código-extra no principal (alias).
+    Em lotes de 200 cods (CodCliente indexado) + retry. CIFRADO (diretoria)."""
+    alias = {str(k): str(v) for k, v in (alias or {}).items()}
+    cods = sorted({str(c) for c in (cods or []) if c is not None and str(c).strip()} | set(alias.keys()))
+    if not cods:
+        return {}
+    def prim(cod): return alias.get(str(cod), str(cod))
+    hoje = datetime.date.today()
+    y, m0 = hoje.year, hoje.month
+    tot = y * 12 + (m0 - 1) - (meses - 1)
+    mn = "%04d-%02d-01" % (tot // 12, tot % 12 + 1)   # 1º dia do mês-janela mais antigo
+    maxd = hoje.isoformat()
+    acc = {}   # {prim: {ym: [n, fat]}}
+    for i in range(0, len(cods), 200):
+        lote = cods[i:i + 200]; ph = ",".join(["%s"] * len(lote))
+        sql = (f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
+               f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+               f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente, ym")
+        rows = None
+        for t in range(tries):
+            try:
+                conn = pymysql.connect(**SRC); c = conn.cursor()
+                try:
+                    c.execute(sql, (*lote, mn, maxd)); rows = c.fetchall()
+                finally:
+                    conn.close()
+                break
+            except Exception as e:
+                if t == tries - 1:
+                    print(f"clinic_fat_mensal_full: lote {i} desistiu ({e})"); rows = []
+                else:
+                    time.sleep(2 * (t + 1))
+        for x in (rows or []):
+            p = prim(str(x["cod"])); mm = acc.setdefault(p, {}); cur = mm.setdefault(x["ym"], [0, 0.0])
+            cur[0] += int(x["n"] or 0); cur[1] += float(x["f"] or 0)
+    out = {}
+    for p, mm in acc.items():
+        serie = [{"ym": ym, "n": mm[ym][0], "fat": round(mm[ym][1], 2)} for ym in sorted(mm)]
+        if any(it["n"] for it in serie):
+            out[p] = serie
+    return out
+
 def clinic_fat_mtd(cods, alias=None, tries=4):
     """DIA-EXATO p/ o 'Ritmo do mês': faturamento de cada clínica ATÉ O MESMO DIA do mês,
     neste mês (cur) e no mês passado (prev). → {cod_principal: {d, cur, prev}}.

@@ -558,7 +558,7 @@ async function loadOps(){ try{ const r=await fetch(OPS_API, {cache:"no-store"});
 function operadorAtual(){ return (localStorage.getItem("crm_operador")||"").trim(); }
 function operadorPapel(){ return (localStorage.getItem("crm_operador_papel")||"comercial"); }
 function ehDiretoria(){ return operadorPapel()==="diretoria"; }   // só diretoria vê R$
-function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; CLIN_CONQFAT=null; CLIN_CONQMES=null; CLIN_FATMTD=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
+function setOperador(nome, papel){ nome=(nome||"").trim(); if(nome){ localStorage.setItem("crm_operador",nome); localStorage.setItem("crm_rep",nome); } if(papel){ localStorage.setItem("crm_operador_papel", papel==="diretoria"?"diretoria":"comercial"); if(papel!=="diretoria"){ CLIN_RS=null; CLIN_FATMES=null; CLIN_RS_DESDE=null; CLIN_CONQFAT=null; CLIN_CONQMES=null; CLIN_FATMTD=null; CLIN_FATMESALL=null; try{sessionStorage.removeItem("crm_dir_code");localStorage.removeItem("crm_fin_code");}catch(e){} } } renderOpBtn(); }
 function renderOpBtn(){ const b=document.getElementById("opBtn"); if(b){ const o=operadorAtual(); b.innerHTML=o?("👤 "+esc(o)+(ehDiretoria()?" 🔓R$":"")+" · trocar"):"👤 identificar-se"; } }
 /* 💰 R$ BLINDADO: só a diretoria vê o valor; comercial vê 🔒 (Fase 2 — pronto p/ o R$ da Fase 3) */
 function fmtBRL(v){ const n=+v||0; return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -692,7 +692,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null, LAB_MES=null, CLIN_FATMTD=null;   // CLIN_FATMTD={cod:{d,cur,prev}} dia-exato p/ o Ritmo do mês   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento do lab TOTAL(lab_desde) e MÊS A MÊS(lab_mes={ym:fat}) desde o marco (denominador do BI) — só diretoria
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null, LAB_MES=null, CLIN_FATMTD=null, CLIN_FATMESALL=null;   // CLIN_FATMESALL={cod:[{ym,n,fat}]} mês a mês p/ o drill-down da clínica (qualquer clínica)   // CLIN_FATMTD={cod:{d,cur,prev}} dia-exato p/ o Ritmo do mês   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento do lab TOTAL(lab_desde) e MÊS A MÊS(lab_mes={ym:fat}) desde o marco (denominador do BI) — só diretoria
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -701,7 +701,7 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; LAB_MES=obj.lab_mes||null; CLIN_FATMTD=obj.fatmtd||{}; }   // {fat, desde, fatmes, conqfat, lab_desde, marco, lab_mes}
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; LAB_MES=obj.lab_mes||null; CLIN_FATMTD=obj.fatmtd||{}; CLIN_FATMESALL=obj.fatmesall||{}; }   // {fat, desde, fatmes, conqfat, lab_desde, marco, lab_mes, fatmtd, fatmesall}
     else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; CLIN_CONQFAT={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
@@ -1731,6 +1731,49 @@ function openReg(cod){
   const mir=document.getElementById("mInatReabrir"); if(mir) mir.onclick=()=>reativarInat(M_COD);
 }
 let EX_VIEW="dia";
+/* 📅 MÊS A MÊS da clínica — exames e R$ por mês, com % vs o mês anterior (pedido do Wal). Visual, por ano. */
+function fatmesDe(cod){ cod=String(cod||""); return (CLIN_FATMESALL&&CLIN_FATMESALL[cod]) || (CLIN_FATMES&&CLIN_FATMES[cod]) || null; }
+function openMesAMes(cod, nome){
+  cod=String(cod||"");
+  const serie=(fatmesDe(cod)||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1);
+  const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
+  const body=document.getElementById("modalBody"), dir=ehDiretoria();
+  if(!serie.length){
+    body.innerHTML=`<div class="m-head"><div><div class="m-cli">📅 ${esc(nome||"Clínica")} — mês a mês</div></div><button class="m-x" id="mClose">✕</button></div>
+      <div class="proxhint" style="border-color:rgba(255,194,77,.4);color:#ffc266;margin-top:10px;line-height:1.5">⏳ O histórico mensal desta clínica entra no <b>próximo ciclo do robô</b>. As de maior faturamento (curvas A/B/C/D) e as da carteira já têm.</div>`;
+    document.getElementById("modal").style.display="flex"; document.getElementById("mClose").onclick=closeModal; return;
+  }
+  const rows=serie.map((m,i)=>{ const pv=i>0?serie[i-1]:null;
+    return {...m, dN:(pv&&pv.n>0)?(m.n/pv.n-1):null, dF:(pv&&pv.fat>0)?(m.fat/pv.fat-1):null}; });
+  const corD=d=> d==null?"#6b7a90": d>=0.03?"#00E5A0": d>=-0.03?"#9fb2cc": d<=-0.15?"#FF5470":"#FF8A00";
+  const pct=d=> d==null?"—":(d>=0?"▲ ":"▼ ")+Math.abs(Math.round(d*100))+"%";
+  const maxF=Math.max(...serie.map(m=>m.fat),1), maxN=Math.max(...serie.map(m=>m.n),1);
+  const totN=serie.reduce((s,m)=>s+m.n,0), totF=serie.reduce((s,m)=>s+m.fat,0);
+  const anos={}; rows.forEach(r=>{ const y=r.ym.slice(0,4); (anos[y]=anos[y]||[]).push(r); });
+  const linha=r=>`<tr style="border-top:1px solid rgba(255,255,255,.05)">
+      <td style="padding:6px 8px;text-align:left;white-space:nowrap">${mlab(r.ym)}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:700;color:#9fe6ff">${r.n}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:700;color:${corD(r.dN)}">${pct(r.dN)}</td>
+      ${dir?`<td style="padding:6px 8px;text-align:right;font-weight:700;color:#7effcf">${fmtBRL(r.fat)}</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:${corD(r.dF)}">${pct(r.dF)}</td>`:""}
+      <td style="padding:6px 8px;width:66px"><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.round((dir?r.fat/maxF:r.n/maxN)*100)}%;background:${dir?'#00E5A0':'#00D4FF'};border-radius:5px"></div></div></td></tr>`;
+  const corpo=Object.keys(anos).sort().reverse().map(y=>{ const rs=anos[y].slice().reverse(); const aN=rs.reduce((s,m)=>s+m.n,0), aF=rs.reduce((s,m)=>s+m.fat,0);
+      return `<tr style="background:rgba(0,212,255,.08)"><td colspan="${dir?6:4}" style="padding:5px 8px;font-weight:800;color:#9fe6ff">${y} · ${aN} exames${dir?` · ${fmtBRL(aF)}`:""}</td></tr>${rs.map(linha).join("")}`; }).join("");
+  body.innerHTML=`<div class="m-head"><div><div class="m-cli">📅 ${esc(nome||"Clínica")} — mês a mês</div>
+      <div class="t-mut" style="font-size:12.5px;margin-top:2px">Exames${dir?" e faturamento":""} por mês · <b>% vs o mês anterior</b> (▲ sobe · ▼ cai)${dir?"":" · <span style='color:#ffc266'>R$ só diretoria</span>"}</div></div>
+      <button class="m-x" id="mClose">✕</button></div>
+    <div class="kgrid" style="margin-bottom:8px">
+      ${kpi("g", totN, "Exames", serie.length+" meses")}
+      ${dir?kpi("g", fmtBRL(totF), "Faturamento", "no período"):kpi("", Math.round(totN/serie.length), "Média/mês", "exames")}
+    </div>
+    <div style="overflow-x:auto;border:1px solid rgba(0,212,255,.22);border-radius:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:${dir?'420':'300'}px">
+        <thead><tr style="color:var(--mut);font-size:10.5px;background:rgba(0,212,255,.06)">
+          <th style="padding:5px 8px;text-align:left">Mês</th><th style="padding:5px 8px;text-align:right">Exames</th><th style="padding:5px 8px;text-align:right">Δ%</th>
+          ${dir?`<th style="padding:5px 8px;text-align:right">R$</th><th style="padding:5px 8px;text-align:right">Δ%</th>`:""}<th style="padding:5px 8px"></th></tr></thead>
+        <tbody>${corpo}</tbody></table></div>
+    <div class="t-mut" style="font-size:11px;margin-top:8px;line-height:1.5">📊 <b>Δ%</b> = variação vs o mês anterior. 🟢 sobe · 🔴 cai. A barrinha compara ${dir?"o R$":"os exames"} entre os meses. Mais recente no topo de cada ano.</div>`;
+  document.getElementById("modal").style.display="flex"; document.getElementById("mClose").onclick=closeModal;
+}
 function openExames(cod, nome){
   cod=String(cod||""); const d=CLIN_DET[cod]||{}; const rec=(d.recent||[]).slice();
   const desde=d.recent_desde||d.marco||"", mais=!!d.recent_mais;
@@ -3232,7 +3275,7 @@ function renderTab(){
           ${conqBox}${mesaBox}${cheioBox}
           ${x.obs?`<div class="lastint">"${esc(x.obs)}"</div>`:""}
           ${interp?`<div class="ci" style="font-size:11.5px;margin-top:3px;${flag?'color:#ff8fa3;font-weight:600':'color:#9fe6ff'}">${interp}</div>`:""}
-          ${x.cod?`<button class="exbtn" data-exames="${esc(x.cod)}" data-exnome="${esc(x.nome)}" type="button" style="margin-top:6px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:#9fe6ff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">🔬 Ver exames (dia · PET · registro)</button>`:""}
+          ${x.cod?`<button class="exbtn" data-exames="${esc(x.cod)}" data-exnome="${esc(x.nome)}" type="button" style="margin-top:6px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:#9fe6ff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">🔬 Ver exames (dia · PET · registro)</button> <button class="exbtn" data-mesames="${esc(x.cod)}" data-mnome="${esc(x.nome)}" type="button" style="margin-top:6px;background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#7effcf;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">📅 Mês a mês</button>`:""}
           <div class="ci t-mut" style="font-size:11px;margin-top:4px">👤 ${esc(x.por||"—")}</div></div>
         <div class="mid"></div></div>`; };
     const CL=CLINICAS.length;
@@ -3724,7 +3767,8 @@ function renderTab(){
           <div style="flex:1"><div class="nm">${esc(a.nome)} <span class="pr" style="background:rgba(0,212,255,.14);color:#9fe6ff">${pl2}</span> <span class="pr" style="background:${meta.cor}22;color:${meta.cor}">curva ${a.curva||curva}</span> <span class="t-mut" style="font-size:11px">🔗 HF</span></div>
             <div class="ci">${a.cidade?"📍 "+esc(a.cidade)+" · ":""}📊 <b>${a.qtd||0}</b> exames (12m) · 💰 ${rsClin(a.cod)}</div>
             ${cats.length?`<div class="ci" style="font-size:11.5px;margin-top:3px;color:#7effcf">✅ manda: ${cats.slice(0,6).map(c=>esc(c.setor)+" ("+c.qtd+")").join(", ")}</div>`:""}
-            ${mesa}</div>
+            ${mesa}
+            ${a.cod?`<button class="exbtn" data-mesames="${esc(a.cod)}" data-mnome="${esc(a.nome)}" type="button" style="margin-top:7px;background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#7effcf;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">📅 Mês a mês (exames${ehDiretoria()?" · R$":""})</button>`:""}</div>
           <div class="mid"></div></div>`; };
       c.innerHTML=`${subtabsClin}
         <div class="proxhint" style="border-color:${meta.bord};color:${meta.cor};margin-bottom:10px;line-height:1.55">${meta.ic} <b>${meta.nome}</b> — ${meta.desc}. Trazidas <b>automaticamente</b> pelo robô (curva ABC), ranqueadas por faturamento. Mesma inteligência das Reconquistadas/Novas: <b>análise de 12 meses</b> do que manda × <b>o que deixa na mesa</b> (vermelho = indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
@@ -3747,6 +3791,7 @@ function renderTab(){
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; renderTab(); });
       document.querySelectorAll("#content [data-sow]").forEach(el=>el.onclick=()=>{ sowFilter=el.dataset.sow; renderTab(); });
       const rb=document.getElementById("relSoW"); if(rb) rb.onclick=()=>relatorioSoW(curva);
+      document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       const la=document.getElementById("lupaAAA"); if(la){ la.addEventListener("input", e=>{ search=e.target.value; const p=la.selectionStart; renderTab(); const l2=document.getElementById("lupaAAA"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
       return;
     }
@@ -3789,6 +3834,7 @@ function renderTab(){
     const vrs=document.getElementById("verRSbtn"); if(vrs) vrs.onclick=()=>abrirFinanceiro();
     document.querySelectorAll("#content [data-cart]").forEach(el=>el.onclick=()=>openCarteira(null, el.dataset.cart));
     document.querySelectorAll("#content [data-exames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openExames(el.dataset.exames, el.dataset.exnome); });
+    document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
     const lc=document.getElementById("lupaCart"); if(lc){ lc.addEventListener("input", e=>{ search=e.target.value; const p=lc.selectionStart; renderTab(); const l2=document.getElementById("lupaCart"); if(l2){l2.focus(); try{l2.setSelectionRange(p,p);}catch(_){}}}); }
     return;
   }
