@@ -1731,7 +1731,7 @@ function openReg(cod){
   const mir=document.getElementById("mInatReabrir"); if(mir) mir.onclick=()=>reativarInat(M_COD);
 }
 let EX_VIEW="dia";
-/* 📅 MÊS A MÊS da clínica — exames e R$ por mês, com % vs o mês anterior (pedido do Wal). Visual, por ano. */
+/* 📅 MÊS A MÊS da clínica — Exames e R$ lado a lado, coligação REAL mês a mês (% vs o mês anterior). Visual. */
 function fatmesDe(cod){ cod=String(cod||""); return (CLIN_FATMESALL&&CLIN_FATMESALL[cod]) || (CLIN_FATMES&&CLIN_FATMES[cod]) || null; }
 function openMesAMes(cod, nome){
   cod=String(cod||"");
@@ -1743,72 +1743,43 @@ function openMesAMes(cod, nome){
       <div class="proxhint" style="border-color:rgba(255,194,77,.4);color:#ffc266;margin-top:10px;line-height:1.5">⏳ O histórico mensal desta clínica entra no <b>próximo ciclo do robô</b>. As de maior faturamento (curvas A/B/C/D) e as da carteira já têm.</div>`;
     document.getElementById("modal").style.display="flex"; document.getElementById("mClose").onclick=closeModal; return;
   }
-  const rows=serie.map((m,i)=>{ const pv=i>0?serie[i-1]:null;
-    return {...m, dN:(pv&&pv.n>0)?(m.n/pv.n-1):null, dF:(pv&&pv.fat>0)?(m.fat/pv.fat-1):null}; });
+  const curYm=(()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");})();
+  const ehParcial=m=>m.ym===curYm;   // o mês corrente ainda está correndo
   const corD=d=> d==null?"#6b7a90": d>=0.03?"#00E5A0": d>=-0.03?"#9fb2cc": d<=-0.15?"#FF5470":"#FF8A00";
   const pct=d=> d==null?"—":(d>=0?"▲ ":"▼ ")+Math.abs(Math.round(d*100))+"%";
-  const maxF=Math.max(...serie.map(m=>m.fat),1), maxN=Math.max(...serie.map(m=>m.n),1);
+  // painel de UMA métrica (exames ou R$): meses do mais novo p/ o mais antigo, % REAL vs o mês anterior
+  const painel=(campo, titulo, cor, fmt)=>{
+    const arr=serie.map((m,i)=>{ const pv=i>0?serie[i-1]:null; const v=m[campo]||0, pvv=pv?(pv[campo]||0):null;
+      const d=(pvv!=null&&pvv>0 && !ehParcial(m))?(v/pvv-1):null;   // parcial não gera % (não é mês cheio)
+      return {ym:m.ym, v, d, parcial:ehParcial(m)}; }).reverse();
+    const mx=Math.max(...arr.map(x=>x.v),1);
+    const rows=arr.map(x=>`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-top:1px solid rgba(255,255,255,.05)">
+        <div style="width:48px;font-size:11.5px;color:${x.parcial?'#ffd27a':'#c9d4e0'};font-weight:${x.parcial?'800':'600'};white-space:nowrap">${mlab(x.ym)}</div>
+        <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:4px;align-items:baseline">
+            <span style="font-weight:700;font-size:12px;color:${cor}">${fmt(x.v)}</span>
+            <span style="font-weight:700;font-size:11px;color:${x.parcial?'#ffd27a':corD(x.d)}">${x.parcial?'parcial':pct(x.d)}</span></div>
+          <div style="height:6px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${Math.max(3,Math.round(x.v/mx*100))}%;background:${cor}${x.parcial?'99':''};border-radius:4px"></div></div></div>
+      </div>`).join("");
+    return `<div style="flex:1;min-width:148px;border:1px solid ${cor}55;border-radius:11px;padding:10px 11px;background:${cor}0d">
+        <div style="font-size:12px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">${titulo}</div>${rows}</div>`;
+  };
+  // possível FUGA: último mês CHEIO (não o parcial) com exames caindo forte vs o anterior
+  const cheios=serie.filter(m=>!ehParcial(m)); const uC=cheios[cheios.length-1], aC=cheios[cheios.length-2];
+  const fuga=(uC&&aC&&aC.n>0 && (uC.n/aC.n-1)<=-0.25);
   const totN=serie.reduce((s,m)=>s+m.n,0), totF=serie.reduce((s,m)=>s+m.fat,0);
-  const anos={}; rows.forEach(r=>{ const y=r.ym.slice(0,4); (anos[y]=anos[y]||[]).push(r); });
-  const linha=r=>`<tr style="border-top:1px solid rgba(255,255,255,.05)">
-      <td style="padding:6px 8px;text-align:left;white-space:nowrap">${mlab(r.ym)}</td>
-      <td style="padding:6px 8px;text-align:right;font-weight:700;color:#9fe6ff">${r.n}</td>
-      <td style="padding:6px 8px;text-align:right;font-weight:700;color:${corD(r.dN)}">${pct(r.dN)}</td>
-      ${dir?`<td style="padding:6px 8px;text-align:right;font-weight:700;color:#7effcf">${fmtBRL(r.fat)}</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:${corD(r.dF)}">${pct(r.dF)}</td>`:""}
-      <td style="padding:6px 8px;width:66px"><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.round((dir?r.fat/maxF:r.n/maxN)*100)}%;background:${dir?'#00E5A0':'#00D4FF'};border-radius:5px"></div></div></td></tr>`;
-  const corpo=Object.keys(anos).sort().reverse().map(y=>{ const rs=anos[y].slice().reverse(); const aN=rs.reduce((s,m)=>s+m.n,0), aF=rs.reduce((s,m)=>s+m.fat,0);
-      return `<tr style="background:rgba(0,212,255,.08)"><td colspan="${dir?6:4}" style="padding:5px 8px;font-weight:800;color:#9fe6ff">${y} · ${aN} exames${dir?` · ${fmtBRL(aF)}`:""}</td></tr>${rs.map(linha).join("")}`; }).join("");
-  // 📆 COMPARAÇÃO JUSTA — cada mês contado SÓ ATÉ O DIA D (hoje), p/ ver se o mês está quente/frio e pegar desvio/fuga
-  const dia = CLIN_FATMESALL_DIA || (new Date()).getDate();
-  const temD = serie.some(m=>m.nd!=null);
-  let ddHtml="";
-  if(temD){
-    const sd=serie.filter(m=>m.nd!=null);
-    const atual=sd[sd.length-1], ant=sd.slice(0,-1);
-    const baseN=ant.length?ant.reduce((s,m)=>s+m.nd,0)/ant.length:0, baseF=ant.length?ant.reduce((s,m)=>s+m.fd,0)/ant.length:0;
-    const vN=baseN>0?(atual.nd/baseN-1):null, vF=baseF>0?(atual.fd/baseF-1):null;
-    const fuga=(vN!=null&&vN<=-0.25);   // exames caíram >25% vs o normal no mesmo ponto = possível fuga
-    const maxNd=Math.max(...sd.map(m=>m.nd),1), maxFd=Math.max(...sd.map(m=>m.fd),1);
-    const sdRows=sd.map((m,i)=>{ const pv=i>0?sd[i-1]:null;
-      const dN=(pv&&pv.nd>0)?(m.nd/pv.nd-1):null, dF=(pv&&pv.fd>0)?(m.fd/pv.fd-1):null, cur=(m===atual);
-      return `<tr style="border-top:1px solid rgba(255,255,255,.05)${cur?';background:rgba(255,194,77,.10)':''}">
-        <td style="padding:5px 8px;text-align:left;white-space:nowrap;font-weight:${cur?'800':'600'};color:${cur?'#ffd27a':'#c9d4e0'}">${mlab(m.ym)}${cur?' <span style="font-size:9px;background:#ffc266;color:#2b1e05;border-radius:4px;padding:1px 5px;font-weight:800">ESTE MÊS</span>':''}</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#9fe6ff">${m.nd}</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;color:${corD(dN)}">${pct(dN)}</td>
-        ${dir?`<td style="padding:5px 8px;text-align:right;font-weight:700;color:#7effcf">${fmtBRL(m.fd)}</td><td style="padding:5px 8px;text-align:right;font-weight:700;color:${corD(dF)}">${pct(dF)}</td>`:""}
-        <td style="padding:5px 8px;width:60px"><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.round((dir?m.fd/maxFd:m.nd/maxNd)*100)}%;background:${dir?'#00E5A0':'#00D4FF'};border-radius:5px"></div></div></td></tr>`;
-    }).reverse().join("");
-    const corH=v=> v==null?"#9fb2cc": v>=0.03?"#00E5A0": v>=-0.03?"#9fb2cc": v<=-0.25?"#FF5470":"#FF8A00";
-    const headline=`Este mês (<b>${mlab(atual.ym)}</b>, até o dia ${dia}) está <b style="color:${corH(vN)}">${pct(vN)}</b> em exames${dir?` e <b style="color:${corH(vF)}">${pct(vF)}</b> em R$`:""} vs a <b>média dos meses anteriores no mesmo ponto</b> (${ant.length} meses).`;
-    ddHtml=`<div style="border:1px solid rgba(255,194,77,.5);border-radius:12px;padding:12px 14px;margin:0 0 12px;background:linear-gradient(180deg,rgba(255,194,77,.08),rgba(255,194,77,.02))">
-        <div style="font-size:12px;font-weight:800;color:#ffd27a;text-transform:uppercase;letter-spacing:.3px">📆 Comparação justa — até o dia ${dia} (dia ${dia} × dia ${dia} dos meses anteriores)</div>
-        <div style="font-size:12.5px;color:#eaf3ff;margin-top:6px;line-height:1.55">${headline}</div>
-        ${fuga?`<div style="margin-top:8px;background:rgba(255,45,85,.14);border:1px solid rgba(255,45,85,.5);border-radius:8px;padding:8px 11px;font-size:12.5px;color:#ffc9d2;font-weight:700">⚠️ Possível <b>desvio / fuga de exames pro concorrente</b> — o volume neste ponto do mês caiu <b>${Math.abs(Math.round(vN*100))}%</b> vs o normal. Vale ligar e investigar.</div>`:(vN!=null&&vN>=0.08?`<div style="margin-top:8px;color:#7effcf;font-size:12.5px;font-weight:700">🔥 Mês quente — acima do ritmo histórico neste ponto. 👏</div>`:"")}
-        <div style="overflow-x:auto;margin-top:9px;border:1px solid rgba(255,194,77,.22);border-radius:8px">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:${dir?'400':'280'}px">
-            <thead><tr style="color:var(--mut);font-size:10px;background:rgba(255,194,77,.08)">
-              <th style="padding:5px 8px;text-align:left">Mês (até dia ${dia})</th><th style="padding:5px 8px;text-align:right">Exames</th><th style="padding:5px 8px;text-align:right">Δ%</th>
-              ${dir?`<th style="padding:5px 8px;text-align:right">R$</th><th style="padding:5px 8px;text-align:right">Δ%</th>`:""}<th></th></tr></thead>
-            <tbody>${sdRows}</tbody></table></div>
-        <div class="t-mut" style="font-size:10.5px;margin-top:7px;line-height:1.5"><b>Legenda:</b> 🟢 aumento · 🔴 queda · 🟠 queda leve · ⚠️ possível fuga de exames (volume caiu &gt;25% vs o normal). Δ% = vs o mês anterior no mesmo ponto. <b>Comparação justa</b>: cada mês conta só até o dia ${dia}, então o mês parcial não parece menor à toa.</div>
-      </div>`;
-  }
   body.innerHTML=`<div class="m-head"><div><div class="m-cli">📅 ${esc(nome||"Clínica")} — mês a mês</div>
-      <div class="t-mut" style="font-size:12.5px;margin-top:2px">Exames${dir?" e faturamento":""} por mês · <b>% vs o mês anterior</b> (▲ sobe · ▼ cai)${dir?"":" · <span style='color:#ffc266'>R$ só diretoria</span>"}</div></div>
+      <div class="t-mut" style="font-size:12.5px;margin-top:2px">Coligação real mês a mês · <b>% vs o mês anterior</b> (▲ sobe · ▼ cai)${dir?"":" · <span style='color:#ffc266'>R$ só diretoria</span>"}</div></div>
       <button class="m-x" id="mClose">✕</button></div>
-    <div class="kgrid" style="margin-bottom:8px">
+    <div class="kgrid" style="margin-bottom:9px">
       ${kpi("g", totN, "Exames", serie.length+" meses")}
       ${dir?kpi("g", fmtBRL(totF), "Faturamento", "no período"):kpi("", Math.round(totN/serie.length), "Média/mês", "exames")}
     </div>
-    ${ddHtml}
-    <div class="seclabel" style="margin:4px 0 6px;font-size:12px">📅 Histórico mensal completo <span class="t-mut" style="font-weight:500;font-size:11px">— mês cheio (todos os dias)</span></div>
-    <div style="overflow-x:auto;border:1px solid rgba(0,212,255,.22);border-radius:10px">
-      <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:${dir?'420':'300'}px">
-        <thead><tr style="color:var(--mut);font-size:10.5px;background:rgba(0,212,255,.06)">
-          <th style="padding:5px 8px;text-align:left">Mês</th><th style="padding:5px 8px;text-align:right">Exames</th><th style="padding:5px 8px;text-align:right">Δ%</th>
-          ${dir?`<th style="padding:5px 8px;text-align:right">R$</th><th style="padding:5px 8px;text-align:right">Δ%</th>`:""}<th style="padding:5px 8px"></th></tr></thead>
-        <tbody>${corpo}</tbody></table></div>
-    <div class="t-mut" style="font-size:11px;margin-top:8px;line-height:1.5">📊 <b>Δ%</b> = variação vs o mês anterior. 🟢 sobe · 🔴 cai. A barrinha compara ${dir?"o R$":"os exames"} entre os meses. Mais recente no topo de cada ano.</div>`;
+    ${fuga?`<div style="background:rgba(255,45,85,.14);border:1px solid rgba(255,45,85,.5);border-radius:9px;padding:8px 11px;margin-bottom:9px;font-size:12.5px;color:#ffc9d2;font-weight:700">⚠️ <b>Atenção:</b> no último mês fechado os exames caíram forte vs o anterior — possível <b>desvio/fuga pro concorrente</b>. Vale ligar e investigar.</div>`:""}
+    <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-start">
+      ${painel("n","📊 Exames / mês","#00D4FF",v=>v)}
+      ${dir?painel("fat","💰 Faturamento / mês","#00E5A0",v=>fmtBRL(v)):""}
+    </div>
+    <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5"><b>Legenda:</b> 🟢 aumento · 🔴 queda · 🟠 queda leve · ⚠️ possível fuga de exames (caiu &gt;25% no mês fechado). Δ% = vs o mês anterior. O <b style="color:#ffd27a">mês atual é parcial</b> (ainda correndo), por isso não leva %. ${dir?"":"R$ é exclusivo da diretoria."}</div>`;
   document.getElementById("modal").style.display="flex"; document.getElementById("mClose").onclick=closeModal;
 }
 function openExames(cod, nome){
