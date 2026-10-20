@@ -309,14 +309,17 @@ def clinic_fat_mensal_full(cods, meses=13, alias=None, tries=4):
         return {}
     def prim(cod): return alias.get(str(cod), str(cod))
     hoje = datetime.date.today()
+    dia = hoje.day   # "dia de hoje" → cada mês também contado ATÉ este dia (comparação justa: dia 20 × dia 20)
     y, m0 = hoje.year, hoje.month
     tot = y * 12 + (m0 - 1) - (meses - 1)
     mn = "%04d-%02d-01" % (tot // 12, tot % 12 + 1)   # 1º dia do mês-janela mais antigo
     maxd = hoje.isoformat()
-    acc = {}   # {prim: {ym: [n, fat]}}
+    acc = {}   # {prim: {ym: [n, fat, nd, fd]}}  (n/fat = mês cheio; nd/fd = até o dia `dia`)
     for i in range(0, len(cods), 200):
         lote = cods[i:i + 200]; ph = ",".join(["%s"] * len(lote))
-        sql = (f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f "
+        sql = (f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COUNT(*) n, COALESCE(SUM(s.ValorExame),0) f, "
+               f"SUM(CASE WHEN DAY(r.DataEntrada)<=%s THEN 1 ELSE 0 END) nd, "
+               f"COALESCE(SUM(CASE WHEN DAY(r.DataEntrada)<=%s THEN s.ValorExame ELSE 0 END),0) fd "
                f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
                f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente, ym")
         rows = None
@@ -324,7 +327,7 @@ def clinic_fat_mensal_full(cods, meses=13, alias=None, tries=4):
             try:
                 conn = pymysql.connect(**SRC); c = conn.cursor()
                 try:
-                    c.execute(sql, (*lote, mn, maxd)); rows = c.fetchall()
+                    c.execute(sql, (dia, dia, *lote, mn, maxd)); rows = c.fetchall()
                 finally:
                     conn.close()
                 break
@@ -334,11 +337,12 @@ def clinic_fat_mensal_full(cods, meses=13, alias=None, tries=4):
                 else:
                     time.sleep(2 * (t + 1))
         for x in (rows or []):
-            p = prim(str(x["cod"])); mm = acc.setdefault(p, {}); cur = mm.setdefault(x["ym"], [0, 0.0])
+            p = prim(str(x["cod"])); mm = acc.setdefault(p, {}); cur = mm.setdefault(x["ym"], [0, 0.0, 0, 0.0])
             cur[0] += int(x["n"] or 0); cur[1] += float(x["f"] or 0)
+            cur[2] += int(x["nd"] or 0); cur[3] += float(x["fd"] or 0)
     out = {}
     for p, mm in acc.items():
-        serie = [{"ym": ym, "n": mm[ym][0], "fat": round(mm[ym][1], 2)} for ym in sorted(mm)]
+        serie = [{"ym": ym, "n": mm[ym][0], "fat": round(mm[ym][1], 2), "nd": mm[ym][2], "fd": round(mm[ym][3], 2)} for ym in sorted(mm)]
         if any(it["n"] for it in serie):
             out[p] = serie
     return out

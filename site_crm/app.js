@@ -692,7 +692,7 @@ function c2mini(cod){ const c2=cerebro2(CLIN_DET[String(cod)]); if(!c2) return "
   return `<span style="color:#7effcf">🟢 ~${c2.semMed}/sem</span>`; }
 /* 💰 R$ POR CLÍNICA — CIFRADO só p/ DIRETORIA (decifra no navegador com o código da diretoria) */
 const CLIN_RS_API="/api/crm-clinicas-rs";
-let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null, LAB_MES=null, CLIN_FATMTD=null, CLIN_FATMESALL=null;   // CLIN_FATMESALL={cod:[{ym,n,fat}]} mês a mês p/ o drill-down da clínica (qualquer clínica)   // CLIN_FATMTD={cod:{d,cur,prev}} dia-exato p/ o Ritmo do mês   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento do lab TOTAL(lab_desde) e MÊS A MÊS(lab_mes={ym:fat}) desde o marco (denominador do BI) — só diretoria
+let CLIN_RS_ENV=null, CLIN_RS=null, CLIN_RS_DESDE=null, CLIN_FATMES=null, CLIN_CONQFAT=null, CLIN_CONQMES=null, LAB_FAT_DESDE=null, LAB_MARCO=null, LAB_MES=null, CLIN_FATMTD=null, CLIN_FATMESALL=null, CLIN_FATMESALL_DIA=0;   // CLIN_FATMESALL={cod:[{ym,n,fat,nd,fd}]} mês a mês (cheio + até o dia D) p/ o drill-down da clínica   // CLIN_FATMTD={cod:{d,cur,prev}} dia-exato p/ o Ritmo do mês   // env cifrado (público) + {cod:fat 12m} + {cod:fat desde marco} + {cod:[{ym,n,fat}]} + {cod:{setor:fat}} conquistas + faturamento do lab TOTAL(lab_desde) e MÊS A MÊS(lab_mes={ym:fat}) desde o marco (denominador do BI) — só diretoria
 async function loadClinRS(){ try{ const r=await fetch(CLIN_RS_API, {cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_RS_ENV=(j&&j.ct)?j:null; } }catch(e){} }
 function _b64b(s){ const bin=atob(s||""); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; }
 async function decDirRS(code){
@@ -701,7 +701,7 @@ async function decDirRS(code){
     const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(CLIN_RS_ENV.salt), iterations:CLIN_RS_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(CLIN_RS_ENV.iv)}, key, _b64b(CLIN_RS_ENV.ct));
     const obj=JSON.parse(new TextDecoder().decode(plain));
-    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; LAB_MES=obj.lab_mes||null; CLIN_FATMTD=obj.fatmtd||{}; CLIN_FATMESALL=obj.fatmesall||{}; }   // {fat, desde, fatmes, conqfat, lab_desde, marco, lab_mes, fatmtd, fatmesall}
+    if(obj && obj.fat){ CLIN_RS=obj.fat; CLIN_RS_DESDE=obj.desde||{}; CLIN_FATMES=obj.fatmes||{}; CLIN_CONQFAT=obj.conqfat||{}; CLIN_CONQMES=obj.conqmes||{}; LAB_FAT_DESDE=obj.lab_desde||null; LAB_MARCO=obj.marco||null; LAB_MES=obj.lab_mes||null; CLIN_FATMTD=obj.fatmtd||{}; CLIN_FATMESALL=obj.fatmesall||{}; CLIN_FATMESALL_DIA=obj.fatmesall_dia||0; }   // {fat, desde, fatmes, conqfat, lab_desde, marco, lab_mes, fatmtd, fatmesall}
     else { CLIN_RS=obj; CLIN_RS_DESDE={}; CLIN_FATMES={}; CLIN_CONQFAT={}; }   // compat formato antigo (mapa plano)
     return true;
   }catch(e){ return false; } }
@@ -1758,6 +1758,41 @@ function openMesAMes(cod, nome){
       <td style="padding:6px 8px;width:66px"><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.round((dir?r.fat/maxF:r.n/maxN)*100)}%;background:${dir?'#00E5A0':'#00D4FF'};border-radius:5px"></div></div></td></tr>`;
   const corpo=Object.keys(anos).sort().reverse().map(y=>{ const rs=anos[y].slice().reverse(); const aN=rs.reduce((s,m)=>s+m.n,0), aF=rs.reduce((s,m)=>s+m.fat,0);
       return `<tr style="background:rgba(0,212,255,.08)"><td colspan="${dir?6:4}" style="padding:5px 8px;font-weight:800;color:#9fe6ff">${y} · ${aN} exames${dir?` · ${fmtBRL(aF)}`:""}</td></tr>${rs.map(linha).join("")}`; }).join("");
+  // 📆 COMPARAÇÃO JUSTA — cada mês contado SÓ ATÉ O DIA D (hoje), p/ ver se o mês está quente/frio e pegar desvio/fuga
+  const dia = CLIN_FATMESALL_DIA || (new Date()).getDate();
+  const temD = serie.some(m=>m.nd!=null);
+  let ddHtml="";
+  if(temD){
+    const sd=serie.filter(m=>m.nd!=null);
+    const atual=sd[sd.length-1], ant=sd.slice(0,-1);
+    const baseN=ant.length?ant.reduce((s,m)=>s+m.nd,0)/ant.length:0, baseF=ant.length?ant.reduce((s,m)=>s+m.fd,0)/ant.length:0;
+    const vN=baseN>0?(atual.nd/baseN-1):null, vF=baseF>0?(atual.fd/baseF-1):null;
+    const fuga=(vN!=null&&vN<=-0.25);   // exames caíram >25% vs o normal no mesmo ponto = possível fuga
+    const maxNd=Math.max(...sd.map(m=>m.nd),1), maxFd=Math.max(...sd.map(m=>m.fd),1);
+    const sdRows=sd.map((m,i)=>{ const pv=i>0?sd[i-1]:null;
+      const dN=(pv&&pv.nd>0)?(m.nd/pv.nd-1):null, dF=(pv&&pv.fd>0)?(m.fd/pv.fd-1):null, cur=(m===atual);
+      return `<tr style="border-top:1px solid rgba(255,255,255,.05)${cur?';background:rgba(255,194,77,.10)':''}">
+        <td style="padding:5px 8px;text-align:left;white-space:nowrap;font-weight:${cur?'800':'600'};color:${cur?'#ffd27a':'#c9d4e0'}">${mlab(m.ym)}${cur?' <span style="font-size:9px;background:#ffc266;color:#2b1e05;border-radius:4px;padding:1px 5px;font-weight:800">ESTE MÊS</span>':''}</td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#9fe6ff">${m.nd}</td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700;color:${corD(dN)}">${pct(dN)}</td>
+        ${dir?`<td style="padding:5px 8px;text-align:right;font-weight:700;color:#7effcf">${fmtBRL(m.fd)}</td><td style="padding:5px 8px;text-align:right;font-weight:700;color:${corD(dF)}">${pct(dF)}</td>`:""}
+        <td style="padding:5px 8px;width:60px"><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.round((dir?m.fd/maxFd:m.nd/maxNd)*100)}%;background:${dir?'#00E5A0':'#00D4FF'};border-radius:5px"></div></div></td></tr>`;
+    }).reverse().join("");
+    const corH=v=> v==null?"#9fb2cc": v>=0.03?"#00E5A0": v>=-0.03?"#9fb2cc": v<=-0.25?"#FF5470":"#FF8A00";
+    const headline=`Este mês (<b>${mlab(atual.ym)}</b>, até o dia ${dia}) está <b style="color:${corH(vN)}">${pct(vN)}</b> em exames${dir?` e <b style="color:${corH(vF)}">${pct(vF)}</b> em R$`:""} vs a <b>média dos meses anteriores no mesmo ponto</b> (${ant.length} meses).`;
+    ddHtml=`<div style="border:1px solid rgba(255,194,77,.5);border-radius:12px;padding:12px 14px;margin:0 0 12px;background:linear-gradient(180deg,rgba(255,194,77,.08),rgba(255,194,77,.02))">
+        <div style="font-size:12px;font-weight:800;color:#ffd27a;text-transform:uppercase;letter-spacing:.3px">📆 Comparação justa — até o dia ${dia} (dia ${dia} × dia ${dia} dos meses anteriores)</div>
+        <div style="font-size:12.5px;color:#eaf3ff;margin-top:6px;line-height:1.55">${headline}</div>
+        ${fuga?`<div style="margin-top:8px;background:rgba(255,45,85,.14);border:1px solid rgba(255,45,85,.5);border-radius:8px;padding:8px 11px;font-size:12.5px;color:#ffc9d2;font-weight:700">⚠️ Possível <b>desvio / fuga de exames pro concorrente</b> — o volume neste ponto do mês caiu <b>${Math.abs(Math.round(vN*100))}%</b> vs o normal. Vale ligar e investigar.</div>`:(vN!=null&&vN>=0.08?`<div style="margin-top:8px;color:#7effcf;font-size:12.5px;font-weight:700">🔥 Mês quente — acima do ritmo histórico neste ponto. 👏</div>`:"")}
+        <div style="overflow-x:auto;margin-top:9px;border:1px solid rgba(255,194,77,.22);border-radius:8px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:${dir?'400':'280'}px">
+            <thead><tr style="color:var(--mut);font-size:10px;background:rgba(255,194,77,.08)">
+              <th style="padding:5px 8px;text-align:left">Mês (até dia ${dia})</th><th style="padding:5px 8px;text-align:right">Exames</th><th style="padding:5px 8px;text-align:right">Δ%</th>
+              ${dir?`<th style="padding:5px 8px;text-align:right">R$</th><th style="padding:5px 8px;text-align:right">Δ%</th>`:""}<th></th></tr></thead>
+            <tbody>${sdRows}</tbody></table></div>
+        <div class="t-mut" style="font-size:10.5px;margin-top:7px;line-height:1.5"><b>Legenda:</b> 🟢 aumento · 🔴 queda · 🟠 queda leve · ⚠️ possível fuga de exames (volume caiu &gt;25% vs o normal). Δ% = vs o mês anterior no mesmo ponto. <b>Comparação justa</b>: cada mês conta só até o dia ${dia}, então o mês parcial não parece menor à toa.</div>
+      </div>`;
+  }
   body.innerHTML=`<div class="m-head"><div><div class="m-cli">📅 ${esc(nome||"Clínica")} — mês a mês</div>
       <div class="t-mut" style="font-size:12.5px;margin-top:2px">Exames${dir?" e faturamento":""} por mês · <b>% vs o mês anterior</b> (▲ sobe · ▼ cai)${dir?"":" · <span style='color:#ffc266'>R$ só diretoria</span>"}</div></div>
       <button class="m-x" id="mClose">✕</button></div>
@@ -1765,6 +1800,8 @@ function openMesAMes(cod, nome){
       ${kpi("g", totN, "Exames", serie.length+" meses")}
       ${dir?kpi("g", fmtBRL(totF), "Faturamento", "no período"):kpi("", Math.round(totN/serie.length), "Média/mês", "exames")}
     </div>
+    ${ddHtml}
+    <div class="seclabel" style="margin:4px 0 6px;font-size:12px">📅 Histórico mensal completo <span class="t-mut" style="font-weight:500;font-size:11px">— mês cheio (todos os dias)</span></div>
     <div style="overflow-x:auto;border:1px solid rgba(0,212,255,.22);border-radius:10px">
       <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:${dir?'420':'300'}px">
         <thead><tr style="color:var(--mut);font-size:10.5px;background:rgba(0,212,255,.06)">

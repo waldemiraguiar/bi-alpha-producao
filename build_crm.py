@@ -280,7 +280,7 @@ def post_clinicas_rs(D):
                 if recuperou: print(f"🛡️ blindagem: recuperado do cifrado anterior (não zerou): {', '.join(recuperou)}")
         except Exception as e:
             print(f"blindagem: não consegui recuperar o cifrado anterior ({e}) — segue com o que tem")
-    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat, "conqmes": conqmes, "lab_desde": lab_desde, "marco": lab_marco, "lab_mes": lab_mes, "fatmtd": fatmtd, "fatmesall": fatmesall}, ensure_ascii=False, separators=(",", ":")).encode()
+    data = json.dumps({"fat": rsmap, "desde": desde, "fatmes": fatmes, "conqfat": conqfat, "conqmes": conqmes, "lab_desde": lab_desde, "marco": lab_marco, "lab_mes": lab_mes, "fatmtd": fatmtd, "fatmesall": fatmesall, "fatmesall_dia": datetime.date.today().day}, ensure_ascii=False, separators=(",", ":")).encode()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(dir_code.encode())
     ct = AESGCM(key).encrypt(iv, data, None)
