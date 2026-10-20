@@ -936,11 +936,18 @@
     const b = document.querySelector('#abas button[data-setor="raiva"]')
     const el = $('raivaLista'); if (!el) return
     // 🔴 Fúlvio 19/out: o render periódico (desenhar a cada 15s) apagava o que a pessoa estava
-    //   DIGITANDO (volume/coloração/motivo) — "coloco o volume e some". Se um campo da lista da
-    //   Raiva está em foco, pulo o re-render (preserva a digitação). Os re-renders após ação (clicar
-    //   botão) acontecem com o campo já desfocado, então não são afetados.
+    //   DIGITANDO (volume/motivo) — "coloco o volume e some". Se um campo em DIGITAÇÃO está em foco,
+    //   pulo o re-render (preserva o texto).
+    // 🔴 Fúlvio 20/out: o skip anterior casava QUALQUER INPUT/SELECT/TEXTAREA — mas CHECKBOX é INPUT
+    //   e fica focado logo após o clique. Então o re-render DEPOIS de marcar o ⑩ era pulado e o ⑪
+    //   (que só aparece com gov_enviado) nunca nascia → Fúlvio "estacionado no item 10". Agora pulo
+    //   SÓ quando é DIGITAÇÃO de verdade (texto/número/textarea); checkbox/radio/select re-renderizam
+    //   na hora (o valor deles já está commitado, não há o que preservar).
     const ae = document.activeElement
-    if (ae && el.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return
+    if (ae && el.contains(ae)) {
+      const tn = ae.tagName, tp = (ae.getAttribute('type') || 'text').toLowerCase()
+      if (tn === 'TEXTAREA' || (tn === 'INPUT' && ['text', 'number', 'search', 'tel', ''].includes(tp))) return
+    }
     const L = raivaCache || []
     if (b) {
       const pend = L.filter(c => !c.fechado_em && c.coleta_ok && !c.amostra).length
@@ -1168,7 +1175,8 @@
                   carimbo com o CRMV". ⛔ As duas saídas são exclusivas — marcar uma apaga a outra. */''}
             ${c.gov_impossivel ? '' : tique(c, 'gov_enviado',
               '⑩ Documento conferido e enviado para a clínica assinar pelo <b>gov.br</b>',
-              ' ' + nucleoFileBtn() + ' <a class="lnk raiva-site" target="_blank" rel="noopener" href="https://www.nucleopesquisasraiva.com.br/">abrir site da Núcleo ↗</a>')}
+              ' ' + nucleoFileBtn())}
+            ${/* 🔴 Fúlvio 20/out: retirar o "abrir site da Núcleo" do ⑩ — deixa só "baixar arquivo Núcleo". */''}
             ${!c.gov_enviado && !c.gov_impossivel ? `<div class="raiva-saidas">
               <button class="btn-sec" data-rgovnao="${c.id}">A clínica não consegue assinar pelo gov.br</button>
               </div>` : ''}
@@ -4754,6 +4762,9 @@
       if (vi) {
         const num = parseFloat(String(vol).replace(/[^\d.,]/g, '').replace(',', '.'))
         const faltas = []
+        // 🔴 Fúlvio 20/out: sem o Nº de registro no HF (③) não pode avançar o processo — trava de
+        //    verdade, não só o destaque âmbar. "não coloquei o nº do HF e mesmo assim avancei".
+        if (!String(caso.requisicao || '').trim()) faltas.push('o Nº de registro no HF (③)')
         if (!vol.trim() || !isFinite(num)) faltas.push('o volume medido em µL')
         else if (num < 500) faltas.push(`volume ≥ 500 µL (você pôs ${num} — abaixo não serve)`)
         if (!cor.trim()) faltas.push('a coloração do soro')
