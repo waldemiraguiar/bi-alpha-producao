@@ -2593,7 +2593,10 @@ function renderTab(){
   if(ACTIVE==="reativar"){
     const FOCO=new Set(["queda_forte","queda"]);                         // foco DIÁRIO = ativos caindo
     const foco = act(D.reativar||[]).filter(x=>FOCO.has(x.motivo||""));
-    const arr = bumpDue(flt(foco));
+    // clientes com retorno futuro agendado ficam ocultos na fila até a data chegar
+    const focoAgu = !diaFilter ? foco.filter(x=>{ const r=retorno(x.cod); return r&&r.status==="futuro"; }) : [];
+    const focoVis = !diaFilter ? foco.filter(x=>{ const r=retorno(x.cod); return !(r&&r.status==="futuro"); }) : foco;
+    const arr = bumpDue(flt(focoVis));
     const calm = arr.length===0; const dc = dueCount();
     const riscoPct = ativos ? 100*foco.length/ativos : 0;
     const nPar = cnt('parados'), nNovos = cnt('novos_esfriando');
@@ -2623,7 +2626,8 @@ function renderTab(){
         ${kpi("", nNovos, "🌱 Novos esfriando", "aba Onboarding — nutrir")}
       </div>
       <div class="seclabel">${diaFilter?"📞 Contatos do dia — retorno agendado p/ hoje":"🎯 Fila diária — queda forte + em queda (priorizada)"}</div>
-      ${list(arr, {acao:true, rank:true, fu:true})}`;
+      ${list(arr, {acao:true, rank:true, fu:true})}
+      ${focoAgu.length ? `<div class="t-mut" style="font-size:12px;margin-top:12px;padding:10px 14px;background:rgba(255,255,255,0.05);border-radius:8px;line-height:1.6">⏰ <b>${focoAgu.length}</b> cliente(s) com retorno futuro agendado — ocultos até a data chegar: ${focoAgu.map(x=>esc(x.nome)).join(", ")}</div>` : ""}`;
     return;
   }
 
@@ -2642,7 +2646,10 @@ function renderTab(){
   }
 
   if(ACTIVE==="parados"){
-    const arr = bumpDue(flt(act(D.parados||[])));
+    const par = act(D.parados||[]);
+    const parAgu = !diaFilter ? par.filter(x=>{ const r=retorno(x.cod); return r&&r.status==="futuro"; }) : [];
+    const parVis = !diaFilter ? par.filter(x=>{ const r=retorno(x.cod); return !(r&&r.status==="futuro"); }) : par;
+    const arr = bumpDue(flt(parVis));
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "parados")}
         <div class="kgrid" style="margin:0">
@@ -2651,7 +2658,8 @@ function renderTab(){
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
       <div class="seclabel">⛔ Parados — priorizar contato (recência primeiro) <span class="t-mut" style="font-weight:500">· fora dos somatórios gerais (lista à parte)</span>${INAT.size?` <span class="t-mut" style="font-weight:500">· 🚫 ${INAT.size} inativo(s) fora da conta</span>`:""}</div>
-      ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
+      ${list(arr, {badge:"motivo", rank:true, fu:true})}
+      ${parAgu.length ? `<div class="t-mut" style="font-size:12px;margin-top:12px;padding:10px 14px;background:rgba(255,255,255,0.05);border-radius:8px;line-height:1.6">⏰ <b>${parAgu.length}</b> parado(s) com retorno futuro agendado — ocultos até a data chegar: ${parAgu.map(x=>esc(x.nome)).join(", ")}</div>` : ""}`;
     return;
   }
 
