@@ -37,6 +37,45 @@ let TABS = [
   {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
   {k:"encerrados",      ic:"🔒", nm:"Encerrados",      cls:"",         bcls:""},
 ];
+/* 🧩 ORDEM DAS ABAS (item 1 — Wal organiza como quiser; salvo só neste aparelho) */
+function tabOrder(){ try{ const a=JSON.parse(localStorage.getItem("crm_tab_order")||"null"); return Array.isArray(a)&&a.length?a:null; }catch(e){ return null; } }
+function orderedTabs(){ const ord=tabOrder(); if(!ord) return TABS;
+  const byk={}; TABS.forEach(t=>byk[t.k]=t); const out=[];
+  ord.forEach(k=>{ if(byk[k]){ out.push(byk[k]); delete byk[k]; } });
+  TABS.forEach(t=>{ if(byk[t.k]) out.push(t); });   // abas novas/não listadas entram no fim
+  return out; }
+function saveTabOrder(keys){ try{ localStorage.setItem("crm_tab_order", JSON.stringify(keys)); }catch(e){} }
+function resetTabOrder(){ try{ localStorage.removeItem("crm_tab_order"); }catch(e){} }
+function openOrganizarAbas(){
+  const body=document.getElementById("modalBody"); if(!body) return;
+  let ks=orderedTabs().map(t=>t.k);
+  const sqbtn="width:34px;height:32px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:#9fe6ff;font-weight:800;font-size:14px;cursor:pointer;flex-shrink:0";
+  const draw=()=>{ const byk={}; TABS.forEach(t=>byk[t.k]=t);
+    body.innerHTML=`<div class="m-head"><div><div class="m-cli">🧩 Organizar abas</div><div class="t-mut" style="font-size:12px;margin-top:3px;line-height:1.45">Deixe as abas na ordem que você achar melhor. Vale só <b>neste aparelho</b> — cada um monta do seu jeito.</div></div><button class="m-x" id="mClose">✕</button></div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin:12px 0">
+      ${ks.map((k,i)=>{ const t=byk[k]; if(!t) return ""; return `<div style="display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:rgba(255,255,255,.02)">
+        <span style="width:20px;text-align:center;color:#6b7a90;font-size:11px;font-variant-numeric:tabular-nums">${i+1}</span>
+        <span style="flex:1;font-weight:700;color:#eaf3ff;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.ic} ${esc(t.nm)}</span>
+        <button class="abord" data-mv="top" data-i="${i}" title="Pro topo" ${i===0?'disabled style="opacity:.3;'+sqbtn+'"':'style="'+sqbtn+'"'}>⤒</button>
+        <button class="abord" data-mv="up" data-i="${i}" title="Subir" ${i===0?'disabled style="opacity:.3;'+sqbtn+'"':'style="'+sqbtn+'"'}>▲</button>
+        <button class="abord" data-mv="dn" data-i="${i}" title="Descer" ${i===ks.length-1?'disabled style="opacity:.3;'+sqbtn+'"':'style="'+sqbtn+'"'}>▼</button>
+      </div>`; }).join("")}</div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="checkinbtn" id="abaReset" style="flex:1;border-color:rgba(255,138,0,.5);color:#ffc266">↩️ Ordem padrão</button>
+        <button class="checkinbtn" id="abaOk" style="flex:1;border-color:rgba(0,229,160,.5);color:#7effcf;font-weight:800">✅ Pronto</button>
+      </div>`;
+    body.querySelectorAll(".abord").forEach(b=>{ if(b.disabled) return; b.onclick=()=>{ const i=+b.dataset.i, mv=b.dataset.mv;
+      if(mv==="up"&&i>0){ const x=ks[i]; ks[i]=ks[i-1]; ks[i-1]=x; }
+      else if(mv==="dn"&&i<ks.length-1){ const x=ks[i]; ks[i]=ks[i+1]; ks[i+1]=x; }
+      else if(mv==="top"&&i>0){ const [x]=ks.splice(i,1); ks.unshift(x); }
+      saveTabOrder(ks); draw(); renderTabs(); }; });
+    const mc=body.querySelector("#mClose"); if(mc) mc.onclick=closeModal;
+    body.querySelector("#abaReset").onclick=()=>{ resetTabOrder(); ks=TABS.map(t=>t.k); draw(); renderTabs(); };
+    body.querySelector("#abaOk").onclick=closeModal;
+  };
+  draw();
+  document.getElementById("modal").style.display="flex";
+}
 /* MODO REUNIÕES DE SQUAD (site pessoal do Wal, só a aba Pauta) — detecta por hostname */
 const SQUAD_MODE = /squad/i.test(location.hostname);
 if(SQUAD_MODE){
@@ -4619,7 +4658,7 @@ function renderTab(){
 /* ---------- abas ---------- */
 function renderTabs(){
   const D = DATA, r = D.resumo||{}, t = document.getElementById("tabs");
-  const shown = locked ? TABS.filter(tb=>tb.k===locked) : TABS;
+  const shown = locked ? TABS.filter(tb=>tb.k===locked) : orderedTabs();
   t.innerHTML = shown.map(tb=>{
     const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length
             : tb.k==="historico" ? HIST.length
@@ -4657,8 +4696,9 @@ function setPin(){
 function rotate(){
   if(pinned) return;
   const m=document.getElementById("modal"); if(m && m.style.display==="flex") return;
-  const i = TABS.findIndex(t=>t.k===ACTIVE);
-  ACTIVE = TABS[(i+1)%TABS.length].k;
+  const _ot = orderedTabs();
+  const i = _ot.findIndex(t=>t.k===ACTIVE);
+  ACTIVE = _ot[(i+1)%_ot.length].k;
   renderAll();
 }
 
@@ -4696,6 +4736,7 @@ function render(D){
   renderOpBtn();
   const _ob=document.getElementById("opBtn"); if(_ob) _ob.onclick=()=>openIdentidade(false);
   const _rb=document.getElementById("refreshBtn"); if(_rb) _rb.onclick=()=>forceRefresh();
+  const _abb=document.getElementById("abasBtn"); if(_abb) _abb.onclick=openOrganizarAbas;
   const _fab=document.getElementById("fabRefresh"); if(_fab) _fab.onclick=()=>forceRefresh();
   loadOps().then(()=>{ if(!operadorAtual()) openIdentidade(true); });   // pede identidade 1x por aparelho
   if(!window.__fuwired){
