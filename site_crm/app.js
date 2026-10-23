@@ -4694,6 +4694,7 @@ function renderTab(){
       const secC=naofeitosPerdidos.length?`<div class="seclabel" style="margin-top:16px;color:#ffc266">🚫 Perdidos — cliente não quis mais (fora da agenda, no histórico/BI) (${naofeitosPerdidos.length})</div>`+naofeitosPerdidos.map(f=>linhaNF(f,"· perdido",true,true)).join(""):"";
       const temAlgo=naofeitosN||naofeitosPerdidos.length;
       c.innerHTML=`${toggle}${repBar}
+        <div style="margin:0 0 8px"><button class="regbtn" id="naofeitosPrint">🖨️ Imprimir / PDF</button></div>
         <div class="kgrid">
           ${kpi("r", naofeitosAtras.length, "Atrasados", "venceu sem baixa")}
           ${kpi("a", naofeitosDesmReag.length, "Desmarcados", "reagende")}
@@ -4703,6 +4704,7 @@ function renderTab(){
         ${selBar([...naofeitosAtras,...naofeitosDesmReag,...naofeitosPerdidos].map(f=>f.id))}
         ${temAlgo?(secA+secB+secC):`<div class="empty">Nada pendente aqui 👌 — retornos em dia.</div>`}`;
       wirePista();
+      const _nfp=document.getElementById("naofeitosPrint"); if(_nfp) _nfp.onclick=()=>window.print();
       return;
     }
 
