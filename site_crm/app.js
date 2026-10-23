@@ -36,6 +36,7 @@ let TABS = [
   {k:"sensiveis",       ic:"🚨", nm:"Sensíveis",       cls:"urgtab",   bcls:"urgb"},
   {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
   {k:"encerrados",      ic:"🔒", nm:"Encerrados",      cls:"",         bcls:""},
+  {k:"heitor",          ic:"👣", nm:"Visitas Heitor",  cls:"",         bcls:""},   // DIRETORIA — rastreio do Heitor (item 4)
   {k:"equipe",          ic:"🛠️", nm:"Equipe",          cls:"",         bcls:""},   // ADMIN (só Wal) — gerencia colaboradores
 ];
 /* 🧩 ORDEM DAS ABAS (item 1 — Wal organiza como quiser; salvo só neste aparelho) */
@@ -47,7 +48,10 @@ function orderedTabs(){ const ord=tabOrder(); if(!ord) return TABS;
   return out; }
 function saveTabOrder(keys){ try{ localStorage.setItem("crm_tab_order", JSON.stringify(keys)); }catch(e){} }
 function resetTabOrder(){ try{ localStorage.removeItem("crm_tab_order"); }catch(e){} }
-function visibleTabs(){ return orderedTabs().filter(tb => tb.k!=="equipe" || isAdmin() || ehDiretoria()); }   // aba Equipe: admin OU diretoria (dono). Hoje, na Matriz, só o Wal é diretoria.
+function visibleTabs(){ return orderedTabs().filter(tb => {
+  if(tb.k==="equipe") return isAdmin() || ehDiretoria();   // Equipe: admin OU diretoria (dono)
+  if(tb.k==="heitor") return isAdmin() || ehDiretoria();   // Visitas Heitor: acompanhamento da diretoria
+  return true; }); }
 function openOrganizarAbas(){
   const body=document.getElementById("modalBody"); if(!body) return;
   let ks=visibleTabs().map(t=>t.k);
@@ -2678,6 +2682,93 @@ function relatorioSimulador(){
   const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para abrir o relatório."); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+/* 👣 ABA VISITAS DO HEITOR (item 4) — rastreio de perto: ritmo, conversão, duração (GPS), regiões, benchmark */
+let heitorRange="mes", heitorView="visao";
+function heitorJanela(){ const d=new Date(), now=Date.now(), d0=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
+  if(heitorRange==="hoje") return {ini:d0,fim:now,label:"hoje"};
+  if(heitorRange==="semana"){ const w=new Date(d0); w.setDate(w.getDate()-((d.getDay()+6)%7)); return {ini:w.getTime(),fim:now,label:"esta semana"}; }
+  if(heitorRange==="mes") return {ini:new Date(d.getFullYear(),d.getMonth(),1).getTime(),fim:now,label:"este mês"};
+  return {ini:0,fim:now,label:"tudo"}; }
+function heitorVisitas(){ return PISTA.filter(p=>/heitor/i.test(String(p.por||p.operador||""))); }
+function visitaTs(p){ if(p.checkin&&p.checkin.ts) return p.checkin.ts; if(p.data_visita){ const t=Date.parse(p.data_visita+"T12:00:00"); if(!isNaN(t)) return t; } return p.ts||0; }
+function visitaDur(p){ return (p.checkin&&p.checkout&&p.checkout.ts>p.checkin.ts)?(p.checkout.ts-p.checkin.ts):null; }
+function fmtDur(ms){ if(ms==null) return "—"; const h=Math.floor(ms/3600000), m=Math.round(ms%3600000/60000); return h?`${h}h${String(m).padStart(2,"0")}`:`${m}min`; }
+function renderHeitor(c){
+  if(!ehDiretoria() && !isAdmin()){ c.innerHTML=`<div class="proxhint" style="border-color:rgba(255,45,85,.4);color:#ff8fa3;margin:10px 0;line-height:1.5">🔒 Painel de acompanhamento — só a diretoria.</div>`; return; }
+  const all=heitorVisitas(), jan=heitorJanela();
+  const vis=all.filter(p=>{ const t=visitaTs(p); return t>=jan.ini && t<=jan.fim; });
+  const OUTCOMES=["interesse","orcamento","fechou","objecao","sem_interesse"];   // "visita" = sem desfecho classificado
+  const n=vis.length, desfecho=vis.filter(p=>OUTCOMES.includes(p.resultado)), fechou=vis.filter(p=>p.resultado==="fechou").length, interesse=vis.filter(p=>["interesse","orcamento"].includes(p.resultado)).length;
+  const conv=desfecho.length?Math.round(fechou/desfecho.length*100):0;
+  const dursAll=vis.map(visitaDur).filter(x=>x!=null), durs=dursAll.filter(x=>x<=180*60000), semCheckout=dursAll.length-durs.length;   // descarta >3h (esqueceu o check-out)
+  const durMed=durs.length?durs.reduce((a,b)=>a+b,0)/durs.length:null, durTot=durs.reduce((a,b)=>a+b,0);
+  // ritmo semanal — do período × média histórica do Heitor
+  const diasJan=Math.max(1,(jan.fim-(all.length?Math.max(jan.ini,Math.min(...all.map(visitaTs))):jan.ini))/864e5);
+  const visSemPeriodo = n/(diasJan/7||1);
+  const spanAll = all.length?Math.max(7,(Date.now()-Math.min(...all.map(visitaTs)))/864e5):7;
+  const visSemHist = all.length/(spanAll/7);
+  const BENCH_VIS=15, BENCH_CONV=15;   // referência comercial: ~15 visitas/sem e ~15% de fechamento
+  const corVs=(v,ref)=> v>=ref?"#00E5A0": v>=ref*0.7?"#FFB020":"#FF5470";
+  // resultado mix
+  const byRes={}; PRORDER.forEach(k=>byRes[k]=0); vis.forEach(p=>{ if(p.resultado&&byRes[p.resultado]!=null) byRes[p.resultado]++; });
+  const semResN=n-desfecho.length;   // visitas sem desfecho classificado (só "visita")
+  // regiões
+  const bai={}; vis.forEach(p=>{ const b=((p.bairro||"").trim())||"(sem bairro)"; bai[b]=(bai[b]||0)+1; });
+  const baiTop=Object.entries(bai).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  // sem retorno sem próximo = risco
+  const risco=vis.filter(p=>["interesse","orcamento"].includes(p.resultado) && !p.proximo);   // pipeline quente sem retorno agendado = esfriando
+  const kpiCard=(ic,val,lbl,sub,cor)=>`<div style="flex:1;min-width:140px;border:1px solid ${cor||'var(--line)'}55;border-left:3px solid ${cor||'#9fe6ff'};border-radius:11px;padding:11px 13px;background:rgba(255,255,255,.02)">
+     <div style="font-size:22px;font-weight:900;color:${cor||'#eaf3ff'};line-height:1">${val}</div>
+     <div style="font-size:12px;font-weight:700;color:#c9d4e0;margin-top:2px">${ic} ${lbl}</div>
+     <div class="t-mut" style="font-size:10.5px;margin-top:1px">${sub}</div></div>`;
+  const rangeBtns=[["hoje","Hoje"],["semana","Semana"],["mes","Mês"],["tudo","Tudo"]].map(([k,l])=>`<button data-hr="${k}" style="cursor:pointer;border-radius:20px;padding:6px 14px;font-size:12px;font-weight:800;border:1px solid ${heitorRange===k?'#00D4FF':'rgba(255,255,255,.14)'};background:${heitorRange===k?'rgba(0,212,255,.18)':'transparent'};color:${heitorRange===k?'#00D4FF':'#9fb2cc'}">${l}</button>`).join("");
+  const subBtns=`<div class="subtabs"><button class="subtab ${heitorView==='visao'?'on':''}" data-hv="visao">📊 Visão</button><button class="subtab ${heitorView==='historico'?'on':''}" data-hv="historico">📅 Histórico (${all.length})</button><button class="subtab ${heitorView==='regioes'?'on':''}" data-hv="regioes">🗺️ Regiões</button></div>`;
+  let corpo="";
+  if(heitorView==="visao"){
+    const barMix=PRORDER.filter(k=>byRes[k]>0).map(k=>{ const o=PRES[k], pct=n?Math.round(byRes[k]/n*100):0;
+      return `<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span style="font-weight:700;color:${o.col}">${o.ic} ${o.lbl}</span><span style="color:#eaf3ff;font-weight:700">${byRes[k]} <span class="t-mut" style="font-weight:500;font-size:10.5px">· ${pct}%</span></span></div><div style="height:7px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.max(3,pct)}%;background:${o.col};border-radius:5px"></div></div></div>`; }).join("");
+    corpo=`<div class="kgrid" style="margin:4px 0 10px">
+        ${kpiCard("👣",n,"Visitas",jan.label,"#00D4FF")}
+        ${kpiCard("✅",conv+"%","Conversão",`${fechou} fechou de ${desfecho.length} c/ desfecho`,corVs(conv,BENCH_CONV))}
+        ${kpiCard("⏱️",fmtDur(durMed),"Duração média",`${fmtDur(durTot)} em campo`,"#9fe6ff")}
+        ${kpiCard("🔥",visSemPeriodo.toFixed(1),"Visitas/semana",`média histórica ${visSemHist.toFixed(1)}/sem`,corVs(visSemPeriodo,BENCH_VIS))}
+      </div>
+      <div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:13px 15px;margin-bottom:12px;background:linear-gradient(180deg,rgba(0,212,255,.06),transparent)">
+        <div style="font-size:12px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🎯 Benchmark — o que olhar</div>
+        <div style="font-size:12.5px;color:#cdefff;line-height:1.7;margin-top:6px">
+          <div>🔥 <b>Ritmo:</b> <b style="color:${corVs(visSemPeriodo,BENCH_VIS)}">${visSemPeriodo.toFixed(1)} visitas/semana</b> <span class="t-mut">— referência saudável ~${BENCH_VIS}/sem. ${visSemPeriodo>=BENCH_VIS?'No ritmo 👏':'Abaixo — cobrar agenda mais cheia.'}</span></div>
+          <div style="margin-top:3px">✅ <b>Conversão:</b> <b style="color:${corVs(conv,BENCH_CONV)}">${conv}%</b> <span class="t-mut">(${fechou} fechamentos) — referência ~${BENCH_CONV}%. ${conv>=BENCH_CONV?'Bom aproveitamento.':'Muitas visitas, poucos fechamentos — ver a qualidade/abordagem.'}</span></div>
+          <div style="margin-top:3px">😍 <b>Pipeline quente:</b> <b style="color:#00E5A0">${interesse}</b> com interesse/orçamento — ${interesse?'cobrar o próximo passo pra não esfriar.':'sem pipeline aberto no período.'}</div>
+          ${semResN?`<div style="margin-top:3px">⚠️ <b style="color:#FFB020">${semResN}</b> visita(s) sem resultado marcado — pedir pro Heitor classificar (senão a conversão fica subestimada).</div>`:''}
+          ${risco.length?`<div style="margin-top:3px">🔴 <b style="color:#FF5470">${risco.length}</b> visita(s) "sem retorno" e <b>sem próximo contato agendado</b> — lead esfriando. <span class="t-mut">(ver no Histórico)</span></div>`:''}
+        </div>
+      </div>
+      <div class="seclabel" style="margin:10px 0 4px">📊 Resultado das visitas <span class="t-mut" style="font-weight:500;font-size:11px">(${jan.label})</span></div>
+      ${barMix||'<div class="t-mut" style="font-size:12px">Sem resultados marcados no período.</div>'}`;
+  } else if(heitorView==="historico"){
+    const ord=all.slice().sort((a,b)=>visitaTs(b)-visitaTs(a));
+    corpo=`<div class="t-mut" style="font-size:11.5px;margin:6px 0 8px">Todas as visitas do Heitor, da mais recente. Duração vem do check-in/out (GPS).</div>`+
+      ord.map(p=>{ const o=PRES[p.resultado]||PRES.visita, dt=new Date(visitaTs(p)), dur=visitaDur(p);
+        const dstr=`${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")} ${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`;
+        return `<div class="crow" style="cursor:default;align-items:flex-start;border-left:3px solid ${o.col}">
+          <div class="rk" style="color:${o.col};font-size:16px">${o.ic}</div>
+          <div style="flex:1;min-width:0">
+            <div class="nm" style="font-size:13.5px">${esc(p.cliente||"—")} <span class="t-mut" style="font-weight:500">${p.bairro?"· "+esc(p.bairro):""}</span></div>
+            <div style="font-size:11px;margin-top:2px"><span style="color:${o.col};font-weight:700">${o.lbl}</span> <span class="t-mut">· ${dstr}${dur?" · ⏱️ "+fmtDur(dur):""}${p.proximo?" · 🔁 retorno "+esc(fmtDataBR?fmtDataBR(p.proximo):p.proximo):""}</span></div>
+            ${p.texto?`<div class="t-mut" style="font-size:11.5px;margin-top:4px;line-height:1.5">${esc(String(p.texto).slice(0,260))}${String(p.texto).length>260?"…":""}</div>`:""}
+          </div><div class="mid"></div></div>`; }).join("");
+  } else {
+    const mx=baiTop.length?baiTop[0][1]:1;
+    corpo=`<div class="seclabel" style="margin:8px 0 6px">🗺️ Onde o Heitor andou <span class="t-mut" style="font-weight:500;font-size:11px">(por bairro · ${jan.label})</span></div>`+
+      (baiTop.length?baiTop.map(([b,q])=>`<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:2px"><span style="font-weight:700;color:#eaf3ff">📍 ${esc(b)}</span><span style="color:#9fe6ff;font-weight:700">${q}</span></div><div style="height:8px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden"><div style="height:100%;width:${Math.max(4,Math.round(q/mx*100))}%;background:#00D4FF;border-radius:5px"></div></div></div>`).join(""):'<div class="t-mut">Sem visitas no período.</div>');
+  }
+  c.innerHTML=`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:6px 0 10px;line-height:1.5">👣 <b>Visitas do Heitor</b> — acompanhamento de perto. Fonte: as visitas de campo (com GPS, duração e resultado). Relatório automático toda <b>sexta 17h</b> no grupo.</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">${rangeBtns}</div>
+    ${subBtns}
+    <div style="margin-top:10px">${corpo}</div>`;
+  c.querySelectorAll("[data-hr]").forEach(b=>b.onclick=()=>{ heitorRange=b.dataset.hr; renderTab(); });
+  c.querySelectorAll("[data-hv]").forEach(b=>b.onclick=()=>{ heitorView=b.dataset.hv; renderTab(); });
+}
 /* 🛠️ ABA EQUIPE (item 2) — admin (Wal) gerencia colaboradores: papel, escopo "vê Safra" (item 3), admin, ativo */
 async function opsPost(body){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,senha:window.__pwd})});
@@ -2739,6 +2830,7 @@ function renderTab(){
   const ativos = (D.carteira ? act(D.carteira).length : (r.ativos || r.carteira || 0));
 
   if(ACTIVE==="equipe"){ renderEquipe(c); return; }
+  if(ACTIVE==="heitor"){ renderHeitor(c); return; }
 
   if(ACTIVE==="reativar"){
     const FOCO=new Set(["queda_forte","queda"]);                         // foco DIÁRIO = ativos caindo
@@ -3746,7 +3838,7 @@ function renderTab(){
             if(caindo.length){
               radarQueda=`<div class="qpulse" style="position:sticky;top:0;z-index:7;border:2px solid #FF2D55;border-radius:13px;padding:11px 14px;margin:0 0 12px;background:rgba(255,45,85,.12)">
                 <div style="font-size:12.5px;font-weight:900;color:#ff6b81;text-transform:uppercase;letter-spacing:.4px">🔴 Queda de movimento — ${caindo.length} cliente(s) caindo</div>
-                <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${caindo.slice(0,8).map(r=>`<div style="font-size:12px;color:#ffc9d2"><span style="font-size:15px">${tipoIc[r.tipo]||''}</span> <b>${esc(r.nome)}</b> — <b style="color:#ff6b81">▼ ${Math.abs(Math.round(r.q.pior*100))}%</b> em exames ${r.q.piorEh==='best'?`vs o melhor mês${r.q.bestM?` (${mlab(r.q.bestM.ym)})`:''}`:'vs o mês passado no mesmo dia'} <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" style="margin-left:2px;border:0;background:rgba(0,212,255,.15);color:#9fe6ff;border-radius:6px;padding:1px 8px;font-weight:800;cursor:pointer">ver +</button></div>`).join("")}</div>
+                <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${(()=>{ const fD=d=> d==null?'<span class="t-mut">s/ base</span>': (d<0?`<b style="color:#ff6b81">▼ ${Math.abs(Math.round(d*100))}%</b>`:(d>0?`<b style="color:#7effcf">▲ ${Math.round(d*100)}%</b>`:`<b style="color:#9fb2cc">0%</b>`)); return caindo.slice(0,8).map(r=>`<div style="font-size:12px;color:#ffc9d2;border-top:1px solid rgba(255,255,255,.06);padding-top:4px"><div><span style="font-size:15px">${tipoIc[r.tipo]||''}</span> <b>${esc(r.nome)}</b> <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" style="margin-left:2px;border:0;background:rgba(0,212,255,.15);color:#9fe6ff;border-radius:6px;padding:1px 8px;font-weight:800;cursor:pointer">ver +</button></div><div class="t-mut" style="font-size:11px;margin-top:1px">exames (até dia ${diaD}): ${fD(r.q.dRitmo)} <span style="color:#6b7a90">vs mês anterior</span> · ${fD(r.q.dBest)} <span style="color:#6b7a90">vs melhor mês${r.q.bestM?` (${mlab(r.q.bestM.ym)})`:''}</span></div></div>`).join(""); })()}</div>
                 <div style="font-size:10.5px;color:#ff9fb0;margin-top:6px;line-height:1.45">Exames deste mês (até o dia ${diaD}) vs o mesmo ponto do mês passado e vs o melhor mês da clínica. 👉 toque em <b>ver +</b> pra abrir a análise e <b>registrar um contato</b> antes de perder pro concorrente.</div></div>`;
             }
             cohortHtml=`<div class="seclabel" style="margin:0 0 6px">💰 Dinheiro por mês <span class="t-mut" style="font-weight:500;font-size:11px">(safra — desde a entrada de cada clínica)</span></div>
