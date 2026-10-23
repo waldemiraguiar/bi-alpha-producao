@@ -136,7 +136,9 @@ td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .etp{display:inline-block;font-family:var(--mono);font-size:12px;margin:0 6px 2px 0;padding:1px 6px;border-radius:4px;background:var(--painel2)}
 .etp.estourou{color:var(--vermelho)}
 
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--texto);color:var(--chao);padding:10px 16px;border-radius:8px;font-weight:700;z-index:60}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--texto);color:var(--chao);padding:10px 16px;border-radius:8px;font-weight:700;z-index:60;max-width:min(92vw,560px);line-height:1.4;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.toast.fixo{background:#c0392b;color:#fff;border:2px solid #fff}
+.toast .toast-ok{background:#fff;color:#c0392b;border:none;border-radius:6px;padding:5px 14px;font-weight:800;cursor:pointer;white-space:nowrap}
 
 /* ===== layout v2 (16/set) ===== */
 main{padding:14px 22px 150px}

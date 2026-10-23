@@ -109,7 +109,19 @@
   function lerLocal(k) { try { return localStorage.getItem(k) } catch { return null } }
   function gravarLocal(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch {} }
   function lerSessao() { try { const s = JSON.parse(localStorage.getItem('inc_sessao') || 'null'); return s && s.ate > Date.now() ? s : null } catch { return null } }
-  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, 3200) }
+  function toast(msg, fixo) {
+    const t = $('toast'); clearTimeout(toast._t); t.classList.remove('fixo')
+    if (fixo) {
+      // 🔴 Fúlvio 22/out: a trava "sumia rápido demais" — aviso de bloqueio fica FIXO com botão "Entendi".
+      t.textContent = ''; t.classList.add('fixo')
+      const s = document.createElement('span'); s.textContent = msg
+      const b = document.createElement('button'); b.className = 'toast-ok'; b.textContent = 'Entendi'
+      b.onclick = () => { t.hidden = true; t.textContent = ''; t.classList.remove('fixo') }
+      t.appendChild(s); t.appendChild(b); t.hidden = false
+    } else {
+      t.textContent = msg; t.hidden = false; toast._t = setTimeout(() => t.hidden = true, 3200)
+    }
+  }
 
   // ── dados ──
   async function pageAll(tab, ordem) {
@@ -4746,7 +4758,7 @@
       const vcD = dados.vacina_data || caso.vacina_data
       if (tq.checked && mcD && vcD && mcD > vcD) {
         tq.checked = false
-        toast('⛔ A vacina é anterior ao microchip — essa vacina não vale para viagem. Precisa vacinar de novo DEPOIS da microchipagem.')
+        toast('⛔ A vacina é anterior ao microchip — essa vacina não vale para viagem. Precisa vacinar de novo DEPOIS da microchipagem.', true)
         return
       }
       // 🔴 Fúlvio 19/out: a antirrábica é ANUAL — vacina VENCIDA não libera coleta. Trava de verdade:
@@ -4755,7 +4767,7 @@
         const vv = (typeof raivaVacinaVence === 'function') ? raivaVacinaVence(caso.vacina_data) : null
         if (vv && Date.now() > vv.getTime()) {
           tq.checked = false
-          toast('⛔ A vacina antirrábica está VENCIDA (é anual; venceu em ' + vv.toLocaleDateString('pt-BR') + '). Precisa REVACINAR antes de coletar — e a nova dose abre outra espera de 30 dias.')
+          toast('⛔ A vacina antirrábica está VENCIDA (é anual; venceu em ' + vv.toLocaleDateString('pt-BR') + '). Precisa REVACINAR antes de coletar — e a nova dose abre outra espera de 30 dias.', true)
           return
         }
         // 🦠 Fúlvio 22/out: a amostra só é ADEQUADA 30 dias APÓS a última vacina. Clicou no ③ antes da
@@ -4764,7 +4776,7 @@
         if (lib && Date.now() < lib.getTime()) {
           tq.checked = false
           const faltam = Math.ceil((lib.getTime() - Date.now()) / 864e5)
-          toast('⛔ Amostra inadequada: a antirrábica exige 30 dias após a última vacina. A amostra correta só pode ser encaminhada a partir de ' + lib.toLocaleDateString('pt-BR') + ' — faltam ' + faltam + ' dia(s).')
+          toast('⛔ Amostra inadequada: a antirrábica exige 30 dias após a última vacina. A amostra correta só pode ser encaminhada a partir de ' + lib.toLocaleDateString('pt-BR') + ' — faltam ' + faltam + ' dia(s).', true)
           return
         }
       }
@@ -4779,7 +4791,7 @@
         const pg = String(caso.pagamento || '').split('|')[0]
         if (pg !== 'avista' && pg !== 'fatura') {
           tq.checked = false
-          toast('⛔ Não dá pra marcar o envio pelos Correios sem o ⑤ Pagamento validado (pago à vista ou na fatura). Agora está ' + (pg === 'aguardando' ? '"aguardando o pagamento"' : 'sem pagamento') + '.')
+          toast('⛔ Pagamento ' + (pg === 'aguardando' ? 'ainda "aguardando a confirmação"' : 'ainda não lançado') + '. Para avançar pro ⑫ Correios, o ⑤ Pagamento precisa estar validado — faturado (na fatura) ou confirmado (pago à vista). Aguarde a confirmação e marque de novo.', true)
           return
         }
       }
