@@ -1480,7 +1480,11 @@
     const avisar = (lado, quem, feitoEm, feitoPor) => {
       const rot = lado === 'tri' ? 'da triagem' : 'do escritório'
       const nome = (quem || '').trim()
-      if (feitoEm) return `<div class="can-avisei ok">✅ ${esc(nome || (lado === 'tri' ? 'Triagem' : 'Escritório'))} ${rot} avisado${feitoPor ? ' por ' + esc(feitoPor) : ''} às ${hm(feitoEm)}</div>`
+      // 🚫 Fúlvio 22/out: o "avisei" usava ✅ verde IGUAL ao do ciente → ele achava que o ciente marcava
+      //   sozinho. Agora o aviso é 📣 e diz CLARAMENTE que ainda falta o ciente (o ciente só marca quando a
+      //   própria pessoa clica na aba dela). Avisar ≠ dar ciência.
+      if (feitoEm) { const marcou = lado === 'tri' ? c.tri_ciente_em : c.esc_ciente_em;
+        return `<div class="can-avisei ok">📣 ${esc(nome || (lado === 'tri' ? 'Triagem' : 'Escritório'))} ${rot} avisado${feitoPor ? ' por ' + esc(feitoPor) : ''} às ${hm(feitoEm)}${marcou ? '' : ` — <b class="mudo">aguardando ${lado === 'tri' ? 'a Triagem' : 'o Escritório'} dar o ciente</b>`}</div>` }
       // ⭐ Fúlvio 12/out: avisar a triagem/escritório é ação do CANCELAMENTO — não aparece DENTRO das abas de setor (tri/esc/tec).
       if (!podeAgir('cc') || ['tri', 'esc', 'tec'].includes(setor)) return ''
       return `<div class="can-acoes"><button class="leve" data-cavisei="${lado}" data-cid="${c.id}">
