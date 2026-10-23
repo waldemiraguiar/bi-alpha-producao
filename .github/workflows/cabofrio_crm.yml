@@ -33,6 +33,12 @@ jobs:
           sed -i "s#__APP_BUILD__#$V#g" site_crm/app.js               # AUTO-UPDATE: carimba a versão no app
           printf '{"v":"%s"}' "$V" > site_crm/version.json           # AUTO-UPDATE: publica a versão atual
 
+      - name: 🛡️ Trava de sintaxe — não publica app.js/funções quebradas (pega smart quotes, etc.)
+        run: |
+          node --check site_crm/app.js
+          for f in site_crm/functions/*.mjs; do node --check "$f"; done
+          echo "✅ sintaxe OK — pode publicar"
+
       - name: Renomear (URL bonita) + publicar
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
