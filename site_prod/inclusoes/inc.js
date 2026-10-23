@@ -1012,6 +1012,15 @@
              data-rtipo="${edita.tipo || 'data'}" data-rlabel="${esc(edita.label || rotulo)}"
              title="corrigir">✏️</button>` : ''}</label>`
 
+    // 🦠 Fúlvio 22/out: preservar o que está sendo DIGITADO (volume/motivo/coloração) ATRAVÉS do re-render.
+    //   Causa do "volume some": ao mover do volume pra coloração, um re-render recria o campo vazio (o valor
+    //   só era lido no clique do ✅/⛔). Agora capturo antes e restauro depois — não some, demore ou não.
+    const _rDig = {};
+    el.querySelectorAll('[data-rvol],[data-rmot],[data-rcor]').forEach(inp => {
+      const id = inp.dataset.rvol || inp.dataset.rmot || inp.dataset.rcor;
+      const key = inp.dataset.rvol ? 'vol' : (inp.dataset.rmot ? 'mot' : 'cor');
+      (_rDig[id] = _rDig[id] || {})[key] = inp.value;
+    });
     el.innerHTML = L.map(c => {
       const lib = raivaLiberaEm(c.vacina_data)
       const faltam = lib ? Math.ceil((lib - Date.now()) / 864e5) : null
@@ -1085,6 +1094,9 @@
             { campo: 'coleta_data', label: 'data do recebimento' })}
           ${!c.coleta_ok ? `<div class="raiva-dica">Tubo de bioquímica (tampa vermelha ou amarela), com a
             requisição normal <b>escrito "Raiva Trânsito Internacional"</b>.</div>` : ''}
+          ${/* 🦠 Fúlvio 22/out: nova amostra solicitada (a anterior foi inviável) → aguardando a nova chegar no ③.
+                Marca guardada no início do obs (🔁). */''}
+          ${(!c.coleta_ok && /^🔁/.test(c.obs || '')) ? `<div class="raiva-nao" style="margin-top:6px">🔁 <b>Aguardando NOVA amostra</b> — a anterior foi inviável e a clínica foi avisada. Marque o ③ quando a nova amostra chegar. <i class="mudo">(${esc((c.obs || '').split('\\n')[0])})</i></div>` : ''}
 
           ${c.coleta_ok ? `<div class="raiva-bio ${c.amostra || ''}">
             <b>🧪 A amostra está viável?</b>
@@ -1106,7 +1118,13 @@
               ? `<div class="${c.amostra === 'viavel' ? 'raiva-sim' : 'raiva-nao'}">
                    ${c.amostra === 'viavel' ? '✅ viável' : '⛔ não viável'}
                    ${c.amostra_motivo ? '· ' + esc(c.amostra_motivo) : ''}
-                   ${c.amostra_por ? `<i class="mudo">— ${esc(c.amostra_por)}</i>` : ''}</div>`
+                   ${c.amostra_por ? `<i class="mudo">— ${esc(c.amostra_por)}</i>` : ''}</div>
+                 ${/* 🦠 Fúlvio 22/out: amostra INVIÁVEL não termina o processo — avisa a clínica e gera
+                      solicitação de NOVA amostra; o caso volta pro ③ e aguarda a nova chegar. */''}
+                 ${c.amostra === 'inviavel' ? `<div class="raiva-desvio" style="margin-top:7px">
+                   <b>O processo não avança com amostra inviável.</b> Avise a clínica e solicite uma nova amostra — o caso volta pro ③ e espera a nova chegar.
+                   <div style="margin-top:6px"><button type="button" class="btn-prim" data-rnovaamostra="${c.id}">📨 Avisei a clínica · solicitar NOVA amostra</button></div>
+                 </div>` : ''}`
               : `<div class="raiva-bioacao">
                    <input class="raiva-vol" data-rvol="${c.id}" placeholder="volume medido (ex.: 700 µL)">
                    ${/* 🔴 Fúlvio 18/out: a 2ª caixinha vira "coloração do soro?", OBRIGATÓRIA pra marcar
@@ -1289,6 +1307,13 @@
           <button class="leve" data-rcancelar="${c.id}">Cancelar este caso</button></div>` : ''}
       </article>`
     }).join('')
+    // 🦠 restaura o que estava sendo digitado (só se o campo novo está vazio — não sobrescreve valor já salvo)
+    Object.keys(_rDig).forEach(id => {
+      const v = _rDig[id];
+      if (v.vol != null) { const e = el.querySelector('[data-rvol="' + id + '"]'); if (e && !e.value) e.value = v.vol; }
+      if (v.mot != null) { const e = el.querySelector('[data-rmot="' + id + '"]'); if (e && !e.value) e.value = v.mot; }
+      if (v.cor != null) { const e = el.querySelector('[data-rcor="' + id + '"]'); if (e && e.value === '' && v.cor) e.value = v.cor; }
+    });
   }
 
   function desenharCancelamentos() {
@@ -4787,6 +4812,23 @@
       await salvarRaiva({ ...caso, id, amostra: vi ? 'viavel' : 'inviavel',
         // viável: a coloração vira o "motivo" exibido ao lado do ✅ · não viável: o motivo digitado
         amostra_volume: vol.trim() || null, amostra_motivo: (vi ? cor : mot).trim() || null })
+      return
+    }
+    // 🦠 Fúlvio 22/out: amostra inviável → avisar a clínica + SOLICITAR NOVA AMOSTRA. Não termina o caso:
+    //   zera a avaliação e a coleta, o processo volta pro ③ e aguarda a nova amostra chegar.
+    const na = ev.target.closest('[data-rnovaamostra]')
+    if (na) {
+      if (!(await garantirLogin())) return
+      const id = +na.dataset.rnovaamostra
+      const caso = (raivaCache || []).find(c => c.id === id); if (!caso) return
+      if (!confirm('Avisar a clínica que a amostra está INVIÁVEL e solicitar uma NOVA amostra?\n\nO caso volta pro passo ③ e aguarda a nova amostra chegar (o motivo fica no histórico).')) return
+      // ⛔ sem coluna nova no banco: guardo o histórico no OBS (campo que já existe) e zero a avaliação+coleta.
+      const hoje = new Date().toLocaleDateString('pt-BR')
+      const marca = `🔁 ${hoje}: amostra inviável${caso.amostra_motivo ? ` (${caso.amostra_motivo})` : ''} — clínica avisada, NOVA amostra solicitada.`
+      await salvarRaiva({ ...caso, id, amostra: null, amostra_volume: null, amostra_motivo: null,
+        coleta_ok: false, coleta_data: null,
+        obs: (marca + (caso.obs ? '\n' + caso.obs : '')).slice(0, 1000) })
+      toast('📨 Clínica avisada · nova amostra solicitada. O caso voltou pro ③ e aguarda a nova amostra.')
       return
     }
     // 🔴 05/out, Fúlvio: *"em VÁRIAS ABAS, independente de qual seja, quando a gente cria uma
