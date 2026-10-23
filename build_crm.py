@@ -10,7 +10,7 @@ faturamento. Tier/R$ ficam de fora — a priorização usa recência + magnitude
 variação.  Cifra (AES-256-GCM, senha do time CRM) -> site_crm/data/crm.enc.
 
 Env: MYSQL_*, BI_PWD (exigido por build_financeiro), CRM_PWD (cifra a saída CRM)."""
-import os, json, base64, datetime, time
+import os, json, base64, datetime, time, hashlib
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -294,6 +294,24 @@ def post_clinicas_rs(D):
         print(f"clinicas R$ (cifrado) -> HTTP {r.status} ({len(rsmap)} clínicas)")
     except Exception as e:
         print(f"post_clinicas_rs falhou (ok, tenta no próximo ciclo): {e}")
+    # 🔒 SAFRA ISOLADA (item 3 — Fábio): só os números da tabela "Dinheiro por mês", cifrados com a
+    # SAFRA_KEY derivada do FIN_KEY (sha256("safra-v1:"+FIN_KEY)). Quem tem escopo "safra" decifra SÓ isto.
+    try:
+        safra_key = hashlib.sha256(("safra-v1:" + dir_code).encode()).hexdigest()
+        sdata = json.dumps({"fatmes": fatmes, "conqmes": conqmes, "fatmesall": fatmesall,
+                            "fatmesall_dia": datetime.date.today().day},
+                           ensure_ascii=False, separators=(",", ":")).encode()
+        ssalt, siv = os.urandom(16), os.urandom(12)
+        skey = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=ssalt, iterations=ITER).derive(safra_key.encode())
+        sct = AESGCM(skey).encrypt(siv, sdata, None)
+        senv = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": ITER, "salt": base64.b64encode(ssalt).decode(),
+                "iv": base64.b64encode(siv).decode(), "ct": base64.b64encode(sct).decode()}
+        spayload = json.dumps({"acao": "set", "env": senv, "senha": pwd}).encode()
+        rs = urllib.request.urlopen(urllib.request.Request(
+            base + "/api/crm-safra", data=spayload, headers={"Content-Type": "application/json"}), timeout=45)
+        print(f"safra isolada (cifrado) -> HTTP {rs.status} ({len(fatmes)} clínicas)")
+    except Exception as e:
+        print(f"post safra falhou (ok, tenta no próximo ciclo): {e}")
 
 def post_clinicas_det():
     """Detalhe (setores/white-space + produção 30d/7d) SÓ das clínicas da carteira → /api/crm-clinicas-det.

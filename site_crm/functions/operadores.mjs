@@ -6,9 +6,11 @@ import { getStore } from "@netlify/blobs";
 import { createHash } from "node:crypto";
 import * as SEC from "./secret.mjs";
 const SECRET = SEC.SECRET;
+// SAFRA_KEY = chave do pacote isolado da Safra (item 3). MESMA derivação do build (sha256("safra-v1:"+FIN_KEY)).
+const SAFRA_KEY = createHash("sha256").update("safra-v1:" + (SEC.FIN_KEY || "")).digest("hex");
 
 const hashPin = (nome, pin) => createHash("sha256").update("crmop:" + nome.trim().toLowerCase() + ":" + String(pin)).digest("hex");
-const pub = (lista) => lista.map((o) => ({ nome: o.nome, papel: o.papel || "comercial", ts: o.ts })).sort((a, b) => a.nome.localeCompare(b.nome));
+const pub = (lista) => lista.map((o) => ({ nome: o.nome, papel: o.papel || "comercial", escopos: o.escopos || [], admin: !!o.admin, ativo: o.ativo !== false, ts: o.ts })).sort((a, b) => a.nome.localeCompare(b.nome));
 
 export default async (req) => {
   const store = getStore("crm-operadores");
@@ -33,7 +35,12 @@ export default async (req) => {
       const ok = o.pin === hashPin(o.nome, String(body.pin || "").trim());
       if (!ok) return Response.json({ ok: false }, { headers: cors });
       // DIRETORIA (ex.: Wal, Fábio no CF) recebe a CHAVE FINANCEIRA no login → R$ abre sozinho ao entrar (inclusive por biometria). Reps (comercial) NUNCA recebem.
-      return Response.json({ ok: true, nome: o.nome, papel: o.papel || "comercial", key: SECRET, finkey: (o.papel === "diretoria" ? (SEC.FIN_KEY || "") : undefined) }, { headers: cors });
+      // ESCOPO "safra" (ex.: Fábio na Matriz): recebe SÓ a SAFRA_KEY → decifra só a tabela da Safra, nunca os outros valores. admin = vê a aba Equipe.
+      const escopos = Array.isArray(o.escopos) ? o.escopos : [];
+      return Response.json({ ok: true, nome: o.nome, papel: o.papel || "comercial", key: SECRET,
+        finkey: (o.papel === "diretoria" ? (SEC.FIN_KEY || "") : undefined),
+        escopos, admin: !!o.admin,
+        safrakey: ((o.papel !== "diretoria") && escopos.includes("safra")) ? SAFRA_KEY : undefined }, { headers: cors });
     }
     if (!SECRET || body.senha !== SECRET)
       return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401, headers: cors });
@@ -45,7 +52,11 @@ export default async (req) => {
       const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
       if (!o) return Response.json({ ok: false, motivo: "nao_existe" }, { headers: cors });
       const ok = o.pin === hashPin(o.nome, pin);
-      return Response.json({ ok, nome: o.nome, papel: o.papel || "comercial", finkey: (ok && o.papel === "diretoria" ? (SEC.FIN_KEY || "") : undefined) }, { headers: cors });
+      const escopos = ok && Array.isArray(o.escopos) ? o.escopos : [];
+      return Response.json({ ok, nome: o.nome, papel: o.papel || "comercial",
+        finkey: (ok && o.papel === "diretoria" ? (SEC.FIN_KEY || "") : undefined),
+        escopos, admin: ok && !!o.admin,
+        safrakey: (ok && o.papel !== "diretoria" && escopos.includes("safra")) ? SAFRA_KEY : undefined }, { headers: cors });
     }
     if (body.acao === "remove") {
       lista = lista.filter((x) => x.nome.toLowerCase() !== nome.toLowerCase());
@@ -62,6 +73,37 @@ export default async (req) => {
       o.papel = papel;
       await store.setJSON("lista", lista);
       return Response.json({ ok: true, nome: o.nome, papel, operadores: pub(lista) }, { headers: cors });
+    }
+    // ESCOPO pontual (ex.: "safra" — Fábio vê SÓ a tabela da Safra em R$). Exige o CÓDIGO DA DIRETORIA.
+    if (body.acao === "setescopo") {
+      if (!SEC.FIN_KEY || body.dir_code !== SEC.FIN_KEY)
+        return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
+      const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
+      if (!o) return new Response(JSON.stringify({ erro: "nao_existe" }), { status: 404, headers: cors });
+      const es = String(body.escopo || "").trim();
+      if (!es) return new Response(JSON.stringify({ erro: "escopo_invalido" }), { status: 400, headers: cors });
+      o.escopos = (Array.isArray(o.escopos) ? o.escopos : []).filter((e) => e !== es);
+      if (body.on) o.escopos.push(es);
+      await store.setJSON("lista", lista);
+      return Response.json({ ok: true, operadores: pub(lista) }, { headers: cors });
+    }
+    // ADMIN (vê a aba Equipe). Exige o CÓDIGO DA DIRETORIA.
+    if (body.acao === "setadmin") {
+      if (!SEC.FIN_KEY || body.dir_code !== SEC.FIN_KEY)
+        return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });
+      const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
+      if (!o) return new Response(JSON.stringify({ erro: "nao_existe" }), { status: 404, headers: cors });
+      o.admin = !!body.on;
+      await store.setJSON("lista", lista);
+      return Response.json({ ok: true, operadores: pub(lista) }, { headers: cors });
+    }
+    // ATIVAR/DESATIVAR operador (quem sai do time). Só senha do time (já validada acima).
+    if (body.acao === "setativo") {
+      const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
+      if (!o) return new Response(JSON.stringify({ erro: "nao_existe" }), { status: 404, headers: cors });
+      o.ativo = body.on !== false;
+      await store.setJSON("lista", lista);
+      return Response.json({ ok: true, operadores: pub(lista) }, { headers: cors });
     }
     // add / setpin (upsert) — cria operador ou troca o PIN
     if (!nome || pin.length < 6)

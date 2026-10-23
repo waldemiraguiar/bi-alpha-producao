@@ -36,6 +36,7 @@ let TABS = [
   {k:"sensiveis",       ic:"🚨", nm:"Sensíveis",       cls:"urgtab",   bcls:"urgb"},
   {k:"historico",       ic:"📅", nm:"Histórico",       cls:"",         bcls:""},
   {k:"encerrados",      ic:"🔒", nm:"Encerrados",      cls:"",         bcls:""},
+  {k:"equipe",          ic:"🛠️", nm:"Equipe",          cls:"",         bcls:""},   // ADMIN (só Wal) — gerencia colaboradores
 ];
 /* 🧩 ORDEM DAS ABAS (item 1 — Wal organiza como quiser; salvo só neste aparelho) */
 function tabOrder(){ try{ const a=JSON.parse(localStorage.getItem("crm_tab_order")||"null"); return Array.isArray(a)&&a.length?a:null; }catch(e){ return null; } }
@@ -46,9 +47,10 @@ function orderedTabs(){ const ord=tabOrder(); if(!ord) return TABS;
   return out; }
 function saveTabOrder(keys){ try{ localStorage.setItem("crm_tab_order", JSON.stringify(keys)); }catch(e){} }
 function resetTabOrder(){ try{ localStorage.removeItem("crm_tab_order"); }catch(e){} }
+function visibleTabs(){ return orderedTabs().filter(tb => tb.k!=="equipe" || isAdmin()); }   // aba Equipe só pro admin (Wal)
 function openOrganizarAbas(){
   const body=document.getElementById("modalBody"); if(!body) return;
-  let ks=orderedTabs().map(t=>t.k);
+  let ks=visibleTabs().map(t=>t.k);
   const sqbtn="width:34px;height:32px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:#9fe6ff;font-weight:800;font-size:14px;cursor:pointer;flex-shrink:0";
   const draw=()=>{ const byk={}; TABS.forEach(t=>byk[t.k]=t);
     body.innerHTML=`<div class="m-head"><div><div class="m-cli">🧩 Organizar abas</div><div class="t-mut" style="font-size:12px;margin-top:3px;line-height:1.45">Deixe as abas na ordem que você achar melhor. Vale só <b>neste aparelho</b> — cada um monta do seu jeito.</div></div><button class="m-x" id="mClose">✕</button></div>
@@ -634,7 +636,7 @@ async function trocarMeuPin(){
 }
 async function verificaPin(nome, pin){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"verify",nome,pin,senha:window.__pwd})});
-    if(r.ok){ const j=await r.json(); return j.ok?{ok:true, papel:j.papel||"comercial", finkey:j.finkey}:{ok:false}; } }catch(e){ return null; }   // null = offline/erro
+    if(r.ok){ const j=await r.json(); return j.ok?{ok:true, papel:j.papel||"comercial", finkey:j.finkey, escopos:j.escopos||[], admin:!!j.admin, safrakey:j.safrakey}:{ok:false}; } }catch(e){ return null; }   // null = offline/erro
   return {ok:false}; }
 async function criarOperador(nome, pin, papel, dir_code){
   try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",nome,pin,papel,dir_code,senha:window.__pwd})});
@@ -669,7 +671,7 @@ async function openIdentidade(force){
     const nome=el.dataset.op, pin=(prompt(`PIN de ${nome}:`)||"").trim(); if(!pin) return;
     const res=await verificaPin(nome, pin);
     if(res===null){ if(confirm("Sem internet pra validar o PIN agora. Entrar como "+nome+" mesmo assim?")){ setOperador(nome, "comercial"); closeModal(); renderAll(); } }   // offline não libera R$ (segurança)
-    else if(res.ok){ setOperador(nome, res.papel); if(res.papel==="diretoria" && res.finkey) await autoRSdir(res.finkey); closeModal(); renderAll(); }
+    else if(res.ok){ setOperador(nome, res.papel); if(res.papel==="diretoria" && res.finkey) await autoRSdir(res.finkey); await aplicarEscopoLogin(res); closeModal(); renderAll(); }
     else alert("PIN incorreto."); });
   document.getElementById("opNovo").onclick=async()=>{
     const nome=(prompt("Nome do novo operador (ex.: Heitor, Luciane, Wal):")||"").trim(); if(!nome) return;
@@ -764,6 +766,30 @@ function rsVal(cod, marco){ if(!CLIN_RS||cod==null) return null; const k=String(
   if(marco && CLIN_RS_DESDE && CLIN_RS_DESDE[k]!=null) return CLIN_RS_DESDE[k];
   return CLIN_RS[k]!=null?CLIN_RS[k]:null; }
 function dirCodeCache(){ return localStorage.getItem("crm_fin_code")||sessionStorage.getItem("crm_dir_code")||""; }   // localStorage = gruda no aparelho da diretoria
+/* 🛠️ ADMIN (vê a aba Equipe) · 🔒 ESCOPO SAFRA (Fábio vê SÓ a tabela da Safra em R$) — item 2/3 */
+function isAdmin(){ try{ return localStorage.getItem("crm_admin")==="1"; }catch(e){ return false; } }
+function veSafra(){ try{ return localStorage.getItem("crm_escopo_safra")==="1" && !ehDiretoria(); }catch(e){ return false; } }
+const SAFRA_API="/api/crm-safra"; let SAFRA_ENV=null;
+async function loadSafraEnv(){ try{ const r=await fetch(SAFRA_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); SAFRA_ENV=(j&&j.ct)?j:null; } }catch(e){} }
+async function decSafra(code){
+  if(!code) return false;
+  if(!SAFRA_ENV) await loadSafraEnv();
+  if(!SAFRA_ENV||!SAFRA_ENV.ct) return false;
+  try{ const bk=await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
+    const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:_b64b(SAFRA_ENV.salt), iterations:SAFRA_ENV.iter||250000, hash:"SHA-256"}, bk, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+    const plain=await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64b(SAFRA_ENV.iv)}, key, _b64b(SAFRA_ENV.ct));
+    const obj=JSON.parse(new TextDecoder().decode(plain));
+    CLIN_FATMES=obj.fatmes||{}; CLIN_CONQMES=obj.conqmes||{}; CLIN_FATMESALL=obj.fatmesall||{}; CLIN_FATMESALL_DIA=obj.fatmesall_dia||0;
+    try{ localStorage.setItem("crm_safra_code", code); }catch(e){}   // gruda no aparelho → reabre sozinho
+    return true;
+  }catch(e){ return false; } }
+async function aplicarEscopoLogin(res){
+  try{ localStorage.setItem("crm_admin", (res&&res.admin)?"1":"0"); }catch(e){}
+  const temSafra = !!(res && Array.isArray(res.escopos) && res.escopos.includes("safra") && res.papel!=="diretoria");
+  try{ localStorage.setItem("crm_escopo_safra", temSafra?"1":"0"); }catch(e){}
+  if(temSafra && res.safrakey){ await decSafra(res.safrakey); }
+  renderOpBtn();
+}
 /* 🔓 AUTO-R$ p/ DIRETORIA: quando o operador diretoria (Wal/Fábio) loga, o servidor manda a finkey → abre o R$ SOZINHO (inclusive por biometria). Reps não recebem finkey → nada muda pra eles. */
 async function autoRSdir(finkey){
   if(!finkey) return false;
@@ -1011,6 +1037,17 @@ function pistaBiJanela(){
   if(pistaBiRange==="semana"){ const w=new Date(d0); w.setDate(w.getDate()-((w.getDay()+6)%7)); return {ini:w.getTime(), fim:now, label:"esta semana (seg→hoje)"}; }
   if(pistaBiRange==="mes"){ const m=new Date(d.getFullYear(),d.getMonth(),1); return {ini:m.getTime(), fim:now, label:"este mês"}; }
   if(pistaBiRange==="30d") return {ini:now-30*864e5, fim:now, label:"últimos 30 dias"};
+  return {ini:0, fim:now, label:"tudo"};
+}
+/* 📊 ABA RESULTADOS — filtro de período (pedido da Luciane 23/10) */
+let resRange="tudo", resDe="", resAte="";
+function resJanela(){
+  if(resDe||resAte){ const ini=resDe?new Date(resDe+"T00:00:00").getTime():0; const fim=resAte?new Date(resAte+"T23:59:59").getTime():Date.now(); return {ini,fim,label:"período escolhido"}; }
+  const d=new Date(), d0=new Date(d); d0.setHours(0,0,0,0); const now=Date.now();
+  if(resRange==="hoje") return {ini:d0.getTime(), fim:now, label:"hoje"};
+  if(resRange==="semana"){ const w=new Date(d0); w.setDate(w.getDate()-((w.getDay()+6)%7)); return {ini:w.getTime(), fim:now, label:"esta semana"}; }
+  if(resRange==="mes"){ const m=new Date(d.getFullYear(),d.getMonth(),1); return {ini:m.getTime(), fim:now, label:"este mês"}; }
+  if(resRange==="30d") return {ini:now-30*864e5, fim:now, label:"últimos 30 dias"};
   return {ini:0, fim:now, label:"tudo"};
 }
 let pautaView="atual";  // "atual" | "historico"
@@ -2286,22 +2323,23 @@ function biStats(){
   const paradosSet=new Set(act(D.parados||[]).map(x=>String(x.cod)));
   const quedaSet=new Set(act([...(D.em_queda||[]),...(D.queda_forte||[])]).map(x=>String(x.cod)));
   const wk=Date.now()-7*864e5, mo=Date.now()-30*864e5;
+  const janela=resJanela(); const I=INTER.filter(x=>x.ts>=janela.ini&&x.ts<=janela.fim);
   const byRes={}; Object.keys(RESULT).forEach(k=>byRes[k]=0);
-  INTER.forEach(x=>{ if(byRes[x.resultado]!=null) byRes[x.resultado]++; });
-  const porPessoa={}; INTER.forEach(x=>{const p=x.por||"equipe"; (porPessoa[p]=porPessoa[p]||{n:0,pos:0}); porPessoa[p].n++; if(x.resultado==="positivo")porPessoa[p].pos++;});
-  const contatados=new Set(INTER.map(x=>String(x.cod)));
+  I.forEach(x=>{ if(byRes[x.resultado]!=null) byRes[x.resultado]++; });
+  const porPessoa={}; I.forEach(x=>{const p=x.por||"equipe"; (porPessoa[p]=porPessoa[p]||{n:0,pos:0}); porPessoa[p].n++; if(x.resultado==="positivo")porPessoa[p].pos++;});
+  const contatados=new Set(I.map(x=>String(x.cod)));
   // REATIVADO = estava PARADO (sem enviar) em algum contato e HOJE não está mais parado nem em queda = voltou a enviar
   const reativadosList=[];
   contatados.forEach(cod=>{ const eraParado=interOf(cod).some(h=>(h.snapshot||{}).situacao==="parado");
     if(eraParado && !paradosSet.has(cod) && !quedaSet.has(cod)){ reativadosList.push(interOf(cod).map(i=>i.cliente).find(Boolean)||("#"+cod)); } });
-  const motivos={}; INTER.filter(x=>x.resultado==="negativo"&&x.motivo).forEach(x=>{motivos[x.motivo]=(motivos[x.motivo]||0)+1;});
-  const weeks=[]; for(let i=7;i>=0;i--){const end=Date.now()-i*7*864e5,start=end-7*864e5; weeks.push({lbl:i===0?"agora":`-${i}s`,c:INTER.filter(x=>x.ts>=start&&x.ts<end).length});}
-  const total=INTER.length, topP=Object.entries(porPessoa).sort((a,b)=>b[1].n-a[1].n)[0];
-  const notas=INTER.filter(x=>x.nota_satisfacao!=null).map(x=>x.nota_satisfacao);
+  const motivos={}; I.filter(x=>x.resultado==="negativo"&&x.motivo).forEach(x=>{motivos[x.motivo]=(motivos[x.motivo]||0)+1;});
+  const weeks=[]; for(let i=7;i>=0;i--){const end=Date.now()-i*7*864e5,start=end-7*864e5; weeks.push({lbl:i===0?"agora":`-${i}s`,c:I.filter(x=>x.ts>=start&&x.ts<end).length});}
+  const total=I.length, topP=Object.entries(porPessoa).sort((a,b)=>b[1].n-a[1].n)[0];
+  const notas=I.filter(x=>x.nota_satisfacao!=null).map(x=>x.nota_satisfacao);
   const satMedia=notas.length?notas.reduce((a,b)=>a+b,0)/notas.length:null;
-  return {total,sem:INTER.filter(x=>x.ts>=wk).length,mes:INTER.filter(x=>x.ts>=mo).length,byRes,porPessoa,
+  return {total,sem:I.filter(x=>x.ts>=wk).length,mes:I.filter(x=>x.ts>=mo).length,byRes,porPessoa,
     reativados:reativadosList.length, reativadosList, motivos,weeks,contatados:contatados.size,pctPos:total?Math.round(100*byRes.positivo/total):0,
-    topPessoa:topP?topP[0]:"—",alvos:act(D.parados||[]).length+act(D.em_queda||[]).length, satMedia, satN:notas.length};
+    topPessoa:topP?topP[0]:"—",alvos:act(D.parados||[]).length+act(D.em_queda||[]).length, satMedia, satN:notas.length,janela};
 }
 function funil(s){
   const steps=[["Alvos (parados + em queda)",s.alvos,"#FF5470"],["Contatados",s.contatados,"#FFB020"],
@@ -2333,9 +2371,26 @@ function drawCharts(s){
     datasets:[{data:s.weeks.map(w=>w.c),borderColor:"#00D4FF",backgroundColor:"rgba(0,212,255,.15)",fill:true,tension:.35,pointRadius:3}]},
     options:{animation:false,scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}}},plugins:{legend:{display:false}}}}));
   const mot=Object.entries(s.motivos).sort((a,b)=>b[1]-a[1]);
-  if(g("cMot")) CHARTS.push(new Chart(g("cMot"),{type:"bar",data:{labels:mot.length?mot.map(m=>m[0]):["sem perdas"],
-    datasets:[{data:mot.length?mot.map(m=>m[1]):[0],backgroundColor:"#FF5470"}]},
-    options:{indexAxis:"y",animation:false,scales:{x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}}));
+  if(g("cMot")){
+    const motChart=new Chart(g("cMot"),{type:"bar",data:{labels:mot.length?mot.map(m=>m[0]):["sem perdas"],
+      datasets:[{data:mot.length?mot.map(m=>m[1]):[0],backgroundColor:"#FF5470"}]},
+      options:{indexAxis:"y",animation:false,scales:{x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{precision:0}},y:{grid:{display:false}}},plugins:{legend:{display:false}},
+        onClick:(evt,els)=>{ if(!els.length||!mot.length) return; showMotDrilldown(mot[els[0].index][0]); }}});
+    CHARTS.push(motChart);
+    g("cMot").style.cursor="pointer";
+  }
+}
+
+/* drilldown: clicou numa barra do gráfico 'Motivos de perda' → lista os contatos */
+function showMotDrilldown(motivo){
+  const janela=resJanela();
+  const lista=INTER.filter(x=>x.resultado==="negativo"&&x.motivo===motivo&&x.ts>=janela.ini&&x.ts<=janela.fim)
+    .sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const rows=lista.map(h=>`<div class="feedrow"><div class="hi-body"><div><b>${esc(h.cliente||("#"+h.cod))}</b> <span class="t-mut">· ${esc(h.canal||"")} · ${esc(diasAtras(h.ts))} · ${esc(h.por)}</span></div>${h.nota?`<div class="hi-nota">"${esc(h.nota)}"</div>`:""}</div></div>`).join("");
+  const body=document.getElementById("modalBody");
+  body.innerHTML=`<div class="m-head"><div><div class="m-cli">❌ Perda: ${esc(motivo)} (${lista.length})</div><div class="t-mut" style="font-size:12px;margin-top:3px">${esc(janela.label)}</div></div><button class="m-x" id="mClose">✕</button></div>${lista.length?rows:'<div class="t-mut" style="padding:16px 0">Nenhum contato com esse motivo no período.</div>'}`;
+  document.getElementById("modal").style.display="flex";
+  document.getElementById("mClose").onclick=closeModal;
 }
 
 /* ---------- helpers ---------- */
@@ -2623,11 +2678,67 @@ function relatorioSimulador(){
   const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para abrir o relatório."); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+/* 🛠️ ABA EQUIPE (item 2) — admin (Wal) gerencia colaboradores: papel, escopo "vê Safra" (item 3), admin, ativo */
+async function opsPost(body){
+  try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,senha:window.__pwd})});
+    if(r.status===403){ alert("❌ Código da diretoria (senha financeira) inválido."); return false; }
+    if(r.status===401){ alert("Sessão sem permissão — saia e entre de novo."); return false; }
+    if(r.ok){ const j=await r.json(); if(j.operadores) syncOps(j.operadores); return true; }
+  }catch(e){ alert("Sem internet."); }
+  return false;
+}
+function finCodeEquipe(){ let c=dirCodeCache(); if(!c){ c=(prompt("Para mexer em papel/Safra/admin, digite a SENHA FINANCEIRA da diretoria:")||"").trim(); } return c; }
+async function eqAction(kind, nome){
+  const o=OPERADORES.find(x=>x.nome===nome); if(!o) return;
+  if(kind==="ativo"){ if(await opsPost({acao:"setativo",nome,on:(o.ativo===false)})) renderTab(); return; }
+  if(kind==="remove"){ if(confirm(`Remover ${nome} de vez? (ele perde o acesso)`)){ if(await opsPost({acao:"remove",nome})) renderTab(); } return; }
+  const code=finCodeEquipe(); if(!code) return;
+  if(kind==="papel"){ const novo=o.papel==="diretoria"?"comercial":"diretoria";
+    if(novo==="diretoria" && !confirm(`${nome} vai virar DIRETORIA e passa a ver TODOS os valores em R$. Confirmar?`)) return;
+    if(await opsPost({acao:"setpapel",nome,papel:novo,dir_code:code})) renderTab(); return; }
+  if(kind==="safra"){ const on=!(o.escopos||[]).includes("safra");
+    if(await opsPost({acao:"setescopo",nome,escopo:"safra",on,dir_code:code})) renderTab(); return; }
+  if(kind==="admin"){ const on=!o.admin;
+    if(await opsPost({acao:"setadmin",nome,on,dir_code:code})) renderTab(); return; }
+}
+async function eqNovo(){
+  const nome=(prompt("Nome do colaborador (ex.: Heitor, Luciane):")||"").trim(); if(!nome) return;
+  const pin=(prompt(`PIN de ${nome} (mín. 6 dígitos — ele usa pra entrar):`)||"").trim(); if(pin.length<6){ alert("PIN precisa de 6+ dígitos."); return; }
+  const ok=await criarOperador(nome, pin, "comercial", "");
+  if(ok){ await loadOps(); renderTab(); alert(`✅ ${nome} criado como comercial. Use os botões pra dar papel/Safra/admin.`); }
+}
+function renderEquipe(c){
+  if(!isAdmin()){ c.innerHTML=`<div class="proxhint" style="border-color:rgba(255,45,85,.4);color:#ff8fa3;margin:10px 0;line-height:1.5">🔒 Área restrita — só o administrador vê a aba Equipe.</div>`; return; }
+  const bt="border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:8px;padding:5px 10px;font-size:11.5px;font-weight:700;cursor:pointer;color:#c9d4e0";
+  const pill=(txt,cor,bg)=>`<span style="display:inline-block;background:${bg};color:${cor};border:1px solid ${cor}66;border-radius:12px;padding:1px 9px;font-size:10.5px;font-weight:800;margin-left:5px;white-space:nowrap">${txt}</span>`;
+  const rows=OPERADORES.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(o=>{
+    const safra=(o.escopos||[]).includes("safra"), dir=o.papel==="diretoria", inativo=o.ativo===false;
+    return `<div class="crow" style="cursor:default;align-items:stretch${inativo?';opacity:.55':''}">
+      <div class="rk" style="color:#9fe6ff">👤</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm" style="font-size:14px">${esc(o.nome)}${dir?pill('🔓 diretoria','#00E5A0','rgba(0,229,160,.14)'):pill('comercial','#9fb2cc','rgba(255,255,255,.05)')}${o.admin?pill('🛠️ admin','#ffc266','rgba(255,194,77,.14)'):''}${safra?pill('🔒 vê Safra R$','#9fe6ff','rgba(0,212,255,.12)'):''}${inativo?pill('⛔ inativo','#ff8fa3','rgba(255,45,85,.12)'):''}</div>
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+          <button data-eq="papel" data-nome="${esc(o.nome)}" style="${bt}">${dir?'↓ tornar comercial':'↑ tornar diretoria'}</button>
+          ${!dir?`<button data-eq="safra" data-nome="${esc(o.nome)}" style="${bt};border-color:rgba(0,212,255,.5);color:#9fe6ff">${safra?'🔒 tirar Safra':'🔓 liberar Safra R$'}</button>`:''}
+          <button data-eq="admin" data-nome="${esc(o.nome)}" style="${bt}">${o.admin?'tirar admin':'tornar admin'}</button>
+          <button data-eq="ativo" data-nome="${esc(o.nome)}" style="${bt}">${inativo?'reativar':'desativar'}</button>
+          <button data-eq="remove" data-nome="${esc(o.nome)}" style="${bt};border-color:rgba(255,45,85,.4);color:#ff8fa3">remover</button>
+        </div>
+      </div><div class="mid"></div></div>`;
+  }).join("");
+  c.innerHTML=`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:6px 0 10px;line-height:1.55">🛠️ <b>Equipe</b> — você gerencia quem entra e o que cada um vê. <b>🔓 liberar Safra R$</b> dá ao colaborador (ex.: Fábio) acesso <b>só</b> à tabela <i>Dinheiro por mês (Safra)</i> em R$ — ele <b>nunca</b> vê os outros valores. <b>diretoria</b> vê todo o R$. <b>admin</b> vê esta aba.</div>
+    <button class="checkinbtn" id="eqNovo" style="max-width:280px;margin:0 auto 12px;border-color:rgba(0,229,160,.5);color:#7effcf;font-weight:800">➕ Novo colaborador</button>
+    ${rows||'<div class="empty">Nenhum colaborador ainda.</div>'}`;
+  c.querySelectorAll("[data-eq]").forEach(b=> b.onclick=()=>eqAction(b.dataset.eq, b.dataset.nome));
+  const nv=document.getElementById("eqNovo"); if(nv) nv.onclick=eqNovo;
+}
 function renderTab(){
   const D = DATA, r = D.resumo || {}, c = document.getElementById("content");
   const cnt = k => act(D[k]||[]).length;                 // contagem JÁ sem encerrados (#1)
   const flt = a => diaFilter ? dueOnly(a) : a;            // filtro contatos do dia (#2)
   const ativos = (D.carteira ? act(D.carteira).length : (r.ativos || r.carteira || 0));
+
+  if(ACTIVE==="equipe"){ renderEquipe(c); return; }
 
   if(ACTIVE==="reativar"){
     const FOCO=new Set(["queda_forte","queda"]);                         // foco DIÁRIO = ativos caindo
@@ -3045,33 +3156,42 @@ function renderTab(){
     return;
   }
 
-  if(ACTIVE==="resultados"){
+  if(ACTIVE===”resultados”){
     const s=biStats();
+    const usaIntRes=!!(resDe||resAte);
+    const resFiltro=`<div class=”card” style=”margin-bottom:12px;padding:10px 12px”><div style=”display:flex;align-items:center;gap:7px;flex-wrap:wrap”><span style=”font-size:12px;font-weight:700;color:#9fb2cc”>📅 Período:</span>${[[“hoje”,”Hoje”],[“semana”,”Esta semana”],[“mes”,”Este mês”],[“30d”,”30 dias”],[“tudo”,”Tudo”]].map(([k,l])=>{const on=!usaIntRes&&resRange===k;return `<button data-resr=”${k}” style=”cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${on?”#00D4FF”:”rgba(255,255,255,.14)”};background:${on?”rgba(0,212,255,.18)”:”transparent”};color:${on?”#00D4FF”:”#9fb2cc”}”>${l}</button>`;}).join(“”)}</div><div style=”display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px”><span class=”t-mut” style=”font-size:11.5px”>ou intervalo:</span><input type=”date” id=”resDe” class=”m-date” style=”width:auto;padding:5px 8px” value=”${esc(resDe)}”><span class=”t-mut” style=”font-size:11.5px”>até</span><input type=”date” id=”resAte” class=”m-date” style=”width:auto;padding:5px 8px” value=”${esc(resAte)}”>${usaIntRes?'<button id=”resLimpa” style=”cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:8px;padding:5px 10px;font-size:11.5px”>✕ limpar</button>':””}</div><div class=”t-mut” style=”font-size:11px;margin-top:7px”>Mostrando: <b style=”color:#9fe6ff”>${s.janela.label}</b> · <b>${s.total}</b> contato(s). Clique numa barra de <b>Motivos de perda</b> para ver quem são.</div></div>`;
     c.innerHTML = `
-      <div class="kgrid">
-        ${kpi("", s.sem, "Contatos na semana", `${s.mes} no mês · ${s.total} no total`)}
-        ${kpi("g", s.pctPos+"%", "Taxa de sucesso", "contatos com resultado positivo")}
-        ${kpi("g", s.reativados, "Clientes reativados", "estavam parados e voltaram a enviar")}
-        ${kpi("a", s.topPessoa, "Mais ativo", "colaborador com mais contatos")}
-        ${s.satN?kpi("", s.satMedia.toFixed(1)+"/10", "Satisfação média", `${s.satN} resposta(s) · Em Alta`):""}
+      <div style=”margin:0 0 8px”><button class=”regbtn” id=”resultadosPrint”>🖨️ Imprimir / PDF</button></div>
+      ${resFiltro}
+      <div class=”kgrid”>
+        ${kpi(“”, s.sem, “Contatos na semana”, `${s.mes} no mês · ${s.total} no total`)}
+        ${kpi(“g”, s.pctPos+”%”, “Taxa de sucesso”, “contatos com resultado positivo”)}
+        ${kpi(“g”, s.reativados, “Clientes reativados”, “estavam parados e voltaram a enviar”)}
+        ${kpi(“a”, s.topPessoa, “Mais ativo”, “colaborador com mais contatos”)}
+        ${s.satN?kpi(“”, s.satMedia.toFixed(1)+”/10”, “Satisfação média”, `${s.satN} resposta(s) · Em Alta`):””}
       </div>
-      <div class="card" style="margin-bottom:14px;border-color:rgba(0,229,160,.3)">
-        <h3>✅ Clientes reativados <span class="tag">parados que voltaram a enviar</span></h3>
+      <div class=”card” style=”margin-bottom:14px;border-color:rgba(0,229,160,.3)”>
+        <h3>✅ Clientes reativados <span class=”tag”>parados que voltaram a enviar</span></h3>
         ${s.reativadosList.length
-          ? `<div style="font-size:14px;color:var(--green);font-weight:700">${s.reativadosList.map(esc).join(" · ")}</div>`
-          : `<div class="t-mut" style="font-size:13px;line-height:1.5">Nenhum ainda. Conta <b>só quem estava PARADO</b> (sem enviar) e voltou — não conta quedas que se recuperaram sozinhas. O rastreio semana a semana fica na aba <b>📅 Histórico</b> (“Saíram do radar”).</div>`}
+          ? `<div style=”font-size:14px;color:var(--green);font-weight:700”>${s.reativadosList.map(esc).join(“ · “)}</div>`
+          : `<div class=”t-mut” style=”font-size:13px;line-height:1.5”>Nenhum ainda. Conta <b>só quem estava PARADO</b> (sem enviar) e voltou — não conta quedas que se recuperaram sozinhas. O rastreio semana a semana fica na aba <b>📅 Histórico</b> (“Saíram do radar”).</div>`}
       </div>
-      <div class="bigrid">
-        <div class="card"><h3>Resultados dos contatos</h3><div class="cwrap"><canvas id="cRes"></canvas></div></div>
-        <div class="card"><h3>Contatos por colaborador</h3><div class="cwrap"><canvas id="cPess"></canvas></div></div>
+      <div class=”bigrid”>
+        <div class=”card”><h3>Resultados dos contatos</h3><div class=”cwrap”><canvas id=”cRes”></canvas></div></div>
+        <div class=”card”><h3>Contatos por colaborador</h3><div class=”cwrap”><canvas id=”cPess”></canvas></div></div>
       </div>
-      <div class="bigrid">
-        <div class="card"><h3>Evolução semanal <span class="tag">últimas 8 semanas</span></h3><div class="cwrap"><canvas id="cSem"></canvas></div></div>
-        <div class="card"><h3>Motivos de perda</h3><div class="cwrap"><canvas id="cMot"></canvas></div></div>
+      <div class=”bigrid”>
+        <div class=”card”><h3>Evolução semanal <span class=”tag”>últimas 8 semanas</span></h3><div class=”cwrap”><canvas id=”cSem”></canvas></div></div>
+        <div class=”card”><h3>Motivos de perda <span class=”tag” style=”color:#ff99ab”>clique na barra para ver os clientes</span></h3><div class=”cwrap”><canvas id=”cMot”></canvas></div></div>
       </div>
-      <div class="card" style="margin-top:14px"><h3>Funil de reativação</h3>${funil(s)}</div>
-      <div class="seclabel">🕑 Últimos contatos registrados</div>${feed()}`;
+      <div class=”card” style=”margin-top:14px”><h3>Funil de reativação</h3>${funil(s)}</div>
+      <div class=”seclabel”>🕑 Últimos contatos registrados</div>${feed()}`;
     drawCharts(s);
+    document.querySelectorAll(“#content [data-resr]”).forEach(el=>el.onclick=()=>{ resRange=el.dataset.resr; resDe=””; resAte=””; renderTab(); });
+    const _rd=document.getElementById(“resDe”); if(_rd) _rd.onchange=()=>{ resDe=_rd.value; renderTab(); };
+    const _ra=document.getElementById(“resAte”); if(_ra) _ra.onchange=()=>{ resAte=_ra.value; renderTab(); };
+    const _rl=document.getElementById(“resLimpa”); if(_rl) _rl.onclick=()=>{ resDe=””; resAte=””; renderTab(); };
+    const _rp=document.getElementById(“resultadosPrint”); if(_rp) _rp.onclick=()=>window.print();
     return;
   }
 
@@ -3542,9 +3662,12 @@ function renderTab(){
           </div>
         </div>`:`<div class="proxhint" style="border-color:rgba(0,212,255,.3);color:#9fe6ff;margin:2px 0 14px;line-height:1.5">📡 O <b>ranking de aquisição</b> aparece aqui quando os clientes tiverem <b>canal / origem / operador</b> marcados (abra cada cliente e marque — vale retroativo).</div>`;
       let painel="";
-      if(!ehDiretoria()){
+      const _scopeSafra = !ehDiretoria() && veSafra();   // item 3: Fábio vê SÓ a Safra em R$
+      if(!ehDiretoria() && !_scopeSafra){
         painel="";   // reps NÃO veem nada de R$ — nem que existe
-      } else if(!CLIN_RS){
+      } else if(_scopeSafra && !CLIN_FATMES){
+        painel=`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:8px 0 6px;text-align:center;line-height:1.55">🔒 Sua <b>Safra em R$</b> está carregando… se não aparecer, saia e entre de novo.</div>`;
+      } else if(ehDiretoria() && !CLIN_RS){
         painel=`<div class="proxhint" style="border-color:rgba(0,229,160,.45);margin:8px 0 6px;text-align:center;line-height:1.55">
             <div style="font-size:13px;color:#c9d4e0">💰 Abra o <b>faturamento em R$</b> da carteira (cifrado — só você).</div>
             <button class="checkinbtn" id="verRSrel" type="button" style="margin:10px auto 2px;max-width:320px;border-color:rgba(0,229,160,.5);color:#7effcf;font-weight:700">🔓 Abrir faturamento (senha financeira)</button>
@@ -3806,6 +3929,13 @@ function renderTab(){
               ${bloco("🧑‍💼","Operador (comissão)",gOper)}
             </div>${insightAq}
           </div>`:`<div class="proxhint" style="border-color:rgba(0,212,255,.35);color:#9fe6ff;margin:8px 0 12px;line-height:1.5">📡 <b>BI de Aquisição</b> aparece aqui quando os clientes tiverem <b>canal / origem / operador</b> preenchidos. Abra cada cliente (inclusive os antigos, de forma <b>retroativa</b>) e marque a chancela.</div>`;
+        if(_scopeSafra){
+          // item 3 — Fábio vê SÓ a Safra em R$ (radar de queda + tabela), nada mais
+          painel=`
+            <div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:6px 0 10px;line-height:1.5">🔒 <b>Sua visão: Safra em R$</b> — o dinheiro mês a mês de cada clínica, desde a entrada. Atualiza sozinho a cada ciclo. (Os demais valores do CRM não ficam nesta visão.)</div>
+            ${radarQueda}
+            ${cohortHtml}`;
+        } else {
         painel=`
           ${radarQueda}
           ${cohortHtml}
@@ -3827,6 +3957,7 @@ function renderTab(){
             <h3>🧠 Como ler isso (regras de mercado)</h3>
             <div style="font-size:12.5px;line-height:1.65">${regras.map(r=>`<div style="margin:4px 0">${r}</div>`).join("")}</div>
           </div>`;
+        }
       }
       // 🧠² alerta de ritmo consolidado (pararam / caíram) — o mais urgente, vai no topo
       const c2all=CARTEIRA.filter(x=>x.cod).map(x=>({x,c2:cerebro2(CLIN_DET[String(x.cod)])})).filter(o=>o.c2);
@@ -4658,7 +4789,7 @@ function renderTab(){
 /* ---------- abas ---------- */
 function renderTabs(){
   const D = DATA, r = D.resumo||{}, t = document.getElementById("tabs");
-  const shown = locked ? TABS.filter(tb=>tb.k===locked) : orderedTabs();
+  const shown = locked ? TABS.filter(tb=>tb.k===locked) : visibleTabs();
   t.innerHTML = shown.map(tb=>{
     const n = tb.k==="resultados" ? INTER.filter(x=>x.ts>=Date.now()-7*864e5).length
             : tb.k==="historico" ? HIST.length
@@ -4696,7 +4827,7 @@ function setPin(){
 function rotate(){
   if(pinned) return;
   const m=document.getElementById("modal"); if(m && m.style.display==="flex") return;
-  const _ot = orderedTabs();
+  const _ot = visibleTabs();
   const i = _ot.findIndex(t=>t.k===ACTIVE);
   ACTIVE = _ot[(i+1)%_ot.length].k;
   renderAll();
@@ -4750,6 +4881,7 @@ function render(D){
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
     Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
+      if(veSafra() && !CLIN_FATMES){ const sc=localStorage.getItem("crm_safra_code"); if(sc) await decSafra(sc); }   // Fábio: a Safra reabre sozinha neste aparelho
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart(), loadDet(), loadAAA(), loadRel(), loadPautas()]);
@@ -4785,6 +4917,7 @@ async function initLogin(){
       localStorage.setItem("agente_crm_matriz", j.key); window.__pwd=j.key;
       setOperador(j.nome, j.papel);
       if(j.papel==="diretoria" && j.finkey) await autoRSdir(j.finkey);   // diretoria: R$ abre sozinho ao logar
+      await aplicarEscopoLogin(j);   // escopo "safra" (Fábio) / admin (aba Equipe)
       document.getElementById("gate").style.display="none";
       render(D);
       try{ if(typeof window.__crmMostraBioSetup==="function") window.__crmMostraBioSetup(); }catch(e){}   // oferece "👆 Proteger com digital" já no 1º login
