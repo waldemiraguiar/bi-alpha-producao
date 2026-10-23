@@ -894,6 +894,10 @@
   const NUCLEO_FILE_URL = 'https://lrwjcdvporaivxvfuiwt.supabase.co/storage/v1/object/public/raiva-anexos/_formulario/ficha_cadastro_raiva_nucleo.docx'
   const nucleoFileBtn = () => NUCLEO_FILE_URL
     ? `<a class="lnk raiva-nucleo-dl" href="${NUCLEO_FILE_URL}" target="_blank" rel="noopener" download>⬇️ baixar arquivo Núcleo</a>` : ''
+  // ⑱ Fúlvio 23/out: comprovante de entrega do laudo RAIVA (arquivo .docx que ele mandou).
+  const COMPROVANTE_LAUDO_URL = 'https://lrwjcdvporaivxvfuiwt.supabase.co/storage/v1/object/public/raiva-anexos/_formulario/comprovante_entrega_laudo_raiva.docx'
+  const comprovanteLaudoBtn = () => COMPROVANTE_LAUDO_URL
+    ? `<a class="lnk raiva-comprov-dl" href="${COMPROVANTE_LAUDO_URL}" target="_blank" rel="noopener" download>⬇️ baixar comprovante</a>` : ''
 
   // ⑨/⑳ anexos imutáveis (CH12 PDF do formulário; CH10 foto do comprovante de entrega). Guardados no
   //    Supabase Storage; a referência fica no caso e pode ser aberta mesmo depois de concluído, e não
@@ -1279,7 +1283,7 @@
               ${tique(c, 'laudo_chegou', '⑰ Laudo chegou ao laboratório',
                 c.laudo_em ? `<i class="mudo">${dataBR(c.laudo_em)}</i>` : '',
                 { campo: 'laudo_em', label: 'data em que o laudo chegou' })}
-              ${c.laudo_chegou ? tique(c, 'entrega_combinada', '⑱ Entrega combinada com a clínica') : ''}
+              ${c.laudo_chegou ? tique(c, 'entrega_combinada', '⑱ Entrega combinada com a clínica', comprovanteLaudoBtn()) : ''}
               ${/* ⑳ NOVO (Fúlvio 14/out): o comprovante de ENTREGA do laudo é o último passo antes de
                     concluir. Além de marcar, dá para anexar a foto/arquivo do comprovante — que fica
                     anexado ao caso e pode ser visto mesmo depois de concluído, sem poder apagar. */''}
