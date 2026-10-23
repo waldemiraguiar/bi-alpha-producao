@@ -1065,7 +1065,7 @@
                 for o valor no banco: o que está na tela nunca afirma que a vacina vale. */''}
           ${tique(ordemErrada ? { ...c, vacina_ok: false } : c, 'vacina_ok', '② Vacina antirrábica aplicada',
             c.vacina_data ? `<i class="mudo">${dataBR(c.vacina_data)}</i>` : '',
-            { campo: 'vacina_data', label: 'data da vacina' })}
+            { campo: 'vacina_data', label: 'data da última vacina antirrábica' })}
           ${c.vacina_ok && lib ? (
             vacVencida
             ? `<div class="raiva-nao">⛔ <b>Vacina fora da validade.</b> A antirrábica vale <b>1 ano</b> —
@@ -4718,6 +4718,15 @@
         if (vv && Date.now() > vv.getTime()) {
           tq.checked = false
           toast('⛔ A vacina antirrábica está VENCIDA (é anual; venceu em ' + vv.toLocaleDateString('pt-BR') + '). Precisa REVACINAR antes de coletar — e a nova dose abre outra espera de 30 dias.')
+          return
+        }
+        // 🦠 Fúlvio 22/out: a amostra só é ADEQUADA 30 dias APÓS a última vacina. Clicou no ③ antes da
+        //   data de liberação → trava: amostra inadequada, só a partir de DATE (os 30 dias de espera).
+        const lib = (typeof raivaLiberaEm === 'function') ? raivaLiberaEm(caso.vacina_data) : null
+        if (lib && Date.now() < lib.getTime()) {
+          tq.checked = false
+          const faltam = Math.ceil((lib.getTime() - Date.now()) / 864e5)
+          toast('⛔ Amostra inadequada: a antirrábica exige 30 dias após a última vacina. A amostra correta só pode ser encaminhada a partir de ' + lib.toLocaleDateString('pt-BR') + ' — faltam ' + faltam + ' dia(s).')
           return
         }
       }
