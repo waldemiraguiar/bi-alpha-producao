@@ -3816,8 +3816,12 @@ function renderTab(){
             const cand=[dRitmo,dBest].filter(v=>v!=null);
             if(!cand.length) return {pior:null};
             const pior=Math.min(...cand), piorEh=(dBest!=null&&(dRitmo==null||dBest<=dRitmo))?'best':'ritmo';
-            return {pior,dRitmo,dBest,piorEh,atual,prev,bestM}; };
+            const dMesR=(prev&&prev.fd>0)?atual.fd/prev.fd-1:null;   // 💰 R$ (até o dia D) vs o mês anterior no mesmo dia
+            return {pior,dRitmo,dBest,piorEh,atual,prev,bestM,dMesR}; };
           fmRows.forEach(r=>r.q=quedaDe(r.cod));
+          // item 6d — EM QUEDA sempre no topo (vermelho piscando), depois o resto por total
+          fmRows.sort((a,b)=>{ const ca=!!(a.q&&a.q.pior!=null&&a.q.pior<=-0.05), cb=!!(b.q&&b.q.pior!=null&&b.q.pior<=-0.05);
+            if(ca!==cb) return ca?-1:1; if(ca&&cb) return a.q.pior-b.q.pior; return b.tot-a.tot; });
           if(fmRows.length&&meses.length){
             const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
             const fatOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?x.fat:0;};
@@ -3831,7 +3835,9 @@ function renderTab(){
               const bl=forte?';border-left:3px solid #FF2D55':(cai?';border-left:3px solid #FF8A00':'');
               const chip=cai?` <span class="${forte?'qpulse':''}" title="movimento (exames até o dia ${diaD}) ${q.piorEh==='best'?'vs o melhor mês':'vs o mês passado no mesmo dia'}" style="display:inline-block;background:${forte?'rgba(255,45,85,.22)':'rgba(255,138,0,.18)'};color:${forte?'#ff6b81':'#ffc266'};border:1px solid ${forte?'rgba(255,45,85,.6)':'rgba(255,138,0,.5)'};border-radius:12px;padding:0 7px;font-size:10.5px;font-weight:800;white-space:nowrap">▼ ${Math.abs(Math.round(q.pior*100))}%${q.piorEh==='best'?' vs auge':''}</span>`:'';
               const plus=` <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" title="Abrir análise completa (mês a mês · benchmark · fuga)" style="margin-left:3px;width:22px;height:22px;border-radius:7px;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.1);color:#9fe6ff;font-weight:800;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle">+</button>`;
-              return `<tr style="border-top:1px solid rgba(255,255,255,.06)${zer?';opacity:.72':''}"><td style="${sc}${bl}"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> ${esc(r.nome)}${chip}${plus}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
+              const mom=(q.dMesR!=null)?q.dMesR:null;
+              const momBadge=mom==null?'':` <span style="font-size:10px;font-weight:800;color:${mom<-0.001?'#ff6b81':(mom>0.001?'#7effcf':'#9fb2cc')};white-space:nowrap" title="R$ até o dia ${diaD} vs o mês anterior no mesmo dia">${mom<0?'▼':(mom>0?'▲':'•')}${Math.abs(Math.round(mom*100))}% vs mês ant.</span>`;
+              return `<tr style="border-top:1px solid rgba(255,255,255,.06)${zer?';opacity:.72':''}"><td style="${sc}${bl}"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> ${esc(r.nome)}${momBadge}${chip}${plus}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
             const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmRows.length})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
             // 🔴 RADAR DE QUEDA — fixo no topo, vermelho piscante (item 6): impossível não ver
             const caindo=fmRows.filter(r=>r.q&&r.q.pior!=null&&r.q.pior<=-0.15).sort((a,b)=>a.q.pior-b.q.pior);
