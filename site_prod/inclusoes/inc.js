@@ -1541,29 +1541,17 @@
     const vereditoBox = (!temReq || c.caminho === 'sem_amostra') ? '' : `<div class="can-veredito ${vereditoCancel.pode === true ? 'sim' : vereditoCancel.pode === false ? 'nao' : 'espera'}">
       ${vereditoCancel.pode === true ? '✅' : vereditoCancel.pode === false ? '⛔' : '⏳'} ${esc(vereditoCancel.txt)}</div>`
 
-    // ═══ 🧪 AS TAREFAS DA TRIAGEM — Fúlvio, 05/out 18h18 e 18h19 ═══
-    // ⛔ *"essa etapa 'anotado cancelamento na requisição' NÃO é uma etapa do cancelamento, é uma
-    //    etapa da TRIAGEM. Aí ele dá o ciente e DEPOIS ele fala que foi anotado."*
-    // ⛔ *"identificar que a amostra chegou e informar o número de requisição... essa obrigação é
-    //    da triagem, EXCLUSIVAMENTE dela. A única coisa que o escritório faz é só dar a ciência."*
-    // ⭐ As duas moravam soltas no cartão, em lugares diferentes, parecendo etapas do processo.
-    //    Agora são UM bloco só, que é da Triagem e diz isso — e a anotação só abre DEPOIS do
-    //    ciente dela, na ordem que ele ditou.
-    const anotEl = c.tri_anotado_em
-      ? `<div class="can-avisei ok">✍️ cancelamento anotado na requisição por ${esc(c.tri_anotado_por || '?')} às ${hm(c.tri_anotado_em)}</div>`
-      : c.status !== 'aberto' ? ''
-        : !c.tri_ciente_em
-          ? `<div class="tri-espera">✍️ anotar o cancelamento na requisição — <i>abre depois do ciente da Triagem</i></div>`
-          : podeAgir('tri')
-            ? `<div class="can-acoes"><button class="leve" data-ctrianot="${c.id}">✍️ Anotado cancelamento na requisição</button></div>`
-            : `<div class="tri-espera">✍️ aguardando a Triagem anotar o cancelamento na requisição</div>`
+    // ═══ 🧪 AS TAREFAS DA TRIAGEM ═══
+    // ⭐ 05/out: tarefa "anotar cancelamento na requisição" foi colocada aqui (Fúlvio pediu).
+    // ⛔ 22/out: Fúlvio confirmou que NÃO é tarefa do cancelamento — é confusão com o fluxo
+    //    "amostra não chegou". A tarefa real da Triagem é "ir ao setor e confirmar processamento"
+    //    (já está em parecerTri, logo abaixo). Removido da exibição (campo tri_anotado_em mantido no banco).
 
     // ⭐ C3/C6: o bloco é o MESMO com e sem número de requisição. A única diferença é que, sem
     //    requisição, a primeira tarefa da Triagem é justamente informá-la.
     const tarefasTri = c.status !== 'aberto' ? '' : `<div class="tri-bloco">
       <div class="tri-cab">🧪 Tarefas da Triagem <span class="mudo">— o Escritório só dá a ciência</span></div>
       ${esperaAmostra || (c.req_nova || c.req ? `<div class="can-avisei ok">📥 requisição informada: <b>${esc(c.req_nova || c.req)}</b></div>` : '')}
-      ${anotEl}
     </div>`
 
     // ── ⛔ a regra que a Thailan chamou de obrigatória: o valor TEM de sair zerado ──
