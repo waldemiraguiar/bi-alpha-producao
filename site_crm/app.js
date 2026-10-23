@@ -4054,6 +4054,7 @@ function renderTab(){
         </div>
         <div class="t-mut" style="font-size:11px;margin-top:7px">Mostrando: <b style="color:#9fe6ff">${jan.label}</b> · <b>${total}</b> leads.</div>
       </div>
+      <div style="margin:0 0 8px"><button class="regbtn" id="comercialPrint">🖨️ Imprimir / PDF</button></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
         ${card("🧲 Total de Leads",total,"no período","#00D4FF")}
         ${card("📥 Receptivos",receptArr.length+" · "+pctR+"%","vieram até nós","#00D4FF")}
@@ -4081,6 +4082,7 @@ function renderTab(){
     const _cc=document.getElementById("comCanal"); if(_cc) _cc.onchange=()=>{ comCanal=_cc.value; renderTab(); };
     const _ct=document.getElementById("comTipo"); if(_ct) _ct.onchange=()=>{ comTipo=_ct.value; renderTab(); };
     const _cl=document.getElementById("comLimpa"); if(_cl) _cl.onclick=()=>{ comOper="";comCanal="";comTipo="";comDe="";comAte=""; renderTab(); };
+    const _cp=document.getElementById("comercialPrint"); if(_cp) _cp.onclick=()=>window.print();
     document.querySelectorAll("#content [data-prosp]").forEach(el=>el.onclick=()=>openProsp(el.dataset.prosp));
     return;
   }
