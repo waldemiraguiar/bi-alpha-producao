@@ -1694,7 +1694,12 @@
   const APOIO_COR = { vetlab: 'verde', tecsa: 'cinza', alpha: 'azul' }
   const TIPO_AMOSTRA = ['Soro', 'Plasma', 'Sangue total', 'Fezes', 'Urina', 'Lâmina', 'Swab', 'Fragmento', 'Outro']
   // as três alterações que ele nomeou, mais o caso normal
-  const QUALIDADE = ['Íntegra', 'Hemólise', 'Icterícia', 'Lipemia']
+  // 🧪 Fúlvio 22/out: graduar a qualidade em +/++/+++ para hemólise, icterícia e lipemia (3 níveis cada).
+  //   'Íntegra' segue como a amostra boa; qualquer um dos graus abaixo conta como "não íntegra" (alerta).
+  const QUALIDADE = ['Íntegra',
+    'Hemólise +', 'Hemólise ++', 'Hemólise +++',
+    'Icterícia +', 'Icterícia ++', 'Icterícia +++',
+    'Lipemia +', 'Lipemia ++', 'Lipemia +++']
 
   // ⏪ a mesma janela de 2 min da Raiva: errar o clique tem volta, e a volta fica onde o erro
   //    acontece — não numa lista de canceladas que ninguém abriria.
