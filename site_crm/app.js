@@ -1241,8 +1241,8 @@ async function addObs(id){
 function openAddCliente(){
   const bairrosUsados=[...new Set(PISTA.map(x=>x.bairro).filter(Boolean))].sort();
   document.getElementById("modalBody").innerHTML=`
-    <div class="m-head"><div><div class="m-cli">🎯 Cliente pra visitar (sem data)</div>
-      <div class="t-mut" style="font-size:13px;margin-top:2px">você lança o cliente; o vendedor escolhe QUANDO ir e dá o feedback lá</div></div>
+    <div class="m-head"><div><div class="m-cli">🎯 Cliente pra visitar</div>
+      <div class="t-mut" style="font-size:13px;margin-top:2px">lance o cliente; informe a data se já souber — entra direto na agenda do vendedor</div></div>
       <button class="m-x" id="mClose">✕</button></div>
     <div class="m-lbl">Comercial (quem vai visitar) <span style="color:var(--red)">*</span></div>
     <input id="cRep" class="m-date" style="width:100%" list="repsDL" value="${esc(meuRep())}">
@@ -1252,6 +1252,8 @@ function openAddCliente(){
     <div class="m-lbl">Bairro <span style="color:var(--red)">*</span> <span class="t-mut" style="font-weight:500">— monta a rota</span></div>
     <input id="cBairro" class="m-date" style="width:100%" placeholder="Ex.: Tijuca" list="bairrosDL">
     <datalist id="bairrosDL">${bairrosUsados.map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
+    <div class="m-lbl">Data provável da visita <span class="t-mut" style="font-weight:500">— opcional; deixe em branco se não souber</span></div>
+    <input id="cData" type="date" class="m-date">
     <div class="m-lbl">Observação <span class="t-mut" style="font-weight:500">— ${speechOK()?"toque 🎤 e fale, ou digite (opcional)":"opcional"}</span></div>
     <div style="display:flex;gap:8px;align-items:stretch">
       <button class="micbtn" id="cMic" type="button">🎤 Falar</button>
@@ -1273,12 +1275,14 @@ function openAddCliente(){
   document.getElementById("cSave").onclick=async()=>{
     try{precStop=true;PREC&&PREC.stop();}catch(e){}
     const rep=document.getElementById("cRep").value.trim(), cli=document.getElementById("cCli").value.trim(), bairro=document.getElementById("cBairro").value.trim(), obs=document.getElementById("cObs").value.trim();
+    const dataPrev=(document.getElementById("cData")||{}).value||"";
     if(!rep){ alert("Informe o COMERCIAL (quem vai visitar)."); return; }
     if(!cli){ alert("Informe o CLIENTE / clínica."); document.getElementById("cCli").focus(); return; }
     if(!bairro){ alert("Informe o BAIRRO (monta a rota)."); document.getElementById("cBairro").focus(); return; }
     localStorage.setItem("crm_rep", rep);
     const btn=document.getElementById("cSave"); btn.disabled=true; btn.textContent="Lançando…";
-    const ok=await savePista({cliente:cli, bairro, por:rep, proximo:"", a_visitar:true, resultado:"visita", origem:"telefone", texto:obs?("🎯 Cliente pra visitar: "+obs):"🎯 Cliente pra visitar (sem data)"});
+    const textoBase=dataPrev?("🎯 Cliente pra visitar — prev. "+fmtDataBR(dataPrev)):"🎯 Cliente pra visitar (sem data)";
+    const ok=await savePista({cliente:cli, bairro, por:rep, proximo:dataPrev||"", a_visitar:true, resultado:"visita", origem:"telefone", texto:obs?(textoBase+": "+obs):textoBase});
     if(ok){ closeModal(); pistaView="retornos"; renderTab(); } else { btn.disabled=false; btn.textContent="🎯 Lançar na lista do vendedor"; } };
 }
 /* BI da Pista (Chart.js — mesmo CDN da aba Resultados) */
@@ -4665,7 +4669,7 @@ function renderTab(){
       const hojeSec=Object.keys(atvByRep).sort().map(rp=>`<div class="repagenda"><div class="repagenda-h">👤 <b>${esc(rp)}</b> · fez hoje <span class="t-mut" style="font-weight:500">(${atvByRep[rp].length})</span></div>${atvByRep[rp].map(linhaAtv).join("")}</div>`).join("")||`<div class="empty">Ninguém registrou visita ou contato hoje ainda.</div>`;
       c.innerHTML=`${toggle}${repBar}
         <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-          <button class="checkinbtn" id="addCliente" type="button" style="flex:1;min-width:160px;margin:0">🎯 Lançar cliente (sem data)</button>
+          <button class="checkinbtn" id="addCliente" type="button" style="flex:1;min-width:160px;margin:0">🎯 Lançar cliente</button>
           <button class="checkinbtn" id="agendarTel" type="button" style="flex:1;min-width:160px;margin:0">📞 Agendar por telefone</button>
         </div>
         <div class="subtabs" style="margin-bottom:10px"><button class="subtab ${!retHoje?'on':''}" id="retAgenda">📋 Agenda de rota</button><button class="subtab ${retHoje?'on':''}" id="retHojeBtn">📅 Fez hoje${atvHoje.length?` (${atvHoje.length})`:''}</button></div>
