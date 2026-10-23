@@ -75,6 +75,14 @@ export default async (req) => {
       return Response.json({ ok: true, nome: o.nome, papel, operadores: pub(lista) }, { headers: cors });
     }
     // ESCOPO pontual (ex.: "safra" — Fábio vê SÓ a tabela da Safra em R$). Exige o CÓDIGO DA DIRETORIA.
+    // 🔓 SAFRAKEY SEM PIN (Wal 23/10): o operador já passou a senha do TIME (gate). Se ele tem o escopo "safra"
+    // no servidor, devolve a safrakey direto — abre o R$ dele sozinho, sem pedir PIN (o Fábio não lembrava o PIN).
+    if (body.acao === "safrakey") {
+      const o = lista.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
+      const esc = o && Array.isArray(o.escopos) ? o.escopos : [];
+      const ok = !!o && o.ativo !== false && o.papel !== "diretoria" && esc.includes("safra");
+      return Response.json({ ok, safrakey: ok ? SAFRA_KEY : undefined }, { headers: cors });
+    }
     if (body.acao === "setescopo") {
       if (!SEC.FIN_KEY || body.dir_code !== SEC.FIN_KEY)
         return new Response(JSON.stringify({ erro: "codigo_diretoria_invalido" }), { status: 403, headers: cors });

@@ -799,20 +799,22 @@ async function aplicarEscopoLogin(res){
 function reconcileEscopo(){ try{ const me=(OPERADORES||[]).find(o=>(o.nome||"").toLowerCase()===operadorAtual().toLowerCase()); if(!me) return;
   if((me.escopos||[]).includes("safra") && !ehDiretoria()){
     if(localStorage.getItem("crm_escopo_safra")!=="1") localStorage.setItem("crm_escopo_safra","1");
-    const sc=localStorage.getItem("crm_safra_code");
-    if(sc && !CLIN_FATMES){ decSafra(sc).then(ok=>{ renderTabs(); renderTab(); }); }   // já ativou antes: reabre sozinho
-    else { renderTabs(); renderTab(); }
+    if(!CLIN_FATMES){
+      const sc=localStorage.getItem("crm_safra_code");
+      if(sc){ decSafra(sc).then(()=>{ renderTabs(); renderTab(); }); }       // já ativou antes: reabre com o código em cache
+      else { autoAtivarSafra(me.nome).then(()=>{ renderTabs(); renderTab(); }); }  // 🔓 SEM PIN: pega a safrakey do servidor (já passou a senha do time)
+    } else { renderTabs(); renderTab(); }
   }
   if(me.admin && localStorage.getItem("crm_admin")!=="1"){ localStorage.setItem("crm_admin","1"); renderTabs(); }
 }catch(e){} }
-/* 🔓 ativa a Safra em R$ no aparelho (Fábio) — confirma o PIN → servidor manda a safrakey → decifra */
+/* 🔓 ativa a Safra em R$ SEM PIN — o operador já passou a senha do time; se tem escopo safra no servidor, abre sozinho */
+async function autoAtivarSafra(nome){ nome=nome||operadorAtual(); if(!nome) return false;
+  try{ const r=await fetch(OPS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"safrakey",nome,senha:window.__pwd})});
+    if(r.ok){ const j=await r.json(); if(j.ok && j.safrakey){ localStorage.setItem("crm_escopo_safra","1"); const ok=await decSafra(j.safrakey); return ok; } } }catch(e){}
+  return false; }
 async function ativarSafra(){ const nome=operadorAtual(); if(!nome){ openIdentidade(false); return; }
-  const pin=(prompt("Confirme seu PIN pra ATIVAR sua Safra em R$ neste aparelho:")||"").trim(); if(!pin) return;
-  const res=await verificaPin(nome,pin);
-  if(res===null){ alert("Sem internet pra validar agora — tente de novo."); return; }
-  if(!res.ok){ alert("PIN incorreto."); return; }
-  if(res.safrakey){ await aplicarEscopoLogin({...res, nome}); renderAll(); }
-  else { alert("Seu acesso à Safra em R$ ainda não foi liberado. Fale com o Wal (aba Equipe → 🔓 liberar Safra R$)."); }
+  const ok=await autoAtivarSafra(nome);
+  if(ok){ renderAll(); } else { alert("Seu acesso à Safra em R$ ainda não foi liberado. Fale com o Wal (aba Equipe → 🔓 liberar Safra R$)."); }
 }
 /* 🔓 AUTO-R$ p/ DIRETORIA: quando o operador diretoria (Wal/Fábio) loga, o servidor manda a finkey → abre o R$ SOZINHO (inclusive por biometria). Reps não recebem finkey → nada muda pra eles. */
 async function autoRSdir(finkey){
