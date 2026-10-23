@@ -312,6 +312,17 @@ def post_clinicas_rs(D):
         print(f"safra isolada (cifrado) -> HTTP {rs.status} ({len(fatmes)} clínicas)")
     except Exception as e:
         print(f"post safra falhou (ok, tenta no próximo ciclo): {e}")
+    # 📊 EXAMES MÊS A MÊS (PÚBLICO, SEM R$): pro time (ex.: Luciane) ver VOLUME + % de alta/queda sem ver dinheiro.
+    # Deriva de fatmesall ({ym,n,fat,nd,fd}) tirando fat/fd → só {ym,n,nd}. Em claro (não é dado financeiro).
+    try:
+        exmes = {c: [{"ym": m["ym"], "n": m.get("n", 0), "nd": m.get("nd", 0)} for m in arr] for c, arr in fatmesall.items()}
+        if exmes:
+            epayload = json.dumps({"acao": "set", "exmes": exmes, "dia": datetime.date.today().day, "senha": pwd}, ensure_ascii=False, separators=(",", ":")).encode()
+            re_ = urllib.request.urlopen(urllib.request.Request(
+                base + "/api/crm-exames", data=epayload, headers={"Content-Type": "application/json"}), timeout=45)
+            print(f"exames mês a mês (público) -> HTTP {re_.status} ({len(exmes)} clínicas)")
+    except Exception as e:
+        print(f"post exames falhou (ok, tenta no próximo ciclo): {e}")
 
 def post_clinicas_det():
     """Detalhe (setores/white-space + produção 30d/7d) SÓ das clínicas da carteira → /api/crm-clinicas-det.

@@ -1857,7 +1857,17 @@ function openReg(cod){
 }
 let EX_VIEW="dia";
 /* 📅 MÊS A MÊS da clínica — Exames e R$ lado a lado, coligação REAL mês a mês (% vs o mês anterior). Visual. */
-function fatmesDe(cod){ cod=String(cod||""); return (CLIN_FATMESALL&&CLIN_FATMESALL[cod]) || (CLIN_FATMES&&CLIN_FATMES[cod]) || null; }
+function fatmesDe(cod){ cod=String(cod||""); return (CLIN_FATMESALL&&CLIN_FATMESALL[cod]) || (CLIN_FATMES&&CLIN_FATMES[cod]) || (CLIN_EXMES&&CLIN_EXMES[cod]) || null; }
+/* 📊 EXAMES mês a mês PÚBLICO (sem R$): {cod:[{ym,n,nd}]} — pro time (Luciane) ver volume + % sem ver dinheiro */
+let CLIN_EXMES=null, CLIN_EXMES_DIA=0;
+async function loadExMes(){ try{ const r=await fetch("/api/crm-exames",{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&j.exmes){ CLIN_EXMES=j.exmes; CLIN_EXMES_DIA=j.dia||0; if(!CLIN_FATMESALL_DIA) CLIN_FATMESALL_DIA=CLIN_EXMES_DIA; } } }catch(e){} }
+/* 📝 NOTAS por clínica (feedback da equipe sobre o cliente) — {cod:[{ts,por,texto}]}, compartilhado */
+let CLIN_NOTAS={};
+const NOTAS_API="/api/crm-notas";
+async function loadNotas(){ try{ const r=await fetch(NOTAS_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); CLIN_NOTAS=(j&&j.notas)||{}; } }catch(e){} }
+function notasDe(cod){ return (CLIN_NOTAS&&CLIN_NOTAS[String(cod)])||[]; }
+async function addNota(cod, texto){ try{ const r=await fetch(NOTAS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",cod:String(cod),texto,por:(meuRep()||operadorAtual()||"equipe"),senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão — saia e entre de novo."); return false; } if(r.ok){ const j=await r.json(); if(j.notas) CLIN_NOTAS=j.notas; return true; } }catch(e){ alert("Sem internet."); } return false; }
+async function removeNota(cod, ts){ try{ const r=await fetch(NOTAS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",cod:String(cod),ts,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); if(j.notas) CLIN_NOTAS=j.notas; return true; } }catch(e){} return false; }
 function openMesAMes(cod, nome){
   cod=String(cod||"");
   const serie=(fatmesDe(cod)||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1);
@@ -1937,8 +1947,16 @@ function openMesAMes(cod, nome){
       ${dir?painel("fat","💰 Faturamento / mês","#00E5A0",v=>fmtBRL(v)):""}
     </div>
     ${ddHtml}
-    <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5"><b>Legenda:</b> 🟢 aumento · 🔴 queda · 🟠 queda leve · ⚠️ possível fuga de exames (caiu &gt;25%). Δ% = vs o mês anterior. O <b style="color:#ffd27a">mês atual é parcial</b> nos painéis de cima; a <b>3ª tabela</b> faz a comparação justa até o dia ${CLIN_FATMESALL_DIA||(new Date()).getDate()}. ${dir?"":"R$ é exclusivo da diretoria."}</div>`;
+    <div class="t-mut" style="font-size:10.5px;margin-top:9px;line-height:1.5"><b>Legenda:</b> 🟢 aumento · 🔴 queda · 🟠 queda leve · ⚠️ possível fuga de exames (caiu &gt;25%). Δ% = vs o mês anterior. O <b style="color:#ffd27a">mês atual é parcial</b> nos painéis de cima; a <b>3ª tabela</b> faz a comparação justa até o dia ${CLIN_FATMESALL_DIA||(new Date()).getDate()}. ${dir?"":"R$ é exclusivo da diretoria."}</div>
+    <div style="border-top:1px solid var(--line);margin-top:13px;padding-top:11px">
+      <div class="seclabel" style="margin:0 0 7px;color:#9fe6ff">📝 O que rolou com esse cliente <span class="t-mut" style="font-weight:500;font-size:11px">(feedback do time — todos veem, fica o histórico)</span></div>
+      <div>${notasDe(cod).slice().reverse().map(nt=>`<div style="background:rgba(0,212,255,.06);border-left:3px solid rgba(0,212,255,.45);border-radius:8px;padding:8px 10px;margin-bottom:7px"><div style="font-size:12.5px;color:#eaf3ff;line-height:1.5">${esc(nt.texto)}</div><div class="t-mut" style="font-size:10.5px;margin-top:4px">👤 <b>${esc(nt.por)}</b> · ${new Date(nt.ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} <button class="notaDel" data-ts="${nt.ts}" title="apagar" style="margin-left:6px;border:0;background:transparent;color:#ff8fa3;cursor:pointer;font-size:12px">✕</button></div></div>`).join("")||'<div class="t-mut" style="font-size:12px">Ainda sem anotação — seja o primeiro. 👇</div>'}</div>
+      <textarea id="notaTxt" placeholder="Ex.: liguei, a Dra. disse que o movimento caiu; prometeu voltar semana que vem…" style="width:100%;box-sizing:border-box;min-height:64px;margin-top:7px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:#eaf3ff;padding:8px 10px;font-size:13px;font-family:inherit"></textarea>
+      <button id="notaSave" class="checkinbtn" style="margin-top:7px;border-color:rgba(0,212,255,.5);color:#9fe6ff;font-weight:800">💾 Salvar feedback</button>
+    </div>`;
   document.getElementById("modal").style.display="flex"; document.getElementById("mClose").onclick=closeModal;
+  const _nsave=document.getElementById("notaSave"); if(_nsave) _nsave.onclick=async()=>{ const t=(document.getElementById("notaTxt").value||"").trim(); if(!t) return; _nsave.disabled=true; _nsave.textContent="Salvando…"; const ok=await addNota(cod,t); if(ok){ openMesAMes(cod,nome); } else { _nsave.disabled=false; _nsave.textContent="💾 Salvar feedback"; } };
+  body.querySelectorAll(".notaDel").forEach(b=>b.onclick=async()=>{ if(confirm("Apagar esta anotação?")){ if(await removeNota(cod,+b.dataset.ts)) openMesAMes(cod,nome); } });
 }
 function openExames(cod, nome){
   cod=String(cod||""); const d=CLIN_DET[cod]||{}; const rec=(d.recent||[]).slice();
@@ -2773,6 +2791,61 @@ function renderHeitor(c){
     <div style="margin-top:10px">${corpo}</div>`;
   c.querySelectorAll("[data-hr]").forEach(b=>b.onclick=()=>{ heitorRange=b.dataset.hr; renderTab(); });
   c.querySelectorAll("[data-hv]").forEach(b=>b.onclick=()=>{ heitorView=b.dataset.hv; renderTab(); });
+}
+/* 📊 RELATÓRIOS COMERCIAL (Luciane) — a Safra em EXAMES (sem R$): mesmo radar/% e o "+", mas volume no lugar de dinheiro */
+function comercialRelatorios(){
+  if(!CLIN_EXMES) return "";
+  const _p2=n=>String(n).padStart(2,"0"), _now=new Date();
+  const _curYm=_now.getFullYear()+"-"+_p2(_now.getMonth()+1);
+  const diaD=CLIN_EXMES_DIA||CLIN_FATMESALL_DIA||_now.getDate();
+  const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
+  const tipoIc={nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'}, tipoNm={nova:'nova',reconquistada:'reconquistada (voltou)',divide:'divide material (manda só parte)',particular:'particular'};
+  const quedaEx=(cod)=>{ const s=(fatmesDe(String(cod))||[]).filter(m=>m.nd!=null).slice().sort((a,b)=>a.ym<b.ym?-1:1);
+    if(s.length<2) return {pior:null};
+    const atual=s[s.length-1]; if(atual.ym!==_curYm) return {pior:null};
+    const prev=s[s.length-2], hist=s.slice(0,-1);
+    const dRitmo=(prev&&prev.nd>0)?atual.nd/prev.nd-1:null;
+    const bestM=hist.reduce((a,m)=>(m.nd||0)>(a?(a.nd||0):-1)?m:a,null), bestN=bestM?(bestM.nd||0):0;
+    const dBest=bestN>0?atual.nd/bestN-1:null;
+    const cand=[dRitmo,dBest].filter(v=>v!=null); if(!cand.length) return {pior:null};
+    const pior=Math.min(...cand), piorEh=(dBest!=null&&(dRitmo==null||dBest<=dRitmo))?'best':'ritmo';
+    return {pior,dRitmo,dBest,piorEh,atual,prev,bestM}; };
+  const rowsAll=CARTEIRA.filter(x=>x.cod && (fatmesDe(x.cod)||[]).length).map(x=>{ const arr=fatmesDe(x.cod)||[];
+    return {cod:String(x.cod), nome:x.nome, tipo:x.tipo, arr, q:quedaEx(x.cod), tot:arr.reduce((s,a)=>s+(a.n||0),0)}; });
+  const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,"");
+  const seen=new Map(); rowsAll.forEach(r=>{const k=norm(r.nome);const p=seen.get(k);if(!p||r.tot>p.tot)seen.set(k,r);});
+  let L=[...seen.values()];
+  L.sort((a,b)=>{ const ca=!!(a.q&&a.q.pior!=null&&a.q.pior<=-0.05), cb=!!(b.q&&b.q.pior!=null&&b.q.pior<=-0.05); if(ca!==cb)return ca?-1:1; if(ca&&cb)return a.q.pior-b.q.pior; return b.tot-a.tot; });
+  const nota1=`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:6px 0 10px;line-height:1.5">📊 <b>Movimento das clínicas — em exames</b>. Tendência, % de alta/queda e fuga por clínica. Toque no <b style="color:#9fe6ff">+</b> pra abrir o mês a mês e <b>registrar o que rolou com o cliente</b>. <i>(Sem valores — só volume.)</i></div>`;
+  if(!L.length) return nota1+`<div class="proxhint" style="margin-top:8px">Os números de exames por clínica entram no próximo ciclo do robô.</div>`;
+  const mset={}; L.forEach(r=>r.arr.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort();
+  const nOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?(x.n||0):0;};
+  const fD=d=> d==null?'<span class="t-mut">s/ base</span>': (d<0?`<b style="color:#ff6b81">▼ ${Math.abs(Math.round(d*100))}%</b>`:(d>0?`<b style="color:#7effcf">▲ ${Math.round(d*100)}%</b>`:`<b style="color:#9fb2cc">0%</b>`));
+  const caindo=L.filter(r=>r.q&&r.q.pior!=null&&r.q.pior<=-0.15).sort((a,b)=>a.q.pior-b.q.pior);
+  let radar="";
+  if(caindo.length){ radar=`<div class="qpulse" style="border:2px solid #FF2D55;border-radius:13px;padding:11px 14px;margin:0 0 12px;background:rgba(255,45,85,.12)">
+    <div style="font-size:12.5px;font-weight:900;color:#ff6b81;text-transform:uppercase;letter-spacing:.4px">🔴 Queda de movimento — ${caindo.length} cliente(s) caindo</div>
+    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${caindo.slice(0,8).map(r=>`<div style="font-size:12px;color:#ffc9d2;border-top:1px solid rgba(255,255,255,.06);padding-top:4px"><div><span style="font-size:15px">${tipoIc[r.tipo]||''}</span> <b>${esc(r.nome)}</b> <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" style="margin-left:2px;border:0;background:rgba(0,212,255,.15);color:#9fe6ff;border-radius:6px;padding:1px 8px;font-weight:800;cursor:pointer">ver +</button></div><div class="t-mut" style="font-size:11px;margin-top:1px">exames (até dia ${diaD}): ${fD(r.q.dRitmo)} <span style="color:#6b7a90">vs mês anterior</span> · ${fD(r.q.dBest)} <span style="color:#6b7a90">vs melhor mês${r.q.bestM?` (${mlab(r.q.bestM.ym)})`:''}</span></div></div>`).join("")}</div>
+    <div style="font-size:10.5px;color:#ff9fb0;margin-top:6px;line-height:1.45">👉 toque em <b>ver +</b> pra abrir e <b>anotar o que descobriu</b> com a clínica.</div></div>`; }
+  const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:6px 8px;border-right:1px solid rgba(0,212,255,.25)";
+  const th="padding:5px 8px;text-align:right;color:var(--mut);font-size:10.5px";
+  const td="padding:5px 8px;text-align:right";
+  const totCol={}; meses.forEach(ym=>totCol[ym]=0); let grand=0;
+  const body=L.map((r,i)=>{ const q=r.q||{}, cai=q.pior!=null&&q.pior<=-0.05, forte=q.pior!=null&&q.pior<=-0.15;
+    const bl=forte?';border-left:3px solid #FF2D55':(cai?';border-left:3px solid #FF8A00':''); grand+=r.tot;
+    meses.forEach(ym=>totCol[ym]+=nOf(r.arr,ym));
+    const mom=(q.dRitmo!=null)?q.dRitmo:null;
+    const momBadge=mom==null?'':` <span style="font-size:10px;font-weight:800;color:${mom<-0.001?'#ff6b81':(mom>0.001?'#7effcf':'#9fb2cc')};white-space:nowrap" title="exames até o dia ${diaD} vs o mês anterior no mesmo dia">${mom<0?'▼':(mom>0?'▲':'•')}${Math.abs(Math.round(mom*100))}% vs mês ant.</span>`;
+    const chip=cai?` <span class="${forte?'qpulse':''}" title="exames (até dia ${diaD}) ${q.piorEh==='best'?'vs o melhor mês':'vs o mês passado'}" style="display:inline-block;background:${forte?'rgba(255,45,85,.22)':'rgba(255,138,0,.18)'};color:${forte?'#ff6b81':'#ffc266'};border:1px solid ${forte?'rgba(255,45,85,.6)':'rgba(255,138,0,.5)'};border-radius:12px;padding:0 7px;font-size:10.5px;font-weight:800;white-space:nowrap">▼ ${Math.abs(Math.round(q.pior*100))}%${q.piorEh==='best'?' vs auge':''}</span>`:'';
+    const plus=` <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" title="Abrir análise + deixar feedback" style="margin-left:3px;width:22px;height:22px;border-radius:7px;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.1);color:#9fe6ff;font-weight:800;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle">+</button>`;
+    const nt=notasDe(r.cod), ult=nt.length?nt[nt.length-1]:null;
+    const hint=ult?`<div style="font-size:10.5px;margin-top:3px;color:#9fe6ff">📝 <b>${esc(ult.por)}</b>: ${esc(String(ult.texto).slice(0,70))}${String(ult.texto).length>70?'…':''}</div>`:'';
+    return `<tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="${sc}${bl}"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> ${esc(r.nome)}${momBadge}${chip}${plus}${hint}</td>${meses.map(ym=>{const v=nOf(r.arr,ym);return `<td style="${td};color:${v?'#9fe6ff':'var(--mut)'}">${v||'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:#9fe6ff">${r.tot}</td></tr>`;}).join("");
+  const foot=`<tr style="border-top:2px solid rgba(0,212,255,.4)"><td style="${sc};font-weight:800">TOTAL (${L.length})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${totCol[ym]}</td>`).join("")}<td style="${td};font-weight:900;color:#9fe6ff">${grand}</td></tr>`;
+  const tabela=`<div class="seclabel" style="margin:0 0 6px">📊 Exames por mês <span class="t-mut" style="font-weight:500;font-size:11px">(por clínica, desde a entrada — nº de exames)</span></div>
+    <div class="t-mut" style="font-size:11px;margin:0 0 7px;line-height:1.5">🆕 nova · ♻️ reconquistada (voltou) · 🔀 divide material · 🐾 particular. <b style="color:#ff6b81">em queda</b> no topo. ▲/▼ = exames vs mês anterior.</div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,212,255,.25);border-radius:8px"><table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%"><thead><tr style="background:rgba(0,212,255,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#9fe6ff">Total</th></tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>`;
+  return nota1+radar+tabela;
 }
 /* 🛠️ ABA EQUIPE (item 2) — admin (Wal) gerencia colaboradores: papel, escopo "vê Safra" (item 3), admin, ativo */
 async function opsPost(body){
@@ -3761,7 +3834,7 @@ function renderTab(){
       let painel="";
       const _scopeSafra = !ehDiretoria() && veSafra();   // item 3: Fábio vê SÓ a Safra em R$
       if(!ehDiretoria() && !_scopeSafra){
-        painel="";   // reps NÃO veem nada de R$ — nem que existe
+        painel = CLIN_EXMES ? comercialRelatorios() : "";   // comercial (Luciane) vê EXAMES + % + "+", SEM R$
       } else if(_scopeSafra && !CLIN_FATMES){
         painel=`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:8px 0 6px;text-align:center;line-height:1.55">🔒 Sua <b>Safra em R$</b> está carregando… se não aparecer, saia e entre de novo.</div>`;
       } else if(ehDiretoria() && !CLIN_RS){
@@ -4999,12 +5072,12 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       if(veSafra() && !CLIN_FATMES){ const sc=localStorage.getItem("crm_safra_code"); if(sc) await decSafra(sc); }   // Fábio: a Safra reabre sozinha neste aparelho
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
-      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart(), loadDet(), loadAAA(), loadRel(), loadPautas()]);
+      await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart(), loadDet(), loadAAA(), loadRel(), loadPautas(), loadNotas()]);
       if(ehDiretoria() && dirCodeCache()){ await loadClinRS(); await decDirRS(dirCodeCache()); }   // R$/conquistas frescos p/ diretoria
       if(a!==sig()) renderTab(); }, 45000);
   }
