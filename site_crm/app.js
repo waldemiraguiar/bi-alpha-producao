@@ -1058,6 +1058,7 @@ let pautaView="atual";  // "atual" | "historico"
 let pautaHistId=null;   // pauta aberta no histórico
 let PAUTA_SEL=new Set(); // tópicos marcados p/ encaminhar à próxima
 let retHoje=false;   // Retornos/rotas: ver "atividade de hoje" (o que o rep fez hoje) em vez da agenda futura
+let retornosFiltro="tudo";   // "tudo"|"hoje"|"semana"|"mes" — filtro de período da aba Clientes para visitar
 /* ---- ☑️ SELEÇÃO EM LOTE (marcar isolado/todos + mover entre abas) ---- */
 let selMode=false; const SEL=new Set();
 function selReset(){ selMode=false; SEL.clear(); }
@@ -4611,13 +4612,18 @@ function renderTab(){
       const today=new Date(); today.setHours(0,0,0,0); const tISO=today.toISOString().slice(0,10);
       const semFimISO=new Date(today.getTime()+7*864e5).toISOString().slice(0,10);
       const atras=ret.filter(f=>f.proximo<tISO).length, semana=ret.filter(f=>f.proximo>=tISO&&f.proximo<=semFimISO).length;
-      const bc={}; ret.forEach(f=>{const b=f.bairro||"(sem bairro)"; bc[b]=(bc[b]||0)+1;});
+      const mesFimISO=new Date(today.getFullYear(),today.getMonth()+1,0).toISOString().slice(0,10);
+      const retVis = retornosFiltro==='hoje' ? ret.filter(f=>f.proximo===tISO)
+        : retornosFiltro==='semana' ? ret.filter(f=>f.proximo>=tISO&&f.proximo<=semFimISO)
+        : retornosFiltro==='mes' ? ret.filter(f=>f.proximo<=mesFimISO)
+        : ret;
+      const bc={}; retVis.forEach(f=>{const b=f.bairro||"(sem bairro)"; bc[b]=(bc[b]||0)+1;});
       const chips=Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([b,n])=>`<span class="comp-pill"><b>📍 ${esc(b)}</b> ${n}</span>`).join("");
       const linha=f=>`<div class="crow" data-fb="${esc(f.id)}" style="cursor:pointer">${selBox(f.id)}<div class="rk" style="color:#00D4FF">↻</div>
         <div><div class="nm">${esc(f.cliente||"(sem nome)")}${f.origem==="telefone"?' <span class="pr" style="background:rgba(0,212,255,.16);color:#9fe6ff;font-size:11px">📞 telefone</span>':""}</div><div class="ci">${esc((PRES[f.resultado]||PRES.visita).lbl)}${f.texto?' · "'+esc(f.texto.slice(0,60))+'"':''}</div></div><div class="mid"></div>
         <div class="rcell" style="flex-direction:column;gap:5px;align-items:stretch"><button class="baixabtn ok" data-cheguei="${esc(f.id)}" onclick="event.stopPropagation()" title="Cheguei na clínica — check-in de chegada (depois: feedback + saída)">📍 Cheguei</button><button class="baixabtn" data-jafoi="${esc(f.id)}" onclick="event.stopPropagation()" style="border-color:rgba(0,229,160,.4);color:#7effcf" title="O rep já foi mas ficou pendente — marcar como visitado (escritório, sem GPS)">✓ Já foi</button><button class="baixabtn no" data-desm="${esc(f.id)}" onclick="event.stopPropagation()" title="Cliente desmarcou — precisa do código da diretoria">🚫 desmarcou</button></div></div>`;
       // agenda por COMERCIAL → dia → bairro (cada vendedor tem a SUA rota; incompatibilidade vale por vendedor)
-      const byRep={}; ret.forEach(f=>{ const rp=f.por||"(sem comercial)"; (byRep[rp]=byRep[rp]||[]).push(f); });
+      const byRep={}; retVis.forEach(f=>{ const rp=f.por||"(sem comercial)"; (byRep[rp]=byRep[rp]||[]).push(f); });
       const diaCard=(d, items)=>{ const bgrp={}; items.forEach(f=>{const b=f.bairro||"(sem bairro)"; (bgrp[b]=bgrp[b]||[]).push(f);});
         const bairrosNomes=Object.keys(bgrp), nb=bairrosNomes.length, late=d<tISO, ehoje=d===tISO, prox=(d>tISO&&d<=semFimISO);
         const cls = late?"retday-late" : (ehoje?"retday-hoje" : (prox?"retday-pulse":""));
@@ -4667,21 +4673,28 @@ function renderTab(){
           <div class="seclabel">📅 Atividade de HOJE · por comercial <span class="t-mut" style="font-weight:500">— visitas e contatos que o rep fez hoje (não precisa procurar um por um)</span></div>
           ${hojeSec}
         `:`
+        <div style="margin:0 0 8px"><button class="regbtn" id="retornosPrint">🖨️ Imprimir / PDF</button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:#9fb2cc">📅 Filtrar:</span>
+          ${[['tudo','Todos'],['hoje','Hoje'],['semana','Esta semana'],['mes','Este mês']].map(([k,l])=>`<button data-rfil="${k}" style="cursor:pointer;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:800;border:1px solid ${retornosFiltro===k?'#00D4FF':'rgba(255,255,255,.14)'};background:${retornosFiltro===k?'rgba(0,212,255,.18)':'transparent'};color:${retornosFiltro===k?'#00D4FF':'#9fb2cc'}">${l}</button>`).join("")}
+        </div>
         <div class="kgrid">
           ${kpi("r", atras, "Atrasados", "passaram da data")}
           ${kpi("a", semana, "Esta semana", "próximos 7 dias")}
-          ${kpi("", ret.length, "Retornos", repFilter?("de "+esc(repFilter)):"pendentes")}
+          ${kpi("", retVis.length, "Retornos", retornosFiltro==='tudo'?(repFilter?"de "+esc(repFilter):"pendentes"):("filtro: "+retornosFiltro))}
           ${kpi(aVisitar.length?"g":"", aVisitar.length, "A visitar", "sem data ainda")}
         </div>
-        ${selBar([...ret.map(f=>f.id), ...aVisitar.map(f=>f.id)])}
+        ${selBar([...retVis.map(f=>f.id), ...aVisitar.map(f=>f.id)])}
         ${avSec}
-        ${ret.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
+        ${retVis.length?`<div class="card" style="margin-bottom:14px;border-color:rgba(0,212,255,.3)"><h3>🗺️ Por bairro — pra montar a rota <span class="tag">junte o mesmo bairro no mesmo dia</span></h3><div class="complist">${chips}</div></div>`:""}
         <div class="seclabel">📅 Agenda de rota · por comercial → dia <span class="t-mut" style="font-weight:500">— dias da semana piscam amarelo (ir); ⚠️ mistura de bairros no mesmo dia = rota inviável</span></div>
-        ${ret.length? agenda : `<div class="empty">Sem retornos agendados. Lance clientes acima (🎯 sem data ou 📞 por telefone) ou preencha o retorno num feedback — a agenda se monta aqui.</div>`}`}`;
+        ${retVis.length? agenda : `<div class="empty">${retornosFiltro!=='tudo'?'Sem retornos para o período selecionado. Experimente "Todos".':'Sem retornos agendados. Lance clientes acima (🎯 sem data ou 📞 por telefone) ou preencha o retorno num feedback — a agenda se monta aqui.'}</div>`}`}`;
       wirePista();
       const rAg=document.getElementById("retAgenda"); if(rAg) rAg.onclick=()=>{ retHoje=false; renderTab(); };
       const rHj=document.getElementById("retHojeBtn"); if(rHj) rHj.onclick=()=>{ retHoje=true; renderTab(); };
       const acb=document.getElementById("addCliente"); if(acb) acb.onclick=()=>openAddCliente();
+      document.querySelectorAll("#content [data-rfil]").forEach(el=>el.onclick=()=>{ retornosFiltro=el.dataset.rfil; renderTab(); });
+      const _rtp=document.getElementById("retornosPrint"); if(_rtp) _rtp.onclick=()=>window.print();
       document.querySelectorAll("#content [data-delav]").forEach(el=>el.onclick=async(e)=>{ e.stopPropagation(); const f=PISTA.find(x=>x.id===el.dataset.delav); if(f && confirm(`Remover "${f.cliente||""}" da lista de visita?`)){ await removePista(f.id); renderTab(); } });
       upgradeRotas();   // troca a estimativa por reta pela distância de RUA real (OSRM) quando online
       return;
