@@ -4784,14 +4784,14 @@
         dados.coleta_data = new Date().toISOString().slice(0, 10)
       if (tq.checked && campo === 'laudo_chegou' && !caso.laudo_em)
         dados.laudo_em = new Date().toISOString().slice(0, 10)
-      // 🔴 Fúlvio 19/out: NÃO pode marcar "amostra enviada pelos Correios" (⑫) sem o PAGAMENTO (⑤)
-      //   VALIDADO — validado = pago à vista OU na fatura. "Aguardando o pagamento" ou vazio = BLOQUEIA.
-      //   (Trava de verdade pedida pelo sócio, como o microchip×vacina acima — não é só alerta.)
-      if (tq.checked && campo === 'correios_ok') {
+      // 🔴 Fúlvio 19/out: NÃO pode avançar sem o PAGAMENTO (⑤) VALIDADO.
+      //   Fúlvio 23/out: trava fica NO ⑪ (devolvido_ok) — ao marcar ⑪ o ⑫ se revela,
+      //   então é aqui que se verifica. Três status: fatura (ok) · avista (ok) · aguardando (BLOQUEIA).
+      if (tq.checked && campo === 'devolvido_ok') {
         const pg = String(caso.pagamento || '').split('|')[0]
         if (pg !== 'avista' && pg !== 'fatura') {
           tq.checked = false
-          toast('⛔ Pagamento ' + (pg === 'aguardando' ? 'ainda "aguardando a confirmação"' : 'ainda não lançado') + '. Para avançar pro ⑫ Correios, o ⑤ Pagamento precisa estar validado — faturado (na fatura) ou confirmado (pago à vista). Aguarde a confirmação e marque de novo.', true)
+          toast('⛔ Pagamento ' + (pg === 'aguardando' ? 'ainda "aguardando a confirmação"' : 'ainda não lançado') + '. Para liberar o ⑫ Correios, o ⑤ Pagamento precisa estar confirmado — faturado (na fatura) ou confirmado (pago à vista). Aguarde a confirmação e marque de novo.', true)
           return
         }
       }
