@@ -1087,6 +1087,7 @@ function selBar(ids){
   ids=ids||[]; const n=SEL.size, isRel=(pistaView==="relatos");
   const acts=(selMode&&n)?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
       ${isRel?"":`<button class="baixabtn ok" id="selRetorno" style="margin:0">📅 Jogar pra Retorno</button><button class="baixabtn ok" id="selRelato" style="margin:0">📣 Copiar p/ Relato</button>`}
+      ${pistaView==="retornos"?`<button class="baixabtn ok" id="selPrint" style="margin:0">🖨️ PDF (${n})</button>`:""}
       <button class="baixabtn no" id="selDel" style="margin:0">🗑️ Excluir (${n})</button>
       <button class="subtab" id="selClear" style="margin:0">limpar</button></div>`:"";
   return `<div class="card" style="margin-bottom:12px;padding:10px 12px;border-color:${selMode?'rgba(0,229,160,.4)':'rgba(255,255,255,.08)'}">
@@ -1117,6 +1118,28 @@ async function bulkExcluir(){
     else { const f=PISTA.find(x=>x.id===id); if(f){ try{ await fetch(EXCL_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",senha:window.__pwd,item:{tipo:"Feedback pista",cliente:f.cliente,bairro:f.bairro,resumo:(f.texto||"").slice(0,200),por_registro:f.por,por_exclusao:por,motivo,ts_original:f.ts}})}); }catch(e){} await removePista(id); } }
   }
   await loadExcl(); selReset(); renderTab();
+}
+function printSelecionados(){
+  const ids=[...SEL]; if(!ids.length){ alert("Nada selecionado."); return; }
+  const items=ids.map(id=>PISTA.find(x=>x.id===id)).filter(Boolean);
+  if(!items.length){ alert("Itens não encontrados."); return; }
+  const dt=new Date(), p2=n=>String(n).padStart(2,"0");
+  const cab=`${p2(dt.getDate())}/${p2(dt.getMonth()+1)}/${dt.getFullYear()} ${p2(dt.getHours())}:${p2(dt.getMinutes())}`;
+  const esc2=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const linhas=items.sort((a,b)=>(a.proximo||"zzz").localeCompare(b.proximo||"zzz")).map(f=>{
+    const pr=PRES[f.resultado]||PRES.visita;
+    const data=f.proximo?fmtDataBR(f.proximo):"sem data";
+    return `<tr><td>${esc2(f.cliente||"—")}</td><td>${esc2(f.bairro||"—")}</td><td>${esc2(f.por||"—")}</td><td>${esc2(data)}</td><td>${esc2(pr.lbl)}</td><td>${esc2((f.texto||"").slice(0,100))}</td></tr>`;
+  }).join("");
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Clientes p/ visitar · ${esc2(cab)}</title>
+  <style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}h2{font-size:14px;margin-bottom:10px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:5px 7px;text-align:left;vertical-align:top}th{background:#e8ecf0;font-weight:700}tr:nth-child(even){background:#f8f9fa}.bar{margin-bottom:12px;display:flex;gap:8px}@media print{.bar{display:none}body{margin:10px}}</style>
+  </head><body>
+  <div class="bar"><button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button><button onclick="window.close()">Fechar</button></div>
+  <h2>📅 Clientes para visitar — ${items.length} selecionado(s) · ${esc2(cab)}</h2>
+  <table><thead><tr><th>Cliente</th><th>Bairro</th><th>Comercial</th><th>Data visita</th><th>Resultado</th><th>Observação</th></tr></thead><tbody>${linhas}</tbody></table>
+  </body></html>`;
+  const w=window.open("","_blank","width=950,height=700");
+  if(w){ w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),400); }
 }
 /* Presença comprovada (check-in de chegada) — vale como visita REALIZADA mesmo sem a baixa formal do retorno */
 function temPresenca(f){ return !!((f.checkin&&f.checkin.ts)||(f.baixa&&f.baixa.checkin&&f.baixa.checkin.ts)); }
@@ -2937,6 +2960,8 @@ function renderTab(){
     const focoAgu = !diaFilter ? foco.filter(x=>{ const r=retorno(x.cod); return r&&r.status==="futuro"; }) : [];
     const focoVis = !diaFilter ? foco.filter(x=>{ const r=retorno(x.cod); return !(r&&r.status==="futuro"); }) : foco;
     const arr = bumpDue(flt(focoVis));
+    const q=search.trim().toLowerCase();
+    const arrF=q?arr.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):arr;
     const calm = arr.length===0; const dc = dueCount();
     const riscoPct = ativos ? 100*foco.length/ativos : 0;
     const nPar = cnt('parados'), nNovos = cnt('novos_esfriando');
@@ -2966,13 +2991,18 @@ function renderTab(){
         ${kpi("", nNovos, "🌱 Novos esfriando", "aba Onboarding — nutrir")}
       </div>
       <div class="seclabel">${diaFilter?"📞 Contatos do dia — retorno agendado p/ hoje":"🎯 Fila diária — queda forte + em queda (priorizada)"}</div>
-      ${list(arr, {acao:true, rank:true, fu:true})}
+      <div style="margin:8px 0 10px"><input class="wlsearch" id="lupaReativar" placeholder="🔍 buscar cliente ou cidade…" value="${esc(search)}"></div>
+      ${arrF.length ? list(arrF, {acao:true, rank:true, fu:true}) : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`}
       ${focoAgu.length ? `<div class="t-mut" style="font-size:12px;margin-top:12px;padding:10px 14px;background:rgba(255,255,255,0.05);border-radius:8px;line-height:1.6">⏰ <b>${focoAgu.length}</b> cliente(s) com retorno futuro agendado — ocultos até a data chegar: ${focoAgu.map(x=>esc(x.nome)).join(", ")}</div>` : ""}`;
+    const _lreat=document.getElementById("lupaReativar");
+    if(_lreat){ _lreat.addEventListener("input",e=>{ search=e.target.value; pinned=true; setPin(); const p=_lreat.selectionStart; renderTab(); const l2=document.getElementById("lupaReativar"); if(l2){l2.focus();try{l2.setSelectionRange(p,p);}catch(_){}}}); }
     return;
   }
 
   if(ACTIVE==="em_queda"){
     const arr = flt(act(D.em_queda||[]));
+    const q=search.trim().toLowerCase();
+    const arrF=q?arr.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):arr;
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*cnt('em_queda')/ativos:0, "#FF5470", "em queda")}
         <div class="kgrid" style="margin:0">
@@ -2981,7 +3011,10 @@ function renderTab(){
           ${kpi("", ativos, "Carteira ativa", "clientes com envio recente")}
         </div></div>
       <div class="seclabel">▼ Em queda — acompanhar de perto</div>
-      ${list(arr, {badge:"motivo", rank:true, fu:true})}`;
+      <div style="margin:8px 0 10px"><input class="wlsearch" id="lupaEmQueda" placeholder="🔍 buscar cliente ou cidade…" value="${esc(search)}"></div>
+      ${arrF.length ? list(arrF, {badge:"motivo", rank:true, fu:true}) : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`}`;
+    const _leq=document.getElementById("lupaEmQueda");
+    if(_leq){ _leq.addEventListener("input",e=>{ search=e.target.value; pinned=true; setPin(); const p=_leq.selectionStart; renderTab(); const l2=document.getElementById("lupaEmQueda"); if(l2){l2.focus();try{l2.setSelectionRange(p,p);}catch(_){}}}); }
     return;
   }
 
@@ -2990,6 +3023,8 @@ function renderTab(){
     const parAgu = !diaFilter ? par.filter(x=>{ const r=retorno(x.cod); return r&&r.status==="futuro"; }) : [];
     const parVis = !diaFilter ? par.filter(x=>{ const r=retorno(x.cod); return !(r&&r.status==="futuro"); }) : par;
     const arr = bumpDue(flt(parVis));
+    const q=search.trim().toLowerCase();
+    const arrF=q?arr.filter(x=>((x.nome||"")+" "+(x.cidade||"")).toLowerCase().includes(q)):arr;
     c.innerHTML = `
       <div class="hero">${ring(ativos? 100*arr.length/ativos:0, "#FF5470", "parados")}
         <div class="kgrid" style="margin:0">
@@ -2998,8 +3033,11 @@ function renderTab(){
           ${kpi("", ativos, "Carteira ativa", "")}
         </div></div>
       <div class="seclabel">⛔ Parados — priorizar contato (recência primeiro) <span class="t-mut" style="font-weight:500">· fora dos somatórios gerais (lista à parte)</span>${INAT.size?` <span class="t-mut" style="font-weight:500">· 🚫 ${INAT.size} inativo(s) fora da conta</span>`:""}</div>
-      ${list(arr, {badge:"motivo", rank:true, fu:true})}
+      <div style="margin:8px 0 10px"><input class="wlsearch" id="lupaParados" placeholder="🔍 buscar cliente ou cidade…" value="${esc(search)}"></div>
+      ${arrF.length ? list(arrF, {badge:"motivo", rank:true, fu:true}) : `<div class="empty">Nada encontrado para "${esc(search)}".</div>`}
       ${parAgu.length ? `<div class="t-mut" style="font-size:12px;margin-top:12px;padding:10px 14px;background:rgba(255,255,255,0.05);border-radius:8px;line-height:1.6">⏰ <b>${parAgu.length}</b> parado(s) com retorno futuro agendado — ocultos até a data chegar: ${parAgu.map(x=>esc(x.nome)).join(", ")}</div>` : ""}`;
+    const _lpar=document.getElementById("lupaParados");
+    if(_lpar){ _lpar.addEventListener("input",e=>{ search=e.target.value; pinned=true; setPin(); const p=_lpar.selectionStart; renderTab(); const l2=document.getElementById("lupaParados"); if(l2){l2.focus();try{l2.setSelectionRange(p,p);}catch(_){}}}); }
     return;
   }
 
@@ -4647,6 +4685,7 @@ function renderTab(){
       const _sr=document.getElementById("selRetorno"); if(_sr) _sr.onclick=()=>bulkRetorno();
       const _srl=document.getElementById("selRelato"); if(_srl) _srl.onclick=()=>bulkRelato();
       const _sd=document.getElementById("selDel"); if(_sd) _sd.onclick=()=>bulkExcluir();
+      const _sprint=document.getElementById("selPrint"); if(_sprint) _sprint.onclick=()=>printSelecionados();
       document.querySelectorAll("#content [data-obs]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); addObs(el.dataset.obs); });
       document.querySelectorAll("#content [data-delfb]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); excluirFeedback(el.dataset.delfb); });
       document.querySelectorAll("#content [data-cheguei]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const f=PISTA.find(x=>x.id===el.dataset.cheguei); if(f) iniciarVisita({id:f.id,cliente:f.cliente,bairro:f.bairro}); });
