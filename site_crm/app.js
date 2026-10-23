@@ -3537,7 +3537,7 @@ function renderTab(){
         }).join("");
         const zerLinha=dados.filter(d=>d.rsv==null&&d.x.cod).map(d=>`<div class="ci t-mut" style="font-size:11.5px">• ${esc(d.x.nome)} — sem R$ (0 exames / pendente)</div>`).join("");
         // 💰 SAFRA — dinheiro mês a mês por clínica desde o marco zero (matriz consolidada, pedido do Wal)
-        let cohortHtml="";
+        let cohortHtml="", radarQueda="";
         if(CLIN_FATMES){
           // TODAS as clínicas com marco (dated) — inclui as ZERADAS (0 exames) com R$ 0; ordena por total desc; numera
           // DINHEIRO NOVO: reconq/nova = tudo (fatmes); DIVIDE = só a CONQUISTA (conqmes) — o baseline/histopato é dinheiro VELHO, não entra; e só aparece quando converter
@@ -3545,26 +3545,55 @@ function renderTab(){
           const fmRows=dados.filter(d=>{ if(!d.x.cod) return false;
               if(d.x.tipo==="divide") return cqm(d.x.cod).length>0;   // divide só entra na safra depois de converter
               return d.x.reconq_data || (CLIN_FATMES[String(d.x.cod)]||[]).length; })
-            .map(d=>({nome:d.x.nome,tipo:d.x.tipo,arr:(d.x.tipo==="divide"?cqm(d.x.cod):(CLIN_FATMES[String(d.x.cod)]||[]))}));
+            .map(d=>({cod:String(d.x.cod),nome:d.x.nome,tipo:d.x.tipo,arr:(d.x.tipo==="divide"?cqm(d.x.cod):(CLIN_FATMES[String(d.x.cod)]||[]))}));
           fmRows.forEach(r=>r.tot=r.arr.reduce((s,a)=>s+a.fat,0));
           fmRows.sort((a,b)=>b.tot-a.tot);
           const mset={}; fmRows.forEach(r=>r.arr.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort();
+          // 🔴 QUEDA DE MOVIMENTO (item 6) — exames (até o dia D) deste mês vs o mês passado no MESMO dia E vs o MELHOR mês. O pior manda.
+          const _curYmS=(()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");})();
+          const diaD=CLIN_FATMESALL_DIA||(new Date()).getDate();
+          const quedaDe=(cod)=>{ const s=(fatmesDe(String(cod))||[]).filter(m=>m.nd!=null).slice().sort((a,b)=>a.ym<b.ym?-1:1);
+            if(s.length<2) return {pior:null};
+            const atual=s[s.length-1]; if(atual.ym!==_curYmS) return {pior:null};   // só alerta no mês corrente
+            const prev=s[s.length-2], hist=s.slice(0,-1);
+            const dRitmo=(prev&&prev.nd>0)?atual.nd/prev.nd-1:null;
+            const bestM=hist.reduce((a,m)=>(m.nd||0)>(a?(a.nd||0):-1)?m:a,null), bestN=bestM?(bestM.nd||0):0;
+            const dBest=bestN>0?atual.nd/bestN-1:null;
+            const cand=[dRitmo,dBest].filter(v=>v!=null);
+            if(!cand.length) return {pior:null};
+            const pior=Math.min(...cand), piorEh=(dBest!=null&&(dRitmo==null||dBest<=dRitmo))?'best':'ritmo';
+            return {pior,dRitmo,dBest,piorEh,atual,prev,bestM}; };
+          fmRows.forEach(r=>r.q=quedaDe(r.cod));
           if(fmRows.length&&meses.length){
             const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
             const fatOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?x.fat:0;};
+            const tipoIc={nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'}, tipoNm={nova:'nova',reconquistada:'reconquistada (voltou)',divide:'divide material (manda só parte)',particular:'particular'};
             const totCol={}; meses.forEach(ym=>totCol[ym]=0); let grand=0;
-            const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:5px 8px;border-right:1px solid rgba(0,229,160,.25)";
+            const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:6px 8px;border-right:1px solid rgba(0,229,160,.25)";
             const th="padding:5px 8px;text-align:right;color:var(--mut);font-size:10.5px";
             const td="padding:5px 8px;text-align:right";
             const body=fmRows.map((r,i)=>{const tot=r.tot,zer=tot<=0;grand+=tot;meses.forEach(ym=>totCol[ym]+=fatOf(r.arr,ym));
-              return `<tr style="border-top:1px solid rgba(255,255,255,.06)${zer?';opacity:.72':''}"><td style="${sc}"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> ${({nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'})[r.tipo]||'♻️'} ${esc(r.nome)}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
+              const q=r.q||{}, cai=q.pior!=null&&q.pior<=-0.05, forte=q.pior!=null&&q.pior<=-0.15;
+              const bl=forte?';border-left:3px solid #FF2D55':(cai?';border-left:3px solid #FF8A00':'');
+              const chip=cai?` <span class="${forte?'qpulse':''}" title="movimento (exames até o dia ${diaD}) ${q.piorEh==='best'?'vs o melhor mês':'vs o mês passado no mesmo dia'}" style="display:inline-block;background:${forte?'rgba(255,45,85,.22)':'rgba(255,138,0,.18)'};color:${forte?'#ff6b81':'#ffc266'};border:1px solid ${forte?'rgba(255,45,85,.6)':'rgba(255,138,0,.5)'};border-radius:12px;padding:0 7px;font-size:10.5px;font-weight:800;white-space:nowrap">▼ ${Math.abs(Math.round(q.pior*100))}%${q.piorEh==='best'?' vs auge':''}</span>`:'';
+              const plus=` <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" title="Abrir análise completa (mês a mês · benchmark · fuga)" style="margin-left:3px;width:22px;height:22px;border-radius:7px;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.1);color:#9fe6ff;font-weight:800;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle">+</button>`;
+              return `<tr style="border-top:1px solid rgba(255,255,255,.06)${zer?';opacity:.72':''}"><td style="${sc}${bl}"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> ${esc(r.nome)}${chip}${plus}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
             const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmRows.length})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
-            cohortHtml=`<div class="seclabel" style="margin:14px 0 6px">💰 Dinheiro por mês <span class="t-mut" style="font-weight:500;font-size:11px">(safra — desde a entrada de cada clínica)</span></div>
+            // 🔴 RADAR DE QUEDA — fixo no topo, vermelho piscante (item 6): impossível não ver
+            const caindo=fmRows.filter(r=>r.q&&r.q.pior!=null&&r.q.pior<=-0.15).sort((a,b)=>a.q.pior-b.q.pior);
+            if(caindo.length){
+              radarQueda=`<div class="qpulse" style="position:sticky;top:0;z-index:7;border:2px solid #FF2D55;border-radius:13px;padding:11px 14px;margin:0 0 12px;background:rgba(255,45,85,.12)">
+                <div style="font-size:12.5px;font-weight:900;color:#ff6b81;text-transform:uppercase;letter-spacing:.4px">🔴 Queda de movimento — ${caindo.length} cliente(s) caindo</div>
+                <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${caindo.slice(0,8).map(r=>`<div style="font-size:12px;color:#ffc9d2"><span style="font-size:15px">${tipoIc[r.tipo]||''}</span> <b>${esc(r.nome)}</b> — <b style="color:#ff6b81">▼ ${Math.abs(Math.round(r.q.pior*100))}%</b> em exames ${r.q.piorEh==='best'?`vs o melhor mês${r.q.bestM?` (${mlab(r.q.bestM.ym)})`:''}`:'vs o mês passado no mesmo dia'} <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" style="margin-left:2px;border:0;background:rgba(0,212,255,.15);color:#9fe6ff;border-radius:6px;padding:1px 8px;font-weight:800;cursor:pointer">ver +</button></div>`).join("")}</div>
+                <div style="font-size:10.5px;color:#ff9fb0;margin-top:6px;line-height:1.45">Exames deste mês (até o dia ${diaD}) vs o mesmo ponto do mês passado e vs o melhor mês da clínica. 👉 toque em <b>ver +</b> pra abrir a análise e <b>registrar um contato</b> antes de perder pro concorrente.</div></div>`;
+            }
+            cohortHtml=`<div class="seclabel" style="margin:0 0 6px">💰 Dinheiro por mês <span class="t-mut" style="font-weight:500;font-size:11px">(safra — desde a entrada de cada clínica)</span></div>
+              <div class="t-mut" style="font-size:11px;margin:0 0 7px;line-height:1.5">🆕 <b style="color:#00E5A0">nova</b> (cliente novo) · ♻️ <b style="color:#00D4FF">reconquistada</b> (parou e <b>voltou</b>) · 🔀 <b style="color:#9fe6ff">divide material</b> (manda só <b>parte</b> — o resto vai pro concorrente) · 🐾 particular. Toque no <b style="color:#9fe6ff">+</b> pra abrir a análise completa de cada clínica.</div>
               <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,229,160,.25);border-radius:8px">
                 <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
                   <thead><tr style="background:rgba(0,229,160,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#7effcf">Total</th></tr></thead>
                   <tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
-              <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Aqui só entra <b>DINHEIRO NOVO</b>: reconquistadas/novas contam tudo (o cliente voltou/entrou); as <b>🔀 dividem material</b> só entram <b>quando convertem</b> — e só com a <b>conquista</b> (categoria nova), porque o que já mandavam (ex.: histopato) é dinheiro <b>velho</b>, não recuperação. O <b>TOTAL</b> = o quanto a carteira realmente recuperou. Acompanhe velho×novo das que dividem na seção 🎉 Conquistas abaixo.</div>`;
+              <div class="t-mut" style="font-size:11px;margin-top:5px;line-height:1.5">📈 Aqui só entra <b>DINHEIRO NOVO</b>: reconquistadas/novas contam tudo; as <b>🔀 dividem material</b> só entram <b>quando convertem</b> (categoria nova), porque o que já mandavam é dinheiro <b>velho</b>. O <b>TOTAL</b> = o quanto a carteira recuperou.</div>`;
           }
         }
         // 📊 RITMO DO MÊS — cada cliente vs o MESMO PONTO do mês passado (run-rate pacing). Fica FIXADO no topo.
@@ -3739,7 +3768,8 @@ function renderTab(){
             </div>${insightAq}
           </div>`:`<div class="proxhint" style="border-color:rgba(0,212,255,.35);color:#9fe6ff;margin:8px 0 12px;line-height:1.5">📡 <b>BI de Aquisição</b> aparece aqui quando os clientes tiverem <b>canal / origem / operador</b> preenchidos. Abra cada cliente (inclusive os antigos, de forma <b>retroativa</b>) e marque a chancela.</div>`;
         painel=`
-          ${ritmoHtml}
+          ${radarQueda}
+          ${cohortHtml}
           ${biConq}
           ${biAquis}
           <div class="proxhint" style="border-color:rgba(0,229,160,.4);color:#7effcf;margin:8px 0 10px">🔓 <b>Faturamento aberto (diretoria)</b> · ao vivo ${AUTO_REL_NOTE}${bioLinha()}</div>
@@ -3754,7 +3784,6 @@ function renderTab(){
           <div class="t-mut" style="font-size:11px;margin:0 0 4px;line-height:1.5">♻️ reconquistada · 🆕 nova · 🔀 divide material · 🐾 particular. <b style="color:#ff8fa3">🎯 na mesa (estimado)</b> = quanto ela poderia render nas classes que hoje <b>não</b> te manda (extrapolando o mix de valor do lab a partir do que ela já te dá). É estimativa pra priorizar — não valor fechado.</div>
           ${rows||'<div class="t-mut" style="font-size:12.5px">Sem R$ vinculado ainda.</div>'}
           ${zerLinha?`<div style="margin-top:6px">${zerLinha}</div>`:""}
-          ${cohortHtml}
           <div class="card" style="margin:14px 0 6px;border-color:rgba(0,212,255,.3)">
             <h3>🧠 Como ler isso (regras de mercado)</h3>
             <div style="font-size:12.5px;line-height:1.65">${regras.map(r=>`<div style="margin:4px 0">${r}</div>`).join("")}</div>
@@ -3824,6 +3853,7 @@ function renderTab(){
         ${RELATORIOS.length?RELATORIOS.map(rcard).join(""):`<div class="empty">Ainda sem foto semanal. A 1ª já foi gerada — recarregue em instantes. Depois vai listando a evolução aqui.</div>`}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
       const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>abrirFinanceiro();
+      document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       return;
     }
     if(clinView==="aaa"||clinView==="aab"||clinView==="aac"||clinView==="aad"){
