@@ -3156,42 +3156,42 @@ function renderTab(){
     return;
   }
 
-  if(ACTIVE===”resultados”){
+  if(ACTIVE==="resultados"){
     const s=biStats();
     const usaIntRes=!!(resDe||resAte);
-    const resFiltro=`<div class=”card” style=”margin-bottom:12px;padding:10px 12px”><div style=”display:flex;align-items:center;gap:7px;flex-wrap:wrap”><span style=”font-size:12px;font-weight:700;color:#9fb2cc”>📅 Período:</span>${[[“hoje”,”Hoje”],[“semana”,”Esta semana”],[“mes”,”Este mês”],[“30d”,”30 dias”],[“tudo”,”Tudo”]].map(([k,l])=>{const on=!usaIntRes&&resRange===k;return `<button data-resr=”${k}” style=”cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${on?”#00D4FF”:”rgba(255,255,255,.14)”};background:${on?”rgba(0,212,255,.18)”:”transparent”};color:${on?”#00D4FF”:”#9fb2cc”}”>${l}</button>`;}).join(“”)}</div><div style=”display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px”><span class=”t-mut” style=”font-size:11.5px”>ou intervalo:</span><input type=”date” id=”resDe” class=”m-date” style=”width:auto;padding:5px 8px” value=”${esc(resDe)}”><span class=”t-mut” style=”font-size:11.5px”>até</span><input type=”date” id=”resAte” class=”m-date” style=”width:auto;padding:5px 8px” value=”${esc(resAte)}”>${usaIntRes?'<button id=”resLimpa” style=”cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:8px;padding:5px 10px;font-size:11.5px”>✕ limpar</button>':””}</div><div class=”t-mut” style=”font-size:11px;margin-top:7px”>Mostrando: <b style=”color:#9fe6ff”>${s.janela.label}</b> · <b>${s.total}</b> contato(s). Clique numa barra de <b>Motivos de perda</b> para ver quem são.</div></div>`;
+    const resFiltro=`<div class="card" style="margin-bottom:12px;padding:10px 12px"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;color:#9fb2cc">📅 Período:</span>${[["hoje","Hoje"],["semana","Esta semana"],["mes","Este mês"],["30d","30 dias"],["tudo","Tudo"]].map(([k,l])=>{const on=!usaIntRes&&resRange===k;return `<button data-resr="${k}" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${on?"#00D4FF":"rgba(255,255,255,.14)"};background:${on?"rgba(0,212,255,.18)":"transparent"};color:${on?"#00D4FF":"#9fb2cc"}">${l}</button>`;}).join("")}</div><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px"><span class="t-mut" style="font-size:11.5px">ou intervalo:</span><input type="date" id="resDe" class="m-date" style="width:auto;padding:5px 8px" value="${esc(resDe)}"><span class="t-mut" style="font-size:11.5px">até</span><input type="date" id="resAte" class="m-date" style="width:auto;padding:5px 8px" value="${esc(resAte)}">${usaIntRes?'<button id="resLimpa" style="cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:8px;padding:5px 10px;font-size:11.5px">✕ limpar</button>':""}</div><div class="t-mut" style="font-size:11px;margin-top:7px">Mostrando: <b style="color:#9fe6ff">${s.janela.label}</b> · <b>${s.total}</b> contato(s). Clique numa barra de <b>Motivos de perda</b> para ver quem são.</div></div>`;
     c.innerHTML = `
-      <div style=”margin:0 0 8px”><button class=”regbtn” id=”resultadosPrint”>🖨️ Imprimir / PDF</button></div>
+      <div style="margin:0 0 8px"><button class="regbtn" id="resultadosPrint">🖨️ Imprimir / PDF</button></div>
       ${resFiltro}
-      <div class=”kgrid”>
-        ${kpi(“”, s.sem, “Contatos na semana”, `${s.mes} no mês · ${s.total} no total`)}
-        ${kpi(“g”, s.pctPos+”%”, “Taxa de sucesso”, “contatos com resultado positivo”)}
-        ${kpi(“g”, s.reativados, “Clientes reativados”, “estavam parados e voltaram a enviar”)}
-        ${kpi(“a”, s.topPessoa, “Mais ativo”, “colaborador com mais contatos”)}
-        ${s.satN?kpi(“”, s.satMedia.toFixed(1)+”/10”, “Satisfação média”, `${s.satN} resposta(s) · Em Alta`):””}
+      <div class="kgrid">
+        ${kpi("", s.sem, "Contatos na semana", `${s.mes} no mês · ${s.total} no total`)}
+        ${kpi("g", s.pctPos+"%", "Taxa de sucesso", "contatos com resultado positivo")}
+        ${kpi("g", s.reativados, "Clientes reativados", "estavam parados e voltaram a enviar")}
+        ${kpi("a", s.topPessoa, "Mais ativo", "colaborador com mais contatos")}
+        ${s.satN?kpi("", s.satMedia.toFixed(1)+"/10", "Satisfação média", `${s.satN} resposta(s) · Em Alta`):""}
       </div>
-      <div class=”card” style=”margin-bottom:14px;border-color:rgba(0,229,160,.3)”>
-        <h3>✅ Clientes reativados <span class=”tag”>parados que voltaram a enviar</span></h3>
+      <div class="card" style="margin-bottom:14px;border-color:rgba(0,229,160,.3)">
+        <h3>✅ Clientes reativados <span class="tag">parados que voltaram a enviar</span></h3>
         ${s.reativadosList.length
-          ? `<div style=”font-size:14px;color:var(--green);font-weight:700”>${s.reativadosList.map(esc).join(“ · “)}</div>`
-          : `<div class=”t-mut” style=”font-size:13px;line-height:1.5”>Nenhum ainda. Conta <b>só quem estava PARADO</b> (sem enviar) e voltou — não conta quedas que se recuperaram sozinhas. O rastreio semana a semana fica na aba <b>📅 Histórico</b> (“Saíram do radar”).</div>`}
+          ? `<div style="font-size:14px;color:var(--green);font-weight:700">${s.reativadosList.map(esc).join(" · ")}</div>`
+          : `<div class="t-mut" style="font-size:13px;line-height:1.5">Nenhum ainda. Conta <b>só quem estava PARADO</b> (sem enviar) e voltou — não conta quedas que se recuperaram sozinhas. O rastreio semana a semana fica na aba <b>📅 Histórico</b> ("Saíram do radar").</div>`}
       </div>
-      <div class=”bigrid”>
-        <div class=”card”><h3>Resultados dos contatos</h3><div class=”cwrap”><canvas id=”cRes”></canvas></div></div>
-        <div class=”card”><h3>Contatos por colaborador</h3><div class=”cwrap”><canvas id=”cPess”></canvas></div></div>
+      <div class="bigrid">
+        <div class="card"><h3>Resultados dos contatos</h3><div class="cwrap"><canvas id="cRes"></canvas></div></div>
+        <div class="card"><h3>Contatos por colaborador</h3><div class="cwrap"><canvas id="cPess"></canvas></div></div>
       </div>
-      <div class=”bigrid”>
-        <div class=”card”><h3>Evolução semanal <span class=”tag”>últimas 8 semanas</span></h3><div class=”cwrap”><canvas id=”cSem”></canvas></div></div>
-        <div class=”card”><h3>Motivos de perda <span class=”tag” style=”color:#ff99ab”>clique na barra para ver os clientes</span></h3><div class=”cwrap”><canvas id=”cMot”></canvas></div></div>
+      <div class="bigrid">
+        <div class="card"><h3>Evolução semanal <span class="tag">últimas 8 semanas</span></h3><div class="cwrap"><canvas id="cSem"></canvas></div></div>
+        <div class="card"><h3>Motivos de perda <span class="tag" style="color:#ff99ab">clique na barra para ver os clientes</span></h3><div class="cwrap"><canvas id="cMot"></canvas></div></div>
       </div>
-      <div class=”card” style=”margin-top:14px”><h3>Funil de reativação</h3>${funil(s)}</div>
-      <div class=”seclabel”>🕑 Últimos contatos registrados</div>${feed()}`;
+      <div class="card" style="margin-top:14px"><h3>Funil de reativação</h3>${funil(s)}</div>
+      <div class="seclabel">🕑 Últimos contatos registrados</div>${feed()}`;
     drawCharts(s);
-    document.querySelectorAll(“#content [data-resr]”).forEach(el=>el.onclick=()=>{ resRange=el.dataset.resr; resDe=””; resAte=””; renderTab(); });
-    const _rd=document.getElementById(“resDe”); if(_rd) _rd.onchange=()=>{ resDe=_rd.value; renderTab(); };
-    const _ra=document.getElementById(“resAte”); if(_ra) _ra.onchange=()=>{ resAte=_ra.value; renderTab(); };
-    const _rl=document.getElementById(“resLimpa”); if(_rl) _rl.onclick=()=>{ resDe=””; resAte=””; renderTab(); };
-    const _rp=document.getElementById(“resultadosPrint”); if(_rp) _rp.onclick=()=>window.print();
+    document.querySelectorAll("#content [data-resr]").forEach(el=>el.onclick=()=>{ resRange=el.dataset.resr; resDe=""; resAte=""; renderTab(); });
+    const _rd=document.getElementById("resDe"); if(_rd) _rd.onchange=()=>{ resDe=_rd.value; renderTab(); };
+    const _ra=document.getElementById("resAte"); if(_ra) _ra.onchange=()=>{ resAte=_ra.value; renderTab(); };
+    const _rl=document.getElementById("resLimpa"); if(_rl) _rl.onclick=()=>{ resDe=""; resAte=""; renderTab(); };
+    const _rp=document.getElementById("resultadosPrint"); if(_rp) _rp.onclick=()=>window.print();
     return;
   }
 
