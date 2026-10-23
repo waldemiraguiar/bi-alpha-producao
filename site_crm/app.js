@@ -4446,6 +4446,7 @@ function renderTab(){
       const taxaReal=(realiz+desm)?Math.round(100*realiz/(realiz+desm)):0;
       const conv=total?Math.round(100*fechou/total):0;
       c.innerHTML=`${toggle}${repBar}
+        <div style="margin:0 0 8px"><button class="regbtn" id="pistaBiPrint">🖨️ Imprimir / PDF</button></div>
         ${biFiltro}
         <div class="kgrid">
           ${kpi("", total, "Feedbacks", jan.label)}
@@ -4473,6 +4474,7 @@ function renderTab(){
       const _ba=document.getElementById("biAte"); if(_ba) _ba.onchange=()=>{ pistaBiAte=_ba.value; renderTab(); };
       const _bl=document.getElementById("biLimpa"); if(_bl) _bl.onclick=()=>{ pistaBiDe=""; pistaBiAte=""; renderTab(); };
       drawPistaBI(base);
+      const _pp=document.getElementById("pistaBiPrint"); if(_pp) _pp.onclick=()=>window.print();
       return;
     }
 
