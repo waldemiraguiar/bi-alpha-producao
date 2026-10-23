@@ -794,6 +794,26 @@ async function aplicarEscopoLogin(res){
   if(temSafra && res.safrakey){ await decSafra(res.safrakey); }
   renderOpBtn();
 }
+/* 🔄 reconcilia o escopo com o SERVIDOR no boot — se o Wal liberou a Safra depois do login do Fábio,
+   o flag local fica desatualizado. Pega a verdade do servidor (OPERADORES já traz escopos/admin). */
+function reconcileEscopo(){ try{ const me=(OPERADORES||[]).find(o=>(o.nome||"").toLowerCase()===operadorAtual().toLowerCase()); if(!me) return;
+  if((me.escopos||[]).includes("safra") && !ehDiretoria()){
+    if(localStorage.getItem("crm_escopo_safra")!=="1") localStorage.setItem("crm_escopo_safra","1");
+    const sc=localStorage.getItem("crm_safra_code");
+    if(sc && !CLIN_FATMES){ decSafra(sc).then(ok=>{ renderTabs(); renderTab(); }); }   // já ativou antes: reabre sozinho
+    else { renderTabs(); renderTab(); }
+  }
+  if(me.admin && localStorage.getItem("crm_admin")!=="1"){ localStorage.setItem("crm_admin","1"); renderTabs(); }
+}catch(e){} }
+/* 🔓 ativa a Safra em R$ no aparelho (Fábio) — confirma o PIN → servidor manda a safrakey → decifra */
+async function ativarSafra(){ const nome=operadorAtual(); if(!nome){ openIdentidade(false); return; }
+  const pin=(prompt("Confirme seu PIN pra ATIVAR sua Safra em R$ neste aparelho:")||"").trim(); if(!pin) return;
+  const res=await verificaPin(nome,pin);
+  if(res===null){ alert("Sem internet pra validar agora — tente de novo."); return; }
+  if(!res.ok){ alert("PIN incorreto."); return; }
+  if(res.safrakey){ await aplicarEscopoLogin({...res, nome}); renderAll(); }
+  else { alert("Seu acesso à Safra em R$ ainda não foi liberado. Fale com o Wal (aba Equipe → 🔓 liberar Safra R$)."); }
+}
 /* 🔓 AUTO-R$ p/ DIRETORIA: quando o operador diretoria (Wal/Fábio) loga, o servidor manda a finkey → abre o R$ SOZINHO (inclusive por biometria). Reps não recebem finkey → nada muda pra eles. */
 async function autoRSdir(finkey){
   if(!finkey) return false;
@@ -3836,7 +3856,10 @@ function renderTab(){
       if(!ehDiretoria() && !_scopeSafra){
         painel = CLIN_EXMES ? comercialRelatorios() : "";   // comercial (Luciane) vê EXAMES + % + "+", SEM R$
       } else if(_scopeSafra && !CLIN_FATMES){
-        painel=`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:8px 0 6px;text-align:center;line-height:1.55">🔒 Sua <b>Safra em R$</b> está carregando… se não aparecer, saia e entre de novo.</div>`;
+        painel=`<div class="proxhint" style="border-color:rgba(0,212,255,.45);margin:8px 0 6px;text-align:center;line-height:1.55">
+            <div style="font-size:13px;color:#c9d4e0">🔒 Ative sua <b>Safra em R$</b> neste aparelho (só uma vez).</div>
+            <button class="checkinbtn" id="ativarSafraBtn" type="button" style="margin:10px auto 2px;max-width:320px;border-color:rgba(0,212,255,.5);color:#9fe6ff;font-weight:700">🔓 Ativar Safra em R$ (confirmar PIN)</button>
+          </div>`;
       } else if(ehDiretoria() && !CLIN_RS){
         painel=`<div class="proxhint" style="border-color:rgba(0,229,160,.45);margin:8px 0 6px;text-align:center;line-height:1.55">
             <div style="font-size:13px;color:#c9d4e0">💰 Abra o <b>faturamento em R$</b> da carteira (cifrado — só você).</div>
@@ -3879,6 +3902,10 @@ function renderTab(){
               return d.x.reconq_data || (CLIN_FATMES[String(d.x.cod)]||[]).length; })
             .map(d=>({cod:String(d.x.cod),nome:d.x.nome,tipo:d.x.tipo,arr:(d.x.tipo==="divide"?cqm(d.x.cod):(CLIN_FATMES[String(d.x.cod)]||[]))}));
           fmRows.forEach(r=>r.tot=r.arr.reduce((s,a)=>s+a.fat,0));
+          // dedup por NOME normalizado (carteira tem a mesma clínica 2-3× — ex.: Four Patinhas) — mantém a de maior total (muta no lugar; fmRows é const)
+          { const _nz=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,""); const _m=new Map();
+            fmRows.forEach(r=>{const k=_nz(r.nome);const p=_m.get(k);if(!p||r.tot>p.tot)_m.set(k,r);});
+            for(let _i=fmRows.length-1;_i>=0;_i--){ if(_m.get(_nz(fmRows[_i].nome))!==fmRows[_i]) fmRows.splice(_i,1); } }
           fmRows.sort((a,b)=>b.tot-a.tot);
           const mset={}; fmRows.forEach(r=>r.arr.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort();
           // 🔴 QUEDA DE MOVIMENTO (item 6) — exames (até o dia D) deste mês vs o mês passado no MESMO dia E vs o MELHOR mês. O pior manda.
@@ -4199,6 +4226,7 @@ function renderTab(){
         ${c2Html}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; renderTab(); });
       const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>abrirFinanceiro();
+      const _asb=document.getElementById("ativarSafraBtn"); if(_asb) _asb.onclick=()=>ativarSafra();
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       return;
     }
@@ -5062,7 +5090,7 @@ function render(D){
   const _rb=document.getElementById("refreshBtn"); if(_rb) _rb.onclick=()=>forceRefresh();
   const _abb=document.getElementById("abasBtn"); if(_abb) _abb.onclick=openOrganizarAbas;
   const _fab=document.getElementById("fabRefresh"); if(_fab) _fab.onclick=()=>forceRefresh();
-  loadOps().then(()=>{ if(!operadorAtual()) openIdentidade(true); });   // pede identidade 1x por aparelho
+  loadOps().then(()=>{ if(!operadorAtual()) openIdentidade(true); else reconcileEscopo(); });   // pede identidade 1x por aparelho; senão sincroniza escopo c/ servidor
   if(!window.__fuwired){
     window.__fuwired = true;
     document.getElementById("content").addEventListener("click", e=>{
