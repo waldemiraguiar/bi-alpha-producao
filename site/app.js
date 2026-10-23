@@ -2175,11 +2175,20 @@ async function renderCustosIA(force){
   h+=`<div class="grid g2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">
     <div class="card"><h3>🕳️ O que ainda NÃO entra no medidor <span class="cap">custo que existe mas não aparece no número acima</span></h3>
       ${(D.lacunas||[]).map(l=>`<div style="margin:6px 0"><b style="color:var(--amber)">${esc(l.titulo)}</b><div style="font-size:12.5px;color:var(--mut)">${esc(l.detalhe)}</div></div>`).join('')||'<div style="color:var(--green)">Nenhuma.</div>'}</div>
-    <div class="card"><h3>☁️ Netlify — deploys de produção em ${dm(NT.dia)} <span class="cap">cada deploy ≈ 15 créditos · a sangria vem daqui</span></h3>
-      ${NT.erro?`<div style="color:var(--amber)">${esc(NT.erro)}</div>`:`<div class="acmp-v" style="font-size:22px;color:${NT.creditos>450?'var(--red)':NT.creditos>150?'var(--amber)':'var(--green)'}">${N(NT.creditos)} créditos ≈ US$ ${String(NT.usd_estimado).replace('.',',')}</div>
-      <table class="atab" style="margin-top:8px"><thead><tr><th>Site</th><th class="num">Deploys</th><th class="num">Créditos</th></tr></thead><tbody>
-      ${(NT.sites||[]).map(s=>`<tr><td>${esc(s.site)}</td><td class="num">${s.deploys}</td><td class="num">${s.creditos}</td></tr>`).join('')}</tbody></table>
+    <div class="card"><h3>☁️ Netlify — deploys de produção em ${dm(NT.dia)} <span class="cap">o deploy é o número REAL; o crédito é estimativa calibrada pelas recargas</span></h3>
+      ${NT.erro?`<div style="color:var(--amber)">${esc(NT.erro)}</div>`:`<div class="acmp-v" style="font-size:22px;color:${NT.creditos>450?'var(--red)':NT.creditos>150?'var(--amber)':'var(--green)'}">${N((NT.sites||[]).reduce((t,x)=>t+x.deploys,0))} deploys <span style="font-size:13px;color:var(--mut)">(≈${N(NT.creditos)} créditos, ~US$ ${String(NT.usd_estimado).replace('.',',')} estimados)</span></div>
+      <table class="atab" style="margin-top:8px"><thead><tr><th>Site</th><th class="num">Deploys</th><th class="num">Origem</th></tr></thead><tbody>
+      ${(NT.sites||[]).map(s=>{const CL={obra:['🛠️ obra','var(--amber)'],bug:['🐞 bug/erro','var(--red)'],investigar:['❓ investigar','var(--red)'],rotina:['rotina','var(--mut)']}[s.classe||'rotina']||['—','var(--mut)'];
+        return `<tr><td>${esc(s.site)}<div style="font-size:11px;color:var(--mut)">${esc(s.porque||'')}</div></td><td class="num">${s.deploys}</td><td class="num" style="color:${CL[1]}">${CL[0]}</td></tr>`}).join('')}</tbody></table>
       <div style="font-size:11.5px;color:var(--mut);margin-top:6px">${esc(NT.obs||'')}</div>`}</div></div>`;
+  const OA=D.outros_agentes||{};
+  if((OA.itens||[]).length){
+    h+=`<div class="card" style="margin-top:14px"><h3>🤖 IA fora das mesas <span class="cap">agentes que gastam IA e não entram no R$/requisição acima</span></h3>
+      <div class="acmp-v" style="font-size:20px;color:${OA.total7>70?'var(--amber)':'var(--green)'}">R$ ${String((OA.total7||0).toFixed(2)).replace('.',',')} <span style="font-size:12px;color:var(--mut)">nos últimos 7 dias (R$ ${String((OA.total_dia||0).toFixed(2)).replace('.',',')} no dia)</span></div>
+      <table class="atab" style="margin-top:8px"><thead><tr><th>Agente</th><th>Onde</th><th class="num">R$ no dia</th><th class="num">R$ 7 dias</th></tr></thead><tbody>
+      ${(OA.itens||[]).map(i=>`<tr><td>${esc(i.agente)}<div style="font-size:11px;color:var(--mut)">${esc(i.fonte||'')}</div></td><td>${esc(i.onde||'')}</td><td class="num">${String((i.rs_dia||0).toFixed(2)).replace('.',',')}</td><td class="num">${String((i.rs7||0).toFixed(2)).replace('.',',')}</td></tr>`).join('')}</tbody></table>
+      ${(OA.lacunas||[]).length?`<div style="font-size:11.5px;color:var(--amber);margin-top:6px">⚠️ ${(OA.lacunas||[]).map(esc).join(' · ')}</div>`:''}</div>`;
+  }
   h+=`<div style="font-size:11px;color:var(--mut);margin:10px 2px">Fonte: ${esc(D.fonte||'')}. Meta medida em ${esc((D.ref||{}).periodo||'')}. Requisições lidas = folhas × imagens por chamada ÷ 2 (aproximação; conferida contra o portal HF).</div>`;
   wrap.innerHTML=h;
 
