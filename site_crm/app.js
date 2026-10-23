@@ -47,7 +47,7 @@ function orderedTabs(){ const ord=tabOrder(); if(!ord) return TABS;
   return out; }
 function saveTabOrder(keys){ try{ localStorage.setItem("crm_tab_order", JSON.stringify(keys)); }catch(e){} }
 function resetTabOrder(){ try{ localStorage.removeItem("crm_tab_order"); }catch(e){} }
-function visibleTabs(){ return orderedTabs().filter(tb => tb.k!=="equipe" || isAdmin()); }   // aba Equipe só pro admin (Wal)
+function visibleTabs(){ return orderedTabs().filter(tb => tb.k!=="equipe" || isAdmin() || ehDiretoria()); }   // aba Equipe: admin OU diretoria (dono). Hoje, na Matriz, só o Wal é diretoria.
 function openOrganizarAbas(){
   const body=document.getElementById("modalBody"); if(!body) return;
   let ks=visibleTabs().map(t=>t.k);
@@ -2708,7 +2708,7 @@ async function eqNovo(){
   if(ok){ await loadOps(); renderTab(); alert(`✅ ${nome} criado como comercial. Use os botões pra dar papel/Safra/admin.`); }
 }
 function renderEquipe(c){
-  if(!isAdmin()){ c.innerHTML=`<div class="proxhint" style="border-color:rgba(255,45,85,.4);color:#ff8fa3;margin:10px 0;line-height:1.5">🔒 Área restrita — só o administrador vê a aba Equipe.</div>`; return; }
+  if(!isAdmin() && !ehDiretoria()){ c.innerHTML=`<div class="proxhint" style="border-color:rgba(255,45,85,.4);color:#ff8fa3;margin:10px 0;line-height:1.5">🔒 Área restrita — só o administrador vê a aba Equipe.</div>`; return; }
   const bt="border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:8px;padding:5px 10px;font-size:11.5px;font-weight:700;cursor:pointer;color:#c9d4e0";
   const pill=(txt,cor,bg)=>`<span style="display:inline-block;background:${bg};color:${cor};border:1px solid ${cor}66;border-radius:12px;padding:1px 9px;font-size:10.5px;font-weight:800;margin-left:5px;white-space:nowrap">${txt}</span>`;
   const rows=OPERADORES.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(o=>{
