@@ -49,23 +49,34 @@ gh workflow run atualiza_crm.yml -f deploy=1 >/dev/null && echo "      ok"
 echo "   🚀 disparando Cabo Frio (cabofrio_crm.yml)..."
 gh workflow run cabofrio_crm.yml >/dev/null && echo "      ok"
 
-# 4) PROVA no ar: espera o version.json das DUAS MUDAR (Actions levam alguns min)
-echo "   ⏳ provando no ar (as Actions levam ~2-5min)..."
-okmz=0; okcf=0
+# 4) PROVA no ar ENDURECIDA (Wal 24/10): não basta o version.json mudar (é um timestamp carimbado em
+#    QUALQUER deploy — um deploy concorrente de HEAD velho muda o timestamp e mascara código antigo).
+#    Exijo DUAS coisas por frota: (a) version.json MUDOU (deploy fresco rodou) E (b) o SELO servido
+#    traz o hash do commit que eu publiquei (`· MZ/CF · <hash>`) = o código certo está no ar.
+EXPECT=$(git rev-parse --short HEAD)
+echo "   ⏳ provando no ar · exijo selo com o commit *$EXPECT* + version.json novo (Actions ~2-5min)..."
+okmz=0; okcf=0; SMZ=""; SCF=""
 for i in $(seq 1 48); do   # até ~8min
   sleep 10
-  NMZ=$(curl -s --max-time 12 "https://agente-crm-matriz.netlify.app/version.json?_=$RANDOM" || true)
-  NCF=$(curl -s --max-time 12 "https://agente-crm-cabofrio.netlify.app/version.json?_=$RANDOM" || true)
-  [ "$okmz" = 0 ] && [ -n "$NMZ" ] && [ "$NMZ" != "$B_MZ" ] && { okmz=1; echo "      ✅ Matriz no ar: $NMZ"; }
-  [ "$okcf" = 0 ] && [ -n "$NCF" ] && [ "$NCF" != "$B_CF" ] && { okcf=1; echo "      ✅ Cabo Frio no ar: $NCF"; }
+  if [ "$okmz" = 0 ]; then
+    NMZ=$(curl -s --max-time 12 "https://agente-crm-matriz.netlify.app/version.json?_=$RANDOM" || true)
+    SMZ=$(curl -s --max-time 15 "https://agente-crm-matriz.netlify.app/?_=$RANDOM" | grep -oE '· MZ · [0-9a-f]{7,}' | head -1)
+    [ -n "$NMZ" ] && [ "$NMZ" != "$B_MZ" ] && echo "$SMZ" | grep -q "$EXPECT" && { okmz=1; echo "      ✅ Matriz: selo [$SMZ] · version $NMZ"; }
+  fi
+  if [ "$okcf" = 0 ]; then
+    NCF=$(curl -s --max-time 12 "https://agente-crm-cabofrio.netlify.app/version.json?_=$RANDOM" || true)
+    SCF=$(curl -s --max-time 15 "https://agente-crm-cabofrio.netlify.app/?_=$RANDOM" | grep -oE '· CF · [0-9a-f]{7,}' | head -1)
+    [ -n "$NCF" ] && [ "$NCF" != "$B_CF" ] && echo "$SCF" | grep -q "$EXPECT" && { okcf=1; echo "      ✅ Cabo Frio: selo [$SCF] · version $NCF"; }
+  fi
   [ "$okmz" = 1 ] && [ "$okcf" = 1 ] && break
 done
 if [ "$okmz" = 1 ] && [ "$okcf" = 1 ]; then
-  echo "✅ NO AR nas DUAS frotas (Matriz + Cabo Frio) — $MSG"
+  echo "✅ NO AR nas DUAS frotas (Matriz + Cabo Frio) servindo o commit $EXPECT — $MSG"
   echo "   (trava segue com '$DONO'; solte com: ./site_crm/dono.sh release $DONO)"
   exit 0
 else
-  echo "⚠️ NÃO confirmei as duas no ar (MZ=$okmz CF=$okcf). Veja as Actions: gh run list --limit 4"
-  echo "   ⚠️ armadilha conhecida: secret.mjs sem export (deploy morre calado) — gh run view <id> --log-failed"
+  echo "⚠️ NÃO confirmei o commit $EXPECT nas duas (MZ=$okmz [$SMZ] · CF=$okcf [$SCF])."
+  echo "   → Selo servindo OUTRO hash = deploy concorrente de HEAD diferente OU a Action ainda rodando/falhou."
+  echo "   → Veja: gh run list --limit 4 · armadilha do secret.mjs: gh run view <id> --log-failed"
   exit 1
 fi
