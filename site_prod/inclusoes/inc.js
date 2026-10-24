@@ -841,7 +841,8 @@
     if (!sessao || !sessao.nome) { raivaCache = []; return }
     try {
       const r = await rpc('raiva_casos_listar',
-        { p_nome: sessao.nome, p_senha: sessao.senha, p_fechados: raivaPer === 'fechados' })
+        { p_nome: sessao.nome, p_senha: sessao.senha, p_fechados: raivaPer === 'fechados',
+          p_cancelados: raivaPer === 'cancelados' })   // 🔴 Fúlvio 23/out: cancelado não some mais — tem aba própria
       // 🔴 Fúlvio 23/out: "nova solicitação abre DOIS cards (teste 3 × 2)". Dedupe defensivo por id —
       //   nunca se quer o mesmo caso 2×. Se a causa for fan-out do raiva_casos_listar, isso já resolve;
       //   se for INSERT duplo (ids diferentes), é inofensivo e o conserto de raiz vem com o dump da função.
@@ -989,12 +990,13 @@
                   f: c => c.laudo_chegou && !c.entrega_combinada },
     }
     if (k) {
-      k.innerHTML = `<div class="kpi"><b>${L.length}</b><span>${raivaPer === 'fechados' ? 'concluídos' : 'em andamento'}</span></div>` +
-        Object.entries(GRUPOS).map(([id, g]) => {
+      k.innerHTML = `<div class="kpi"><b>${L.length}</b><span>${raivaPer === 'cancelados' ? 'cancelados' : raivaPer === 'fechados' ? 'concluídos' : 'em andamento'}</span></div>` +
+        // 🔴 Fúlvio 23/out: os KPIs de grupo (espera/cadastro/…) não fazem sentido na aba "Cancelados"
+        (raivaPer === 'cancelados' ? '' : Object.entries(GRUPOS).map(([id, g]) => {
           const n = L.filter(g.f).length
           return `<button class="kpi ${g.alerta && n ? 'alerta' : ''} ${raivaGaveta === id ? 'on' : ''}"
             data-rgav="${id}" ${n ? '' : 'disabled'}><b>${n}</b><span>${g.rot}</span></button>`
-        }).join('')
+        }).join(''))
     }
     const gav = $('raivaGaveta')
     if (gav) {
@@ -1017,7 +1019,9 @@
         : '<div class="lin mudo">—</div>')
     }
     if (!L.length) {
-      el.innerHTML = `<p class="mudo">Nenhuma solicitação ${raivaPer === 'fechados' ? 'concluída' : 'em andamento'}.
+      el.innerHTML = raivaPer === 'cancelados'
+        ? `<p class="mudo">Nenhuma solicitação cancelada. 👍</p>`
+        : `<p class="mudo">Nenhuma solicitação ${raivaPer === 'fechados' ? 'concluída' : 'em andamento'}.
         Use <b>+ Nova solicitação</b> quando uma clínica pedir laudo de trânsito internacional.</p>`
       return
     }
@@ -1042,6 +1046,14 @@
       (_rDig[id] = _rDig[id] || {})[key] = inp.value;
     });
     el.innerHTML = L.map(c => {
+      // 🔴 Fúlvio 23/out: cancelado NÃO some mais — aparece na aba "Cancelados", read-only, com o motivo.
+      if (c.cancelado_em) return `<div class="raiva-card" style="opacity:.85;border-left:3px solid #c0392b">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <b>🐾 ${esc(c.pet || '—')}</b>
+          <span class="mudo">${esc(c.clinica || '')}${c.destino ? ' · ✈️ ' + esc(c.destino) : ''}</span>
+          <span style="margin-left:auto;background:#5a2a2a;color:#ffd7d7;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">🚫 Cancelado</span>
+        </div>
+        <div class="mudo" style="font-size:12px;margin-top:4px">cancelado${c.cancelado_por ? ' por ' + esc(c.cancelado_por) : ''}${c.cancelado_em ? ' em ' + dtBR(c.cancelado_em) : ''}${c.cancelado_motivo ? ' — ' + esc(c.cancelado_motivo) : ''}</div></div>`
       const lib = raivaLiberaEm(c.vacina_data)
       const faltam = lib ? Math.ceil((lib - Date.now()) / 864e5) : null
       // ⭐ Fúlvio 14/out: a antirrábica vale 1 ANO. "Coleta liberada desde 05/03/2020" estava
@@ -5030,7 +5042,12 @@
   $('rVacina')?.addEventListener('input', conferirOrdem)
   $('rFechar')?.addEventListener('click', () => $('dlgRaiva').close())
 
+  // 🔴 Fúlvio 23/out: "nova solicitação abre DOIS cards". Causa: o botão não travava durante o
+  //   await, então clique duplo/impaciente disparava 2 inserts (cada um gera um id novo → 2 cards
+  //   idênticos). Agora TRAVO o botão enquanto salva e destravo no fim.
+  let rSalvando = false
   $('rSalvar')?.addEventListener('click', async () => {
+    if (rSalvando) return
     const pet = $('rPet').value.trim(), clinica = $('rClinica').value.trim()
     const err = $('rErro')
     if (!pet)     { err.textContent = 'Escreva o nome do pet.'; $('rPet').focus(); return }
@@ -5048,8 +5065,11 @@
     //    impede marcar a vacina como válida. É a diferença entre registrar e aprovar.
     if (mc) { dados.microchip_data = mc; dados.microchip_ok = true }
     if (vc) { dados.vacina_data = vc; dados.vacina_ok = !(mc && mc > vc) }
-    const ok = await salvarRaiva(dados)
-    if (ok !== false) { $('dlgRaiva').close(); toast('✅ solicitação aberta') }
+    rSalvando = true; const bSalvar = $('rSalvar'); if (bSalvar) bSalvar.disabled = true
+    try {
+      const ok = await salvarRaiva(dados)
+      if (ok !== false) { $('dlgRaiva').close(); toast('✅ solicitação aberta') }
+    } finally { rSalvando = false; if (bSalvar) bSalvar.disabled = false }
   })
 
   async function salvarRaiva(dados) {
