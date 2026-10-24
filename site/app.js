@@ -663,6 +663,17 @@ function _regiao(rota){
   if(r.includes('folguista')) return 'Folguista';
   return 'Rio (metrô)';
 }
+const ROTA_BAIRRO={'1':'Barra · Recreio','2':'Santa Cruz · Sepetiba','3':'Sen. Camará · Campo Grande','4':'Valqueire · Taquara/Curicica','5':'Anil · Barra Olímpica/Rio 2','6':'Cascadura/Méier · Tijuca','7':'Belford Roxo · Bangu/Realengo','8':'Zona Sul · Niterói','9':'Nova Campina · Caxias · Madureira','10':'Queimados/Austin · Nova Iguaçu','11':'Guaratiba · Recreio','12':'Paracambi/Japeri · Seropédica'};
+function _bairro(rota){
+  const r=(rota||'').toLowerCase();
+  if(r.includes('angra')) return 'Angra dos Reis';
+  if(r.includes('caxias')||r.includes('18h')) return 'Duque de Caxias e região';
+  if(r.includes('7h')||r.includes('7 hora')||r.includes('manhã')||r.includes('manha')) return 'Matinal (várias)';
+  if(r.includes('21h')||r.includes('21 hora')||r.includes('noite')) return 'Noturna (várias)';
+  if(r.includes('folguista')) return 'Folguista (coringa)';
+  const m=r.match(/(\d+)/);
+  return (m&&ROTA_BAIRRO[m[1]])||'Rio (metrô)';
+}
 async function renderMotoboy(){
   const wrap=document.getElementById('motoboy'); if(!wrap) return;
   if(wrap.__done) return; wrap.__done=1;
@@ -690,7 +701,7 @@ function _motoHtml(rows){
   const rotaStats=Object.entries(byR).map(([rota,g])=>{
     const imp=g.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas);
     const fech=100*g.filter(x=>x.fechado_em).length/g.length;
-    return {rota,regiao:_regiao(rota),n:g.length,
+    return {rota,regiao:_regiao(rota),bairro:_bairro(rota),n:g.length,
       par:_medn(g.map(x=>x.paradas).filter(v=>v!=null)),
       exa:_medn(g.map(x=>x.exames).filter(v=>v!=null)),
       dens:_medn(g.filter(x=>x.paradas&&x.exames!=null).map(x=>x.exames/x.paradas)),
@@ -738,6 +749,20 @@ function _motoHtml(rows){
   // benchmark
   const impGeral=_medn(rows.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas));
   const fechGeral=100*rows.filter(x=>x.fechado_em).length/rows.length;
+  // SÉRIE TEMPORAL — semana a semana (segunda)
+  const wkKey=d=>{const dt=new Date(d+'T12:00:00');dt.setDate(dt.getDate()-((dt.getDay()+6)%7));return dt.toISOString().slice(0,10);};
+  const byW={}; rows.forEach(x=>{(byW[wkKey(x.dia)]=byW[wkKey(x.dia)]||[]).push(x);});
+  const weeks=Object.keys(byW).sort().map(w=>{const g=byW[w];return {w,n:g.length,
+    imp:_medn(g.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas)),
+    fech:100*g.filter(x=>x.fechado_em).length/g.length,
+    exd:_medn(g.map(x=>x.exames).filter(v=>v!=null))};}).slice(-6);
+  // TENDÊNCIA por motoboy: 1ª metade × 2ª metade (disciplina = imputação + relatório)
+  const diasOrd=[...dias].sort(); const corte=diasOrd[Math.floor(diasOrd.length/2)];
+  const sc=a=>{const im=a.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas); if(!im.length) return null; const f=a.map(x=>x.fechado_em?1:0); return (im.reduce((p,q)=>p+q,0)/im.length + 100*f.reduce((p,q)=>p+q,0)/f.length)/2;};
+  const trend=[]; Object.entries(byM).forEach(([mb,g])=>{const v=g.filter(x=>x.dia<corte),n=g.filter(x=>x.dia>=corte); if(v.length>=4&&n.length>=4){const sv=sc(v),sn=sc(n); if(sv!=null&&sn!=null) trend.push({mb,d:sn-sv,sv,sn});}});
+  const sobe=[...trend].sort((a,b)=>b.d-a.d).filter(t=>t.d>=1).slice(0,4);
+  const cai=[...trend].sort((a,b)=>a.d-b.d).filter(t=>t.d<=-1).slice(0,4);
+  const dmy=w=>{const[y,m,d]=w.split('-');return d+'/'+m;};
   const row=(c)=>`<tr>${c.map(x=>typeof x==='object'?`<td class="num" style="color:${x.c};font-weight:700">${x.t}</td>`:`<td>${esc(String(x))}</td>`).join('')}</tr>`;
   const pcell=p=>({t:p==null?'—':Math.round(p)+'%',c:_pcol(p)});
   const card=(ic,tit,val,sub,col)=>`<div style="flex:1;min-width:150px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:11px 13px">
@@ -776,9 +801,9 @@ function _motoHtml(rows){
   <div class="card" style="margin-bottom:16px">
     <h3>Por rota <span class="cap">mediana por rota-dia · densidade = exames por parada · fechado = % dias com relatório fechado</span></h3>
     <div style="overflow-x:auto"><table class="atab"><thead><tr>
-      <th>Rota</th><th>Região</th><th class="num">Dias</th><th class="num">Paradas</th><th class="num">Exames/dia</th><th class="num">Densidade</th><th class="num">Término</th><th class="num">Duração</th><th class="num">Imputação</th><th class="num">Fechado</th>
+      <th>Rota</th><th>Bairro(s)</th><th class="num">Dias</th><th class="num">Paradas</th><th class="num">Exames/dia</th><th class="num">Densidade</th><th class="num">Término</th><th class="num">Duração</th><th class="num">Imputação</th><th class="num">Fechado</th>
     </tr></thead><tbody>
-    ${rotaStats.map(r=>row([r.rota,r.regiao,r.n,r.par==null?'—':Math.round(r.par),r.exa==null?'—':Math.round(r.exa),{t:r.dens==null?'—':r.dens.toFixed(1),c:r.dens==null?'var(--mut)':(r.dens>=1?'var(--green)':r.dens>=0.8?'var(--amber)':'#FF5470')},_fmtmin(r.term),r.dur==null?'—':Math.round(r.dur)+'m',pcell(r.imp),pcell(r.fech)])).join('')}
+    ${rotaStats.map(r=>row([r.rota,r.bairro,r.n,r.par==null?'—':Math.round(r.par),r.exa==null?'—':Math.round(r.exa),{t:r.dens==null?'—':r.dens.toFixed(1),c:r.dens==null?'var(--mut)':(r.dens>=1?'var(--green)':r.dens>=0.8?'var(--amber)':'#FF5470')},_fmtmin(r.term),r.dur==null?'—':Math.round(r.dur)+'m',pcell(r.imp),pcell(r.fech)])).join('')}
     </tbody></table></div>
   </div>
 
@@ -807,6 +832,29 @@ function _motoHtml(rows){
     ${mbStats.map(m=>row([m.mb,m.n,m.dur==null?'—':Math.round(m.dur)+'m',pcell(m.imp),pcell(m.fech)])).join('')}
     </tbody></table></div>
     <div style="color:var(--mut);font-size:11px;margin-top:8px">⚠️ O nome do motoboy está registrado em ~${Math.round(100*comMb.length/rows.length)}% das rotas-dia (as mais recentes têm; as antigas não). O ranking considera só os dias com nome. "Duração" = tempo mediano entre a 1ª e a última confirmação (o horário de término depende do turno da rota, por isso a velocidade é medida pela duração).</div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>📈 Evolução semana a semana <span class="cap">mediana por semana · a disciplina subiu quando o relatório/figurinha entrou no ar (fim de set)</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr>
+      <th>Semana (início)</th><th class="num">Rotas-dia</th><th class="num">Imputação</th><th class="num">Relatório fechado</th><th class="num">Exames/dia</th>
+    </tr></thead><tbody>
+    ${weeks.map(w=>row([dmy(w.w),w.n,pcell(w.imp),pcell(w.fech),w.exd==null?'—':Math.round(w.exd)])).join('')}
+    </tbody></table></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>📊 Quem está evoluindo <span class="cap">disciplina (imputação + relatório) na 2ª metade vs a 1ª metade do período</span></h3>
+    <div style="display:flex;gap:26px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div style="font-weight:800;color:var(--green);font-size:13px;margin-bottom:4px">📈 Melhorando</div>
+        ${sobe.length?sobe.map(t=>`<div style="font-size:13px;line-height:1.8">${esc(first(t.mb))}: <b>${Math.round(t.sv)} → ${Math.round(t.sn)}</b> <span style="color:var(--green);font-weight:700">(+${Math.round(t.d)})</span></div>`).join(''):'<div style="color:var(--mut);font-size:12px">—</div>'}
+      </div>
+      <div style="flex:1;min-width:220px">
+        <div style="font-weight:800;color:#FF5470;font-size:13px;margin-bottom:4px">📉 Caindo</div>
+        ${cai.length?cai.map(t=>`<div style="font-size:13px;line-height:1.8">${esc(first(t.mb))}: <b>${Math.round(t.sv)} → ${Math.round(t.sn)}</b> <span style="color:#FF5470;font-weight:700">(${Math.round(t.d)})</span></div>`).join(''):'<div style="color:var(--mut);font-size:12px">—</div>'}
+      </div>
+    </div>
   </div>
 
   <div class="card">
