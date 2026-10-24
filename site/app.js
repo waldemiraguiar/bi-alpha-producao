@@ -624,7 +624,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',socios:'socios',apoio:'apoio',apoiot:'apoiot',voz:'voz'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',socios:'socios',apoio:'apoio',apoiot:'apoiot',voz:'voz',motoboy:'motoboy'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -640,7 +640,129 @@ function wireFTabs(){
     if(v==='apoiot') renderApoioT();
     if(v==='voz') renderVoz();
     if(v==='socios') renderSocios();
+    if(v==='motoboy') renderMotoboy();
   });});
+}
+
+/* ===================== ABA 🛵 COLETA MOTOBOYS ===================== */
+let _MOTO=null;
+const MOTO_SUPA="https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1";
+const MOTO_KEY="sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8";
+function _medn(a){ if(!a||!a.length) return null; const s=[...a].sort((x,y)=>x-y),m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+function _hmBRT(iso){ if(!iso) return null; const t=new Date(iso); return ((t.getUTCHours()*60+t.getUTCMinutes())-180+1440)%1440; }
+function _fmtmin(m){ if(m==null) return '—'; m=Math.round(m); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+function _durmin(a,b){ if(a==null||b==null) return null; let d=b-a; if(d<0) d+=1440; return d; }
+function _pcol(p){ return p==null?'var(--mut)':(p>=90?'var(--green)':p>=75?'var(--amber)':'#FF5470'); }
+function _regiao(rota){
+  const r=(rota||'').toLowerCase();
+  if(r.includes('angra')) return 'Angra';
+  if(r.includes('caxias')||r.includes('18h')) return 'Caxias e região';
+  if(r.includes('meiuca')||r.includes('11')) return 'Meiuca';
+  if(r.includes('7h')||r.includes('manhã')||r.includes('manha')) return 'Matinal';
+  if(r.includes('21h')||r.includes('noite')) return 'Noturna';
+  if(r.includes('folguista')) return 'Folguista';
+  return 'Rio (metrô)';
+}
+async function renderMotoboy(){
+  const wrap=document.getElementById('motoboy'); if(!wrap) return;
+  if(wrap.__done) return; wrap.__done=1;
+  wrap.innerHTML='<div class="card"><div class="loading">Carregando coletas…</div></div>';
+  try{
+    if(!_MOTO){
+      const d0=new Date(Date.now()-45*864e5).toISOString().slice(0,10);
+      const r=await fetch(`${MOTO_SUPA}/rota_dia?select=*&dia=gte.${d0}&order=dia.desc`,{headers:{apikey:MOTO_KEY,authorization:'Bearer '+MOTO_KEY}});
+      if(!r.ok) throw new Error('rota_dia '+r.status);
+      _MOTO=await r.json();
+    }
+    wrap.innerHTML=_motoHtml(_MOTO);
+  }catch(e){
+    wrap.innerHTML=`<div class="card"><h3>🛵 Coleta Motoboys</h3><div style="color:#FF5470;font-size:13px">Não consegui carregar os dados da coleta agora (${esc(String(e.message||e))}). Tente novamente em instantes.</div></div>`;
+    wrap.__done=0;
+  }
+}
+function _motoHtml(rows){
+  if(!rows.length) return '<div class="card"><h3>🛵 Coleta Motoboys</h3><div style="color:var(--mut)">Sem dados de coleta no período.</div></div>';
+  const dias=new Set(rows.map(x=>x.dia));
+  const comMb=rows.filter(x=>x.motoboy && String(x.motoboy).trim());
+  // --- por ROTA ---
+  const byR={}; rows.forEach(x=>{(byR[x.rota]=byR[x.rota]||[]).push(x);});
+  const rotaStats=Object.entries(byR).map(([rota,g])=>{
+    const imp=g.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas);
+    const fech=100*g.filter(x=>x.fechado_em).length/g.length;
+    return {rota,regiao:_regiao(rota),n:g.length,
+      par:_medn(g.map(x=>x.paradas).filter(v=>v!=null)),
+      exa:_medn(g.map(x=>x.exames).filter(v=>v!=null)),
+      term:_medn(g.map(x=>_hmBRT(x.ultima_conf)).filter(v=>v!=null)),
+      dur:_medn(g.map(x=>_durmin(_hmBRT(x.primeira_conf),_hmBRT(x.ultima_conf))).filter(v=>v!=null)),
+      imp:_medn(imp), fech};
+  }).sort((a,b)=>(b.imp+b.fech)-(a.imp+a.fech));
+  // --- por MOTOBOY ---
+  const byM={}; comMb.forEach(x=>{const k=String(x.motoboy).trim();(byM[k]=byM[k]||[]).push(x);});
+  const mbStats=Object.entries(byM).map(([mb,g])=>{
+    const imp=g.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas);
+    const fech=100*g.filter(x=>x.fechado_em).length/g.length;
+    return {mb,n:g.length,
+      dur:_medn(g.map(x=>_durmin(_hmBRT(x.primeira_conf),_hmBRT(x.ultima_conf))).filter(v=>v!=null)),
+      imp:_medn(imp), fech};
+  }).filter(m=>m.n>=5).sort((a,b)=>(b.imp+b.fech)-(a.imp+a.fech));
+  // destaques
+  const mbImp=[...mbStats].sort((a,b)=>b.imp-a.imp);
+  const mbFech=[...mbStats].sort((a,b)=>b.fech-a.fech);
+  const mbRap=[...mbStats].filter(m=>m.dur!=null).sort((a,b)=>a.dur-b.dur);
+  const piorRota=[...rotaStats].sort((a,b)=>(a.imp+a.fech)-(b.imp+b.fech))[0];
+  const topN=a=>a.slice(0,3).map(m=>m.mb.split(' ')[0]).join(', ');
+  // benchmark atual
+  const impGeral=_medn(rows.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas));
+  const fechGeral=100*rows.filter(x=>x.fechado_em).length/rows.length;
+  const row=(c)=>`<tr>${c.map(x=>typeof x==='object'?`<td class="num" style="color:${x.c};font-weight:700">${x.t}</td>`:`<td>${esc(String(x))}</td>`).join('')}</tr>`;
+  const pcell=p=>({t:p==null?'—':Math.round(p)+'%',c:_pcol(p)});
+  return `
+  <div class="card" style="margin-bottom:16px">
+    <h3>🛵 Coleta dos Motoboys <span class="cap">últimos 45 dias · ${dias.size} dias · ${rows.length} rotas-dia · mediana · fonte: relatório de rota (sem R$)</span></h3>
+    <div style="display:flex;gap:26px;flex-wrap:wrap;margin:6px 0 4px">
+      <div><div class="acmp-l">Imputação mediana</div><div class="acmp-v" style="color:${_pcol(impGeral)}">${Math.round(impGeral)}%</div><div class="acmp-s">paradas informadas / total</div></div>
+      <div><div class="acmp-l">Relatório fechado</div><div class="acmp-v" style="color:${_pcol(fechGeral)}">${Math.round(fechGeral)}%</div><div class="acmp-s">rotas que mandaram a figurinha</div></div>
+      <div><div class="acmp-l">Rotas monitoradas</div><div class="acmp-v">${rotaStats.length}</div><div class="acmp-s">${new Set(rotaStats.map(r=>r.regiao)).size} regiões</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>🏆 Destaques <span class="cap">quem puxa a média pra cima e onde está o gargalo</span></h3>
+    <div style="font-size:13px;line-height:1.9">
+      ✅ <b>Não esquece de imputar</b> (top 3): <b style="color:var(--green)">${topN(mbImp)}</b><br>
+      📩 <b>Passa o relatório</b> (top 3): <b style="color:var(--green)">${topN(mbFech)}</b><br>
+      ⚡ <b>Mais rápido na rota</b> (menor duração, top 3): <b style="color:var(--cyan)">${topN(mbRap)}</b><br>
+      🔴 <b>Rota com maior gargalo</b>: <b style="color:#FF5470">${esc(piorRota.rota)}</b> — imputa ${Math.round(piorRota.imp)}% e fecha relatório em ${Math.round(piorRota.fech)}% dos dias
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Por rota <span class="cap">mediana por rota-dia · imputação = paradas informadas/total · fechado = % dias com relatório fechado</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr>
+      <th>Rota</th><th>Região</th><th class="num">Dias</th><th class="num">Paradas</th><th class="num">Exames</th><th class="num">Término</th><th class="num">Duração</th><th class="num">Imputação</th><th class="num">Fechado</th>
+    </tr></thead><tbody>
+    ${rotaStats.map(r=>row([r.rota,r.regiao,r.n,r.par==null?'—':Math.round(r.par),r.exa==null?'—':Math.round(r.exa),_fmtmin(r.term),r.dur==null?'—':Math.round(r.dur)+'m',pcell(r.imp),pcell(r.fech)])).join('')}
+    </tbody></table></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Por motoboy <span class="cap">só dias com o nome registrado · mín. 5 dias · ordenado por disciplina (imputação + relatório)</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr>
+      <th>Motoboy</th><th class="num">Dias</th><th class="num">Duração mediana</th><th class="num">Imputação</th><th class="num">Relatório</th>
+    </tr></thead><tbody>
+    ${mbStats.map(m=>row([m.mb,m.n,m.dur==null?'—':Math.round(m.dur)+'m',pcell(m.imp),pcell(m.fech)])).join('')}
+    </tbody></table></div>
+    <div style="color:var(--mut);font-size:11px;margin-top:8px">⚠️ O nome do motoboy está registrado em ~${Math.round(100*comMb.length/rows.length)}% das rotas-dia (as mais recentes têm; as antigas não). O ranking considera só os dias com nome. "Duração" = tempo mediano entre a 1ª e a última confirmação (o horário de término depende do turno da rota, por isso a velocidade é medida pela duração).</div>
+  </div>
+
+  <div class="card">
+    <h3>📊 Referência de mercado (last-mile / operação de campo)</h3>
+    <div style="font-size:13px;line-height:1.9">
+      - <b>Prova de entrega/confirmação</b>: operações maduras de última milha registram confirmação em <b>95%+</b> das paradas. Aqui, a mediana de rotas com relatório fechado é <b style="color:${_pcol(fechGeral)}">${Math.round(fechGeral)}%</b>.<br>
+      - <b>Completude de dados de campo</b>: a referência é <b>98%+</b> dos eventos com dado completo. Aqui a imputação mediana é <b style="color:${_pcol(impGeral)}">${Math.round(impGeral)}%</b>.<br>
+      - Leitura simples: a <b>coleta física</b> vai bem; o que falha é o <b>registro</b> (imputar o número e fechar o relatório). É um ajuste de disciplina/hábito, não de rota.
+    </div>
+  </div>`;
 }
 
 /* ===================== ABA NOVOS (maturação) ===================== */
