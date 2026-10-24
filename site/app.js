@@ -684,6 +684,7 @@ function _motoHtml(rows){
   if(!rows.length) return '<div class="card"><h3>🛵 Coleta Motoboys</h3><div style="color:var(--mut)">Sem dados de coleta no período.</div></div>';
   const dias=new Set(rows.map(x=>x.dia));
   const comMb=rows.filter(x=>x.motoboy && String(x.motoboy).trim());
+  const first=s=>String(s||'').split(' ')[0];
   // --- por ROTA ---
   const byR={}; rows.forEach(x=>{(byR[x.rota]=byR[x.rota]||[]).push(x);});
   const rotaStats=Object.entries(byR).map(([rota,g])=>{
@@ -692,57 +693,110 @@ function _motoHtml(rows){
     return {rota,regiao:_regiao(rota),n:g.length,
       par:_medn(g.map(x=>x.paradas).filter(v=>v!=null)),
       exa:_medn(g.map(x=>x.exames).filter(v=>v!=null)),
+      dens:_medn(g.filter(x=>x.paradas&&x.exames!=null).map(x=>x.exames/x.paradas)),
+      tot:g.reduce((s,x)=>s+(x.exames||0),0),
       term:_medn(g.map(x=>_hmBRT(x.ultima_conf)).filter(v=>v!=null)),
       dur:_medn(g.map(x=>_durmin(_hmBRT(x.primeira_conf),_hmBRT(x.ultima_conf))).filter(v=>v!=null)),
       imp:_medn(imp), fech};
-  }).sort((a,b)=>(b.imp+b.fech)-(a.imp+a.fech));
+  }).sort((a,b)=>(b.exa||0)-(a.exa||0));
   // --- por MOTOBOY ---
   const byM={}; comMb.forEach(x=>{const k=String(x.motoboy).trim();(byM[k]=byM[k]||[]).push(x);});
   const mbStats=Object.entries(byM).map(([mb,g])=>{
     const imp=g.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas);
     const fech=100*g.filter(x=>x.fechado_em).length/g.length;
     return {mb,n:g.length,
+      exa:_medn(g.map(x=>x.exames).filter(v=>v!=null)),
       dur:_medn(g.map(x=>_durmin(_hmBRT(x.primeira_conf),_hmBRT(x.ultima_conf))).filter(v=>v!=null)),
       imp:_medn(imp), fech};
   }).filter(m=>m.n>=5).sort((a,b)=>(b.imp+b.fech)-(a.imp+a.fech));
-  // destaques
+  // destaques motoboy
   const mbImp=[...mbStats].sort((a,b)=>b.imp-a.imp);
   const mbFech=[...mbStats].sort((a,b)=>b.fech-a.fech);
   const mbRap=[...mbStats].filter(m=>m.dur!=null).sort((a,b)=>a.dur-b.dur);
-  const piorRota=[...rotaStats].sort((a,b)=>(a.imp+a.fech)-(b.imp+b.fech))[0];
-  const topN=a=>a.slice(0,3).map(m=>m.mb.split(' ')[0]).join(', ');
-  // benchmark atual
+  const melhorMb=mbStats[0];
+  const topN=a=>a.slice(0,3).map(m=>first(m.mb)).join(', ');
+  // ranking de ROTA (só com amostra >=10 dias p/ não contar rota rara)
+  const elig=rotaStats.filter(r=>r.n>=10);
+  const maxExa=Math.max(...elig.map(r=>r.exa||0),1);
+  elig.forEach(r=>r.score=((r.imp||0)+(r.fech||0)+100*(r.exa||0)/maxExa)/3);
+  const melhorRota=[...elig].sort((a,b)=>b.score-a.score)[0];
+  const rendeMais=[...elig].sort((a,b)=>(b.exa||0)-(a.exa||0))[0];
+  const piorRota=[...elig].sort((a,b)=>(a.imp+a.fech)-(b.imp+b.fech))[0];
+  const poucoDensa=[...elig].filter(r=>r.dens!=null).sort((a,b)=>a.dens-b.dens)[0];
+  // por REGIÃO
+  const byReg={}; rows.forEach(x=>{const rg=_regiao(x.rota);(byReg[rg]=byReg[rg]||[]).push(x);});
+  const regStats=Object.entries(byReg).map(([rg,g])=>({rg,n:g.length,
+    tot:g.reduce((s,x)=>s+(x.exames||0),0),
+    imp:_medn(g.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas))})).sort((a,b)=>b.tot-a.tot);
+  // DIA DA SEMANA + HORÁRIO
+  const WD=['dom','seg','ter','qua','qui','sex','sáb'];
+  const byWd={}; rows.forEach(x=>{const d=new Date(x.dia+'T12:00:00').getDay();(byWd[d]=byWd[d]||[]).push(x.exames||0);});
+  const wdStats=[1,2,3,4,5,6,0].filter(d=>byWd[d]).map(d=>({wd:WD[d],med:_medn(byWd[d]),n:byWd[d].length}));
+  const melhorDia=[...wdStats].sort((a,b)=>b.med-a.med)[0];
+  const terms=rows.map(x=>_hmBRT(x.ultima_conf)).filter(v=>v!=null).sort((a,b)=>a-b);
+  const pq=q=>terms.length?terms[Math.floor(q*terms.length)]:null;
+  // benchmark
   const impGeral=_medn(rows.filter(x=>x.paradas).map(x=>100*x.informadas/x.paradas));
   const fechGeral=100*rows.filter(x=>x.fechado_em).length/rows.length;
   const row=(c)=>`<tr>${c.map(x=>typeof x==='object'?`<td class="num" style="color:${x.c};font-weight:700">${x.t}</td>`:`<td>${esc(String(x))}</td>`).join('')}</tr>`;
   const pcell=p=>({t:p==null?'—':Math.round(p)+'%',c:_pcol(p)});
+  const card=(ic,tit,val,sub,col)=>`<div style="flex:1;min-width:150px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:11px 13px">
+    <div style="font-size:11px;color:var(--mut)">${ic} ${tit}</div><div style="font-size:16px;font-weight:900;color:${col||'#fff'};margin:2px 0">${val}</div><div style="font-size:11px;color:var(--mut)">${sub}</div></div>`;
   return `
   <div class="card" style="margin-bottom:16px">
     <h3>🛵 Coleta dos Motoboys <span class="cap">últimos 45 dias · ${dias.size} dias · ${rows.length} rotas-dia · mediana · fonte: relatório de rota (sem R$)</span></h3>
     <div style="display:flex;gap:26px;flex-wrap:wrap;margin:6px 0 4px">
       <div><div class="acmp-l">Imputação mediana</div><div class="acmp-v" style="color:${_pcol(impGeral)}">${Math.round(impGeral)}%</div><div class="acmp-s">paradas informadas / total</div></div>
       <div><div class="acmp-l">Relatório fechado</div><div class="acmp-v" style="color:${_pcol(fechGeral)}">${Math.round(fechGeral)}%</div><div class="acmp-s">rotas que mandaram a figurinha</div></div>
-      <div><div class="acmp-l">Rotas monitoradas</div><div class="acmp-v">${rotaStats.length}</div><div class="acmp-s">${new Set(rotaStats.map(r=>r.regiao)).size} regiões</div></div>
+      <div><div class="acmp-l">Rotas monitoradas</div><div class="acmp-v">${rotaStats.length}</div><div class="acmp-s">${regStats.length} regiões</div></div>
     </div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
-    <h3>🏆 Destaques <span class="cap">quem puxa a média pra cima e onde está o gargalo</span></h3>
+    <h3>⭐ As perguntas-chave <span class="cap">resposta direta pelo dado (rotas com 10+ dias)</span></h3>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      ${card('🥇','Melhor rota (equilíbrio)',esc(melhorRota.rota),`${Math.round(melhorRota.exa)} exames/dia · imputa ${Math.round(melhorRota.imp)}% · fecha ${Math.round(melhorRota.fech)}%`,'var(--cyan)')}
+      ${card('💰','Rota que mais rende',esc(rendeMais.rota),`${Math.round(rendeMais.exa)} exames/dia (mediana) · ${rendeMais.tot} no período`,'var(--green)')}
+      ${card('🥇','Melhor motoboy',esc(first(melhorMb.mb)),`imputa ${Math.round(melhorMb.imp)}% · fecha ${Math.round(melhorMb.fech)}% · ${melhorMb.n} dias`,'var(--cyan)')}
+      ${card('⚡','Mais rápido',esc(first(mbRap[0].mb)),`${Math.round(mbRap[0].dur)} min de mediana por rota`,'var(--cyan)')}
+      ${card('🔴','Maior gargalo',esc(piorRota.rota),`imputa ${Math.round(piorRota.imp)}% · fecha só ${Math.round(piorRota.fech)}%`,'#FF5470')}
+      ${card('🧪','Rota menos densa',esc(poucoDensa.rota),`${(poucoDensa.dens||0).toFixed(1)} exame/parada · muitas paradas p/ pouco exame`,'var(--amber)')}
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>🏆 Destaques por motoboy <span class="cap">top 3 em cada dimensão</span></h3>
     <div style="font-size:13px;line-height:1.9">
-      ✅ <b>Não esquece de imputar</b> (top 3): <b style="color:var(--green)">${topN(mbImp)}</b><br>
-      📩 <b>Passa o relatório</b> (top 3): <b style="color:var(--green)">${topN(mbFech)}</b><br>
-      ⚡ <b>Mais rápido na rota</b> (menor duração, top 3): <b style="color:var(--cyan)">${topN(mbRap)}</b><br>
-      🔴 <b>Rota com maior gargalo</b>: <b style="color:#FF5470">${esc(piorRota.rota)}</b> — imputa ${Math.round(piorRota.imp)}% e fecha relatório em ${Math.round(piorRota.fech)}% dos dias
+      ✅ <b>Não esquece de imputar</b>: <b style="color:var(--green)">${topN(mbImp)}</b><br>
+      📩 <b>Passa o relatório</b>: <b style="color:var(--green)">${topN(mbFech)}</b><br>
+      ⚡ <b>Mais rápido na rota</b> (menor duração): <b style="color:var(--cyan)">${topN(mbRap)}</b>
     </div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
-    <h3>Por rota <span class="cap">mediana por rota-dia · imputação = paradas informadas/total · fechado = % dias com relatório fechado</span></h3>
+    <h3>Por rota <span class="cap">mediana por rota-dia · densidade = exames por parada · fechado = % dias com relatório fechado</span></h3>
     <div style="overflow-x:auto"><table class="atab"><thead><tr>
-      <th>Rota</th><th>Região</th><th class="num">Dias</th><th class="num">Paradas</th><th class="num">Exames</th><th class="num">Término</th><th class="num">Duração</th><th class="num">Imputação</th><th class="num">Fechado</th>
+      <th>Rota</th><th>Região</th><th class="num">Dias</th><th class="num">Paradas</th><th class="num">Exames/dia</th><th class="num">Densidade</th><th class="num">Término</th><th class="num">Duração</th><th class="num">Imputação</th><th class="num">Fechado</th>
     </tr></thead><tbody>
-    ${rotaStats.map(r=>row([r.rota,r.regiao,r.n,r.par==null?'—':Math.round(r.par),r.exa==null?'—':Math.round(r.exa),_fmtmin(r.term),r.dur==null?'—':Math.round(r.dur)+'m',pcell(r.imp),pcell(r.fech)])).join('')}
+    ${rotaStats.map(r=>row([r.rota,r.regiao,r.n,r.par==null?'—':Math.round(r.par),r.exa==null?'—':Math.round(r.exa),{t:r.dens==null?'—':r.dens.toFixed(1),c:r.dens==null?'var(--mut)':(r.dens>=1?'var(--green)':r.dens>=0.8?'var(--amber)':'#FF5470')},_fmtmin(r.term),r.dur==null?'—':Math.round(r.dur)+'m',pcell(r.imp),pcell(r.fech)])).join('')}
     </tbody></table></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Por região <span class="cap">volume total de exames no período</span></h3>
+    <div style="overflow-x:auto"><table class="atab"><thead><tr>
+      <th>Região</th><th class="num">Rotas-dia</th><th class="num">Exames (total)</th><th class="num">Exames/rota-dia</th><th class="num">Imputação</th>
+    </tr></thead><tbody>
+    ${regStats.map(r=>row([r.rg,r.n,r.tot,(r.tot/r.n).toFixed(1),pcell(r.imp)])).join('')}
+    </tbody></table></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>⏱️ Quando rende e a que horas fecha</h3>
+    <div style="font-size:13px;line-height:1.9">
+      📅 <b>Melhor dia</b>: <b style="color:var(--cyan)">${melhorDia.wd}</b> (${melhorDia.med} exames/rota-dia) · ${wdStats.map(w=>`${w.wd} ${w.med}`).join(' · ')}<br>
+      🕐 <b>Término das rotas</b>: mediana <b>${_fmtmin(pq(.5))}</b> · 80% fecham entre <b>${_fmtmin(pq(.1))}</b> e <b>${_fmtmin(pq(.9))}</b>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
