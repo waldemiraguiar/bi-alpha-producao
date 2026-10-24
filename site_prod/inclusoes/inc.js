@@ -842,7 +842,11 @@
     try {
       const r = await rpc('raiva_casos_listar',
         { p_nome: sessao.nome, p_senha: sessao.senha, p_fechados: raivaPer === 'fechados' })
-      raivaCache = (r && r.ok && r.casos) ? r.casos : []
+      // 🔴 Fúlvio 23/out: "nova solicitação abre DOIS cards (teste 3 × 2)". Dedupe defensivo por id —
+      //   nunca se quer o mesmo caso 2×. Se a causa for fan-out do raiva_casos_listar, isso já resolve;
+      //   se for INSERT duplo (ids diferentes), é inofensivo e o conserto de raiz vem com o dump da função.
+      const _vistos = new Set()
+      raivaCache = ((r && r.ok && r.casos) ? r.casos : []).filter(c => { if (_vistos.has(c.id)) return false; _vistos.add(c.id); return true })
     } catch (e) { raivaCache = []; console.warn('raiva:', e.message) }
   }
 
@@ -1717,9 +1721,13 @@
       <span class="mudo">— dá para desfazer por 2 minutos</span>`
   }
 
+  // 🔴 Fúlvio 23/out: Alpha→Alpha finaliza quando o setor DESTINO confirma a RETIRADA;
+  //   apoio externo (Vet Lab/TECSA) finaliza quando o parceiro COLETA.
+  const saidaFin = x => x.apoio === 'alpha' ? !!x.retirada_em : !!x.coletado_em
+  const setorNome = k => SETOR_EXAME[k] || k || '—'
   function desenharSaidas() {
     const b = document.querySelector('#abas button[data-setor="saida"]')
-    const abertas = saidas.filter(x => !x.coletado_em)
+    const abertas = saidas.filter(x => !saidaFin(x))
     if (b) {
       b.innerHTML = '📦 Saída de amostras' + (abertas.length ? ` <span class="badge">${abertas.length}</span>` : '')
       b.classList.toggle('tem', abertas.length > 0)
@@ -1729,7 +1737,8 @@
     const d0 = new Date(); d0.setHours(0, 0, 0, 0)
     const lim = saidaPer === 'semana' ? agora() - 7 * 864e5 : d0.getTime()
     const lst = saidaPer === 'abertas' ? abertas
-      : saidas.filter(x => x.coletado_em && T(x.coletado_em) >= lim)
+      : saidaPer === 'historico' ? saidas    // 🔴 Fúlvio 23/out: histórico = TODAS as saídas feitas
+      : saidas.filter(x => saidaFin(x) && T(x.coletado_em || x.retirada_em) >= lim)
     if (!lst.length) {
       alvo.innerHTML = saidaSemTabela
         ? `<div class="vazio ruim">A aba está pronta, mas a tabela ainda não existe no banco.<br>
@@ -1744,39 +1753,62 @@
       const am = Array.isArray(x.amostras) ? x.amostras : []
       const idade = fmt((agora() - T(x.saiu_em)) / 60000)
       const ruim = am.some(a => a.qualidade && a.qualidade !== 'Íntegra')
-      return `<div class="saida ${x.coletado_em ? 'ok' : ''}" data-sid="${x.id}">
+      const alpha = x.apoio === 'alpha'          // 🔴 Alpha→Alpha (interação entre setores)
+      const fin = saidaFin(x)
+      const rota = alpha
+        ? `${x.origem_setor ? (SETOR_ICONE[x.origem_setor] || '') + ' ' : ''}<b>${esc(setorNome(x.origem_setor))}</b> → ${x.destino_setor ? (SETOR_ICONE[x.destino_setor] || '') + ' ' : ''}<b class="sai-apoio">${esc(setorNome(x.destino_setor))}</b> <span class="mudo">(Alpha→Alpha)</span>`
+        : `${x.origem_setor ? esc(setorNome(x.origem_setor)) + ' → ' : ''}<b class="sai-apoio">${esc(APOIO[x.apoio] || x.apoio)}</b>`
+      const statusTxt = fin
+        ? (alpha ? `retirada ${quandoDia(x.retirada_em)} · ${esc(x.retirada_por || '')}` : `coletado ${quandoDia(x.coletado_em)} · ${esc(x.coletado_por || '')}`)
+        : (alpha ? `aguardando retirada · há ${idade}` : `saiu há ${idade}`)
+      return `<div class="saida ${fin ? 'ok' : ''}${alpha ? ' alpha2alpha' : ''}" data-sid="${x.id}">
         <div class="can-cab">
           <b class="can-clin">${esc(x.clinica || 'clínica não informada')}</b>
-          <span class="can-t">${x.coletado_em
-            ? `coletado ${quandoDia(x.coletado_em)} · ${esc(x.coletado_por || '')}`
-            : `saiu há ${idade}`}</span>
+          <span class="can-t">${statusTxt}</span>
         </div>
         <div class="can-alvo">${x.pet ? `<b>${esc(x.pet)}</b>` : '<span class="mudo">pet não informado</span>'}${x.tutor ? ` <span class="mudo">(tutor: ${esc(x.tutor)})</span>` : ''} <span class="req">${esc(x.req)}</span>
-          → <b class="sai-apoio">${esc(APOIO[x.apoio] || x.apoio)}</b></div>
+          → ${rota}</div>
         <div class="sai-exames">🔬 ${ex.map(esc).join(' · ') || '—'}</div>
         <div class="sai-amostras ${ruim ? 'alerta' : ''}">${am.length
           ? am.map(a => `<span class="am">${esc(a.tipo || '?')}${a.volume ? ` · ${esc(a.volume)}` : ''}${a.qualidade ? ` · <b>${esc(a.qualidade)}</b>` : ''}</span>`).join('')
           : '<span class="mudo">sem amostra descrita</span>'}</div>
         ${x.obs ? `<div class="can-txt mudo">↳ ${esc(x.obs)}</div>` : ''}
-        <div class="can-acoes">${x.coletado_em
-          ? `<button class="leve" data-sdesfazer="${x.id}">Não foi coletado — voltar</button>`
-          : `<button data-scoletado="${x.id}">O parceiro coletou</button>`}
+        <div class="can-acoes">${fin
+          ? (alpha ? `<button class="leve" data-sretdesfazer="${x.id}">Desfazer retirada</button>`
+                   : `<button class="leve" data-sdesfazer="${x.id}">Não foi coletado — voltar</button>`)
+          : (alpha ? `<button data-sretirada="${x.id}">✅ Confirmar a retirada da amostra</button>`
+                   : `<button data-scoletado="${x.id}">O parceiro coletou</button>`)}
           ${/* 🔴 Fúlvio 05/out: "em VÁRIAS ABAS... você não coloca opção de cancelamento".
                 Aqui existia só o desfazer da COLETA — que não anula uma saída registrada errado.
                 ⛔ Só aparece ANTES de o parceiro coletar: depois disso a amostra saiu de verdade,
                    e sumir com o registro seria apagar da tela um encaminhamento que existe. */''}
           ${/* ⭐ No DEMO o botão aparece para qualquer um: é laboratório de treino, e quem aprende
                 precisa ver que errar tem volta. Na operação vale a lista de nomes, como no resto. */''}
-          ${!x.coletado_em && (DEMO || souAutorizadoACancelar())
+          ${!fin && (DEMO || souAutorizadoACancelar())
             ? `<button class="leve" data-scancelar="${x.id}">Cancelar esta saída</button>` : ''}</div>
       </div>`
     }).join('')
   }
 
   // ── a tela do setor TRIAGEM ──
+  // 🔴 Fúlvio 23/out: "a triagem confirma [o ciente], aí SOME e o processo continua dentro do próprio
+  //   cancelamento". Causa: a aba Triagem só mostrava quem faltava o CIENTE inicial — depois do ciente,
+  //   o resto do trabalho DA TRIAGEM (informar a requisição no caminho sem-amostra, ou consultar os
+  //   setores no caminho com-amostra) continuava pendente mas só dava para fazer DENTRO do Cancelamento.
+  //   ⭐ Agora a aba Triagem segura o cartão enquanto a triagem tiver QUALQUER tarefa pendente.
+  function triagemTemTarefa(c) {
+    if (c.status !== 'aberto') return false
+    if (!c.tri_ciente_em) return true                         // 1) falta o ciente da triagem
+    if (semAmostraEsperando(c)) return true                   // 2) sem amostra: informar a requisição quando ela chegar
+    if (c.caminho !== 'sem_amostra') {                        // 3) amostra no lab: a triagem ainda precisa consultar os setores
+      const proc = procDe(c)
+      return examesDoCartao(c).some(nome => { const p = proc[nome] || {}; return !p.resposta && !p.perguntado_em })
+    }
+    return false
+  }
   function desenharTriagem() {
     const b = document.querySelector('#abas button[data-setor="tri"]')
-    const esperando = cancelamentos.filter(c => c.status === 'aberto' && !c.tri_ciente_em)
+    const esperando = cancelamentos.filter(triagemTemTarefa)
     if (b) {
       b.innerHTML = 'Triagem' + (esperando.length ? ` <span class="badge">${esperando.length}</span>` : '')
       b.classList.toggle('tem', esperando.length > 0)
@@ -4279,6 +4311,8 @@
     // ⛔ Cada laboratório marcado precisa do par COMPLETO: exame E amostra. Registrar um destino
     //    sem saber o que foi para lá é exatamente o que ele quer evitar.
     const labs = labsUsados()
+    // 🔴 Fúlvio 23/out: destino (setor que recebe) só no Alpha→Alpha — recalcula a cada mudança
+    if ($('sDestinoWrap')) $('sDestinoWrap').hidden = !labs.includes('alpha')
     const ok = labs.length > 0 && sAmostras.every(a => a.tipo) && labs.every(k =>
       Object.values(sExSel).includes(k) && sAmostras.some(a => a.apoio === k))
     $('sSalvar').hidden = !ok
@@ -4296,6 +4330,12 @@
     $('sConfere').hidden = true; $('sResto').hidden = true; $('sSalvar').hidden = true
     $('sReqErro').textContent = ''; $('sErro').textContent = ''
     document.querySelectorAll('#sApoio .alvo').forEach(b => b.classList.remove('on'))
+    // 🔴 Fúlvio 23/out: popula os setores (origem sempre; destino só no Alpha→Alpha)
+    const _optsSetor = k0 => (k0 || '') + Object.entries(SETOR_EXAME)
+      .map(([k, v]) => `<option value="${k}">${SETOR_ICONE[k] || ''} ${esc(v)}</option>`).join('')
+    if ($('sOrigem')) $('sOrigem').innerHTML = _optsSetor('<option value="">— escolha o setor —</option>')
+    if ($('sDestino')) $('sDestino').innerHTML = _optsSetor('<option value="">— escolha o setor destino —</option>')
+    if ($('sDestinoWrap')) $('sDestinoWrap').hidden = true
     $('dlgSaida').showModal(); $('sReq').focus()
   })
   async function buscarReqSaida() {
@@ -4353,6 +4393,8 @@
       Object.values(APOIO_COR).forEach(c => x.classList.remove('ap-' + c))
       x.classList.add('ap-' + APOIO_COR[k])
     })
+    // 🔴 Fúlvio 23/out: destino só faz sentido no Alpha→Alpha — aparece quando "Alpha Labs" está em uso
+    if ($('sDestinoWrap')) $('sDestinoWrap').hidden = !labsUsados().includes('alpha')
     const ex = (sHF && sHF.exames) || []
     document.querySelectorAll('#sExLista [data-sex]').forEach(b => {
       const nome = (ex[+b.dataset.sex] || {}).exame
@@ -4445,9 +4487,15 @@
       //    coletas e confirmações diferentes — então cada um é a sua própria saída.
       // ⛔ Isso também evita mexer na tabela: `apoio` continua sendo uma coluna só.
       const labs = labsUsados()
+      const reqDig = $('sReq').value.replace(/\D/g, '')
+      // 🔴 Fúlvio 23/out: origem (qual setor gera) é sempre; destino só no Alpha→Alpha
+      const origem = ($('sOrigem') && $('sOrigem').value) || ''
+      const destino = ($('sDestino') && $('sDestino').value) || ''
+      if (!origem) { $('sErro').textContent = 'Diga qual setor do Alpha está gerando a saída.'; $('sSalvar').disabled = false; return }
+      if (labs.includes('alpha') && !destino) { $('sErro').textContent = 'No Alpha→Alpha, diga o setor que vai RECEBER a amostra.'; $('sSalvar').disabled = false; return }
       const base = {
         p_nome: sessao.nome, p_senha: sessao.senha,
-        p_req: $('sReq').value.replace(/\D/g, ''),
+        p_req: reqDig,
         p_clinica: (sHF && sHF.clinica) || null, p_pet: (sHF && sHF.pet) || null,
         p_tutor: (sHF && sHF.tutor) || null,
         p_obs: $('sObs').value.trim() || null, p_saiu: null,
@@ -4458,6 +4506,9 @@
           await rpc('inc_saida_nova', { ...base, p_apoio: k,
             p_exames: Object.keys(sExSel).filter(n => sExSel[n] === k),
             p_amostras: sAmostras.filter(a => a.apoio === k) })
+          // grava origem (e destino só no Alpha→Alpha) na saída recém-criada
+          try { await rpc('inc_saida_setores', { p_nome: sessao.nome, p_senha: sessao.senha,
+            p_req: reqDig, p_apoio: k, p_origem: origem, p_destino: k === 'alpha' ? destino : '' }) } catch (e) { /* aditivo: se o SQL ainda não rodou, a saída já foi registrada */ }
           feitos.push(APOIO[k])
         } catch (e) { falhou.push(`${APOIO[k]}: ${e.message}`) }
       }
@@ -4519,6 +4570,18 @@
           await carregar(); desenhar()
         } catch (e) { toast(e.message) }
       }
+      return
+    }
+    // 🔴 Fúlvio 23/out: Alpha→Alpha — o setor DESTINO confirma a retirada da amostra (ou desfaz)
+    const sr = ev.target.closest('[data-sretirada]'), srd = ev.target.closest('[data-sretdesfazer]')
+    if (sr || srd) {
+      if (!(await garantirLogin())) return
+      const bt = sr || srd; bt.disabled = true
+      try {
+        await rpc(sr ? 'inc_saida_retirada' : 'inc_saida_retirada_desfazer',
+          { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +(sr ? sr.dataset.sretirada : srd.dataset.sretdesfazer) })
+        toast(sr ? '✅ Retirada da amostra confirmada' : 'Retirada desfeita'); await carregar(); desenhar()
+      } catch (e) { bt.disabled = false; toast(msgSqlFalta(e, 'saida_amostra_alpha_para_alpha')) }
       return
     }
     const c = ev.target.closest('[data-scoletado]'), d = ev.target.closest('[data-sdesfazer]')
@@ -5561,6 +5624,19 @@
     if (nome === 'inc_saida_desfazer') {
       const x = saidas.find(y => y.id === a.p_id); if (x) { x.coletado_em = null; x.coletado_por = null }
       return true
+    }
+    if (nome === 'inc_saida_setores') {   // 🔴 Fúlvio 23/out: Alpha→Alpha
+      const x = saidas.filter(y => y.req === a.p_req && y.apoio === a.p_apoio && !y.cancelado_em).sort((p, q) => q.id - p.id)[0]
+      if (x) { x.origem_setor = a.p_origem || null; x.destino_setor = a.p_destino || null }
+      return { ok: !!x, id: x && x.id }
+    }
+    if (nome === 'inc_saida_retirada') {
+      const x = saidas.find(y => y.id === a.p_id); if (x) { x.retirada_em = new Date().toISOString(); x.retirada_por = 'DEMO' }
+      return { ok: !!x }
+    }
+    if (nome === 'inc_saida_retirada_desfazer') {
+      const x = saidas.find(y => y.id === a.p_id); if (x) { x.retirada_em = null; x.retirada_por = null }
+      return { ok: !!x }
     }
     if (nome === 'inc_exames_lib') {
       const x = chamados.find(y => y.id === a.p_id)
