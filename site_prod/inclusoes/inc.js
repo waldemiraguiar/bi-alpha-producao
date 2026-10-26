@@ -782,7 +782,7 @@
       Este laudo e este valor valem para esses dois destinos — <b>confirme antes de prometer</b>.</div>`
   }
 
-  let raivaCache = [], raivaPer = 'abertos', raivaGaveta = null, raivaAberto = null   // ⭐ Fúlvio 16/out: 1 formulário aberto por vez; o resto recolhido
+  let raivaCache = [], raivaPer = 'abertos', raivaGaveta = null, raivaAberto = null, raivaErro = null   // ⭐ Fúlvio 16/out: 1 formulário aberto por vez; o resto recolhido · raivaErro: falha de carga (não confundir com lista vazia)
   // ⏪ o desfazer do cancelamento: vale por 2 minutos, que é a janela em que a pessoa percebe
   //    que clicou errado. Depois disso o caso fica cancelado mesmo — e nada se perde, porque a
   //    linha continua no banco com quem cancelou e por quê.
@@ -838,17 +838,26 @@
       ]
       return
     }
-    if (!sessao || !sessao.nome) { raivaCache = []; return }
-    try {
-      const r = await rpc('raiva_casos_listar',
-        { p_nome: sessao.nome, p_senha: sessao.senha, p_fechados: raivaPer === 'fechados',
-          p_cancelados: raivaPer === 'cancelados' })   // 🔴 Fúlvio 23/out: cancelado não some mais — tem aba própria
-      // 🔴 Fúlvio 23/out: "nova solicitação abre DOIS cards (teste 3 × 2)". Dedupe defensivo por id —
-      //   nunca se quer o mesmo caso 2×. Se a causa for fan-out do raiva_casos_listar, isso já resolve;
-      //   se for INSERT duplo (ids diferentes), é inofensivo e o conserto de raiz vem com o dump da função.
-      const _vistos = new Set()
-      raivaCache = ((r && r.ok && r.casos) ? r.casos : []).filter(c => { if (_vistos.has(c.id)) return false; _vistos.add(c.id); return true })
-    } catch (e) { raivaCache = []; console.warn('raiva:', e.message) }
+    if (!sessao || !sessao.nome) { raivaErro = 'sem login'; return }   // ⛔ sem sessão: NÃO apaga o que já está na tela
+    // 🔴 Fúlvio 25/out: "recarreguei a página e TUDO sumiu (Maria Antônia, Ronda) — reapareceu ao criar
+    //   um card". Causa: um tropeço transitório (rede/boot) no listar zerava o raivaCache e o erro era
+    //   engolido (.catch vazio). Agora só SUBSTITUO em sucesso, RETENTO o transitório, e NUNCA apago o
+    //   que está na tela por um tropeço. (O dedupe por id continua — nunca o mesmo caso 2×.)
+    for (let tent = 1; tent <= 3; tent++) {
+      try {
+        const r = await rpc('raiva_casos_listar',
+          { p_nome: sessao.nome, p_senha: sessao.senha, p_fechados: raivaPer === 'fechados',
+            p_cancelados: raivaPer === 'cancelados' })   // 🔴 Fúlvio 23/out: cancelado tem aba própria
+        if (r && r.ok && Array.isArray(r.casos)) {
+          const _vistos = new Set()
+          raivaCache = r.casos.filter(c => { if (_vistos.has(c.id)) return false; _vistos.add(c.id); return true })
+          raivaErro = null; return
+        }
+        raivaErro = (r && r.erro) || 'sem resposta'
+      } catch (e) { raivaErro = e.message }
+      if (tent < 3) await new Promise(s => setTimeout(s, 700 * tent))   // espera e retenta o transitório
+    }
+    console.warn('raiva: não carregou (mantive o que estava na tela) —', raivaErro)
   }
 
   // ⭐ o dia em que a coleta libera: a espera depois da vacina; a coleta vale do dia seguinte.
@@ -1019,7 +1028,10 @@
         : '<div class="lin mudo">—</div>')
     }
     if (!L.length) {
-      el.innerHTML = raivaPer === 'cancelados'
+      // 🔴 Fúlvio 25/out: lista vazia por FALHA de carga ≠ "não tem solicitação". Avisa o erro (não some em silêncio).
+      el.innerHTML = raivaErro
+        ? `<p class="raiva-nao">⚠️ Não consegui carregar as solicitações agora (${esc(raivaErro === 'sem login' ? 'faça login' : 'rede/servidor')}). <b>As solicitações estão salvas</b> — recarregue ou faça uma ação que elas voltam. <button class="leve" data-rrecarregar="1">↻ Tentar de novo</button></p>`
+        : raivaPer === 'cancelados'
         ? `<p class="mudo">Nenhuma solicitação cancelada. 👍</p>`
         : `<p class="mudo">Nenhuma solicitação ${raivaPer === 'fechados' ? 'concluída' : 'em andamento'}.
         Use <b>+ Nova solicitação</b> quando uma clínica pedir laudo de trânsito internacional.</p>`
@@ -4790,6 +4802,12 @@
       raivaPer = f.dataset.rper
       $('vRaiva').querySelectorAll('[data-rper]').forEach(x => x.classList.toggle('on', x === f))
       await carregarRaiva(); return desenharRaiva()
+    }
+    // 🔴 Fúlvio 25/out: botão "↻ Tentar de novo" quando a carga falhou (sessão/rede)
+    if (ev.target.closest('[data-rrecarregar]')) {
+      if (sessao && sessao.ate > Date.now()) { await carregarRaiva(); return desenharRaiva() }
+      if (await garantirLogin()) { await carregarRaiva(); return desenharRaiva() }
+      return
     }
     // os tiquezinhos do checklist
     const tq = ev.target.closest('[data-rtq]')
