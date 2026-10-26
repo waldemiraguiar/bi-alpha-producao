@@ -793,6 +793,7 @@
     el.hidden = !vale
     if (vale) el.innerHTML = `⏪ <b>${esc(raivaDesfazer.pet)}</b> foi cancelado.
       <button class="lnk" data-rdesfazer="${raivaDesfazer.id}">desfazer</button>
+      <button class="lnk nao" data-rconfirmcancel="${raivaDesfazer.id}">confirmar cancelamento</button>
       <span class="mudo">— dá para desfazer por 2 minutos</span>`
   }
 
@@ -1577,9 +1578,18 @@
 
     // ⭐ C3/C6: o bloco é o MESMO com e sem número de requisição. A única diferença é que, sem
     //    requisição, a primeira tarefa da Triagem é justamente informá-la.
+    // ⭐ Fúlvio 26/out: sem_amostra tem DUAS etapas na Triagem: (1) informar a requisição,
+    //    (2) anotar na requisição que o exame foi cancelado. Campo tri_anotado_em já existe no banco.
+    const anotadoReq = (c.caminho === 'sem_amostra' && (c.req || c.req_nova))
+      ? (c.tri_anotado_em
+          ? `<div class="can-avisei ok">✍️ cancelamento anotado na requisição por ${esc(c.tri_anotado_por || '?')} às ${hm(c.tri_anotado_em)}</div>`
+          : podeAgir('tri')
+            ? `<div class="can-acoes"><button data-ctrianot="${c.id}">✍️ Anotei na requisição que o exame foi cancelado</button></div>`
+            : `<div class="can-avisei"><span class="mudo">aguardando a Triagem anotar na requisição</span></div>`)
+      : ''
     const tarefasTri = c.status !== 'aberto' ? '' : `<div class="tri-bloco">
       <div class="tri-cab">🧪 Tarefas da Triagem <span class="mudo">— o Escritório só dá a ciência</span></div>
-      ${esperaAmostra || (c.req_nova || c.req ? `<div class="can-avisei ok">📥 requisição informada: <b>${esc(c.req_nova || c.req)}</b></div>` : '')}
+      ${esperaAmostra || (c.req_nova || c.req ? `<div class="can-avisei ok">📥 requisição informada: <b>${esc(c.req_nova || c.req)}</b></div>${anotadoReq}` : '')}
     </div>`
 
     // ── ⛔ a regra que a Thailan chamou de obrigatória: o valor TEM de sair zerado ──
@@ -1590,10 +1600,10 @@
              <div class="can-acoes"><button data-cvalor="1" data-cid="${c.id}">Corrigi — está zerado</button></div></div>`
         : (podeAgir('esc') || podeAgir('cc'))
           ? `<div class="can-valor pede"><b>💰 O valor ficou zerado no HF?</b>
-               <span>Exame cancelado nunca pode sair mantendo o valor.</span>
+               ${c.caminho !== 'sem_amostra' ? '<span>Exame cancelado nunca pode sair mantendo o valor.</span>' : ''}
                <div class="can-acoes">
                  <button data-cvalor="1" data-cid="${c.id}">Sim, está zerado</button>
-                 <button class="nao" data-cvalor="0" data-cid="${c.id}">Não — ainda está cobrando</button>
+                 ${c.caminho !== 'sem_amostra' ? `<button class="nao" data-cvalor="0" data-cid="${c.id}">Não — ainda está cobrando</button>` : ''}
                </div></div>`
           : ''
 
@@ -1609,7 +1619,9 @@
         // ⭐ Fúlvio 13/out (padrão ouro): cada setor marca o SEU ciente, e SÓ DENTRO da aba dele. No cancelamento
         //    (ou em qualquer outra aba) o botão mostra só o ESTADO — não dá pra clicar o ciente do outro setor.
         if (setor === dono && podeAgir(dono)) return `<div class="can-lado"><button data-cciente="${lad}" data-cid="${c.id}">Ciente — ${rot}</button></div>`
-        return `<div class="can-lado"><span class="so-setor">${rot}: aguardando o ciente ${dono === 'tri' ? 'da Triagem' : 'do Escritório'} <span class="mudo">(marca na aba ${esc(SETORES[dono].nome)})</span></span></div>`
+        // ⭐ Fúlvio 26/out: mantém o mesmo botão cinza escuro (mesma aparência de "aguardando o aviso"),
+        //    mas agora diz "aguardando o aceite" — deixa claro que o aviso já foi, falta o ciente.
+        return `<div class="can-lado"><button class="ciente-sombra" disabled style="opacity:.45;cursor:not-allowed">Ciente — ${rot} <span class="mudo">(aguardando o aceite)</span></button></div>`
       }
       const cobranca = estourou && podeAgir('cc') && !c.cobrado_em
         ? `<div class="can-acoes"><button class="nao" data-ccobrar="${c.id}">Ninguém deu ciente — vou sinalizar</button></div>` : ''
@@ -1627,10 +1639,11 @@
       // ⭐ THAILAN 02/out: "as respostas em relação ao escritório, quando o exame já está no
       //    laboratório: o exame foi cancelado, foi criado um exame com cancelamento, ou o exame
       //    já foi processado / liberado." Era um botão só — agora são os três desfechos reais.
+      // ⭐ Fúlvio 26/out: sem_amostra = exame nunca chegou; só cabe "criei o cancelamento no HF".
       return trilha + consulta + `<div class="can-acoes can-esc">
         <button data-chf="${c.id}" data-cdesf="criado">Criei o exame de cancelamento no HF</button>
-        <button data-chf="${c.id}" data-cdesf="cancelado" class="leve">Exame cancelado no HF</button>
-        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button></div>`
+        ${c.caminho !== 'sem_amostra' ? `<button data-chf="${c.id}" data-cdesf="cancelado" class="leve">Exame cancelado no HF</button>
+        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button>` : ''}</div>`
         + parecerEsc + vereditoBox + valorBox + descartar
     }
 
@@ -1662,6 +1675,17 @@
                <button data-caviseicc="${c.id}">Avisei o atendimento</button>
              </div></div>`
         : `<div class="can-parecer pede"><span class="so-setor">📣 aguardando o Escritório avisar o Atendimento ao Cliente</span></div>`
+
+    // ⭐ Fúlvio 26/out: sem_amostra = exame foi criado agora no HF (inexistente antes).
+    //    Não há espelho a conferir. Atendimento só confirma "cliente avisado no grupo".
+    if (c.caminho === 'sem_amostra') {
+      if (!podeAgir('cc')) return trilha + valorBox + aviseAtend
+      return trilha + valorBox + aviseAtend
+        + (avisouCC
+          ? `<div class="can-acoes"><button data-ccliente="${c.id}">Cliente avisado no grupo — encerrar</button></div>`
+          : `<div class="can-parecer pede"><span class="so-setor">⏳ o Atendimento confirma depois que o Escritório avisar (acima)</span></div>`)
+        + descartar
+    }
 
     if (!podeAgir('cc')) return trilha + valorBox + comoConferiu + aviseAtend +
       `<div class="can-acoes"><button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>`
@@ -4691,6 +4715,12 @@
         await carregarRaiva(); desenharRaiva()
       } catch (e) { toast(e.message) }
       return
+    }
+    // ⏩ confirmar cancelamento: encerra a janela de 2 min sem desfazer (Fúlvio 26/out)
+    const cf = ev.target.closest('[data-rconfirmcancel]')
+    if (cf) {
+      raivaDesfazer = null; raivaDesfeito = null
+      desenharDesfazer(); return desenharRaiva()
     }
 
     // ⭐ Fúlvio 16/out: clicar no cabeçalho RECOLHE/ABRE o formulário (1 aberto por vez)
