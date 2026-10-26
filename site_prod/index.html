@@ -448,7 +448,7 @@ body{font-family:'Inter',sans-serif;background:
 /* === AUTO-ATUALIZACAO ALPHA — todos rodam a build publicada, sem limpar cache ===
    Bump a CADA publicacao: este BUILD + (se houver) o selo de versao + o /version.json. */
 (function(){
-  var BUILD="24071540";
+  var BUILD="2610261534";
   function ver(){
     try{
       fetch("version.json?_="+Date.now(),{cache:"no-store"})
@@ -506,7 +506,7 @@ body{font-family:'Inter',sans-serif;background:
      que a rede de alguns laboratórios bloqueia/afunila (causa do travamento 08/jul). -->
 <script src="supabase-js.min.js"></script>
 <script src="supa.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=2610261534"></script>
 <script src="sep.js"></script>
 <script src="cli.js"></script>
 </body>

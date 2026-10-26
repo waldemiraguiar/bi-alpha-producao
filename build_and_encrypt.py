@@ -126,6 +126,7 @@ def build():
         sep_rows = q(f"""SELECT s.CodCategoria cod, s.CodExame codex, s.Exame exame,
             r.NumeroSequencial req, r.AnoRequisiçao ano,
             r.Animal paciente, r.Proprietario tutor, r.Requisitante vet, r.Cliente clinica,
+            r.Raça raca, r.Especie especie, r.Idade idade, r.NumeroSequencialLabHF hf,
             r.DataEntrada entrada, r.UsuarioDataEntrada udata, r.UsuarioHoraEntrada uhora,
             s.Urgencia urg, DATEDIFF(CURDATE(), r.DataEntrada) dias
             FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela
@@ -152,6 +153,8 @@ def build():
                 "tutor": (r["tutor"] or "").strip(),
                 "vet": (r["vet"] or "").strip(),
                 "clinica": (r["clinica"] or "").strip(),
+                "raca": (r["raca"] or "").strip(), "especie": (r["especie"] or "").strip(),
+                "idade": (r["idade"] or "").strip(), "hf": (r["hf"] or r["req"]),
                 "entrada": str(r["entrada"]) if r["entrada"] else None,
                 "entrada_dt": ent_dt, "classe": classe,
                 "urgente": (r["urg"] == 1), "dias": r["dias"] or 0,

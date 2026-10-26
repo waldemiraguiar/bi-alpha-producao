@@ -13,6 +13,45 @@ let prodBaixados=new Set(), prodBaixaInfo=[];
 let avisarMarks=[];
 const exChave=e=>String(e.registro)+'|'+(e.exame||'');
 const exBaixado=e=>prodBaixados.has(exChave(e));
+/* ===== 🖨️ RASCUNHO PCR (Dudu 26/10): imprime a folha de Biologia Molecular direto do painel ===== */
+function _rascFdt(s){ if(!s) return null; const m=String(s).slice(0,10).match(/(\d{4})-(\d{2})-(\d{2})/); return m?new Date(+m[1],+m[2]-1,+m[3]):null; }
+function _rascDmy(d){ return d?String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear():'____/____/______'; }
+function _rascItens(){ return (DATA&&DATA.separacao&&DATA.separacao.itens)||[]; }
+function _rascFolha(reg){
+  const its=_rascItens().filter(i=>String(i.req)===String(reg)&&/MOLECULAR/i.test(i.cat||''));
+  if(!its.length) return null;
+  const r=its[0], ent=_rascFdt(r.entrada), lib=ent?new Date(ent.getTime()+4*864e5):null;
+  const exs=[...new Set(its.map(i=>i.exame).filter(Boolean))];
+  const hoje=new Date(), ref='AL-'+String(hoje.getFullYear()).slice(2)+String(hoje.getMonth()+1).padStart(2,'0')+String(hoje.getDate()).padStart(2,'0')+'-ME'+String(reg).slice(-4);
+  const up=s=>String(s||'').toUpperCase();
+  return `<div class="folha">
+    <div class="hf">Nº HF: <b>${esc(String(r.hf||reg))}</b><br><span class="ref">ref. interna: ${ref}</span></div>
+    <div class="h1">ALPHA LABS</div><div class="h2">BIOLOGIA MOLECULAR (PCR)</div>
+    <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
+    <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
+    <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
+    <div class="lin"><b>Méd. Vet.:</b> ${esc(r.vet||'—')} &nbsp;·&nbsp; <b>Clínica:</b> ${esc(r.clinica||'—')} &nbsp;·&nbsp; <b>Entrada:</b> ${_rascDmy(ent)}</div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exs.map(e=>`<div class="ex">• <b>${esc(e)}</b></div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="sec">PCR · Alpha</div>
+    <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div><div><b>Data de liberação:</b> <u>${_rascDmy(lib)}</u> <span class="ref">(PCR: 4 dias)</span></div></div>
+    <div class="amost"><b>Amostras:</b> <span>( ) Sangue</span><span>( ) Swab</span><span>( ) Fezes</span><span>( ) Urina</span><span>( ) Medula</span><span>( ) Linfonodo</span><span>( ) ______</span></div>
+    <table class="an"><thead><tr><th style="text-align:left;width:60%">Análises</th><th>DNA</th><th>RNA</th></tr></thead><tbody><tr><td style="height:28px"></td><td></td><td></td></tr><tr><td style="height:28px"></td><td></td><td></td></tr></tbody></table>
+  </div>`;
+}
+const _RASC_CSS="@page{size:A4;margin:12mm} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0} .folha{border:2px solid #111;padding:16px 20px;page-break-after:always} .folha:last-child{page-break-after:auto} .h1{font-size:26px;font-weight:800} .h2{font-size:16px;font-weight:800;margin-bottom:10px} .lin{font-size:13.5px;margin:3px 0} .box{border:1.5px solid #111;margin-top:12px} .boxh{background:#eee;font-weight:800;padding:5px 10px;border-bottom:1.5px solid #111;font-size:13px} .boxb{padding:8px 10px} .ex{font-size:14px;margin:3px 0} .sec{font-size:20px;font-weight:800;margin:16px 0 6px} .datas{display:flex;gap:40px;font-size:14px;margin:8px 0} .datas u{padding:0 6px} .amost{font-size:14px;margin-top:10px} .amost span{margin-right:12px;white-space:nowrap} .hf{float:right;text-align:right;font-size:12px;color:#333} .ref{color:#888} table.an{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px} table.an td,table.an th{border:1px solid #111;padding:5px 8px}";
+function _rascImprimir(regs){
+  const folhas=regs.map(_rascFolha).filter(Boolean);
+  if(!folhas.length){ alert('Sem dados de PCR para imprimir agora (toque em 🔄 Atualizar e tente de novo).'); return; }
+  const w=window.open('','_blank');
+  if(!w){ alert('O navegador bloqueou a janela de impressão — libere o pop-up e tente de novo.'); return; }
+  w.document.write("<!doctype html><html><head><meta charset=utf-8><title>Rascunho PCR</title><style>"+_RASC_CSS+"</style></head><body>"+folhas.join('')+"</body></html>");
+  w.document.close(); setTimeout(()=>{ try{w.focus();w.print();}catch(e){} },350);
+}
+function imprimirRascunhoPCR(reg){ _rascImprimir([reg]); }
+function imprimirLotePCR(){
+  const regs=[...new Set(_rascItens().filter(i=>/MOLECULAR/i.test(i.cat||'')).map(i=>String(i.req)))];
+  _rascImprimir(regs);
+}
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
 let prodTravados=[], prodTravadoSet=new Set(), prodTravadosHist=[], prodTravaMap={};
 // 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only da Triagem, cat Cito/Histo/Necrópsia)
@@ -636,11 +675,12 @@ function renderActive(){
           <span class="lg"><b style="color:var(--cyan,#22d3ee)">✓ no exame</b> = tira o exame da Produção · não depende do HF · pede seu login</span>
           ${atrasAlvo.length?`<button class="limpabtn">🧹 Limpar atrasados (${atrasAlvo.length})</button>`:''}
           <button class="histbtn">🗂 Histórico do exame${(prodBaixaInfo.length+prodTravados.length+prodTravadosHist.length)?` (${prodBaixaInfo.length+prodTravados.length+prodTravadosHist.length})`:''}</button>
+          ${!special&&/MOLECULAR/i.test(x.categoria||'')?`<button class="limpabtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirLotePCR()" title="imprime o rascunho de TODOS os PCR em processo">🖨️ Imprimir lote PCR</button>`:''}
         </div>
         <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
           <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
             <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div>${travHistLine(e)}<div class="pobswrap"><input class="pobsinput${((sepMarksMap['prod:'+e.registro+'|'+(e.exame||'')]||{}).obs)?' has':''}" data-pobsk="prod:${escA(String(e.registro))}|${escA(e.exame||'')}" value="${escA(((sepMarksMap['prod:'+e.registro+'|'+(e.exame||'')]||{}).obs)||'')}" placeholder="📝 observação / motivo de não ter dado baixa (ex.: preso com o escritório, não separado)" autocomplete="off" spellcheck="false"><span class="pobssaved"></span></div></div>
-            <div class="wlact">${e._urg
+            <div class="wlact">${/MOLECULAR/i.test(e.categoria||x.categoria||'')?`<button class="exbaixabtn" style="background:#0284c7;border-color:#0284c7" onclick="imprimirRascunhoPCR('${esc(String(e.registro))}')" title="imprimir o rascunho do PCR">🖨️</button>`:''}${e._urg
               ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" data-manual="${e._manual?'1':'0'}" title="tira do alerta de urgência (o exame continua na fila)">baixa na urgência</button>`
               : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<button class="exbaixabtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" data-atr="${e.atrasado?'1':'0'}" title="baixa no EXAME — tira da Produção (não depende do HF)">✓ no exame</button><button class="travarbtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" title="travar o exame (financeiro, cadastro, problema de amostra…) — vai pra aba 🔒 Travados">🔒 Travar</button><span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
         </div>
