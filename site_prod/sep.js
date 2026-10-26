@@ -537,7 +537,8 @@
     const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
     // 🔒 TRAVAR: manda o exame pra aba Travados (financeiro/cadastro/problema de amostra…), motivo em texto livre
     const btrava = `<button class="sepbtn trava" data-act="travar" data-k="${k}" title="travar este exame (financeiro, cadastro, problema de amostra…)">🔒 Travar</button>`;
-    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${undo}</div></div>`;
+    const bRasc = /MOLECULAR/i.test(it.cat || '') ? `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="imprimir o rascunho do PCR deste animal">🖨️</button>` : '';
+    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${bRasc}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${undo}</div></div>`;
   }
 
   // ordena categorias seguindo a ORDEM da TV (familiaridade); fallback alfabético
@@ -609,8 +610,9 @@
     const ordered = [...arr].sort((a, b) => (b.dias || 0) - (a.dias || 0) || rankSt(statusOf(a).st) - rankSt(statusOf(b).st));
     const bar = opts.bar ? opts.bar(items.length) : '';
     const listHtml = ordered.length ? ordered.map(rowSeparar).join('') : `<div class="sepwait" style="padding:14px">✓ Nenhum exame em <b>${esc2(selKey)}</b> nesta aba agora.</div>`;
+    const _loteBtn = /MOLECULAR/i.test(selKey) ? `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff;margin-left:10px" onclick="imprimirLotePCR()" title="imprimir o rascunho de TODOS os PCR da fila">🖨️ Imprimir lote PCR</button>` : '';
     return search + bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(selKey)}</span>
-      <span class="cnt">${arr.length} ${opts.noun}</span></div>${listHtml}</div>`;
+      <span class="cnt">${arr.length} ${opts.noun}</span>${_loteBtn}</div>${listHtml}</div>`;
   }
   // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
   // FILA DE HOJE = entradas de HOJE (dias 0) ainda não confirmadas. Fluxo completo: separar → receber → tem amostra?
