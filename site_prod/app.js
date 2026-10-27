@@ -51,15 +51,18 @@ function _rascImprimir(regs){
 //    A equipe passa a VER quais PCR já tiveram o rascunho impresso (✅ + hora), compartilhado e persistente.
 let rascImpressoMap={};   // { registro(string): ts }
 const _rascHm=ts=>{ try{ const d=new Date(Number(ts)); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }catch(e){ return ''; } };
+// expõe pro sep.js (aba Triagem, onde o Dudu trabalha) ler o mesmo estado — let não vai pro window sozinho
+window._rascInfo=r=>rascImpressoMap[String(r)]; window._rascHmG=_rascHm;
 async function _rascMarcarImpresso(regs){
   // imprime SEMPRE; marcar é um extra. Sem nuvem não marca, mas NUNCA bloqueia a impressão.
   if(!(window.SUPA&&window.SUPA.ok)) return;
   for(const reg of regs){ try{ await window.SUPA.upsertMark({chave:'rascpcr:'+String(reg), req:String(reg), estado:'rascunho_impresso', por:'equipe', ts_sep:Date.now()}); rascImpressoMap[String(reg)]=Date.now(); }catch(e){} }
   try{ await loadManual(); renderActive(); }catch(e){}
+  try{ if(window.SEP&&window.SEP.render) window.SEP.render(); }catch(e){}   // atualiza tb a aba Triagem
 }
 async function _rascDesmarcar(reg){
   if(!(window.SUPA&&window.SUPA.ok)){ alert('Desmarcar exige conexão em nuvem.'); return; }
-  try{ await window.SUPA.upsertMark({chave:'rascpcr:'+String(reg), req:String(reg), estado:'', por:'equipe', ts_sep:Date.now()}); delete rascImpressoMap[String(reg)]; await loadManual(); renderActive(); }catch(e){}
+  try{ await window.SUPA.upsertMark({chave:'rascpcr:'+String(reg), req:String(reg), estado:'', por:'equipe', ts_sep:Date.now()}); delete rascImpressoMap[String(reg)]; await loadManual(); renderActive(); try{ if(window.SEP&&window.SEP.render) window.SEP.render(); }catch(e){} }catch(e){}
 }
 function imprimirRascunhoPCR(reg){ _rascImprimir([reg]); _rascMarcarImpresso([String(reg)]); }
 function imprimirLotePCR(){

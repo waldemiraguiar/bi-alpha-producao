@@ -537,7 +537,10 @@
     const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
     // 🔒 TRAVAR: manda o exame pra aba Travados (financeiro/cadastro/problema de amostra…), motivo em texto livre
     const btrava = `<button class="sepbtn trava" data-act="travar" data-k="${k}" title="travar este exame (financeiro, cadastro, problema de amostra…)">🔒 Travar</button>`;
-    const bRasc = /MOLECULAR/i.test(it.cat || '') ? `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="imprimir o rascunho do PCR deste animal">🖨️</button>` : '';
+    const _rImp = (window._rascInfo ? window._rascInfo(it.req) : null);   // ✅ checklist "rascunho impresso" (Wal 27/10) — mesmo estado da aba Produção
+    const bRasc = /MOLECULAR/i.test(it.cat || '') ? ( _rImp
+      ? `<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:3px 8px;font-weight:700;font-size:12px;white-space:nowrap" title="rascunho impresso às ${window._rascHmG?window._rascHmG(_rImp):''}">✅ rascunho ${window._rascHmG?window._rascHmG(_rImp):''}</span><button class="sepbtn" style="background:#64748b;border-color:#64748b;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="reimprimir o rascunho do PCR">🖨️</button><button class="sepbtn" style="background:#ef4444;border-color:#ef4444;color:#fff" onclick="_rascDesmarcar('${esc2(String(it.req))}')" title="desmarcar (ainda não impresso)">✕</button>`
+      : `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="imprimir o rascunho do PCR deste animal">🖨️</button>` ) : '';
     return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${bRasc}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${undo}</div></div>`;
   }
 
