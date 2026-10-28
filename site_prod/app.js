@@ -13,6 +13,9 @@ let prodBaixados=new Set(), prodBaixaInfo=[];
 let avisarMarks=[];
 const exChave=e=>String(e.registro)+'|'+(e.exame||'');
 const exBaixado=e=>prodBaixados.has(exChave(e));
+// 📦 TERCEIRIZADOS: tipo de exame marcado pela equipe → vai pra aba própria (sep_marks chave 'terc_tipo:<normAcc(exame)>')
+let tercTypes=new Set(); // normAcc do nome do exame
+const exTerceirizado=e=>tercTypes.has(normAcc(String(e.exame||'')));
 /* ===== 🖨️ RASCUNHO PCR (Dudu 26/10): imprime a folha de Biologia Molecular direto do painel ===== */
 function _rascFdt(s){ if(!s) return null; const m=String(s).slice(0,10).match(/(\d{4})-(\d{2})-(\d{2})/); return m?new Date(+m[1],+m[2]-1,+m[3]):null; }
 function _rascDmy(d){ return d?String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear():'____/____/______'; }
@@ -56,13 +59,20 @@ window._rascInfo=r=>rascImpressoMap[String(r)]; window._rascHmG=_rascHm;
 async function _rascMarcarImpresso(regs){
   // imprime SEMPRE; marcar é um extra. Sem nuvem não marca, mas NUNCA bloqueia a impressão.
   if(!(window.SUPA&&window.SUPA.ok)) return;
-  for(const reg of regs){ try{ await window.SUPA.upsertMark({chave:'rascpcr:'+String(reg), req:String(reg), estado:'rascunho_impresso', por:'equipe', ts_sep:Date.now()}); rascImpressoMap[String(reg)]=Date.now(); }catch(e){} }
-  try{ await loadManual(); renderActive(); }catch(e){}
-  try{ if(window.SEP&&window.SEP.render) window.SEP.render(); }catch(e){}   // atualiza tb a aba Triagem
+  const ts=Date.now();
+  // atualização otimista: reflete na tela imediatamente, sem esperar a rede
+  regs.forEach(r=>{rascImpressoMap[String(r)]=ts;});
+  try{renderActive();}catch(e){}
+  try{if(window.SEP&&window.SEP.render)window.SEP.render();}catch(e){}
+  // persiste em nuvem em paralelo (não bloqueia a UI — fire & forget)
+  Promise.all(regs.map(r=>window.SUPA.upsertMark({chave:'rascpcr:'+String(r),req:String(r),estado:'rascunho_impresso',por:'equipe',ts_sep:ts}).catch(()=>{}))).catch(()=>{});
 }
 async function _rascDesmarcar(reg){
   if(!(window.SUPA&&window.SUPA.ok)){ alert('Desmarcar exige conexão em nuvem.'); return; }
-  try{ await window.SUPA.upsertMark({chave:'rascpcr:'+String(reg), req:String(reg), estado:'', por:'equipe', ts_sep:Date.now()}); delete rascImpressoMap[String(reg)]; await loadManual(); renderActive(); try{ if(window.SEP&&window.SEP.render) window.SEP.render(); }catch(e){} }catch(e){}
+  delete rascImpressoMap[String(reg)];
+  try{renderActive();}catch(e){}
+  try{if(window.SEP&&window.SEP.render)window.SEP.render();}catch(e){}
+  try{await window.SUPA.upsertMark({chave:'rascpcr:'+String(reg),req:String(reg),estado:'',por:'equipe',ts_sep:Date.now()});}catch(e){}
 }
 function imprimirRascunhoPCR(reg){ _rascImprimir([reg]); _rascMarcarImpresso([String(reg)]); }
 function imprimirLotePCR(){
@@ -104,7 +114,8 @@ function travHistLine(e){
   return `<div class="travahist"><b>📋 Já foi travado</b><div>🔒 <b>Motivo:</b> ${esc(m.obs||'(sem motivo)')}${vez}</div><div>🔒 <b>Travou:</b> ${esc(m.por||'—')} — ${fmtDataHoraP(m.ts_sep)}</div><div>✅ <b>Destravou:</b> ${esc(m.por_receb||'—')} — ${fmtDataHoraP(m.ts_receb)}</div><div>⏱️ <b>Ficou travado:</b> ${labelDiasP(m)}</div></div>`;
 }
 function setOverlays(j){manual=new Set((j.urgentes||[]).map(u=>String(u.registro))); baixados=new Set((j.baixas||[]).map(u=>String(u.registro))); baixasInfo=(j.baixas||[]);}
-async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;}); sepMarksMap={}; (s.marks||[]).forEach(m=>{if(m&&m.chave)sepMarksMap[String(m.chave)]=m;}); rascImpressoMap={}; (s.marks||[]).forEach(m=>{if(m&&m.estado==='rascunho_impresso'&&String(m.chave).startsWith('rascpcr:'))rascImpressoMap[String(m.chave).slice(8)]=(m.ts_sep||Date.now());});}catch(e){} try{amostrasEsp=await window.SUPA.loadAmostras();}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
+async function loadManual(){ try{ if(window.SUPA&&window.SUPA.ok){const o=await window.SUPA.loadUrg(); setOverlays({urgentes:o.urgentes,baixas:o.baixas}); try{prodBaixaInfo=await window.SUPA.loadProd(); prodBaixados=new Set(prodBaixaInfo.filter(b=>!b.desfeito).map(b=>String(b.chave)));}catch(e){} try{const s=await window.SUPA.loadSep(); const desc=new Set((s.descartes||[]).map(d=>String(d.chave))); avisarMarks=(s.marks||[]).filter(m=>m&&m.estado==='insuficiente'&&!desc.has(String(m.chave))); prodTravados=(s.marks||[]).filter(m=>m&&m.estado==='travado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))); prodTravadoSet=new Set(prodTravados.map(m=>String(m.chave))); prodTravadosHist=(s.marks||[]).filter(m=>m&&m.estado==='destravado'&&String(m.chave).startsWith('prod:')&&!desc.has(String(m.chave))).sort((a,b)=>(Number(b.ts_receb)||0)-(Number(a.ts_receb)||0)); prodTravaMap={}; (s.marks||[]).forEach(m=>{if(m&&String(m.chave).startsWith('prod:')&&(m.estado==='travado'||m.estado==='destravado'))prodTravaMap[String(m.chave)]=m;}); sepMarksMap={}; (s.marks||[]).forEach(m=>{if(m&&m.chave)sepMarksMap[String(m.chave)]=m;}); rascImpressoMap={}; (s.marks||[]).forEach(m=>{if(m&&m.estado==='rascunho_impresso'&&String(m.chave).startsWith('rascpcr:'))rascImpressoMap[String(m.chave).slice(8)]=(m.ts_sep||Date.now());});
+        tercTypes=new Set((s.marks||[]).filter(m=>m&&m.estado==='terceirizado'&&String(m.chave).startsWith('terc_tipo:')&&!desc.has(String(m.chave))).map(m=>String(m.chave).slice('terc_tipo:'.length)));}catch(e){} try{amostrasEsp=await window.SUPA.loadAmostras();}catch(e){} return;} const r=await fetch('/api/overlays?_='+Date.now()); if(r.ok){const o=await r.json(); setOverlays({urgentes:o.urgentes,baixas:o.urg_baixas});}}catch(e){} }
 // urgente de verdade = (sistema OU manual) E NÃO baixado
 const urgentOf=e=>{const r=String(e.registro);return (e.urgente||manual.has(r))&&!baixados.has(r);};
 async function post(payload,errMsg){
@@ -135,7 +146,9 @@ function onContentClick(ev){
   const dv=ev.target.closest('.destravabtn'); if(dv){destravarEx(dv.dataset.chave);return;}
   const lb=ev.target.closest('.limpabtn'); if(lb){limparAtrasados();return;}
   const hp=ev.target.closest('[data-histcat]'); if(hp){histotecSel=hp.dataset.histcat; histotecQ=''; renderHistotec(); return;}
-  const hb=ev.target.closest('.histbtn'); if(hb){openHistBaix();return;}}
+  const hb=ev.target.closest('.histbtn'); if(hb){openHistBaix();return;}
+  const tt=ev.target.closest('.terctipobtn'); if(tt){terceirizarTipo(tt.dataset.exm);return;}
+  const ut=ev.target.closest('.unterctipobtn'); if(ut){descerceirizarTipo(ut.dataset.exm);return;}}
 // 🔒 travar / destravar exame na Produção (motivo em texto livre)
 async function travarEx(d){
   if(!(window.SUPA&&window.SUPA.ok)){alert('Trava exige conexão em nuvem.');return;}
@@ -152,6 +165,24 @@ async function destravarEx(chave){
   const por=(typeof __op!=='undefined'&&__op&&__op.nome)||'produção';
   try{ await window.SUPA.updateMark(chave,{estado:'destravado',por_receb:por,ts_receb:Date.now()}); await loadManual(); buildTabs(); renderActive(); }   // arquiva (não apaga) — guarda o histórico
   catch(e){ alert('Não consegui destravar.'); }
+}
+// 📦 Terceirizar / remover tipo de exame — permanente (marca o TIPO, afeta todos os futuros desse tipo)
+async function terceirizarTipo(exame){
+  if(!exame) return;
+  if(!confirm('Marcar \''+exame+'\' como terceirizado?\n\nTodos os exames desse tipo vão para a aba Terceirizados enquanto estiver marcado.')) return;
+  if(!(window.SUPA&&window.SUPA.ok)){alert('Requer conexão em nuvem.');return;}
+  const chave='terc_tipo:'+normAcc(exame);
+  try{await window.SUPA.upsertMark({chave,req:'terc',exame,estado:'terceirizado',por:'equipe',ts_sep:Date.now()});
+    tercTypes.add(normAcc(exame));buildTabs();renderActive();}
+  catch(e){alert('Não foi possível marcar: '+(e.message||e));}
+}
+async function descerceirizarTipo(exame){
+  if(!exame||!confirm('Remover \''+exame+'\' dos terceirizados?\n\nVolta para a fila normal.')) return;
+  if(!(window.SUPA&&window.SUPA.ok)){alert('Requer conexão em nuvem.');return;}
+  const chave='terc_tipo:'+normAcc(exame);
+  try{await window.SUPA.upsertMark({chave,req:'terc',exame,estado:'',por:'equipe',ts_sep:Date.now()});
+    tercTypes.delete(normAcc(exame));buildTabs();renderActive();}
+  catch(e){alert('Não foi possível remover: '+(e.message||e));}
 }
 // --- LOGIN do colaborador p/ baixa de exame (mesma equipe da Triagem) ---
 let __op=null, __opTimer=null;            // {nome, senha, papel} — sessão na memória; zera no auto-reload da meia-noite
@@ -347,12 +378,14 @@ function buildAtrasCat(list){return buildSpecial(list,e=>e.atrasado,{cod:'__ATR_
 function buildAvisoCat(){return {cod:'__AVI__',categoria:'AVISAR CLIENTE / ESCRITÓRIO',special:true,kind:'aviso',sla:null,em_processo:avisarMarks.length,atrasado:0,no_prazo:avisarMarks.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // 🔒 TRAVADOS na Produção (a equipe trava direto aqui) — vermelho pulsante
 function buildTravaCat(){return {cod:'__TRAVA__',categoria:'TRAVADOS / ESCRITÓRIO',special:true,kind:'trava',sla:null,em_processo:prodTravados.length,atrasado:0,no_prazo:prodTravados.length,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
+// 📦 EXAMES TERCEIRIZADOS (tipo marcado pela equipe → enviado a outro laboratório; sai da fila normal)
+function buildTercCat(list){return buildSpecial(list,e=>exTerceirizado(e),{cod:'__TERC__',nome:'EXAMES TERCEIRIZADOS',kind:'terc'});}
 // 🔬 ESPELHO Histotécnica · Controle de Amostras (mirror read-only do app Histotécnica, tabela amostras)
 function buildHistotecCat(){const n=(amostrasEsp||[]).filter(a=>!amEtapas(a).finalizado).length;return {cod:'__HISTOTEC__',categoria:'HISTOTÉCNICA · CONTROLE DE AMOSTRAS',special:true,kind:'histotec',sla:null,em_processo:n,atrasado:0,no_prazo:n,pct_no_prazo:100,tat_medio:null,urgentes:0,urgentes_list:[],exames:[],derivacoes:[]};}
 // Desconta os exames baixados (PIN) E os TRAVADOS de uma categoria NORMAL — contadores, derivações e lista batem.
 function adjustCat(x){
-  if(!x||x.special||(!prodBaixados.size&&!prodTravadoSet.size)) return x;
-  const oculto=e=>exBaixado(e)||exTravado(e);
+  if(!x||x.special||(!prodBaixados.size&&!prodTravadoSet.size&&!tercTypes.size)) return x;
+  const oculto=e=>exBaixado(e)||exTravado(e)||exTerceirizado(e);
   const ex=x.exames||[], baix=ex.filter(oculto);
   if(!baix.length) return x;
   const byT={},byTA={}; baix.forEach(e=>{const t=e.exame||'';byT[t]=(byT[t]||0)+1;if(e.atrasado)byTA[t]=(byTA[t]||0)+1;});
@@ -419,7 +452,7 @@ function cats(){
   let list=(DATA.categorias||[]).filter(x=>x.em_processo>0 || (x.derivacoes&&x.derivacoes.length));
   if(ORDER.length){ const idx=c=>{const i=ORDER.findIndex(o=>slug(c.categoria).includes(slug(o)));return i<0?99:i;};
     list=[...list].sort((a,b)=>idx(a)-idx(b)); }
-  return [buildUrgentCat(list), buildAvisoCat(), buildTravaCat(), buildPetCat(list), buildAtrasCat(list), ...list, buildHistotecCat()];   // especiais primeiro; Histotécnica (espelho) por ÚLTIMO
+  return [buildUrgentCat(list), buildAvisoCat(), buildTravaCat(), buildPetCat(list), buildAtrasCat(list), ...(tercTypes.size>0?[buildTercCat(list)]:[]), ...list, buildHistotecCat()];   // especiais primeiro; Terceirizados (só quando há tipos marcados); Histotécnica (espelho) por ÚLTIMO
 }
 function resolveLock(list){
   const h=decodeURIComponent((location.hash||'').replace('#','')).trim();
@@ -480,7 +513,7 @@ function buildTabs(){
   }
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
-  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},trava:{t:'travatab',i:'🔒',b:'travab'},histotec:{t:'histotectab',i:'🔬',b:'histotecb'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'}};
+  const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},trava:{t:'travatab',i:'🔒',b:'travab'},histotec:{t:'histotectab',i:'🔬',b:'histotecb'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'},terc:{t:'terctab',i:'📦',b:'tercb'}};
   tabsEl.innerHTML=`<button class="atualizar-btn" id="atualizarBtn" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>`
     + list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
     <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'?'avisopulse':''} ${x.kind==='trava'&&x.em_processo>0?'travapulse':''}" data-i="${i}">
@@ -639,7 +672,8 @@ function renderActive(){
   const KIND={
     urg:{c:C.amber,ic:'🚨',sub:'urgentes de todas as categorias',ring:'urgentes',m1l:'Urgentes na fila',work:'Amostras urgentes',m3l:'Marcados pela equipe (★)'},
     pet:{c:C.petlove,ic:'💗',sub:'pacientes Pet Love — todas as categorias',ring:'pacientes',m1l:'Pacientes Pet Love',work:'Pacientes Pet Love',m3l:'Urgentes entre os Pet Love'},
-    atras:{c:C.red,ic:'⏰',sub:'atrasados de todas as categorias',ring:'atrasados',m1l:'Atrasados na fila',work:'Amostras atrasadas',m3l:'Atraso máximo (dias)'}};
+    atras:{c:C.red,ic:'⏰',sub:'atrasados de todas as categorias',ring:'atrasados',m1l:'Atrasados na fila',work:'Amostras atrasadas',m3l:'Atraso máximo (dias)'},
+    terc:{c:C.purple,ic:'📦',sub:'exames enviados a laboratórios terceirizados',ring:'exames',m1l:'Exames terceirizados',work:'Fila de terceirizados',m3l:'Tipos terceirizados'}};
   const K=special?KIND[x.kind]:null;
   const col=special?K.c:ringColor(x.pct_no_prazo);
   const ders=(x.derivacoes||[]).slice(0,18);
@@ -653,6 +687,14 @@ function renderActive(){
   const atrasAlvo=wlItems.filter(e=>e.atrasado);
   window.__limparAlvo=atrasAlvo.map(e=>({chave:exChave(e),registro:String(e.registro),exame:e.exame||'',paciente:e.paciente||'',cat:e.categoria||x.categoria||'',atrasado:true}));
   window.__curCat=special?'':x.categoria;
+  // MOLECULAR (PCR): agrupar exames do mesmo registro num único card (Dudu 27/10)
+  const ISMOL=!special&&/MOLECULAR/i.test(x.categoria||'');
+  const wlRender=ISMOL
+    ? [...new Map(wlItems.map(e=>[String(e.registro!=null?e.registro:''),e])).values()].map(e=>{
+        const grp=wlItems.filter(i=>String(i.registro)===String(e.registro));
+        return {...e,exame:grp.map(i=>i.exame||'—').join(' + '),_grp:grp};
+      })
+    : wlItems.map(e=>({...e,_grp:[e]}));
   const banner = (!special && urgCount>0) ? `<div class="urgbanner"><span class="ico">🚨</span>
       <span class="ttl">${num(urgCount)} URGENTE${urgCount>1?'S':''}</span>
       <div class="ul">${urgItems.slice(0,10).map(u=>`<span class="u"><span class="r">#${esc(u.registro)}</span> ${esc(u.paciente)} · ${esc(u.exame||'')} · ${u.dias}d</span>`).join('')}</div>
@@ -694,12 +736,14 @@ function renderActive(){
           <button class="histbtn">🗂 Histórico do exame${(prodBaixaInfo.length+prodTravados.length+prodTravadosHist.length)?` (${prodBaixaInfo.length+prodTravados.length+prodTravadosHist.length})`:''}</button>
           ${!special&&/MOLECULAR/i.test(x.categoria||'')?`<button class="limpabtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirLotePCR()" title="imprime o rascunho de TODOS os PCR em processo">🖨️ Imprimir lote PCR</button>`:''}
         </div>
-        <div class="scroll">${wlItems.map(e=>{const pl=isPetlove(e.paciente);return `
-          <div class="wl"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
-            <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${e.atrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div>${travHistLine(e)}<div class="pobswrap"><input class="pobsinput${((sepMarksMap['prod:'+e.registro+'|'+(e.exame||'')]||{}).obs)?' has':''}" data-pobsk="prod:${escA(String(e.registro))}|${escA(e.exame||'')}" value="${escA(((sepMarksMap['prod:'+e.registro+'|'+(e.exame||'')]||{}).obs)||'')}" placeholder="📝 observação / motivo de não ter dado baixa (ex.: preso com o escritório, não separado)" autocomplete="off" spellcheck="false"><span class="pobssaved"></span></div></div>
+        <div class="scroll">${wlRender.map(e=>{const pl=isPetlove(e.paciente);const isGrp=e._grp.length>1;const isAtrasado=e._grp.some(i=>i.atrasado);return `
+          <div class="wl${isGrp?' pcr-grp':''}"><span class="reg">#${esc(e.registro!=null?e.registro:'—')}</span>
+            <div><div class="pac${pl?' petlove':''}">${esc(e.paciente)}${pl?'<span class="plove">PET LOVE</span>':''}${e._urg?`<span class="urg">URGENTE${e._manual?' ★':''}</span>`:''}</div><div class="exm">${special?`<b style="color:var(--cyan)">${esc(e.categoria)}</b> · `:''}${esc(e.exame||'—')} · entrou ${fmtD(e.entrada)} · <b style="color:${isAtrasado?C.red:C.amber}">limite ${fmtD(e.limite)}</b>${e.dono?' · '+esc(e.dono):''}</div>${travHistLine(e)}<div class="pobswrap"><input class="pobsinput${((sepMarksMap['prod:'+e._grp[0].registro+'|'+(e._grp[0].exame||'')]||{}).obs)?' has':''}" data-pobsk="prod:${escA(String(e._grp[0].registro))}|${escA(e._grp[0].exame||'')}" value="${escA(((sepMarksMap['prod:'+e._grp[0].registro+'|'+(e._grp[0].exame||'')]||{}).obs)||'')}" placeholder="📝 observação / motivo de não ter dado baixa (ex.: preso com o escritório, não separado)" autocomplete="off" spellcheck="false"><span class="pobssaved"></span></div></div>
             <div class="wlact">${/MOLECULAR/i.test(e.categoria||x.categoria||'')?(rascImpressoMap[String(e.registro)]?`<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:3px 8px;font-weight:700;font-size:12px;white-space:nowrap" title="rascunho impresso às ${_rascHm(rascImpressoMap[String(e.registro)])}">✅ rascunho ${_rascHm(rascImpressoMap[String(e.registro)])}</span><button class="exbaixabtn" style="background:#64748b;border-color:#64748b" onclick="imprimirRascunhoPCR('${esc(String(e.registro))}')" title="reimprimir o rascunho do PCR">🖨️</button><button class="exbaixabtn" style="background:#ef4444;border-color:#ef4444" onclick="_rascDesmarcar('${esc(String(e.registro))}')" title="desmarcar (ainda não impresso)">✕</button>`:`<button class="exbaixabtn" style="background:#0284c7;border-color:#0284c7" onclick="imprimirRascunhoPCR('${esc(String(e.registro))}')" title="imprimir o rascunho do PCR">🖨️</button>`):''}${e._urg
-              ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" data-manual="${e._manual?'1':'0'}" title="tira do alerta de urgência (o exame continua na fila)">baixa na urgência</button>`
-              : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e.exame||'')}" title="marcar como urgente">🚨</button>`}<button class="exbaixabtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" data-atr="${e.atrasado?'1':'0'}" title="baixa no EXAME — tira da Produção (não depende do HF)">✓ no exame</button><button class="travarbtn" data-reg="${esc(e.registro)}" data-exm="${escA(e.exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" title="travar o exame (financeiro, cadastro, problema de amostra…) — vai pra aba 🔒 Travados">🔒 Travar</button><span class="db ${e.atrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
+              ? `<button class="baixabtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e._grp[0].exame||'')}" data-manual="${e._manual?'1':'0'}" title="tira do alerta de urgência (o exame continua na fila)">baixa na urgência</button>`
+              : `<button class="urgbtn" data-reg="${esc(e.registro)}" data-pac="${escA(e.paciente)}" data-exm="${escA(e._grp[0].exame||'')}" title="marcar como urgente">🚨</button>`}${isGrp
+              ? e._grp.map(i=>`<button class="exbaixabtn" data-reg="${esc(i.registro)}" data-exm="${escA(i.exame||'')}" data-pac="${escA(i.paciente)}" data-cat="${escA(i.categoria||x.categoria||'')}" data-atr="${i.atrasado?'1':'0'}" title="baixa em ${esc(i.exame||'—')}">✓ ${esc(i.exame||'')}</button>`).join('')
+              : `<button class="exbaixabtn" data-reg="${esc(e.registro)}" data-exm="${escA(e._grp[0].exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" data-atr="${isAtrasado?'1':'0'}" title="baixa no EXAME — tira da Produção (não depende do HF)">✓ no exame</button>`}<button class="travarbtn" data-reg="${esc(e.registro)}" data-exm="${escA(e._grp[0].exame||'')}" data-pac="${escA(e.paciente)}" data-cat="${escA(e.categoria||x.categoria||'')}" title="travar o exame (financeiro, cadastro, problema de amostra…) — vai pra aba 🔒 Travados">🔒 Travar</button>${x.kind==='terc'?`<button class="unterctipobtn" data-exm="${escA(e._grp[0].exame||'')}" title="remover este tipo dos terceirizados — volta pra fila normal">↩ Tirar</button>`:''}${!special&&!exTerceirizado(e)?`<button class="terctipobtn" data-exm="${escA(e._grp[0].exame||'')}" title="marcar este tipo como terceirizado (vai pra aba Terceirizados)" style="background:transparent;border:1px solid #7d5bd0;color:#c4b5fd;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12px;margin-left:4px">📦</button>`:''}<span class="db ${isAtrasado?'late':'ok'}">${e.dias}d</span></div></div>`;}).join('')||(special?'<div style="color:var(--green);padding:14px">✓ Nenhum urgente no momento.</div>':'<div style="color:var(--green);padding:14px">✓ Nada em processo.</div>')}
         </div>
       </div>
     </div></div>`;

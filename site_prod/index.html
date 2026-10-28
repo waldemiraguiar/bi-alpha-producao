@@ -86,6 +86,13 @@ body{font-family:'Inter',sans-serif;background:
 .tab.atrastab .tn{color:#FF8A8A;font-weight:800} .tab.atrastab.on{background:rgba(255,84,112,.22)}
 .tab .tb.atrasb{background:var(--red);color:#fff}
 .hcat.atrascat{border-color:rgba(255,84,112,.5);background:linear-gradient(180deg,rgba(255,84,112,.16),var(--navy2))}
+/* aba EXAMES TERCEIRIZADOS */
+.tab.terctab{border-color:rgba(167,139,250,.6);background:rgba(167,139,250,.12)}
+.tab.terctab .tn{color:#c4b5fd;font-weight:800} .tab.terctab.on{background:rgba(167,139,250,.22)}
+.tab .tb.tercb{background:var(--purple,#a78bfa);color:#fff}
+.hcat.terccat{border-color:rgba(167,139,250,.5);background:linear-gradient(180deg,rgba(167,139,250,.14),var(--navy2))}
+/* card PCR agrupado (múltiplos exames mesmo registro) */
+.wl.pcr-grp{border-left:3px solid #0284c7}
 .wlsearch{background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:8px;padding:6px 11px;color:var(--ink);font-size:12.5px;font-family:inherit;outline:none;width:240px;font-weight:600}
 .wlsearch:focus{border-color:var(--cyan)}
 .wlsearch::placeholder{color:var(--mut)}
@@ -448,7 +455,7 @@ body{font-family:'Inter',sans-serif;background:
 /* === AUTO-ATUALIZACAO ALPHA — todos rodam a build publicada, sem limpar cache ===
    Bump a CADA publicacao: este BUILD + (se houver) o selo de versao + o /version.json. */
 (function(){
-  var BUILD="2610261534";
+  var BUILD="2610271640";
   function ver(){
     try{
       fetch("version.json?_="+Date.now(),{cache:"no-store"})
