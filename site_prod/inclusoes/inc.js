@@ -1411,10 +1411,24 @@
   }
   const semAmostraEsperando = c => c.caminho === 'sem_amostra' && !c.req && !c.req_nova
 
+  // ⭐ Fúlvio 22/out (caminho COM requisição): quem decide é a TRIAGEM, indo fisicamente aos setores.
+  //    Se o exame JÁ está em processamento, não há o que criar — o Escritório só toma ciência e o
+  //    Atendimento avisa que não deu para cancelar. (esc_digitado é o cruzamento antigo da Thailan.)
+  const procRespostas = c => Object.values(procDe(c)).map(p => p && p.resposta).filter(Boolean)
+  const cancelImpossivel = c => c.caminho !== 'sem_amostra' &&
+    (c.tri_veredito === 'em_processamento' || c.esc_digitado === true || procRespostas(c).includes('iniciou'))
+  // a Triagem LIBEROU o cancelamento: parecer "não iniciado", ou todos os exames consultados = não iniciou
+  const triLiberou = c => c.caminho !== 'sem_amostra' && !cancelImpossivel(c) &&
+    (c.tri_veredito === 'nao_iniciado' ||
+     (examesDoCartao(c).length > 0 && examesDoCartao(c).every(nome => (procDe(c)[nome] || {}).resposta === 'nao_iniciou')))
   function cancelEtapa(c) {
     if (c.status !== 'aberto') return null
     if (!c.tri_ciente_em || !c.esc_ciente_em) return { n: 1, nome: 'Ciente da Triagem e do Escritório' }
-    if (!c.hf_feito_em) return { n: 2, dono: 'esc', nome: 'Escritório: criar o exame cancelado no HF' }
+    // exame já em processamento: pula a criação, vai direto ao Atendimento avisar que não deu
+    if (cancelImpossivel(c)) return { n: 3, dono: 'cc', nome: 'Avisar que não deu para cancelar' }
+    // ⭐ Fúlvio 26/out: o Escritório tem DUAS obrigações e o cartão NÃO sai dele até as duas feitas —
+    //    criar o cancelamento no HF E conferir que o valor zerou. Antes "sumia" assim que criava.
+    if (!c.hf_feito_em || c.valor_zerado !== true) return { n: 2, dono: 'esc', nome: 'Escritório: criar o cancelamento no HF e zerar o valor' }
     return { n: 3, dono: 'cc', nome: 'Avisar o cliente e encerrar' }
   }
   const cancelAlvoTxt = c => c.alvo === 'tudo'
@@ -1433,7 +1447,9 @@
         <span class="can-t">${c.status === 'aberto' ? `pedido há ${idade}` : `${d ? d.rot : esc(c.status)} · ${esc(c.resolvido_por || '')}`}</span>
       </div>
       <div class="can-alvo">${c.pet ? `<b>${esc(c.pet)}</b>` : '<span class="mudo">pet não informado</span>'}${c.tutor ? ` <span class="mudo">(tutor: ${esc(c.tutor)})</span>` : ''}${c.req ? ` <span class="req">${esc(c.req)}</span>` : ''} — quer cancelar: ${cancelAlvoTxt(c)}${c.exame_digitado ? ' <span class="can-sel-feito">já estava digitado</span>' : ''}</div>
-      ${c.caminho === 'sem_amostra' ? '<div class="can-hf">📦 a amostra ainda não tinha chegado ao laboratório</div>' : ''}
+      ${c.caminho === 'sem_amostra'
+        ? '<div class="can-hf">📦 a amostra ainda não chegou ao laboratório</div>'
+        : `<div class="can-hf">📋 a amostra já está no laboratório${(c.req || c.req_nova) ? ' — requisição <b>' + esc(c.req || c.req_nova) + '</b>' : ''}</div>`}
       ${c.colaborador ? `<div class="can-txt mudo">🧭 triagem por ${esc(c.colaborador)}</div>` : ''}
       ${c.texto ? `<div class="can-txt">💬 ${esc(c.texto)}${c.autor ? ` <span class="mudo">— ${esc(c.autor)}</span>` : ''}</div>` : ''}
       ${c.hf_estado ? `<div class="can-hf">🔎 ${esc(c.hf_estado)}</div>` : ''}
@@ -1446,6 +1462,11 @@
     if (!et) return ''
     const trilha = `<div class="can-trilha">${[1, 2, 3].map(n =>
       `<i class="${n < et.n ? 'ok' : n === et.n ? 'aqui' : ''}"></i>`).join('')}<span>${esc(et.nome)}</span></div>`
+    // ⭐ Fúlvio (20/22/26-out, repetido): o trabalho de CADA setor só se faz NA ABA DELE. A aba
+    //    Cancelamento (setor === 'cancel') é só ACOMPANHAMENTO — mostra o passo a passo, mas não
+    //    deixa clicar o ciente/parecer/HF de ninguém. Aqui mora o erro que ele mais apontou.
+    const naCancel = setor === 'cancel'
+    const podeMexer = dono => podeAgir(dono) && !naCancel
 
     // ── a consulta aos setores (Fúlvio 20h04/20h06) e a espera da amostra (20h48) ──
     const proc = procDe(c)
@@ -1462,12 +1483,12 @@
         }
         if (p.perguntado_em) {
           return `<div class="proc-linha espera"><b>${esc(nome)}</b> — perguntado à ${esc(SETOR_EXAME[p.setor] || p.setor)}, aguardando
-            ${podeAgir('tec') ? `<span class="proc-resp">
+            ${podeMexer('tec') ? `<span class="proc-resp">
               <button data-cproc="nao_iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Exame cancelado</button>
               <button class="nao" data-cproc="iniciou" data-cid="${c.id}" data-cex="${esc(nome)}">Já está em processamento</button>
             </span>` : ''}</div>`
         }
-        if (!podeAgir('tri')) return `<div class="proc-linha espera"><b>${esc(nome)}</b> — <span class="mudo">a Triagem ainda não consultou o setor</span></div>`
+        if (!podeMexer('tri')) return `<div class="proc-linha espera"><b>${esc(nome)}</b> — <span class="mudo">a Triagem ainda não consultou o setor</span></div>`
         return `<div class="proc-linha"><b>${esc(nome)}</b> — perguntar a:
           <span class="proc-setores">${Object.keys(SETOR_EXAME).map(k =>
             `<button class="leve" data-cconsultar="${k}" data-cid="${c.id}" data-cex="${esc(nome)}">${SETOR_ICONE[k]} ${esc(SETOR_EXAME[k])}</button>`).join('')}</span></div>`
@@ -1493,32 +1514,22 @@
 
     const esperaAmostra = semAmostraEsperando(c) ? `<div class="can-espera">
       📦 A amostra ainda não chegou ao laboratório. O Escritório E a Triagem PODEM dar ciente mesmo assim (depois do aviso) — o processo só não AVANÇA enquanto ela não chega.
-      ${podeAgir('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
+      ${podeMexer('tri') ? `<div class="can-acoes"><button data-creqchegou="${c.id}">A amostra chegou — informar a requisição</button></div>` : ''}
     </div>` : ''
     // ✖ quando a solicitação foi cancelada por quem abriu, o motivo é a informação principal
     if (c.status === 'descartado') return trilha + `<div class="can-descartada">
       ✖ <b>Solicitação cancelada</b>${c.resolvido_por ? ' por ' + esc(c.resolvido_por) : ''}${c.resolvido_em ? ' às ' + hm(c.resolvido_em) : ''}
       ${c.motivo ? `<span>${esc(c.motivo)}</span>` : ''}</div>`
 
-    // ═══ FLUXO TRIAGEM × ESCRITÓRIO — Thailan, 9 áudios de 02/out ═══
-    // ⭐ O desfecho sai do CRUZAMENTO dos dois setores, não de um só:
-    //    triagem "em processamento" OU escritório "já digitado" → impossibilitado
-    //    triagem "não iniciado" E escritório "não digitado"     → pode cancelar
-    //    ⛔ Com só um dos dois, a resposta é "falta o outro" — nunca um palpite.
-    const vereditoCancel = (() => {
-      const triNao = c.tri_veredito === 'em_processamento'
-      const escNao = c.esc_digitado === true
-      if (triNao || escNao) {
-        const por = [triNao ? 'a Triagem viu o exame em processamento' : null,
-                     escNao ? 'o Escritório viu o exame já digitado' : null].filter(Boolean).join(' e ')
-        return { pode: false, txt: `Cancelamento impossibilitado — ${por}.` }
-      }
-      const triSim = c.tri_veredito === 'nao_iniciado'
-      const escSim = c.esc_digitado === false
-      if (triSim && escSim) return { pode: true, txt: 'Os dois setores confirmaram: o cancelamento é válido.' }
-      const falta = [!c.tri_veredito ? 'a Triagem' : null, c.esc_digitado == null ? 'o Escritório' : null].filter(Boolean)
-      return { pode: null, txt: `Falta o parecer d${falta.length > 1 ? 'os dois setores' : 'e ' + falta[0]}.` }
-    })()
+    // ═══ QUEM DECIDE É A TRIAGEM — Fúlvio 22/out/26-out ═══
+    // ⭐ A Triagem vai FISICAMENTE aos setores que fazem o exame e confirma, por exame, se já começou:
+    //    em processamento → impossibilitado · não iniciado → pode cancelar.
+    //    (O "digitado?" do Escritório era o cruzamento antigo da Thailan; aqui a decisão é da Triagem.)
+    const vereditoCancel = cancelImpossivel(c)
+      ? { pode: false, txt: 'Cancelamento impossibilitado — a Triagem viu o exame já em processamento.' }
+      : triLiberou(c)
+        ? { pode: true, txt: 'A Triagem confirmou nos setores: o exame não começou, o cancelamento é válido.' }
+        : { pode: null, txt: 'Aguardando a Triagem confirmar nos setores se o exame já começou.' }
 
     // ⭐ "avisei o Gabriel da triagem" / "avisei a Marcele do escritório".
     //    Com o NOME da pessoa: "avisei a Triagem" é vago e ninguém sabe a quem cobrar.
@@ -1547,7 +1558,7 @@
       ? `<div class="can-parecer ${c.tri_veredito === 'nao_iniciado' ? 'sim' : 'nao'}">
            🧪 <b>Triagem:</b> ${c.tri_veredito === 'nao_iniciado' ? 'o exame NÃO foi iniciado — pode cancelar' : 'o exame JÁ está em processamento — não dá para cancelar'}
            <i>${esc(c.tri_veredito_por || '')} ${c.tri_veredito_em ? 'às ' + hm(c.tri_veredito_em) : ''}</i></div>`
-      : podeAgir('tri')
+      : podeMexer('tri')
         ? `<div class="can-parecer pede"><b>🧪 Triagem: o exame já começou a ser processado?</b>
              <div class="can-acoes">
                <button data-ctriv="nao_iniciado" data-cid="${c.id}">Não foi iniciado — pode cancelar</button>
@@ -1559,7 +1570,7 @@
       ? `<div class="can-parecer ${c.esc_digitado ? 'nao' : 'sim'}">
            🏢 <b>Escritório:</b> ${c.esc_digitado ? 'o exame JÁ foi digitado — não dá para cancelar' : 'o exame NÃO foi digitado'}
            <i>${esc(c.esc_digitado_por || '')} ${c.esc_digitado_em ? 'às ' + hm(c.esc_digitado_em) : ''}</i></div>`
-      : podeAgir('esc')
+      : podeMexer('esc')
         ? `<div class="can-parecer pede"><b>🏢 Escritório: o exame foi digitado?</b>
              <div class="can-acoes">
                <button data-cescd="0" data-cid="${c.id}">Não foi digitado</button>
@@ -1583,7 +1594,7 @@
     const anotadoReq = (c.caminho === 'sem_amostra' && (c.req || c.req_nova))
       ? (c.tri_anotado_em
           ? `<div class="can-avisei ok">✍️ cancelamento anotado na requisição por ${esc(c.tri_anotado_por || '?')} às ${hm(c.tri_anotado_em)}</div>`
-          : podeAgir('tri')
+          : podeMexer('tri')
             ? `<div class="can-acoes"><button data-ctrianot="${c.id}">✍️ Anotei na requisição que o exame foi cancelado</button></div>`
             : `<div class="can-avisei"><span class="mudo">aguardando a Triagem anotar na requisição</span></div>`)
       : ''
@@ -1598,7 +1609,7 @@
       : c.valor_zerado === false
         ? `<div class="can-valor nao">🔴 <b>O valor NÃO está zerado.</b> Exame cancelado não pode sair cobrando — corrija no HF.
              <div class="can-acoes"><button data-cvalor="1" data-cid="${c.id}">Corrigi — está zerado</button></div></div>`
-        : (podeAgir('esc') || podeAgir('cc'))
+        : (podeMexer('esc') || podeMexer('cc'))
           ? `<div class="can-valor pede"><b>💰 O valor ficou zerado no HF?</b>
                ${c.caminho !== 'sem_amostra' ? '<span>Exame cancelado nunca pode sair mantendo o valor.</span>' : ''}
                <div class="can-acoes">
@@ -1633,28 +1644,43 @@
       </div>` + tarefasTri + parecerTri + parecerEsc + vereditoBox + consulta + cobranca + descartar
     }
 
-    // ── etapa 2: o Escritório cria o exame de cancelamento no HF ──
+    // ── etapa 2: o Escritório cria o cancelamento no HF E confere que o valor zerou ──
+    // ⭐ Fúlvio 26/out: um ÚNICO botão ("Criei o exame de cancelamento no HF"), não três. E as DUAS
+    //    obrigações ficam AQUI, na aba do Escritório, SEM SUMIR: cria → confere o valor zerado.
+    //    No caminho sem_amostra o Escritório só cria DEPOIS que a Triagem informa a requisição.
     if (et.n === 2) {
-      if (!podeAgir('esc')) return trilha + consulta + `<span class="so-setor">ação do ESCRITÓRIO</span>`
-      // ⭐ THAILAN 02/out: "as respostas em relação ao escritório, quando o exame já está no
-      //    laboratório: o exame foi cancelado, foi criado um exame com cancelamento, ou o exame
-      //    já foi processado / liberado." Era um botão só — agora são os três desfechos reais.
-      // ⭐ Fúlvio 26/out: sem_amostra = exame nunca chegou; só cabe "criei o cancelamento no HF".
-      return trilha + consulta + `<div class="can-acoes can-esc">
-        <button data-chf="${c.id}" data-cdesf="criado">Criei o exame de cancelamento no HF</button>
-        ${c.caminho !== 'sem_amostra' ? `<button data-chf="${c.id}" data-cdesf="cancelado" class="leve">Exame cancelado no HF</button>
-        <button data-chf="${c.id}" data-cdesf="processado" class="nao">Já foi processado / liberado</button>` : ''}</div>`
-        + parecerEsc + vereditoBox + valorBox + descartar
+      // os passos da Triagem continuam visíveis (na aba Triagem são clicáveis; aqui, só acompanhamento)
+      const antesTri = c.caminho === 'sem_amostra' ? tarefasTri : (consulta + parecerTri + vereditoBox)
+      if (!podeMexer('esc')) return trilha + antesTri +
+        `<span class="so-setor">ação do ESCRITÓRIO — ${c.hf_feito_em ? 'conferir o valor zerado' : 'criar o cancelamento no HF'}</span>`
+        + (c.hf_feito_em ? valorBox : '') + descartar
+      // ⛔ o Escritório só cria depois da Triagem: sem_amostra = informar a requisição;
+      //    com requisição (Fúlvio 22/out) = a Triagem ir aos setores e confirmar que PODE cancelar.
+      const bloqEsc = c.caminho === 'sem_amostra'
+        ? (!(c.req || c.req_nova)
+            ? '⏳ aguardando a Triagem informar a requisição'
+            : (!c.tri_anotado_em ? '⏳ aguardando a Triagem anotar o cancelamento na requisição' : ''))
+        : (vereditoCancel.pode !== true ? '⏳ aguardando o parecer da Triagem (ir aos setores)' : '')
+      const criar = c.hf_feito_em
+        ? `<div class="can-avisei ok">✅ exame de cancelamento criado no HF${c.hf_feito_por ? ' por ' + esc(c.hf_feito_por) : ''}${c.hf_feito_em ? ' às ' + hm(c.hf_feito_em) : ''}</div>`
+        : bloqEsc
+          ? `<div class="can-parecer pede"><span class="so-setor">${bloqEsc}</span></div>`
+          : `<div class="can-acoes can-esc"><button data-chf="${c.id}" data-cdesf="criado">Criei o exame de cancelamento no HF</button></div>`
+      return trilha + antesTri + criar + (c.hf_feito_em ? valorBox : '') + descartar
     }
 
-    // ── etapa 3: o Atendimento ao Cliente avisa e encerra ──
-    // ⭐ THAILAN 02/out: "eu preciso que você só libere o ícone do avisei ao cliente e encerrar
-    //    depois que ele conferir no HF. Se você não conseguir encontrar no HF, peça para
-    //    conferir manualmente. Aí ele clica no conferir manualmente, e aí sim você libera."
-    // ⛔ Avisar o cliente de um cancelamento que não foi feito no HF é o pior desfecho possível:
-    //    o cliente para de cobrar e o exame continua lá.
-    const conferido = !!(c.hf_lancado_em || c.conf_manual_em)
-    const comoConferiu = c.hf_lancado_em
+    // ── etapa 3: o Atendimento ao Cliente dá ciência e avisa o cliente ──
+    const impossivel = cancelImpossivel(c)
+    // ⭐ Fúlvio 22/out (caminho req): se já estava em processamento, o Atendimento avisa que NÃO deu.
+    const desfechoMsg = impossivel
+      ? `<div class="can-veredito nao">⛔ <b>Não deu para cancelar</b> — ${c.tri_veredito === 'em_processamento' ? 'a Triagem viu o exame já em processamento' : 'o Escritório viu o exame já digitado'}. O Atendimento avisa o cliente que o exame não pôde ser cancelado.</div>`
+      : ''
+    // ⛔ THAILAN 02/out: só libere avisar o cliente DEPOIS de conferir no HF (espelho ou manual).
+    //    Avisar de um cancelamento que não foi feito é o pior desfecho: o cliente para de cobrar e o exame fica.
+    //    A conferência só existe no caminho COM requisição e quando o cancelamento FOI feito (não no impossível).
+    const precisaConferir = !impossivel && c.caminho !== 'sem_amostra'
+    const conferido = !precisaConferir || !!(c.hf_lancado_em || c.conf_manual_em)
+    const comoConferiu = !precisaConferir ? '' : c.hf_lancado_em
       ? `<div class="can-avisei ok">🔎 conferido no espelho do HF às ${hm(c.hf_lancado_em)}</div>`
       : c.conf_manual_em
         ? `<div class="can-avisei ok">🔎 conferido <b>manualmente</b> por ${esc(c.conf_manual_por || '?')} às ${hm(c.conf_manual_em)}</div>`
@@ -1664,11 +1690,10 @@
              Se você abrir o HF e vir que está feito, use o botão de conferência manual.</span></div>`
 
     // ⭐ Fúlvio 13/out (padrão ouro): o Escritório AVISA o Atendimento colocando o NOME do colaborador.
-    //    Só DEPOIS disso o Atendimento vê o card e confirma "avisado ao cliente".
     const avisouCC = !!c.avisei_cc_em
     const aviseAtend = avisouCC
       ? `<div class="can-avisei ok">📣 Atendimento ao Cliente avisado — colaborador <b>${esc(c.avisei_cc_por || '')}</b>${c.avisei_cc_em ? ' às ' + hm(c.avisei_cc_em) : ''}</div>`
-      : (podeAgir('esc') || podeAgir('cc'))
+      : (podeMexer('esc') || podeMexer('cc'))
         ? `<div class="can-parecer pede"><b>📣 Avise o Atendimento ao Cliente</b>
              <div class="can-acoes" style="flex-wrap:wrap;gap:6px">
                <input class="cc-colab" data-cid="${c.id}" placeholder="nome do colaborador do atendimento" style="flex:1;min-width:160px;background:#0b1119;color:var(--txt,#e8ecf3);border:1px solid var(--line,#273041);border-radius:6px;padding:5px 8px;font:inherit;font-size:12px">
@@ -1676,26 +1701,28 @@
              </div></div>`
         : `<div class="can-parecer pede"><span class="so-setor">📣 aguardando o Escritório avisar o Atendimento ao Cliente</span></div>`
 
-    // ⭐ Fúlvio 26/out: sem_amostra = exame foi criado agora no HF (inexistente antes).
-    //    Não há espelho a conferir. Atendimento só confirma "cliente avisado no grupo".
-    if (c.caminho === 'sem_amostra') {
-      if (!podeAgir('cc')) return trilha + valorBox + aviseAtend
-      return trilha + valorBox + aviseAtend
-        + (avisouCC
-          ? `<div class="can-acoes"><button data-ccliente="${c.id}">Cliente avisado no grupo — encerrar</button></div>`
-          : `<div class="can-parecer pede"><span class="so-setor">⏳ o Atendimento confirma depois que o Escritório avisar (acima)</span></div>`)
-        + descartar
-    }
+    // ⭐ Fúlvio 26/out: a SEGUNDA fase de ciente. O colaborador do Atendimento dá a ciência ("recebi
+    //    o aviso") ANTES de confirmar "cliente avisado no grupo". Mesmo padrão do ciente da Triagem/Escritório.
+    const ccCiente = !!c.cc_ciente_em
+    const cienteAtend = !avisouCC ? '' : ccCiente
+      ? `<div class="can-lado ok">✅ Atendimento ciente · ${esc(c.cc_ciente_por || '')} ${c.cc_ciente_em ? 'às ' + hm(c.cc_ciente_em) : ''}</div>`
+      : podeMexer('cc')
+        ? `<div class="can-acoes"><button data-ccciente="${c.id}">Ciente — recebi o aviso (Atendimento)</button></div>`
+        : `<div class="can-lado"><button class="ciente-sombra" disabled style="opacity:.45;cursor:not-allowed">Ciente — Atendimento <span class="mudo">(aguardando o aceite)</span></button></div>`
 
-    if (!podeAgir('cc')) return trilha + valorBox + comoConferiu + aviseAtend +
-      `<div class="can-acoes"><button class="leve" data-cconferir="${c.id}">Conferir no HF</button></div>`
-    return trilha + vereditoBox + valorBox + comoConferiu + aviseAtend
-      + (avisouCC ? `<div class="can-acoes">
-          ${conferido ? `<button data-ccliente="${c.id}">Avisei o cliente — encerrar</button>` : ''}
-          <button class="leve" data-cconferir="${c.id}">Conferir no HF</button>
-          ${conferido ? '' : `<button class="leve" data-cconfman="${c.id}">✔ Conferi manualmente no HF</button>`}</div>`
-        : `<div class="can-parecer pede"><span class="so-setor">⏳ o Atendimento confirma depois que o Escritório avisar (acima)</span></div>`)
-      + descartar
+    // só depois do aviso do Escritório, do ciente do Atendimento E (no caminho req) da conferência no HF
+    const encerrarBtn = (podeMexer('cc') && avisouCC && ccCiente && conferido)
+      ? `<button data-ccliente="${c.id}">Cliente avisado no grupo${impossivel ? ' (não deu para cancelar)' : ''} — encerrar</button>`
+      : ''
+    const conferirBtns = (precisaConferir && podeMexer('cc') && avisouCC && !conferido)
+      ? `<button class="leve" data-cconferir="${c.id}">Conferir no HF</button>
+         <button class="leve" data-cconfman="${c.id}">✔ Conferi manualmente no HF</button>`
+      : ''
+    const acoesFim = (encerrarBtn || conferirBtns)
+      ? `<div class="can-acoes">${encerrarBtn}${conferirBtns}</div>`
+      : (!avisouCC ? '' : '')
+
+    return trilha + desfechoMsg + (impossivel ? '' : valorBox) + comoConferiu + aviseAtend + cienteAtend + acoesFim + descartar
   }
 
   // ── 🔎 rastreador: pedido do cliente que não virou cartão (Fúlvio 28/set 20h00) ──
@@ -1847,12 +1874,14 @@
   function triagemTemTarefa(c) {
     if (c.status !== 'aberto') return false
     if (!c.tri_ciente_em) return true                         // 1) falta o ciente da triagem
-    if (semAmostraEsperando(c)) return true                   // 2) sem amostra: informar a requisição quando ela chegar
-    if (c.caminho !== 'sem_amostra') {                        // 3) amostra no lab: a triagem ainda precisa consultar os setores
-      const proc = procDe(c)
-      return examesDoCartao(c).some(nome => { const p = proc[nome] || {}; return !p.resposta && !p.perguntado_em })
+    if (c.caminho === 'sem_amostra') {                        // amostra não chegou: a Triagem tem DUAS tarefas (Fúlvio 26/out)
+      if (!(c.req || c.req_nova)) return true                 //   (1ª) informar a requisição quando ela chegar
+      if (!c.tri_anotado_em) return true                      //   (2ª) anotar na requisição que o exame foi cancelado
+      return false                                            //   feito as duas, a Triagem não tem mais função
     }
-    return false
+    // amostra no lab: a triagem ainda precisa consultar os setores
+    const proc = procDe(c)
+    return examesDoCartao(c).some(nome => { const p = proc[nome] || {}; return !p.resposta && !p.perguntado_em })
   }
   function desenharTriagem() {
     const b = document.querySelector('#abas button[data-setor="tri"]')
@@ -5353,6 +5382,20 @@
       catch (e) { chf.disabled = false; toast(e.message) }
       return
     }
+    const ccc = ev.target.closest('[data-ccciente]')         // ✅ 2ª fase de ciente: o Atendimento recebeu o aviso (Fúlvio 26/out)
+    if (ccc) {
+      if (!(await garantirLogin())) return
+      ccc.disabled = true
+      try {
+        const r = await rpc('inc_cancel_cc_ciente', { p_nome: sessao.nome, p_senha: sessao.senha, p_id: +ccc.dataset.ccciente })
+        toast(r && r.ok ? '✅ ciente registrado' : '⚠️ ' + ((r && r.erro) || 'não consegui'))
+        await carregar(); desenharCancelamentos(); cancelDoSetor(setor)
+      } catch (e) {
+        ccc.disabled = false
+        toast(/PGRST202|does not exist|schema cache/i.test(e.message || '') ? 'Falta rodar o SQL supabase_inclusoes_45_cancel_ciente_atendimento.sql no Supabase.' : e.message)
+      }
+      return
+    }
     const cli = ev.target.closest('[data-ccliente]')         // ③ avisa o cliente e encerra
     if (cli) {
       if (!(await garantirLogin())) return
@@ -5628,13 +5671,18 @@
         caminho: 'req', validado_em: min(40), exame_digitado: false, colaborador: 'Camila',
         tri_ciente_em: min(35), tri_ciente_por: 'TRIAGEM', esc_ciente_em: min(34), esc_ciente_por: 'ESCRITORIO',
         hf_estado: 'HF: THOR · Alpha - Paula Andriotti · 5 exame(s)' },
+      // ⭐ Fúlvio 26/out: card no FIM do fluxo sem_amostra, esperando a 2ª fase de ciente do Atendimento.
       { id: 7, criado_em: min(90), quando_pedido: min(92), clinica: 'Clínica de exemplo', autor: 'Dr. André',
         texto: 'A amostra do Simba nem saiu daqui ainda, pode cancelar',
         pet: 'SIMBA', tutor: 'Joaquim', alvo: 'exame', exame: 'Perfil tireoidiano', status: 'aberto',
         caminho: 'sem_amostra', colaborador: 'Camila',
         tri_ciente_em: min(85), tri_ciente_por: 'TRIAGEM', esc_ciente_em: min(84), esc_ciente_por: 'ESCRITORIO',
-        hf_feito_em: min(60), hf_feito_por: 'ESCRITORIO' },
-      { id: 3, criado_em: min(210), quando_pedido: min(215), clinica: 'Terceira clínica de exemplo', autor: 'Rodrigo',
+        req_nova: '641088', req_nova_em: min(70), req_nova_por: 'TRIAGEM', req: '641088',
+        tri_anotado_em: min(68), tri_anotado_por: 'TRIAGEM',
+        hf_feito_em: min(60), hf_feito_por: 'ESCRITORIO',
+        valor_zerado: true, valor_zerado_em: min(58), valor_zerado_por: 'ESCRITORIO',
+        avisei_cc_em: min(50), avisei_cc_por: 'Gabriel' },
+      { id: 8, criado_em: min(210), quando_pedido: min(215), clinica: 'Terceira clínica de exemplo', autor: 'Rodrigo',
         texto: 'Pode cancelar o exame de Sansão por favor. Obrigado', pet: 'SANSÃO', req: '640402', exame: 'Perfil hepático',
         status: 'nao_deu_tempo', resolvido_por: 'DEMO', resolvido_em: min(200),
         motivo: 'reagente já usado — combinado com a Dra. que entra na fatura e o laudo vai assim mesmo',
@@ -5765,6 +5813,50 @@
     if (nome === 'inc_cancel_avisei_cc') {
       const x = cancelamentos.find(y => y.id === a.p_id)
       if (x) { x.avisei_cc_em = new Date().toISOString(); x.avisei_cc_por = a.p_colab || 'DEMO' }
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_cc_ciente') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.cc_ciente_em = new Date().toISOString(); x.cc_ciente_por = 'DEMO' }
+      return { ok: true }
+    }
+    // ── mocks que faltavam para o demo exercitar o fluxo COMPLETO dos dois caminhos ──
+    if (nome === 'inc_cancel_tri_veredito') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.tri_veredito = a.p_veredito; x.tri_veredito_em = new Date().toISOString(); x.tri_veredito_por = 'DEMO' }
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_esc_digitado') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.esc_digitado = !!a.p_digitado; x.esc_digitado_em = new Date().toISOString(); x.esc_digitado_por = 'DEMO' }
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_tri_anotado') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.tri_anotado_em = new Date().toISOString(); x.tri_anotado_por = 'DEMO' }
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_valor_zerado') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.valor_zerado = !!a.p_zerado; x.valor_zerado_em = new Date().toISOString(); x.valor_zerado_por = 'DEMO' }
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_conf_manual') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.conf_manual_em = new Date().toISOString(); x.conf_manual_por = 'DEMO' }
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_desfecho') {
+      const x = cancelamentos.find(y => y.id === a.p_id); if (x) x.desfecho = a.p_desfecho
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_colab_esc') {
+      const x = cancelamentos.find(y => y.id === a.p_id); if (x) x.colab_esc = a.p_colab || 'DEMO'
+      return { ok: true }
+    }
+    if (nome === 'inc_cancel_descartar') {
+      const x = cancelamentos.find(y => y.id === a.p_id)
+      if (x) { x.status = 'descartado'; x.resolvido_por = 'DEMO'; x.resolvido_em = new Date().toISOString(); x.motivo = a.p_motivo }
       return { ok: true }
     }
     if (nome === 'inc_cancel_cobrar') {
