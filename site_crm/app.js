@@ -730,6 +730,15 @@ function cepDe(cod){ return CLIN_CEP[String(cod==null?"":cod)]||""; }          /
 function cepFmt(cp){ cp=String(cp||"").replace(/\D/g,""); return cp.length>=8?cp.slice(0,5)+"-"+cp.slice(5,8):""; }
 function marcoLabel(iso){ const s=String(iso||"").slice(0,10); const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:""; }   // 2026-09-09 → 09/09/26
 function ehDrDra(nome){ return /^\s*dr(a|ª)?\.?\s/i.test(String(nome||"")); }   // vet particular: nome começa com Dr./Dra. — p/ agrupar junto dentro de cada tipo
+// ⭐ estrelas de FEEDBACK de contato ao lado do nome: nº de estrelas = nº de feedbacks; ROSA normal, DOURADAS se o último é recente (≤7 dias). Atualiza a cor sozinha com o passar dos dias (Wal 30/10).
+function estrelasFeedback(cod){
+  const nt=(typeof notasDe==="function")?notasDe(cod):[]; const n=nt.length; if(!n) return "";
+  const latest=nt.reduce((m,x)=>Math.max(m,x.ts||0),0);
+  const recente = latest>0 && (Date.now()-latest)<=7*864e5;
+  const cor = recente?'#ffd23b':'#ff8fcf';
+  const show=Math.min(n,5), stars='★'.repeat(show), extra=n>5?`<sub style="font-size:9px;color:${cor};font-weight:800">+${n-5}</sub>`:'';
+  return `<span title="${n} feedback(s) de contato · ${recente?'último há ≤7 dias (dourada)':'último há mais de 7 dias (rosa)'}" style="color:${cor};font-size:14px;letter-spacing:-1px;margin-left:3px;vertical-align:-1px${recente?';text-shadow:0 0 6px rgba(255,210,59,.75)':''}">${stars}</span>${extra}`;
+}
 
 /* ===== 🚨 RADAR DE FUGAS RECENTES — lupa sensível: queda grande de exames em janelas curtas (3/7/15d)
    vs o ritmo TÍPICO da própria clínica (mediana robusta das somas móveis). Pega "parou ontem/essa semana"
@@ -4251,7 +4260,7 @@ function renderTab(){
               const pctLinha=(momPill||augePill)?`<div style="display:flex;gap:9px;margin-top:5px;flex-wrap:wrap">${momPill}${augePill}</div>`:'';
               // 🦓 zebra: linhas alternadas ganham leve realce p/ não perder a linha na tabela larga (Wal)
               const zA=(i%2===1), trBg=zA?'rgba(130,175,230,.16)':'rgba(255,255,255,.015)', scZ=`position:sticky;left:0;background:${zA?'#1b3249':'#0b1a2b'};z-index:1;text-align:left;padding:11px 8px;border-right:1px solid rgba(0,229,160,.25)`;
-              return `<tr class="fmrow" style="border-top:1px solid rgba(255,255,255,.06);background:${trBg}${zer?';opacity:.72':''}"><td style="${scZ}${bl}"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> <b style="color:#eaf3ff">${esc(r.nome)}</b> ${baiChip} ${mkChip} ${plus}</div>${pctLinha}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
+              return `<tr class="fmrow" style="border-top:1px solid rgba(255,255,255,.06);background:${trBg}${zer?';opacity:.72':''}"><td style="${scZ}${bl}"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> <b style="color:#eaf3ff">${esc(r.nome)}</b>${estrelasFeedback(r.cod)} ${baiChip} ${mkChip} ${plus}</div>${pctLinha}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
             const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmShow.length}${_bq?` de ${fmRows.length}`:''})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
             // 🔴 RADAR DE QUEDA (card do topo) — REMOVIDO a pedido do Wal (30/10): a queda agora está nos chips ▼ da própria tabela e no Relatório p/ equipe (sem R$, por bairro). radarQueda fica vazio.
             // 📸 foto dos dados p/ os relatórios PDF (financeiro e p/ equipe) — ordem = a da tabela (em queda no topo)
