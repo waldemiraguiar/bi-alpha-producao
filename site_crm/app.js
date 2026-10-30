@@ -818,6 +818,13 @@ function _diaLabel(idx, baseISO){ try{ const b=new Date((baseISO||CLIN_DIA_BASE)
 function hfPins(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_pin")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
 function hfSetPins(a){ try{ localStorage.setItem("crm_hf_pin", JSON.stringify(a.slice(0,12))); }catch(e){} }
 function hfPinToggle(cod){ cod=String(cod); let a=hfPins(); if(a.includes(cod)) a=a.filter(x=>x!==cod); else a.unshift(cod); hfSetPins(a); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+// 📝 ANOTAÇÃO PESSOAL por clínica (só pra mim, guardada no aparelho) — lembrar do que se trata a clínica no futuro. Card rosa.
+let hfObsEdit="";
+function hfObsAll(){ try{ const o=JSON.parse(localStorage.getItem("crm_hf_obs")||"{}"); return (o&&typeof o==="object")?o:{}; }catch(e){ return {}; } }
+function hfObs(cod){ return hfObsAll()[String(cod)]||""; }
+function hfObsStart(cod){ hfObsEdit=String(cod); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+function hfObsCancel(){ hfObsEdit=""; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+function hfObsSave(cod){ const el=document.getElementById("hfObsTxt"); const t=el?String(el.value||"").trim():""; const o=hfObsAll(); if(t) o[String(cod)]=t.slice(0,600); else delete o[String(cod)]; try{ localStorage.setItem("crm_hf_obs", JSON.stringify(o)); }catch(e){} hfObsEdit=""; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
 function _hfCard(cod, pinned){
   const c=clinByCod(cod), st=_hfStats(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
@@ -850,12 +857,26 @@ function _hfCard(cod, pinned){
         ${(e.v&&e.v!=='-')?`<span style="margin-left:auto;font-size:10.5px;color:#ffd27a">🩺 ${esc(e.v)}</span>`:''}
       </div>`).join("")}</div>` : `<div class="t-mut" style="font-size:12px;margin-top:11px">Sem requisições nos últimos 21 dias.</div>`;
   } else { lista = `<div class="t-mut" style="font-size:12px;margin-top:11px">⏳ carregando exames recentes…</div>`; }
+  // 📝 anotação pessoal (rosa piscante leve) — editável, só pra mim
+  const obs=hfObs(cod), editing=(hfObsEdit===String(cod));
+  const obsHtml = editing
+    ? `<div style="margin-top:9px;border:1.5px solid rgba(255,143,207,.55);border-radius:12px;padding:10px 12px;background:rgba(255,143,207,.1)">
+        <div style="font-size:10.5px;font-weight:800;color:#ff8fcf;text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px">📝 minha anotação <span class="t-mut" style="font-weight:600">(só pra mim · fica neste aparelho)</span></div>
+        <textarea id="hfObsTxt" placeholder="Ex.: dona Fulana, coleta de manhã, histórico de atrito em agosto, concorrente por perto…" style="width:100%;min-height:68px;box-sizing:border-box;border:1px solid rgba(255,143,207,.4);border-radius:8px;background:rgba(0,0,0,.22);color:#eaf3ff;font-size:13px;padding:8px;resize:vertical">${esc(obs)}</textarea>
+        <div style="display:flex;gap:7px;margin-top:7px"><button onclick="hfObsSave('${esc(String(cod))}')" style="border:0;background:#ff8fcf;color:#2a0d20;border-radius:8px;padding:7px 15px;font-size:12.5px;font-weight:800;cursor:pointer">💾 salvar</button><button onclick="hfObsCancel()" style="border:1px solid var(--mut);background:transparent;color:var(--mut);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer">cancelar</button></div>
+      </div>`
+    : (obs
+      ? `<div class="pzpulse" onclick="hfObsStart('${esc(String(cod))}')" title="toque pra editar" style="margin-top:9px;border:1.5px solid rgba(255,143,207,.55);border-radius:12px;padding:9px 12px;background:rgba(255,143,207,.12);cursor:pointer">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:10px;font-weight:800;color:#ff8fcf;text-transform:uppercase;letter-spacing:.3px">📝 minha anotação</div><span style="font-size:10.5px;color:#ff8fcf">✏️ editar</span></div>
+          <div style="font-size:12.5px;color:#ffd7ee;margin-top:3px;white-space:pre-wrap;line-height:1.45">${esc(obs)}</div></div>`
+      : `<div style="margin-top:9px"><button onclick="hfObsStart('${esc(String(cod))}')" style="border:1px dashed rgba(255,143,207,.55);background:rgba(255,143,207,.06);color:#ff8fcf;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📝 anotar algo sobre essa clínica (só pra mim)</button></div>`);
   return `<div class="${pulse}" style="border:2px solid ${caindo?'#FF2D55':'rgba(0,212,255,.35)'};border-radius:14px;padding:13px 15px;margin-top:11px;background:${caindo?'rgba(255,45,85,.09)':'rgba(0,212,255,.05)'}">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge}
       <div style="margin-left:auto">${pinBtn}</div>
     </div>
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
+    ${obsHtml}
     ${kpis}${spark}
     <div class="t-mut" style="font-size:10px;margin-top:3px">📊 exames/dia (21 dias) · verde=hoje · <b style="color:#ff5a7a">vermelho piscando = queda recente</b></div>
     ${lista}
@@ -875,7 +896,7 @@ function lupaHF(){
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
     : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia. Busque acima pra ver/fixar outra.</div>`:"");
-  return `<div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
+  return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
     <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
     <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar. Se um <b style="color:#ff5a7a">cair</b>, o card <b>pisca em vermelho</b> na hora. Mostra o ritmo (3d/7d, média, dia típico, frequência) e os exames recentes (registro, paciente, 🩺 vet).</div>
     ${box}${cards}${hint}
