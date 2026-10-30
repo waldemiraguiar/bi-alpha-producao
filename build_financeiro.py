@@ -582,10 +582,10 @@ def build():
         if r["primeira"] and str(r["primeira"])>='2021-01-01':
             ym=str(r["primeira"])[:7]; nv[ym]=nv.get(ym,0)+1
     D["novos_clientes"]=[{"ym":k2,"novos":nv[k2]} for k2 in sorted(nv)]
-    names={r["cod"]:r for r in q("SELECT CodCliente cod, Cliente nome, Cidade, Uf, Bairro FROM TabCliente")}
+    names={r["cod"]:r for r in q("SELECT CodCliente cod, Cliente nome, Cidade, Uf, Bairro, Cep FROM TabCliente")}
     # MASTER de clínicas p/ o autocomplete do CRM (todas do HF + produção L12; R$ à parte, gated p/ diretoria)
     _prodmap={r["cod"]:r for r in cli}
-    D["clinicas_full"]=[{"cod":cod,"nome":(info.get("nome") or ""),"cidade":(info.get("Cidade") or ""),"bairro":(info.get("Bairro") or ""),
+    D["clinicas_full"]=[{"cod":cod,"nome":(info.get("nome") or ""),"cidade":(info.get("Cidade") or ""),"bairro":(info.get("Bairro") or ""),"cep":(info.get("Cep") or ""),
                          "qtd":int(_prodmap.get(cod,{}).get("qtd") or 0),
                          "fat":round(_prodmap.get(cod,{}).get("fat") or 0,2)}
                         for cod,info in names.items() if (info.get("nome") or "").strip()]

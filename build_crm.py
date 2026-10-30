@@ -448,7 +448,7 @@ def post_clinicas(D):
     if not pwd or not full:
         return
     base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
-    clis = [{"cod": c.get("cod"), "nome": c.get("nome"), "cidade": c.get("cidade"), "bairro": c.get("bairro") or "", "prod": int(c.get("qtd") or 0)} for c in full]
+    clis = [{"cod": c.get("cod"), "nome": c.get("nome"), "cidade": c.get("cidade"), "bairro": c.get("bairro") or "", "cep": c.get("cep") or "", "prod": int(c.get("qtd") or 0)} for c in full]
     try:
         payload = json.dumps({"acao": "set", "clinicas": clis, "senha": pwd}).encode()
         r = urllib.request.urlopen(urllib.request.Request(
