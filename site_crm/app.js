@@ -785,6 +785,72 @@ function fugasRecentes(){
   </div>`;
 }
 
+/* ===== 🔎 LUPA DE MONITORAMENTO por clínica — busca qualquer clínica do HF e mostra o movimento de perto:
+   exames recentes (registro HF, paciente, espécie, vet solicitante) + ritmo (média/mediana/dia) vs dias anteriores. SEM R$. ===== */
+function _hfStats(cod){
+  const serie=(CLIN_DIA&&CLIN_DIA[String(cod)])||null; if(!serie||!serie.length) return null;
+  const H=CLIN_DIA_HOJE_IDX; const by={}; let first=null,last=null,tot=0;
+  serie.forEach(([d,n])=>{ by[d]=(by[d]||0)+n; if(first==null||d<first)first=d; if(last==null||d>last)last=d; tot+=n; });
+  const sum=(a,b)=>{ let s=0; for(let d=a;d<=b;d++) s+=(by[d]||0); return s; };
+  const act=Object.keys(by).map(k=>by[k]).filter(v=>v>0).sort((a,b)=>a-b);
+  const idxs=Object.keys(by).map(Number).sort((a,b)=>a-b); const gaps=[]; for(let i=1;i<idxs.length;i++) gaps.push(idxs[i]-idxs[i-1]); gaps.sort((a,b)=>a-b);
+  return { by, first, last, tot, H, last7:sum(H-6,H), prev7:sum(H-13,H-7), mean30:sum(H-29,H)/30,
+    medEnvio: act.length?act[Math.floor(act.length/2)]:0, gapMed: gaps.length?gaps[Math.floor(gaps.length/2)]:null, daysSince:H-last };
+}
+function _diaLabel(idx, baseISO){ try{ const b=new Date((baseISO||CLIN_DIA_BASE)+"T12:00:00"); const dt=new Date(b.getTime()+idx*864e5); return String(dt.getDate()).padStart(2,"0")+"/"+String(dt.getMonth()+1).padStart(2,"0"); }catch(e){ return ""; } }
+function lupaHF(){
+  if(!CLINICAS.length) return "";
+  const nomeSel = hfSel ? ((clinByCod(hfSel)||{}).nome||"") : "";
+  const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Digite o nome da clínica (todas do HF)" value="${esc(nomeSel)}" style="flex:1;min-width:240px;max-width:460px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
+    <datalist id="hfDL">${CLINICAS.slice(0,4000).map(c=>`<option value="${esc(c.nome)}">`).join("")}</datalist>
+    ${hfSel?`<button id="hfClear" style="cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:9px;padding:8px 11px;font-size:12px">✕ trocar</button>`:''}
+  </div>`;
+  let card="";
+  if(hfSel){
+    const c=clinByCod(hfSel), st=_hfStats(hfSel), bai=bairroDe(hfSel), cid=(c&&c.cidade)||"";
+    if(!st){ card=`<div class="t-mut" style="font-size:12.5px;margin-top:10px">Sem exames dessa clínica nos últimos 90 dias no HF.</div>`; }
+    else {
+      const col=(a,b)=>a>b*1.02?'#7effcf':(a<b*0.98?'#ff6b81':'#9fb2cc'), seta=(a,b)=>a>b*1.02?'▲':(a<b*0.98?'▼':'•');
+      const pct7=st.prev7>0?Math.round((st.last7/st.prev7-1)*100):(st.last7>0?100:0);
+      const H=st.H, sdays=[]; for(let d=H-20;d<=H;d++) sdays.push(st.by[d]||0); const mx=Math.max(1,...sdays);
+      const spark=`<div style="display:flex;align-items:flex-end;gap:2px;height:38px;margin-top:5px">${sdays.map((v,i)=>{const idx=H-20+i,h=Math.round(v/mx*36),hoje=idx===H; return `<div title="${_diaLabel(idx)}: ${v}" style="flex:1;min-width:3px;height:${Math.max(2,h)}px;background:${v?(hoje?'#00E5A0':'#4a9fd4'):'rgba(255,255,255,.08)'};border-radius:2px"></div>`;}).join("")}</div>`;
+      const kpi=(v,l,cor)=>`<div style="flex:1;min-width:96px;border:1px solid ${cor}44;border-left:3px solid ${cor};border-radius:9px;padding:7px 10px"><div style="font-size:18px;font-weight:900;color:#eaf3ff;line-height:1.1">${v}</div><div class="t-mut" style="font-size:10.5px">${l}</div></div>`;
+      const okRec=st.daysSince<=((st.gapMed||3)+1);
+      const stats=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">
+        ${kpi(`${st.last7} <span style="font-size:12px;color:${col(st.last7,st.prev7)}">${seta(st.last7,st.prev7)}${Math.abs(pct7)}%</span>`,`últimos 7d <span class="t-mut">(vs ${st.prev7})</span>`,'#00D4FF')}
+        ${kpi(st.mean30.toFixed(1),'exames/dia (média 30d)','#9fe6ff')}
+        ${kpi(st.medEnvio,'por envio (mediana)','#7effcf')}
+        ${kpi(st.gapMed!=null?('~'+st.gapMed+'d'):'—','manda a cada','#ffc266')}
+        ${kpi(st.daysSince+'d',okRec?'último envio ✓':'desde o último ⚠️',okRec?'#7effcf':'#ff6b81')}
+      </div>`;
+      let lista;
+      if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(hfSel)]||[]);
+        lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:13px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(últimos 21 dias · ${arr.length})</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px">${arr.slice(0,30).map(e=>`<div style="display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding:6px 0;flex-wrap:wrap">
+            <span style="font-family:ui-monospace,monospace;font-size:11px;color:#9fe6ff;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.25);border-radius:6px;padding:1px 7px">#${esc(e.r)}</span>
+            <span style="font-size:10.5px;color:#c9d4e0">${_diaLabel(e.d,CRM_HF_BASE)}</span>
+            <b style="font-size:12.5px;color:#eaf3ff">${esc(e.p||'—')}</b>${e.e?`<span class="t-mut" style="font-size:10.5px">${esc(e.e)}</span>`:''}
+            ${(e.v&&e.v!=='-')?`<span style="margin-left:auto;font-size:10.5px;color:#ffd27a">🩺 ${esc(e.v)}</span>`:''}
+          </div>`).join("")}${arr.length>30?`<div class="t-mut" style="font-size:11px;margin-top:4px">+ ${arr.length-30} requisições</div>`:''}</div>`
+          : `<div class="t-mut" style="font-size:12px;margin-top:11px">Sem requisições nos últimos 21 dias (mas tem histórico em 90d — veja o ritmo acima).</div>`;
+      } else { lista = `<div class="t-mut" style="font-size:12px;margin-top:11px">⏳ carregando exames recentes…</div>`; }
+      card=`<div style="border:1px solid rgba(0,212,255,.35);border-radius:12px;padding:12px 14px;margin-top:10px;background:rgba(0,212,255,.05)">
+        <div style="font-size:15px;font-weight:800;color:#eaf3ff">${esc((c&&c.nome)||('#'+hfSel))}</div>
+        <div class="t-mut" style="font-size:11.5px;margin-top:2px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
+        ${stats}${spark}
+        <div class="t-mut" style="font-size:10px;margin-top:3px">📊 barrinhas = exames/dia nos últimos 21 dias (verde = hoje)</div>
+        ${lista}
+      </div>`;
+    }
+  }
+  return `<div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.4)">
+    <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica (HF)</div>
+    <div class="t-mut" style="font-size:11px;margin:3px 0 8px;line-height:1.5">Busque <b>qualquer clínica do HF</b> e veja o movimento de perto: exames recentes (registro, paciente, 🩺 vet solicitante) + ritmo (média/mediana por dia) e comparação com os dias anteriores.</div>
+    ${box}${card}
+  </div>`;
+}
+
 /* ===== 🖨️ RELATÓRIOS PDF do Monitoramento — 2 botões: FINANCEIRO (com R$) e P/ EQUIPE (sem R$, por bairro/proximidade) ===== */
 // card de % tema-claro p/ impressão (verde sobe / vermelho cai / cinza estável)
 function _pcardPct(val,label){ if(val==null) return '';
@@ -2049,6 +2115,10 @@ async function loadExMes(){ try{ const r=await fetch("/api/crm-exames",{cache:"n
 // 📅 SÉRIE DIÁRIA por clínica (exames/dia 90d) — base do RADAR DE FUGAS RECENTES. {cod:[[idx,n]]}, idx = dias desde CLIN_DIA_BASE.
 let CLIN_DIA=null, CLIN_DIA_BASE="", CLIN_DIA_HOJE_IDX=0;
 async function loadDia(){ try{ const r=await fetch("/api/crm-dia",{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&j.dia){ CLIN_DIA=j.dia; CLIN_DIA_BASE=j.base||""; CLIN_DIA_HOJE_IDX=j.hoje_idx||0; } } }catch(e){} }
+// 🔎 LUPA HF — detalhe recente de exames por clínica (registro, paciente, espécie, vet). Carregado SOB DEMANDA (pesa ~450KB).
+let CRM_HF=null, CRM_HF_BASE="", CRM_HF_HOJE=0, CRM_HF_LOADING=false;
+let hfSel="";   // cod da clínica selecionada na lupa
+async function loadHF(){ if(CRM_HF||CRM_HF_LOADING) return; CRM_HF_LOADING=true; try{ const r=await fetch("/api/crm-hf",{cache:"no-store"}); if(r.ok){ const j=await r.json(); CRM_HF=(j&&j.det)||{}; CRM_HF_BASE=j.base||""; CRM_HF_HOJE=j.hoje_idx||0; } }catch(e){} CRM_HF_LOADING=false; }
 /* 📝 NOTAS por clínica (feedback da equipe sobre o cliente) — {cod:[{ts,por,texto}]}, compartilhado */
 let CLIN_NOTAS={};
 const NOTAS_API="/api/crm-notas";
@@ -4442,8 +4512,10 @@ function renderTab(){
           </div>`; }).join("")}
         <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 Enquanto a barra é só <b style="color:#9fe6ff">💙 azul</b>, é dinheiro que já entrava (não é mérito). Cada pedaço <b style="color:#7effcf">💚 verde</b> que você abre = recuperação real, e é o que <b>comissiona</b> o vendedor.</div>` : "";
       const fugaCard = CLIN_DIA ? fugasRecentes() : "";
+      const lupaCard = CLINICAS.length ? lupaHF() : "";
       c.innerHTML=`${subtabsClin}
         ${fugaCard}
+        ${lupaCard}
         ${ehDiretoria()?"":biAquisPublico}
         ${painel}
         ${conquistaHtml}
@@ -4457,6 +4529,8 @@ function renderTab(){
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       const _sl=document.getElementById("safraLupa"); if(_sl){ _sl.addEventListener("input", e=>{ safraBusca=e.target.value; const pos=_sl.selectionStart; renderTab(); const l2=document.getElementById("safraLupa"); if(l2){ l2.focus(); try{ l2.setSelectionRange(pos,pos); }catch(_){} } }); }
       const _slx=document.getElementById("safraLupaX"); if(_slx) _slx.onclick=()=>{ safraBusca=""; renderTab(); };
+      const _hf=document.getElementById("hfLupa"); if(_hf) _hf.onchange=()=>{ const v=_hf.value.trim(); const cc=CLINICAS.find(x=>(x.nome||"")===v); if(cc){ hfSel=String(cc.cod); if(!CRM_HF&&!CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); } renderTab(); } };
+      const _hfc=document.getElementById("hfClear"); if(_hfc) _hfc.onclick=()=>{ hfSel=""; renderTab(); };
       return;
     }
     if(clinView==="aaa"||clinView==="aab"||clinView==="aac"||clinView==="aad"){
