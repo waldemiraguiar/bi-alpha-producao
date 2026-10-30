@@ -4511,10 +4511,9 @@ function renderTab(){
             ${falta.length?`<div style="margin-top:9px"><div style="font-size:11px;color:#ff8fa3;font-weight:700;margin-bottom:4px">🎯 Falta abrir (o alvo pra virar dinheiro novo):</div><div style="display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,10).map(f=>`<span style="background:rgba(255,45,85,.18);color:#ffc9d2;border:1px solid rgba(255,45,85,.4);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}</div></div>`:(conq.length?`<div style="font-size:11px;color:#7effcf;margin-top:8px">👏 já manda todas as classes — conversão completa!</div>`:"")}
           </div>`; }).join("")}
         <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 Enquanto a barra é só <b style="color:#9fe6ff">💙 azul</b>, é dinheiro que já entrava (não é mérito). Cada pedaço <b style="color:#7effcf">💚 verde</b> que você abre = recuperação real, e é o que <b>comissiona</b> o vendedor.</div>` : "";
-      const fugaCard = CLIN_DIA ? fugasRecentes() : "";
+      // 🚨 Card "Fugas recentes" REMOVIDO do topo a pedido do Wal (30/10). O feed diário (CLIN_DIA) fica — a Lupa usa pra média/mediana/gráfico.
       const lupaCard = CLINICAS.length ? lupaHF() : "";
       c.innerHTML=`${subtabsClin}
-        ${fugaCard}
         ${lupaCard}
         ${ehDiretoria()?"":biAquisPublico}
         ${painel}
