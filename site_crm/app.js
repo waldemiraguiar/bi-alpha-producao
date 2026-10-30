@@ -842,15 +842,19 @@ function hfObsSave(cod){ const el=document.getElementById("hfObsTxt"); const t=e
 function hfAAA(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_aaa")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
 function hfIsAAA(cod){ return hfAAA().includes(String(cod)); }
 function hfAAAToggle(cod){ cod=String(cod); let a=hfAAA(); if(a.includes(cod)) a=a.filter(x=>x!==cod); else a.unshift(cod); try{ localStorage.setItem("crm_hf_aaa", JSON.stringify(a.slice(0,300))); }catch(e){} if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+// 👥 GRUPO / MESMO DONO — clínicas com o mesmo rótulo ficam sempre juntas na Lupa (salvo no aparelho). (Wal 30/10)
+function hfGrupos(){ try{ const o=JSON.parse(localStorage.getItem("crm_hf_grupo")||"{}"); return (o&&typeof o==="object")?o:{}; }catch(e){ return {}; } }
+function hfGrupo(cod){ return hfGrupos()[String(cod)]||""; }
+function hfGrupoSet(cod){ cod=String(cod); const v=(window.prompt("Dono / grupo desta clínica — as do mesmo valor ficam SEMPRE juntas na Lupa (ex.: 'Dr. João'). Vazio = sem grupo.", hfGrupo(cod))||"").trim().slice(0,40); const o=hfGrupos(); if(v) o[cod]=v; else delete o[cod]; try{ localStorage.setItem("crm_hf_grupo", JSON.stringify(o)); }catch(e){} if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 // 🏅 SELO AUTOMÁTICO por CURVA (ranking de faturamento 12m): A=Triplo A, B=AA, C=A. O sistema coloca sozinho. (Wal 30/10)
 function tierDe(cod){ cod=String(cod); const a=(typeof AAA!=="undefined"&&AAA)?AAA.find(x=>String(x.cod)===cod):null; return a?(a.curva||"A"):null; }
 function _tierSeal(cod){
   const t=tierDe(cod); if(!t) return "";
-  const map={ A:{txt:'🏅 TRIPLO A',bg:'linear-gradient(135deg,#ffe88a,#f0a500)',col:'#3a2600',glow:true},
-              B:{txt:'🥈 AA',bg:'linear-gradient(135deg,#eef2f8,#aab8c7)',col:'#26303c',glow:false},
-              C:{txt:'🥉 A',bg:'linear-gradient(135deg,#f0c088,#c07f3a)',col:'#3a2410',glow:false} };
+  const map={ A:{txt:'🏅 Curva A',bg:'linear-gradient(135deg,#ffe88a,#f0a500)',col:'#3a2600',glow:true},
+              B:{txt:'🥈 Curva B',bg:'linear-gradient(135deg,#eef2f8,#aab8c7)',col:'#26303c',glow:false},
+              C:{txt:'🥉 Curva C',bg:'linear-gradient(135deg,#f0c088,#c07f3a)',col:'#3a2410',glow:false} };
   const m=map[t]; if(!m) return "";   // curva D: sem selo
-  return `<span class="${m.glow?'aaaseal':''}" title="curva ${t} — ranking por faturamento dos últimos 12 meses (o sistema classifica sozinho)" style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.col};border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;letter-spacing:.5px">${m.txt}</span>`;
+  return `<span class="${m.glow?'aaaseal':''}" title="curva ${t} por faturamento dos últimos 12 meses — A = Triplo A (top 40 clínicas), B (próximas 60), C (próximas 100). O sistema classifica sozinho." style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.col};border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;letter-spacing:.5px">${m.txt}</span>`;
 }
 function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
 function _hfCard(cod, pinned){
@@ -906,10 +910,14 @@ function _hfCard(cod, pinned){
           <div style="font-size:12.5px;color:#ffd7ee;margin-top:3px;white-space:pre-wrap;line-height:1.45">${esc(obs)}</div></div>`
       : `<div style="margin-top:9px"><button onclick="hfObsStart('${esc(String(cod))}')" style="border:1px dashed rgba(255,143,207,.55);background:rgba(255,143,207,.06);color:#ff8fcf;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📝 anotar algo sobre essa clínica (só pra mim)</button></div>`);
   const isAAA=(tierDe(cod)==='A'), aaaSeal=_tierSeal(cod);   // selo automático pela curva (A=Triplo A dourado)
+  const grpVal=hfGrupo(cod);
+  const grpBtn = grpVal
+    ? `<button onclick="hfGrupoSet('${esc(String(cod))}')" title="dono/grupo: ${esc(grpVal)} — clique p/ editar" style="border:1px solid rgba(155,140,255,.55);background:rgba(155,140,255,.16);color:#c9bcff;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">👥 ${esc(grpVal)}</button>`
+    : `<button onclick="hfGrupoSet('${esc(String(cod))}')" title="agrupar com clínicas do mesmo dono" style="border:1px solid rgba(255,255,255,.18);background:transparent;color:#9fb2cc;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">👥 grupo</button>`;
   return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:16px 18px;margin-top:18px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
-      <div style="margin-left:auto;display:flex;gap:7px">${pinBtn}</div>
+      <div style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap">${grpBtn}${pinBtn}</div>
     </div>
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
     ${obsHtml}
@@ -928,9 +936,16 @@ function ensureHfDatalist(){
 function lupaHF(){
   if(!CLINICAS.length) return "";
   const pins=hfPins();
-  // 📌 cards FIXOS sempre com os EM QUEDA em cima (mais grave primeiro), depois o resto — Wal 30/10
+  // 📌 cards FIXOS: clínicas do MESMO DONO sempre juntas; grupos/queda mais graves em cima — Wal 30/10
   const _ddN=s=>s?Math.max((s.drop7!=null?s.drop7:-9),(s.drop3!=null?s.drop3:-9)):-9;
-  let cods=pins.slice().sort((a,b)=>{ const sa=_hfStats(a), sb=_hfStats(b), ca=!!(sa&&sa.caindo), cb=!!(sb&&sb.caindo); if(ca!==cb) return ca?-1:1; return _ddN(sb)-_ddN(sa); });
+  const _sevN=c=>{ const s=_hfStats(c); return s&&s.caindo?_ddN(s):1; };   // menor = mais grave
+  const _gk=c=>{ const g=hfGrupo(c); return g?('g:'+g.toLowerCase()):('u:'+c); };
+  const _grpSev={}; pins.forEach(c=>{ const k=_gk(c), s=_sevN(c); if(_grpSev[k]==null||s<_grpSev[k]) _grpSev[k]=s; });
+  let cods=pins.slice().sort((a,b)=>{
+    const ka=_gk(a), kb=_gk(b);
+    if(ka!==kb){ const ga=_grpSev[ka], gb=_grpSev[kb]; if(ga!==gb) return ga-gb; return ka<kb?-1:1; }   // mesmo dono SEMPRE junto; grupo com fuga sobe
+    const sa=_hfStats(a), sb=_hfStats(b), ca=!!(sa&&sa.caindo), cb=!!(sb&&sb.caindo); if(ca!==cb) return ca?-1:1; return _ddN(sb)-_ddN(sa);
+  });
   if(hfSel && !cods.includes(String(hfSel))) cods.unshift(String(hfSel));
   let exemplo=false;
   if(!cods.length){ const sos=CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")&&!/nofaro|plamev/i.test(c.nome||"")) || CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")); if(sos){ cods=[String(sos.cod)]; exemplo=true; } }
