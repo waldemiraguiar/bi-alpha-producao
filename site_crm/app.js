@@ -4415,9 +4415,23 @@ function renderTab(){
   }
 
   if(ACTIVE==="comercial"){
-    // 📈 FUNIL COMERCIAL (leads · prospecção · conversão) — pedido da Luciane. Base: PROSPECÇÃO (leads classificados).
+    // 📈 FUNIL COMERCIAL (leads · prospecção · conversão) — pedido da Luciane. Base: PROSPECÇÃO + NOVAS do Guarda-Chuva.
     const jan=comJanela();
-    let leads=PROSP.filter(p=>{ const t=p.ts||0; return t>=jan.ini && t<=jan.fim; });
+    // 🤝 Integra as NOVAS cadastradas em Guarda-Chuva → Novos (clientes já ganhos) — a Luciane cadastra os RECEPTIVOS ali;
+    //    sem isto o funil só enxergava os ATIVOS da prospecção (Receptivos ficava 0). Pedido da Lu 30/10. SEM R$.
+    const _normL=s=>String(s||"").trim().toLowerCase();
+    const _prospNomes=new Set(PROSP.map(p=>_normL(p.nome)));
+    const _novasByCod=new Map();   // a mesma clínica pode ter sido salva 2x na carteira → fica a mais recente
+    (CARTEIRA||[]).filter(x=>x && x.tipo==="nova" && x.nome).forEach(x=>{
+      const k=String(x.cod||x.id||_normL(x.nome));
+      const ts=x.reconq_data?new Date(x.reconq_data+"T12:00:00").getTime():(x.ts||x.edit_ts||0);
+      const prev=_novasByCod.get(k); if(!prev||ts>prev._ts) _novasByCod.set(k,{x,_ts:ts});
+    });
+    const cartLeads=[..._novasByCod.values()].filter(o=>!_prospNomes.has(_normL(o.x.nome)))
+      .map(o=>({ id:"cart"+(o.x.cod||o.x.id||_normL(o.x.nome)), cod:o.x.cod, nome:o.x.nome, ts:o._ts, status:"venda_ganha",
+        origemlead:(o.x.origem||o.x.origemlead||""), canal:(o.x.canal||""), operador:(o.x.operador||""), _carteira:true }));
+    const BASE=[...PROSP, ...cartLeads];
+    let leads=BASE.filter(p=>{ const t=p.ts||0; return t>=jan.ini && t<=jan.fim; });
     if(comOper)  leads=leads.filter(p=>(p.operador||"")===comOper);
     if(comCanal) leads=leads.filter(p=>(p.canal||"")===comCanal);
     if(comTipo)  leads=leads.filter(p=>leadGrupo(p)===comTipo);
@@ -4448,7 +4462,7 @@ function renderTab(){
     const convCanalHtml=byCanal.length?tbl(byCanal.map(([k,arr])=>convRow(k,arr,corCanal(k))).join("")):"";
     const convOperHtml=byOper.length?tbl(byOper.map(([k,arr])=>convRow(k,arr,corFech(k))).join("")):"";
     // filtros
-    const canaisDistintos=[...new Set(PROSP.map(p=>p.canal).filter(Boolean))], opersDistintos=[...new Set(PROSP.map(p=>p.operador).filter(Boolean))];
+    const canaisDistintos=[...new Set(BASE.map(p=>p.canal).filter(Boolean))], opersDistintos=[...new Set(BASE.map(p=>p.operador).filter(Boolean))];
     const sel=(id,val,opts,ph)=>`<select id="${id}" class="m-date" style="width:auto;padding:5px 8px;font-size:12px"><option value="">${ph}</option>${opts.map(o=>`<option value="${esc(o)}"${o===val?" selected":""}>${esc(o)}</option>`).join("")}</select>`;
     const usaInt=!!(comDe||comAte);
     const card=(t,v,s,cor)=>`<div style="flex:1;min-width:120px;border:1px solid ${cor}44;border-left:3px solid ${cor};border-radius:10px;padding:9px 11px"><div style="font-size:11px;color:${cor};font-weight:700">${t}</div><div style="font-size:21px;font-weight:900;color:#eaf3ff;line-height:1.1">${v}</div><div class="t-mut" style="font-size:10.5px">${s}</div></div>`;
@@ -4476,7 +4490,7 @@ function renderTab(){
         ${card("✅ Novos Clientes",nConv,"leads convertidos","#7effcf")}
         ${card("🎯 Taxa de Conversão",taxa+"%",nConv+" de "+total,"#ffc266")}
       </div>
-      ${PROSP.length?"":`<div class="proxhint" style="border-color:rgba(255,194,77,.4);color:#ffc266;margin:10px 0;line-height:1.5">⏳ Ainda não há leads cadastrados. Cadastre na aba <b>🧲 Prospecção</b> e marque <b>canal · origem · operador</b> no lead — aí este funil enche sozinho.</div>`}
+      ${BASE.length?"":`<div class="proxhint" style="border-color:rgba(255,194,77,.4);color:#ffc266;margin:10px 0;line-height:1.5">⏳ Ainda não há leads cadastrados. Cadastre na aba <b>🧲 Prospecção</b> e marque <b>canal · origem · operador</b> no lead — aí este funil enche sozinho.</div>`}
       ${sec("📈 Leads por período <span class='t-mut' style='font-weight:500;font-size:11px'>(✅ = convertidos)</span> <span style='float:right'><button data-comg='mes' style='cursor:pointer;border:1px solid ${comGran==='mes'?'#00D4FF':'rgba(255,255,255,.14)'};background:transparent;color:${comGran==='mes'?'#00D4FF':'#9fb2cc'};border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700'>Mês</button> <button data-comg='semana' style='cursor:pointer;border:1px solid ${comGran==='semana'?'#00D4FF':'rgba(255,255,255,.14)'};background:transparent;color:${comGran==='semana'?'#00D4FF':'#9fb2cc'};border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700'>Semana</button></span>", perHtml)}
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:230px">${sec("📡 Origem dos leads",canalHtml)}</div>
@@ -4486,7 +4500,7 @@ function renderTab(){
       ${sec("⚡ Prospecção ativa <span class='t-mut' style='font-weight:500;font-size:11px'>(leads ativos: "+ativosArr.length+")</span>",`<div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><div class="t-mut" style="font-size:11px;font-weight:700;margin-bottom:3px">Por operador</div>${paOper.length?paOper.map(([k,a])=>barRow(k,a.length,ativosArr.length,corFech(k))).join(""):'<div class="t-mut" style="font-size:12px">—</div>'}</div><div style="flex:1;min-width:180px"><div class="t-mut" style="font-size:11px;font-weight:700;margin-bottom:3px">Por origem</div>${paCanal.length?paCanal.map(([k,a])=>barRow(k,a.length,ativosArr.length,corCanal(k))).join(""):'<div class="t-mut" style="font-size:12px">—</div>'}</div></div>`)}
       ${sec("🎯 Conversão por origem <span class='t-mut' style='font-weight:500;font-size:11px'>— qual canal gera mais CLIENTES</span>",convCanalHtml||'<div class="t-mut" style="font-size:12px">—</div>')}
       ${sec("🏅 Conversão por operador",convOperHtml||'<div class="t-mut" style="font-size:12px">—</div>')}
-      ${convArr.length?`<div class="seclabel" style="margin-top:6px">✅ Clientes convertidos (${convArr.length})</div>${convArr.sort((a,b)=>(b.ts||0)-(a.ts||0)).map(p=>`<div class="crow" data-prosp="${esc(p.id)}" style="cursor:pointer"><div class="rk" style="color:#00E5A0">✅</div><div><div class="nm">${esc(p.nome)}</div><div class="ci">${p.canal?"📡 "+esc(p.canal)+" · ":""}${p.operador?"🧑‍💼 "+esc(p.operador)+" · ":""}${esc(diasAtras(p.ts))}</div></div><div class="mid"></div></div>`).join("")}`:""}`;
+      ${convArr.length?`<div class="seclabel" style="margin-top:6px">✅ Clientes convertidos (${convArr.length})</div>${convArr.sort((a,b)=>(b.ts||0)-(a.ts||0)).map(p=>{ const o=p.origemlead?origemInfo(p.origemlead):null; const chip=o&&o.grupo?` · ${o.grupo==="receptivo"?"📥":"🎯"} ${esc(p.origemlead)}`:""; const clk=!p._carteira; return `<div class="crow" ${clk?`data-prosp="${esc(p.id)}" style="cursor:pointer"`:`style="cursor:default"`}><div class="rk" style="color:#00E5A0">✅</div><div><div class="nm">${esc(p.nome)}</div><div class="ci">${p.canal?"📡 "+esc(p.canal)+" · ":""}${p.operador?"🧑‍💼 "+esc(p.operador)+" · ":""}${esc(diasAtras(p.ts))}${chip}</div></div><div class="mid"></div></div>`; }).join("")}`:""}`;
     // wiring
     document.querySelectorAll("#content [data-comr]").forEach(el=>el.onclick=()=>{ comRange=el.dataset.comr; comDe=""; comAte=""; renderTab(); });
     document.querySelectorAll("#content [data-comg]").forEach(el=>el.onclick=()=>{ comGran=el.dataset.comg; renderTab(); });
