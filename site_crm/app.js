@@ -731,6 +731,60 @@ function cepFmt(cp){ cp=String(cp||"").replace(/\D/g,""); return cp.length>=8?cp
 function marcoLabel(iso){ const s=String(iso||"").slice(0,10); const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:""; }   // 2026-09-09 → 09/09/26
 function ehDrDra(nome){ return /^\s*dr(a|ª)?\.?\s/i.test(String(nome||"")); }   // vet particular: nome começa com Dr./Dra. — p/ agrupar junto dentro de cada tipo
 
+/* ===== 🚨 RADAR DE FUGAS RECENTES — lupa sensível: queda grande de exames em janelas curtas (3/7/15d)
+   vs o ritmo TÍPICO da própria clínica (mediana robusta das somas móveis). Pega "parou ontem/essa semana"
+   antes do mês fechar. Base: /api/crm-dia (série diária 90d, SEM R$). ===== */
+function _fugaStats(serie, H){
+  if(!serie || serie.length<3) return null;
+  const by={}; let first=serie[0][0], last=first, tot=0;
+  serie.forEach(([d,n])=>{ by[d]=(by[d]||0)+n; if(d<first)first=d; if(d>last)last=d; tot+=n; });
+  if((H-first)<21) return null;                      // histórico curto demais p/ julgar fuga
+  const winSum=W=>{ let s=0; for(let d=H-W+1; d<=H; d++) s+=(by[d]||0); return s; };
+  const rollMed=W=>{ const a=[]; for(let end=first+W-1; end<=H-W; end++){ let s=0; for(let d=end-W+1; d<=end; d++) s+=(by[d]||0); a.push(s); } if(a.length<3) return null; a.sort((x,y)=>x-y); return a[Math.floor(a.length/2)]; };
+  const mk=W=>{ const rec=winSum(W), base=rollMed(W); return {W,rec,base,drop:(base&&base>0)?(1-rec/base):null}; };
+  const idxs=Object.keys(by).map(Number).sort((a,b)=>a-b); const gaps=[]; for(let i=1;i<idxs.length;i++) gaps.push(idxs[i]-idxs[i-1]); gaps.sort((a,b)=>a-b);
+  return { w3:mk(3), w7:mk(7), w15:mk(15), daysSince:H-last, gapMed:gaps.length?gaps[Math.floor(gaps.length/2)]:null, tot, last };
+}
+function fugasRecentes(){
+  if(!CLIN_DIA || !CLIN_DIA_HOJE_IDX) return "";
+  const H=CLIN_DIA_HOJE_IDX, MINBASE=3, DROP=0.55, SUST=0.4, MAXSINCE=25;
+  const items=[];
+  for(const cod in CLIN_DIA){
+    const st=_fugaStats(CLIN_DIA[cod], H); if(!st) continue;
+    const relevante=(st.w7.base!=null&&st.w7.base>=8)||(st.w15.base!=null&&st.w15.base>=16);
+    if(!relevante) continue;                            // só clínicas com volume que importa (tira ruído de clínica minúscula)
+    let pior=null; [st.w3,st.w7,st.w15].forEach(w=>{ if(w.base!=null&&w.base>=MINBASE&&w.drop!=null&&(pior==null||w.drop>pior.drop)) pior=w; });
+    const sustent=(st.w7.drop!=null&&st.w7.drop>=SUST)||(st.w15.drop!=null&&st.w15.drop>=SUST);
+    const cai=!!(pior&&pior.drop>=DROP&&sustent);        // queda forte E sustentada (não é blip de 1 dia)
+    const sumiu=st.gapMed!=null && st.daysSince>=Math.max(st.gapMed*3,5) && st.daysSince<=MAXSINCE && st.tot>=20;  // parou RECENTE (não fuga velha)
+    const perdido=pior?Math.max(0,Math.round(pior.base-pior.rec)):Math.round((st.tot/90)*Math.min(st.daysSince,15));
+    if((!cai||perdido<6) && !sumiu) continue;
+    const c=clinByCod(cod);
+    items.push({ cod, nome:(c&&c.nome)||("#"+cod), bairro:bairroDe(cod), st, pior, sumiu, perdido });
+  }
+  if(!items.length) return "";
+  items.sort((a,b)=> b.perdido-a.perdido || ((b.pior?b.pior.drop:0.6)-(a.pior?a.pior.drop:0.6)));
+  const TOP=items.slice(0,25);
+  const wChip=(lbl,w)=>{ if(w.base==null||w.base<MINBASE||w.drop==null) return `<span class="t-mut" style="font-size:10.5px;padding:2px 7px;border:1px solid rgba(255,255,255,.1);border-radius:9px">${lbl} —</span>`;
+    const dp=w.drop, dn=dp>=0.5, md=dp>=0.25;
+    const col=dn?'#ff6b81':(md?'#ffc266':'#9fb2cc'), bg=dn?'rgba(255,45,85,.16)':(md?'rgba(255,138,0,.14)':'rgba(255,255,255,.05)'), bd=dn?'rgba(255,45,85,.5)':(md?'rgba(255,138,0,.45)':'rgba(255,255,255,.14)');
+    return `<span title="${lbl}: ${w.rec} exame(s) nos últimos ${w.W} dias vs ~${w.base} do ritmo típico" style="display:inline-flex;align-items:center;gap:4px;background:${bg};border:1px solid ${bd};border-radius:9px;padding:2px 8px;font-size:10.5px;font-weight:800;color:${col};white-space:nowrap">${lbl} <b>${w.rec}</b><span style="opacity:.7;font-weight:600">/~${w.base}</span>${dp>0.001?` ▼${Math.round(dp*100)}%`:''}</span>`; };
+  const rows=TOP.map(it=>{
+    const tag=it.sumiu?`<span class="qpulse" style="background:rgba(255,45,85,.22);color:#ff6b81;border:1px solid rgba(255,45,85,.6);border-radius:9px;padding:1px 7px;font-size:10px;font-weight:900;white-space:nowrap">🔴 PAROU · ${it.st.daysSince}d</span>`:`<span style="background:rgba(255,138,0,.18);color:#ffc266;border:1px solid rgba(255,138,0,.5);border-radius:9px;padding:1px 7px;font-size:10px;font-weight:900;white-space:nowrap">🟠 CAINDO</span>`;
+    const bai=it.bairro?`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.33);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;color:#9fe6ff;white-space:nowrap">📍 ${esc(it.bairro)}</span>`:'';
+    return `<div style="border-top:1px solid rgba(255,255,255,.07);padding:8px 0">
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">${tag} <b style="color:#eaf3ff;font-size:13px">${esc(it.nome)}</b> ${bai}
+        <button class="mplus" data-mesames="${esc(it.cod)}" data-mnome="${esc(it.nome)}" style="margin-left:auto;border:0;background:rgba(0,212,255,.15);color:#9fe6ff;border-radius:6px;padding:2px 9px;font-weight:800;cursor:pointer;font-size:11.5px">ver +</button></div>
+      <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">${wChip('3d',it.st.w3)}${wChip('7d',it.st.w7)}${wChip('15d',it.st.w15)}${it.st.gapMed!=null?`<span class="t-mut" style="font-size:10px">· costuma a cada ~${it.st.gapMed}d</span>`:''}</div>
+    </div>`; }).join("");
+  return `<div style="border:2px solid #FF2D55;border-radius:14px;padding:12px 14px;margin:0 0 14px;background:rgba(255,45,85,.1)">
+    <div style="font-size:13.5px;font-weight:900;color:#ff6b81;text-transform:uppercase;letter-spacing:.4px">🚨 Fugas recentes — ${items.length} cliente(s) sumindo/caindo</div>
+    <div class="t-mut" style="font-size:11px;margin:3px 0 4px;line-height:1.5">Queda grande de exames nos últimos <b>3 / 7 / 15 dias</b> vs o ritmo típico da própria clínica (mediana robusta). <b style="color:#ff6b81">🔴 parou</b> · <b style="color:#ffc266">🟠 caindo</b>. Pega a fuga antes do mês fechar — <b>sem R$</b>. (baseado no HF, atualiza a cada ciclo)</div>
+    ${rows}
+    ${items.length>25?`<div class="t-mut" style="font-size:11px;margin-top:8px">Mostrando as <b>25 de maior perda</b> de exames · + ${items.length-25} outras caindo menos.</div>`:''}
+  </div>`;
+}
+
 /* ===== 🖨️ RELATÓRIOS PDF do Monitoramento — 2 botões: FINANCEIRO (com R$) e P/ EQUIPE (sem R$, por bairro/proximidade) ===== */
 // card de % tema-claro p/ impressão (verde sobe / vermelho cai / cinza estável)
 function _pcardPct(val,label){ if(val==null) return '';
@@ -1992,6 +2046,9 @@ function fatmesDe(cod){ cod=String(cod||""); return (CLIN_FATMESALL&&CLIN_FATMES
 /* 📊 EXAMES mês a mês PÚBLICO (sem R$): {cod:[{ym,n,nd}]} — pro time (Luciane) ver volume + % sem ver dinheiro */
 let CLIN_EXMES=null, CLIN_EXMES_DIA=0;
 async function loadExMes(){ try{ const r=await fetch("/api/crm-exames",{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&j.exmes){ CLIN_EXMES=j.exmes; CLIN_EXMES_DIA=j.dia||0; if(!CLIN_FATMESALL_DIA) CLIN_FATMESALL_DIA=CLIN_EXMES_DIA; } } }catch(e){} }
+// 📅 SÉRIE DIÁRIA por clínica (exames/dia 90d) — base do RADAR DE FUGAS RECENTES. {cod:[[idx,n]]}, idx = dias desde CLIN_DIA_BASE.
+let CLIN_DIA=null, CLIN_DIA_BASE="", CLIN_DIA_HOJE_IDX=0;
+async function loadDia(){ try{ const r=await fetch("/api/crm-dia",{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&j.dia){ CLIN_DIA=j.dia; CLIN_DIA_BASE=j.base||""; CLIN_DIA_HOJE_IDX=j.hoje_idx||0; } } }catch(e){} }
 /* 📝 NOTAS por clínica (feedback da equipe sobre o cliente) — {cod:[{ts,por,texto}]}, compartilhado */
 let CLIN_NOTAS={};
 const NOTAS_API="/api/crm-notas";
@@ -4384,7 +4441,9 @@ function renderTab(){
             ${falta.length?`<div style="margin-top:9px"><div style="font-size:11px;color:#ff8fa3;font-weight:700;margin-bottom:4px">🎯 Falta abrir (o alvo pra virar dinheiro novo):</div><div style="display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,10).map(f=>`<span style="background:rgba(255,45,85,.18);color:#ffc9d2;border:1px solid rgba(255,45,85,.4);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}</div></div>`:(conq.length?`<div style="font-size:11px;color:#7effcf;margin-top:8px">👏 já manda todas as classes — conversão completa!</div>`:"")}
           </div>`; }).join("")}
         <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 Enquanto a barra é só <b style="color:#9fe6ff">💙 azul</b>, é dinheiro que já entrava (não é mérito). Cada pedaço <b style="color:#7effcf">💚 verde</b> que você abre = recuperação real, e é o que <b>comissiona</b> o vendedor.</div>` : "";
+      const fugaCard = CLIN_DIA ? fugasRecentes() : "";
       c.innerHTML=`${subtabsClin}
+        ${fugaCard}
         ${ehDiretoria()?"":biAquisPublico}
         ${painel}
         ${conquistaHtml}
@@ -5285,7 +5344,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas(), loadDia()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       if(veSafra() && !CLIN_FATMES){ const sc=localStorage.getItem("crm_safra_code"); if(sc) await decSafra(sc); }   // Fábio: a Safra reabre sozinha neste aparelho
       pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
