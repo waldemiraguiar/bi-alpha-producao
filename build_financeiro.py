@@ -606,6 +606,21 @@ def build():
         D["dia_clinica"]={"dia":_dia, "base":_base.isoformat(), "hoje_idx":(tdt-_base).days, "dia_hoje":tdt.day}
     except Exception as _e:
         print(f"dia_clinica pulado ({_e})"); D["dia_clinica"]=None
+    # 🔎 DETALHE RECENTE por clínica (requisições dos últimos 21d: registro HF, paciente, espécie, vet solicitante) — p/ a LUPA. SEM R$.
+    try:
+        _b2=(tdt-datetime.timedelta(days=90)); _i21=(tdt-datetime.timedelta(days=21))
+        _hr=q(f"SELECT CodCliente cod, NumeroSequencial reg, DATE(DataEntrada) d, Animal pet, Especie esp, Requisitante vet "
+              f"FROM {RQ} WHERE DataEntrada >= %s ORDER BY CodCliente, DataEntrada DESC, NumeroSequencial DESC", (_i21.isoformat(),))
+        _hd={}
+        for _r in _hr:
+            _cod=str(_r["cod"]); _dd=_r["d"]
+            if hasattr(_dd,"date"): _dd=_dd.date()
+            _hd.setdefault(_cod,[]).append({"r":_r["reg"], "d":(_dd-_b2).days,
+                "p":(_r["pet"] or "")[:40], "e":(_r["esp"] or "")[:16], "v":(_r["vet"] or "")[:40]})
+        for _cod in _hd: _hd[_cod]=_hd[_cod][:60]   # teto de 60 requisições por clínica (as mais recentes)
+        D["hf_det"]={"det":_hd, "base":_b2.isoformat(), "hoje_idx":(tdt-_b2).days, "dias":21}
+    except Exception as _e:
+        print(f"hf_det pulado ({_e})"); D["hf_det"]=None
     churn=[]
     for r in sorted([x for x in life if x["ultima"] and str(x["ultima"])<seis and (x["fat_rec"] or 0)>0],
                     key=lambda x:-(x["fat_rec"] or 0))[:40]:
