@@ -14,8 +14,10 @@ export default async (req) => {
   };
   if (req.method === "OPTIONS") return new Response("", { headers: cors });
   if (req.method === "GET") {
-    const d = (await store.get("det", { type: "json", consistency: "strong" })) || { det: {}, base: "", hoje_idx: 0, dias: 0, ts: 0 };
-    return Response.json(d, { headers: cors });
+    const d = (await store.get("det", { type: "json" })) || { det: {}, base: "", hoje_idx: 0, dias: 0, ts: 0 };
+    // dado muda a cada ~6h → cachear (CDN + navegador) deixa rápido; leitura eventual (sem strong) tira latência
+    const ch = "public, max-age=600, stale-while-revalidate=86400";
+    return Response.json(d, { headers: { ...cors, "Cache-Control": ch, "Netlify-CDN-Cache-Control": ch } });
   }
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({}));

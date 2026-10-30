@@ -2166,11 +2166,11 @@ let CLIN_EXMES=null, CLIN_EXMES_DIA=0;
 async function loadExMes(){ try{ const r=await fetch("/api/crm-exames",{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&j.exmes){ CLIN_EXMES=j.exmes; CLIN_EXMES_DIA=j.dia||0; if(!CLIN_FATMESALL_DIA) CLIN_FATMESALL_DIA=CLIN_EXMES_DIA; } } }catch(e){} }
 // 📅 SÉRIE DIÁRIA por clínica (exames/dia 90d) — base do RADAR DE FUGAS RECENTES. {cod:[[idx,n]]}, idx = dias desde CLIN_DIA_BASE.
 let CLIN_DIA=null, CLIN_DIA_BASE="", CLIN_DIA_HOJE_IDX=0;
-async function loadDia(){ try{ const r=await fetch("/api/crm-dia",{cache:"no-store"}); if(r.ok){ const j=await r.json(); if(j&&j.dia){ CLIN_DIA=j.dia; CLIN_DIA_BASE=j.base||""; CLIN_DIA_HOJE_IDX=j.hoje_idx||0; } } }catch(e){} }
+async function loadDia(){ try{ const r=await fetch("/api/crm-dia"); if(r.ok){ const j=await r.json(); if(j&&j.dia){ CLIN_DIA=j.dia; CLIN_DIA_BASE=j.base||""; CLIN_DIA_HOJE_IDX=j.hoje_idx||0; } } }catch(e){} }
 // 🔎 LUPA HF — detalhe recente de exames por clínica (registro, paciente, espécie, vet). Carregado SOB DEMANDA (pesa ~450KB).
 let CRM_HF=null, CRM_HF_BASE="", CRM_HF_HOJE=0, CRM_HF_LOADING=false;
 let hfSel="";   // cod da clínica selecionada na lupa
-async function loadHF(){ if(CRM_HF||CRM_HF_LOADING) return; CRM_HF_LOADING=true; try{ const r=await fetch("/api/crm-hf",{cache:"no-store"}); if(r.ok){ const j=await r.json(); CRM_HF=(j&&j.det)||{}; CRM_HF_BASE=j.base||""; CRM_HF_HOJE=j.hoje_idx||0; } }catch(e){} CRM_HF_LOADING=false; }
+async function loadHF(){ if(CRM_HF||CRM_HF_LOADING) return; CRM_HF_LOADING=true; try{ const r=await fetch("/api/crm-hf"); if(r.ok){ const j=await r.json(); CRM_HF=(j&&j.det)||{}; CRM_HF_BASE=j.base||""; CRM_HF_HOJE=j.hoje_idx||0; } }catch(e){} CRM_HF_LOADING=false; }
 /* 📝 NOTAS por clínica (feedback da equipe sobre o cliente) — {cod:[{ts,por,texto}]}, compartilhado */
 let CLIN_NOTAS={};
 const NOTAS_API="/api/crm-notas";
@@ -5476,7 +5476,9 @@ function render(D){
     Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas(), loadDia()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       if(veSafra() && !CLIN_FATMES){ const sc=localStorage.getItem("crm_safra_code"); if(sc) await decSafra(sc); }   // Fábio: a Safra reabre sozinha neste aparelho
-      pqFlush(); rqFlush(); renderOpBtn(); renderAll(); });
+      pqFlush(); rqFlush(); renderOpBtn(); renderAll();
+      setTimeout(()=>{ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }, 1200);   // pré-carrega o detalhe da Lupa em 2º plano (não trava o boot) → já fica pronto
+    });
     setInterval(async()=>{ const sig=()=>[...FOLLOWED.keys()].sort().join()+"|"+INTER.length+"|"+HIST.length+"|"+ENCERR.size+"|"+INAT.size+"|"+SENS.length+"|"+PROSP.length+"|"+PISTA.length+"|"+REPS.length+"|"+EXCL.length+"|"+RELATOS.length+"|"+CARTEIRA.length+"|"+CLINICAS.length;
       await pqFlush(); await rqFlush(); const a=sig(); await Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadClin(), loadCart(), loadDet(), loadAAA(), loadRel(), loadPautas(), loadNotas()]);
       if(ehDiretoria() && dirCodeCache()){ await loadClinRS(); await decDirRS(dirCodeCache()); }   // R$/conquistas frescos p/ diretoria
