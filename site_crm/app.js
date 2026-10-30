@@ -4226,9 +4226,12 @@ function renderTab(){
             if(ca!==cb) return ca?-1:1;                                        // 1) caindo (exames OU R$) no topo
             const ta=(_trank[a.tipo]!=null?_trank[a.tipo]:9), tb=(_trank[b.tipo]!=null?_trank[b.tipo]:9);
             if(ta!==tb) return ta-tb;                                          // 2) agrupa por tipo
-            const da=ehDrDra(a.nome), db=ehDrDra(b.nome); if(da!==db) return da?1:-1;  // 3) dentro do tipo: Dr./Dra. juntos no fim
-            if(ca&&cb) return _sevN(a)-_sevN(b);                               // 4a) quedas: mais grave primeiro
-            return b.tot-a.tot; });                                            // 4b) resto: maior total primeiro
+            const sa=notasDe(a.cod).length, sb=notasDe(b.cod).length;          // 3) ESTRELAS (feedback) agrupadas no topo da categoria — ver se a Lu trabalhou o cliente
+            if((sa>0)!==(sb>0)) return sa>0?-1:1;
+            if(sa!==sb) return sb-sa;                                          // mais feedbacks primeiro
+            const da=ehDrDra(a.nome), db=ehDrDra(b.nome); if(da!==db) return da?1:-1;  // 4) dentro do tipo: Dr./Dra. juntos no fim
+            if(ca&&cb) return _sevN(a)-_sevN(b);                               // 5a) quedas: mais grave primeiro
+            return b.tot-a.tot; });                                            // 5b) resto: maior total primeiro
           if(fmRows.length&&meses.length){
             const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
             const fatOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?x.fat:0;};
