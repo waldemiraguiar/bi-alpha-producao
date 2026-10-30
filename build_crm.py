@@ -439,6 +439,23 @@ def post_relatorio(D):
     except Exception as e:
         print(f"post_relatorio falhou (ok, tenta no próximo ciclo): {e}")
 
+def post_dia(D):
+    """Manda a SÉRIE DIÁRIA por clínica (exames/dia, 90d) p/ /api/crm-dia — base do RADAR DE FUGAS RECENTES. SEM R$."""
+    import urllib.request
+    pwd = CRM_PWD
+    dc = (D or {}).get("dia_clinica")
+    if not pwd or not dc or not dc.get("dia"):
+        print("post_dia: pulado (sem pwd/dados)"); return
+    base = os.environ.get("CRM_BASE", "https://agente-crm-matriz.netlify.app").rstrip("/")
+    try:
+        payload = json.dumps({"acao": "set", "dia": dc["dia"], "base": dc["base"],
+                              "hoje_idx": dc["hoje_idx"], "dia_hoje": dc["dia_hoje"], "senha": pwd}).encode()
+        r = urllib.request.urlopen(urllib.request.Request(
+            base + "/api/crm-dia", data=payload, headers={"Content-Type": "application/json"}), timeout=60)
+        print(f"serie diaria -> HTTP {r.status} ({len(dc['dia'])} clínicas)")
+    except Exception as e:
+        print(f"post_dia falhou (ok, tenta no próximo ciclo): {e}")
+
 def post_clinicas(D):
     """Manda o MASTER de clínicas do HF (nome+cod+cidade+produção, SEM R$) p/ o autocomplete das abas
     Novas/Reconquistadas (/api/crm-clinicas). O R$ (fat) NÃO vai — fica gated p/ diretoria (Fase 3b)."""
@@ -462,7 +479,7 @@ if __name__ == "__main__":
     last = None
     for attempt in range(1, 4):
         try:
-            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); post_clinicas_det(); post_aaa(D0); post_relatorio(D0); break
+            D0 = build(); D2 = crm_from(D0); encrypt(D2); post_snapshot(D2); post_clinicas(D0); post_clinicas_rs(D0); post_clinicas_det(); post_aaa(D0); post_relatorio(D0); post_dia(D0); break
         except Exception as e:
             import pymysql
             if isinstance(e, pymysql.err.OperationalError):

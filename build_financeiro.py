@@ -589,6 +589,23 @@ def build():
                          "qtd":int(_prodmap.get(cod,{}).get("qtd") or 0),
                          "fat":round(_prodmap.get(cod,{}).get("fat") or 0,2)}
                         for cod,info in names.items() if (info.get("nome") or "").strip()]
+    # 📅 SÉRIE DIÁRIA por clínica (exames/dia, últimos 90d) — p/ o RADAR DE FUGAS RECENTES (3/7/15d) e a lupa. SEM R$.
+    try:
+        _base=(tdt-datetime.timedelta(days=90))
+        _drows=q(f"SELECT r.CodCliente cod, DATE(r.DataEntrada) d, COUNT(*) n "
+                 f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+                 f"WHERE r.DataEntrada >= %s GROUP BY r.CodCliente, DATE(r.DataEntrada)", (_base.isoformat(),))
+        _dia={}
+        for _x in _drows:
+            _cod=str(_x["cod"]); _dd=_x["d"]
+            if hasattr(_dd,"date"): _dd=_dd.date()
+            _idx=(_dd-_base).days
+            if _idx<0: continue
+            _dia.setdefault(_cod,[]).append([_idx, int(_x["n"] or 0)])
+        for _cod in _dia: _dia[_cod].sort(key=lambda p:p[0])
+        D["dia_clinica"]={"dia":_dia, "base":_base.isoformat(), "hoje_idx":(tdt-_base).days, "dia_hoje":tdt.day}
+    except Exception as _e:
+        print(f"dia_clinica pulado ({_e})"); D["dia_clinica"]=None
     churn=[]
     for r in sorted([x for x in life if x["ultima"] and str(x["ultima"])<seis and (x["fat_rec"] or 0)>0],
                     key=lambda x:-(x["fat_rec"] or 0))[:40]:
