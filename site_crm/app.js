@@ -838,6 +838,10 @@ function hfObs(cod){ return hfObsAll()[String(cod)]||""; }
 function hfObsStart(cod){ hfObsEdit=String(cod); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function hfObsCancel(){ hfObsEdit=""; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function hfObsSave(cod){ const el=document.getElementById("hfObsTxt"); const t=el?String(el.value||"").trim():""; const o=hfObsAll(); if(t) o[String(cod)]=t.slice(0,600); else delete o[String(cod)]; try{ localStorage.setItem("crm_hf_obs", JSON.stringify(o)); }catch(e){} hfObsEdit=""; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+// 🏅 SELO TRIPLO A — manual, colável/removível pela diretoria, dourado chamativo (salvo no aparelho)
+function hfAAA(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_aaa")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
+function hfIsAAA(cod){ return hfAAA().includes(String(cod)); }
+function hfAAAToggle(cod){ cod=String(cod); let a=hfAAA(); if(a.includes(cod)) a=a.filter(x=>x!==cod); else a.unshift(cod); try{ localStorage.setItem("crm_hf_aaa", JSON.stringify(a.slice(0,300))); }catch(e){} if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
 function _hfCard(cod, pinned){
   const c=clinByCod(cod), st=_hfStats(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
@@ -888,10 +892,13 @@ function _hfCard(cod, pinned){
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:10px;font-weight:800;color:#ff8fcf;text-transform:uppercase;letter-spacing:.3px">📝 minha anotação</div><span style="font-size:10.5px;color:#ff8fcf">✏️ editar</span></div>
           <div style="font-size:12.5px;color:#ffd7ee;margin-top:3px;white-space:pre-wrap;line-height:1.45">${esc(obs)}</div></div>`
       : `<div style="margin-top:9px"><button onclick="hfObsStart('${esc(String(cod))}')" style="border:1px dashed rgba(255,143,207,.55);background:rgba(255,143,207,.06);color:#ff8fcf;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📝 anotar algo sobre essa clínica (só pra mim)</button></div>`);
-  return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':'rgba(0,212,255,.3)'};border-left:4px solid ${caindo?'#FF2D55':'#00D4FF'};border-radius:14px;padding:14px 16px;margin-top:12px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':'rgba(13,27,45,.9)'},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
+  const isAAA=hfIsAAA(cod);
+  const aaaSeal = isAAA ? `<span class="aaaseal" onclick="hfAAAToggle('${esc(String(cod))}')" title="remover selo Triplo A" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#ffe88a,#f0a500);color:#3a2600;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;letter-spacing:.6px">🏅 TRIPLO A</span>` : '';
+  const aaaBtn = isAAA ? '' : `<button onclick="hfAAAToggle('${esc(String(cod))}')" title="colar selo Triplo A (dourado)" style="border:1px solid rgba(255,200,60,.5);background:rgba(255,200,60,.1);color:#ffd27a;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">🏅 AAA</button>`;
+  return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:14px 16px;margin-top:12px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-      <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge}
-      <div style="margin-left:auto">${pinBtn}</div>
+      <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
+      <div style="margin-left:auto;display:flex;gap:7px">${aaaBtn}${pinBtn}</div>
     </div>
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
     ${obsHtml}
@@ -924,7 +931,7 @@ function lupaHF(){
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
     : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia. Busque acima pra ver/fixar outra.</div>`:"");
-  return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
+  return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
     <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
     <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar. Se um <b style="color:#ff5a7a">cair</b>, o card <b>pisca em vermelho</b> na hora. Mostra o ritmo (3d/7d, média, dia típico, frequência) e os exames recentes (registro, paciente, 🩺 vet).</div>
     ${box}${cards}${hint}
