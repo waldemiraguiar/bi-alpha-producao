@@ -845,8 +845,6 @@ function _hfCard(cod, pinned){
     ${kpi(st.medEnvio,'num dia típico','exames quando ela manda','#7effcf')}
     ${kpi(freq,'frequência','de quanto em quanto manda','#ffc266')}
   </div>`;
-  const H=st.H, sdays=[]; for(let d=H-20;d<=H;d++) sdays.push(st.by[d]||0); const mx=Math.max(1,...sdays);
-  const spark=`<div style="display:flex;align-items:flex-end;gap:2px;height:44px;margin-top:9px">${sdays.map((v,i)=>{const idx=H-20+i,h=Math.round(v/mx*42),rec=idx>H-7; const cor=!v?'rgba(255,255,255,.08)':(caindo&&rec?'#ff2d55':(idx===H?'#00E5A0':'#4a9fd4')); return `<div class="${(caindo&&rec&&v)?'qpulse':''}" title="${_diaLabel(idx)}: ${v}" style="flex:1;min-width:3px;height:${Math.max(2,h)}px;background:${cor};border-radius:2px"></div>`;}).join("")}</div>`;
   let lista;
   if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(cod)]||[]);
     lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:12.5px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(21 dias · ${arr.length})</span></div>
@@ -877,8 +875,7 @@ function _hfCard(cod, pinned){
     </div>
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
     ${obsHtml}
-    ${kpis}${spark}
-    <div class="t-mut" style="font-size:10px;margin-top:3px">📊 exames/dia (21 dias) · verde=hoje · <b style="color:#ff5a7a">vermelho piscando = queda recente</b></div>
+    ${kpis}
     ${lista}
   </div>`;
 }
