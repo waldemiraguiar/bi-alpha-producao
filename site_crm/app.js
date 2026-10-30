@@ -2942,11 +2942,16 @@ function comercialRelatorios(){
     const pior=Math.min(...cand), piorEh=(dBest!=null&&(dRitmo==null||dBest<=dRitmo))?'best':'ritmo';
     return {pior,dRitmo,dBest,piorEh,atual,prev,bestM}; };
   const rowsAll=CARTEIRA.filter(x=>x.cod && (fatmesDe(x.cod)||[]).length).map(x=>{ const arr=fatmesDe(x.cod)||[];
-    return {cod:String(x.cod), nome:x.nome, tipo:x.tipo, arr, q:quedaEx(x.cod), tot:arr.reduce((s,a)=>s+(a.n||0),0)}; });
+    return {cod:String(x.cod), nome:x.nome, tipo:x.tipo, marco:(x.reconq_data||""), arr, q:quedaEx(x.cod), tot:arr.reduce((s,a)=>s+(a.n||0),0)}; });
   const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,"");
   const seen=new Map(); rowsAll.forEach(r=>{const k=norm(r.nome);const p=seen.get(k);if(!p||r.tot>p.tot)seen.set(k,r);});
   let L=[...seen.values()];
-  L.sort((a,b)=>{ const ca=!!(a.q&&a.q.pior!=null&&a.q.pior<=-0.05), cb=!!(b.q&&b.q.pior!=null&&b.q.pior<=-0.05); if(ca!==cb)return ca?-1:1; if(ca&&cb)return a.q.pior-b.q.pior; return b.tot-a.tot; });
+  // caindo (qualquer % de exames) no topo; dentro, agrupa por tipo e Dr./Dra. juntos — igual à tabela da diretoria
+  const _tr={nova:0,reconquistada:1,divide:2,particular:3};
+  L.sort((a,b)=>{ const ca=!!(a.q&&a.q.pior!=null&&a.q.pior<0), cb=!!(b.q&&b.q.pior!=null&&b.q.pior<0); if(ca!==cb)return ca?-1:1;
+    const ta=(_tr[a.tipo]!=null?_tr[a.tipo]:9),tb=(_tr[b.tipo]!=null?_tr[b.tipo]:9); if(ta!==tb)return ta-tb;
+    const da=ehDrDra(a.nome),db=ehDrDra(b.nome); if(da!==db)return da?1:-1;
+    if(ca&&cb)return a.q.pior-b.q.pior; return b.tot-a.tot; });
   const nota1=`<div class="proxhint" style="border-color:rgba(0,212,255,.4);color:#9fe6ff;margin:6px 0 10px;line-height:1.5">📊 <b>Movimento das clínicas — em exames</b>. Tendência, % de alta/queda e fuga por clínica. Toque no <b style="color:#9fe6ff">+</b> pra abrir o mês a mês e <b>registrar o que rolou com o cliente</b>. <i>(Sem valores — só volume.)</i></div>`;
   if(!L.length) return nota1+`<div class="proxhint" style="margin-top:8px">Os números de exames por clínica entram no próximo ciclo do robô.</div>`;
   const mset={}; L.forEach(r=>r.arr.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort();
@@ -2972,7 +2977,15 @@ function comercialRelatorios(){
   const tabela=`<div class="seclabel" style="margin:0 0 6px">📊 Exames por mês <span class="t-mut" style="font-weight:500;font-size:11px">(por clínica, desde a entrada — nº de exames)</span></div>
     <div class="t-mut" style="font-size:11px;margin:0 0 7px;line-height:1.5">🆕 nova · ♻️ reconquistada (voltou) · 🔀 divide material · 🐾 particular. <b style="color:#ff6b81">em queda</b> no topo. ▲/▼ = exames vs mês anterior.</div>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,212,255,.25);border-radius:8px"><table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%"><thead><tr style="background:rgba(0,212,255,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#9fe6ff">Total</th></tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>`;
-  return nota1+radar+tabela;
+  // 📸 foto p/ o relatório da equipe (SEM R$) — a Luciane/comercial só tem este botão (o financeiro é só diretoria/Fábio). Wal 30/10
+  SAFRA_SNAP={ diaD, meses:meses.slice(), mlabs:meses.map(mlab), rows:L.map((r,i)=>({
+    pos:i+1, cod:r.cod, nome:r.nome, tipo:r.tipo, bairro:bairroDe(r.cod), cep:cepDe(r.cod),
+    marco: r.marco?marcoLabel(r.marco):((r.arr&&r.arr.length)?('desde '+mlab(r.arr.slice().sort((a,b)=>a.ym<b.ym?-1:1)[0].ym)):''),
+    tot:r.tot, mesVals:meses.map(ym=>nOf(r.arr,ym)), mom:null,
+    pior:(r.q&&r.q.pior!=null)?r.q.pior:null, piorEh:r.q?r.q.piorEh:null,
+    dRitmo:(r.q&&r.q.dRitmo!=null)?r.q.dRitmo:null, dBest:(r.q&&r.q.dBest!=null)?r.q.dBest:null })) };
+  const equipeBtn=`<div style="margin:0 0 10px"><button onclick="relSafraEquipe()" style="cursor:pointer;border:1px solid rgba(255,45,85,.5);background:rgba(255,45,85,.12);color:#ff9fb0;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório p/ equipe <span style="font-weight:600;opacity:.85">(PDF · em queda, por bairro)</span></button></div>`;
+  return nota1+equipeBtn+tabela;
 }
 /* 🛠️ ABA EQUIPE (item 2) — admin (Wal) gerencia colaboradores: papel, escopo "vê Safra" (item 3), admin, ativo */
 async function opsPost(body){
@@ -4048,12 +4061,15 @@ function renderTab(){
           fmRows.forEach(r=>r.q=quedaDe(r.cod));
           // item 6d — EM QUEDA sempre no topo; dentro, AGRUPADO POR TIPO (🆕 nova · ♻️ reconq · 🔀 divide · 🐾 particular) — pedido Wal 30/10
           const _trank={nova:0,reconquistada:1,divide:2,particular:3};
-          fmRows.sort((a,b)=>{ const ca=!!(a.q&&a.q.pior!=null&&a.q.pior<=-0.05), cb=!!(b.q&&b.q.pior!=null&&b.q.pior<=-0.05);
-            if(ca!==cb) return ca?-1:1;                                        // 1) em queda no topo
+          // CAINDO = exames OU R$ negativo (qualquer %) — clínicas com R$ caindo sobem junto, mesmo se os exames subiram (ex.: Perto Pet). Wal 30/10
+          const _sevN=r=>{ const q=r.q||{}; const v=[]; if(q.pior!=null)v.push(q.pior); if(q.dMesR!=null)v.push(q.dMesR); return v.length?Math.min(...v):1; };
+          const _caiN=r=>_sevN(r)<-0.0001;
+          fmRows.sort((a,b)=>{ const ca=_caiN(a), cb=_caiN(b);
+            if(ca!==cb) return ca?-1:1;                                        // 1) caindo (exames OU R$) no topo
             const ta=(_trank[a.tipo]!=null?_trank[a.tipo]:9), tb=(_trank[b.tipo]!=null?_trank[b.tipo]:9);
             if(ta!==tb) return ta-tb;                                          // 2) agrupa por tipo
-            const da=ehDrDra(a.nome), db=ehDrDra(b.nome); if(da!==db) return da?1:-1;  // 3) dentro do tipo: vets particulares (Dr./Dra.) juntos no fim
-            if(ca&&cb) return a.q.pior-b.q.pior;                               // 4a) quedas: mais grave primeiro
+            const da=ehDrDra(a.nome), db=ehDrDra(b.nome); if(da!==db) return da?1:-1;  // 3) dentro do tipo: Dr./Dra. juntos no fim
+            if(ca&&cb) return _sevN(a)-_sevN(b);                               // 4a) quedas: mais grave primeiro
             return b.tot-a.tot; });                                            // 4b) resto: maior total primeiro
           if(fmRows.length&&meses.length){
             const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
@@ -4067,8 +4083,8 @@ function renderTab(){
             const _bq=(safraBusca||"").trim().toLowerCase();
             const fmShow=_bq?fmRows.filter(r=>(r.nome||"").toLowerCase().includes(_bq)||(bairroDe(r.cod)||"").toLowerCase().includes(_bq)):fmRows;
             const body=fmShow.map((r,i)=>{const tot=r.tot,zer=tot<=0;grand+=tot;meses.forEach(ym=>totCol[ym]+=fatOf(r.arr,ym));
-              const q=r.q||{}, cai=q.pior!=null&&q.pior<=-0.05, forte=q.pior!=null&&q.pior<=-0.15;
-              const bl=forte?';border-left:3px solid #FF2D55':(cai?';border-left:3px solid #FF8A00':'');
+              const q=r.q||{}, cai=q.pior!=null&&q.pior<=-0.05, forte=q.pior!=null&&q.pior<=-0.15, caiR=q.dMesR!=null&&q.dMesR<0;
+              const bl=forte?';border-left:3px solid #FF2D55':(cai?';border-left:3px solid #FF8A00':(caiR?';border-left:3px solid rgba(255,107,129,.75)':''));
               const plus=`<button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" title="Abrir análise completa (mês a mês · benchmark · fuga)" style="width:22px;height:22px;border-radius:7px;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.1);color:#9fe6ff;font-weight:800;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle">+</button>`;
               // 📍 bairro do cliente (clínica, hospital, Dr./Dra.) — ao lado do nome
               const bai=bairroDe(r.cod);
@@ -4104,8 +4120,8 @@ function renderTab(){
               </div>
               ${_bq&&!fmShow.length?`<div class="t-mut" style="font-size:12.5px;margin:2px 0 8px">Nada encontrado para <b>"${esc(safraBusca)}"</b>. Tente o nome do cliente ou o bairro.</div>`:''}
               <div style="display:flex;gap:9px;margin:0 0 10px;flex-wrap:wrap">
-                <button id="relSafraFin" style="cursor:pointer;border:1px solid rgba(0,229,160,.5);background:rgba(0,229,160,.12);color:#7effcf;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório financeiro <span style="font-weight:600;opacity:.85">(PDF · com R$)</span></button>
-                <button id="relSafraEq" style="cursor:pointer;border:1px solid rgba(255,45,85,.5);background:rgba(255,45,85,.12);color:#ff9fb0;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório p/ equipe <span style="font-weight:600;opacity:.85">(PDF · em queda, por bairro, sem R$)</span></button>
+                <button onclick="relSafraFin()" style="cursor:pointer;border:1px solid rgba(0,229,160,.5);background:rgba(0,229,160,.12);color:#7effcf;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório financeiro <span style="font-weight:600;opacity:.85">(PDF · com R$)</span></button>
+                <button onclick="relSafraEquipe()" style="cursor:pointer;border:1px solid rgba(255,45,85,.5);background:rgba(255,45,85,.12);color:#ff9fb0;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório p/ equipe <span style="font-weight:600;opacity:.85">(PDF · em queda, por bairro, sem R$)</span></button>
               </div>
               <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,229,160,.25);border-radius:8px">
                 <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
@@ -4382,8 +4398,6 @@ function renderTab(){
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       const _sl=document.getElementById("safraLupa"); if(_sl){ _sl.addEventListener("input", e=>{ safraBusca=e.target.value; const pos=_sl.selectionStart; renderTab(); const l2=document.getElementById("safraLupa"); if(l2){ l2.focus(); try{ l2.setSelectionRange(pos,pos); }catch(_){} } }); }
       const _slx=document.getElementById("safraLupaX"); if(_slx) _slx.onclick=()=>{ safraBusca=""; renderTab(); };
-      const _rsf=document.getElementById("relSafraFin"); if(_rsf) _rsf.onclick=()=>relSafraFin();
-      const _rse=document.getElementById("relSafraEq"); if(_rse) _rse.onclick=()=>relSafraEquipe();
       return;
     }
     if(clinView==="aaa"||clinView==="aab"||clinView==="aac"||clinView==="aad"){
