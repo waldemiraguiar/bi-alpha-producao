@@ -792,62 +792,84 @@ function _hfStats(cod){
   const H=CLIN_DIA_HOJE_IDX; const by={}; let first=null,last=null,tot=0;
   serie.forEach(([d,n])=>{ by[d]=(by[d]||0)+n; if(first==null||d<first)first=d; if(last==null||d>last)last=d; tot+=n; });
   const sum=(a,b)=>{ let s=0; for(let d=a;d<=b;d++) s+=(by[d]||0); return s; };
+  const rollMed=W=>{ const a=[]; for(let end=first+W-1; end<=H-W; end++){ let s=0; for(let d=end-W+1;d<=end;d++) s+=(by[d]||0); a.push(s);} if(a.length<3) return null; a.sort((x,y)=>x-y); return a[Math.floor(a.length/2)]; };
   const act=Object.keys(by).map(k=>by[k]).filter(v=>v>0).sort((a,b)=>a-b);
   const idxs=Object.keys(by).map(Number).sort((a,b)=>a-b); const gaps=[]; for(let i=1;i<idxs.length;i++) gaps.push(idxs[i]-idxs[i-1]); gaps.sort((a,b)=>a-b);
-  return { by, first, last, tot, H, last7:sum(H-6,H), prev7:sum(H-13,H-7), mean30:sum(H-29,H)/30,
-    medEnvio: act.length?act[Math.floor(act.length/2)]:0, gapMed: gaps.length?gaps[Math.floor(gaps.length/2)]:null, daysSince:H-last };
+  const gapMed=gaps.length?gaps[Math.floor(gaps.length/2)]:null, daysSince=H-last;
+  const last3=sum(H-2,H), last7=sum(H-6,H), base3=rollMed(3), base7=rollMed(7);
+  const drop3=(base3&&base3>0)?1-last3/base3:null, drop7=(base7&&base7>0)?1-last7/base7:null;
+  const overdue = gapMed!=null && daysSince>Math.max(gapMed*3,4) && tot>=8;
+  const caindo = (drop7!=null&&drop7>=0.4) || (drop3!=null&&drop3>=0.5) || overdue;   // fuga: queda forte OU sumido
+  return { by, first, last, tot, H, span:Math.max(1,H-first+1),
+    last3, prev3:sum(H-5,H-3), base3, drop3, last7, prev7:sum(H-13,H-7), base7, drop7,
+    mean30:sum(H-29,H)/30, medEnvio: act.length?act[Math.floor(act.length/2)]:0, gapMed, daysSince, overdue, caindo };
 }
 function _diaLabel(idx, baseISO){ try{ const b=new Date((baseISO||CLIN_DIA_BASE)+"T12:00:00"); const dt=new Date(b.getTime()+idx*864e5); return String(dt.getDate()).padStart(2,"0")+"/"+String(dt.getMonth()+1).padStart(2,"0"); }catch(e){ return ""; } }
+// 📌 fixar clínicas na Lupa (persistente no aparelho) — pra olhar os mesmos clientes todo dia
+function hfPins(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_pin")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
+function hfSetPins(a){ try{ localStorage.setItem("crm_hf_pin", JSON.stringify(a.slice(0,12))); }catch(e){} }
+function hfPinToggle(cod){ cod=String(cod); let a=hfPins(); if(a.includes(cod)) a=a.filter(x=>x!==cod); else a.unshift(cod); hfSetPins(a); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
+function _hfCard(cod, pinned){
+  const c=clinByCod(cod), st=_hfStats(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
+  const pinBtn=`<button onclick="hfPinToggle('${esc(String(cod))}')" title="${pinned?'desafixar':'fixar pra acompanhar todo dia'}" style="border:1px solid ${pinned?'rgba(255,194,77,.6)':'rgba(255,255,255,.18)'};background:${pinned?'rgba(255,194,77,.16)':'transparent'};color:${pinned?'#ffd27a':'#9fb2cc'};border-radius:9px;padding:4px 11px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">${pinned?'📌 fixada':'📌 fixar'}</button>`;
+  if(!st){ return `<div style="border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px 14px;margin-top:11px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b style="color:#eaf3ff;font-size:14px">${esc(nome)}</b>${pinBtn}</div><div class="t-mut" style="font-size:12px;margin-top:6px">Sem exames nos últimos 90 dias no HF.</div></div>`; }
+  const caindo=st.caindo, pulse=caindo?'qpulse':'';
+  const badge = caindo
+    ? `<span class="qpulse" style="background:#FF2D55;color:#fff;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;white-space:nowrap">🚨 EM QUEDA${st.overdue?` · ${st.daysSince}d parada`:''}</span>`
+    : `<span style="background:rgba(0,229,160,.18);color:#00E5A0;border:1px solid rgba(0,229,160,.5);border-radius:20px;padding:3px 13px;font-size:12px;font-weight:800;white-space:nowrap">🟢 em dia</span>`;
+  const t3=_hfTrend(st.last3, st.base3!=null?st.base3:st.prev3), t7=_hfTrend(st.last7, st.base7!=null?st.base7:st.prev7);
+  const win=(val,ref,t,lbl,alarm)=>`<div class="${alarm?pulse:''}" style="flex:1;min-width:104px;border-radius:12px;padding:10px 12px;background:linear-gradient(160deg,${t.col}2b,${t.col}0a);border:1.5px solid ${t.col}66"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${val} <span style="font-size:13px;color:${t.col}">${t.seta}${Math.abs(t.pct)}%</span></div><div style="font-size:10px;font-weight:800;color:${t.col};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div><div class="t-mut" style="font-size:9.5px;margin-top:1px">típico ~${ref!=null?ref:'—'}</div></div>`;
+  const kpi=(big,lbl,sub,cor)=>`<div style="flex:1;min-width:104px;border-radius:12px;padding:10px 12px;background:linear-gradient(160deg,${cor}22,${cor}08);border:1px solid ${cor}44"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${big}</div><div style="font-size:10px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div>${sub?`<div class="t-mut" style="font-size:9.5px;margin-top:1px">${sub}</div>`:''}</div>`;
+  const freq = st.gapMed==null?'—':(st.gapMed<=1?'quase todo dia':('~'+st.gapMed+'d'));
+  const kpis=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    ${win(st.last3, st.base3, t3, 'últimos 3 dias', st.drop3>=0.5)}
+    ${win(st.last7, st.base7, t7, 'últimos 7 dias', st.drop7>=0.4)}
+    ${kpi(st.mean30.toFixed(1),'exames por dia','média dos últimos 30d','#9fe6ff')}
+    ${kpi(st.medEnvio,'num dia típico','exames quando ela manda','#7effcf')}
+    ${kpi(freq,'frequência','de quanto em quanto manda','#ffc266')}
+  </div>`;
+  const H=st.H, sdays=[]; for(let d=H-20;d<=H;d++) sdays.push(st.by[d]||0); const mx=Math.max(1,...sdays);
+  const spark=`<div style="display:flex;align-items:flex-end;gap:2px;height:44px;margin-top:9px">${sdays.map((v,i)=>{const idx=H-20+i,h=Math.round(v/mx*42),rec=idx>H-7; const cor=!v?'rgba(255,255,255,.08)':(caindo&&rec?'#ff2d55':(idx===H?'#00E5A0':'#4a9fd4')); return `<div class="${(caindo&&rec&&v)?'qpulse':''}" title="${_diaLabel(idx)}: ${v}" style="flex:1;min-width:3px;height:${Math.max(2,h)}px;background:${cor};border-radius:2px"></div>`;}).join("")}</div>`;
+  let lista;
+  if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(cod)]||[]);
+    lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:12.5px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(21 dias · ${arr.length})</span></div>
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto">${arr.slice(0,40).map(e=>`<div style="display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding:5px 0;flex-wrap:wrap">
+        <span style="font-family:ui-monospace,monospace;font-size:11px;color:#9fe6ff;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.25);border-radius:6px;padding:1px 7px">#${esc(e.r)}</span>
+        <span style="font-size:10.5px;color:#c9d4e0">${_diaLabel(e.d,CRM_HF_BASE)}</span>
+        <b style="font-size:12.5px;color:#eaf3ff">${esc(e.p||'—')}</b>${e.e?`<span class="t-mut" style="font-size:10.5px">${esc(e.e)}</span>`:''}
+        ${(e.v&&e.v!=='-')?`<span style="margin-left:auto;font-size:10.5px;color:#ffd27a">🩺 ${esc(e.v)}</span>`:''}
+      </div>`).join("")}</div>` : `<div class="t-mut" style="font-size:12px;margin-top:11px">Sem requisições nos últimos 21 dias.</div>`;
+  } else { lista = `<div class="t-mut" style="font-size:12px;margin-top:11px">⏳ carregando exames recentes…</div>`; }
+  return `<div class="${pulse}" style="border:2px solid ${caindo?'#FF2D55':'rgba(0,212,255,.35)'};border-radius:14px;padding:13px 15px;margin-top:11px;background:${caindo?'rgba(255,45,85,.09)':'rgba(0,212,255,.05)'}">
+    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+      <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge}
+      <div style="margin-left:auto">${pinBtn}</div>
+    </div>
+    <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
+    ${kpis}${spark}
+    <div class="t-mut" style="font-size:10px;margin-top:3px">📊 exames/dia (21 dias) · verde=hoje · <b style="color:#ff5a7a">vermelho piscando = queda recente</b></div>
+    ${lista}
+  </div>`;
+}
 function lupaHF(){
   if(!CLINICAS.length) return "";
-  const nomeSel = hfSel ? ((clinByCod(hfSel)||{}).nome||"") : "";
-  const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Digite o nome da clínica (todas do HF)" value="${esc(nomeSel)}" style="flex:1;min-width:240px;max-width:460px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
+  const pins=hfPins(); let cods=pins.slice();
+  if(hfSel && !cods.includes(String(hfSel))) cods.unshift(String(hfSel));
+  let exemplo=false;
+  if(!cods.length){ const sos=CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")&&!/nofaro|plamev/i.test(c.nome||"")) || CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")); if(sos){ cods=[String(sos.cod)]; exemplo=true; } }
+  cods=cods.slice(0,8); const pinSet=new Set(pins);
+  const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:2px">
+    <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Buscar clínica (todas do HF) e fixar pra acompanhar" value="" style="flex:1;min-width:240px;max-width:470px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
     <datalist id="hfDL">${CLINICAS.slice(0,4000).map(c=>`<option value="${esc(c.nome)}">`).join("")}</datalist>
-    ${hfSel?`<button id="hfClear" style="cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:9px;padding:8px 11px;font-size:12px">✕ trocar</button>`:''}
   </div>`;
-  let card="";
-  if(hfSel){
-    const c=clinByCod(hfSel), st=_hfStats(hfSel), bai=bairroDe(hfSel), cid=(c&&c.cidade)||"";
-    if(!st){ card=`<div class="t-mut" style="font-size:12.5px;margin-top:10px">Sem exames dessa clínica nos últimos 90 dias no HF.</div>`; }
-    else {
-      const col=(a,b)=>a>b*1.02?'#7effcf':(a<b*0.98?'#ff6b81':'#9fb2cc'), seta=(a,b)=>a>b*1.02?'▲':(a<b*0.98?'▼':'•');
-      const pct7=st.prev7>0?Math.round((st.last7/st.prev7-1)*100):(st.last7>0?100:0);
-      const H=st.H, sdays=[]; for(let d=H-20;d<=H;d++) sdays.push(st.by[d]||0); const mx=Math.max(1,...sdays);
-      const spark=`<div style="display:flex;align-items:flex-end;gap:2px;height:38px;margin-top:5px">${sdays.map((v,i)=>{const idx=H-20+i,h=Math.round(v/mx*36),hoje=idx===H; return `<div title="${_diaLabel(idx)}: ${v}" style="flex:1;min-width:3px;height:${Math.max(2,h)}px;background:${v?(hoje?'#00E5A0':'#4a9fd4'):'rgba(255,255,255,.08)'};border-radius:2px"></div>`;}).join("")}</div>`;
-      const kpi=(v,l,cor)=>`<div style="flex:1;min-width:96px;border:1px solid ${cor}44;border-left:3px solid ${cor};border-radius:9px;padding:7px 10px"><div style="font-size:18px;font-weight:900;color:#eaf3ff;line-height:1.1">${v}</div><div class="t-mut" style="font-size:10.5px">${l}</div></div>`;
-      const okRec=st.daysSince<=((st.gapMed||3)+1);
-      const stats=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">
-        ${kpi(`${st.last7} <span style="font-size:12px;color:${col(st.last7,st.prev7)}">${seta(st.last7,st.prev7)}${Math.abs(pct7)}%</span>`,`últimos 7d <span class="t-mut">(vs ${st.prev7})</span>`,'#00D4FF')}
-        ${kpi(st.mean30.toFixed(1),'exames/dia (média 30d)','#9fe6ff')}
-        ${kpi(st.medEnvio,'por envio (mediana)','#7effcf')}
-        ${kpi(st.gapMed!=null?('~'+st.gapMed+'d'):'—','manda a cada','#ffc266')}
-        ${kpi(st.daysSince+'d',okRec?'último envio ✓':'desde o último ⚠️',okRec?'#7effcf':'#ff6b81')}
-      </div>`;
-      let lista;
-      if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(hfSel)]||[]);
-        lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:13px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(últimos 21 dias · ${arr.length})</span></div>
-          <div style="display:flex;flex-direction:column;gap:5px">${arr.slice(0,30).map(e=>`<div style="display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding:6px 0;flex-wrap:wrap">
-            <span style="font-family:ui-monospace,monospace;font-size:11px;color:#9fe6ff;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.25);border-radius:6px;padding:1px 7px">#${esc(e.r)}</span>
-            <span style="font-size:10.5px;color:#c9d4e0">${_diaLabel(e.d,CRM_HF_BASE)}</span>
-            <b style="font-size:12.5px;color:#eaf3ff">${esc(e.p||'—')}</b>${e.e?`<span class="t-mut" style="font-size:10.5px">${esc(e.e)}</span>`:''}
-            ${(e.v&&e.v!=='-')?`<span style="margin-left:auto;font-size:10.5px;color:#ffd27a">🩺 ${esc(e.v)}</span>`:''}
-          </div>`).join("")}${arr.length>30?`<div class="t-mut" style="font-size:11px;margin-top:4px">+ ${arr.length-30} requisições</div>`:''}</div>`
-          : `<div class="t-mut" style="font-size:12px;margin-top:11px">Sem requisições nos últimos 21 dias (mas tem histórico em 90d — veja o ritmo acima).</div>`;
-      } else { lista = `<div class="t-mut" style="font-size:12px;margin-top:11px">⏳ carregando exames recentes…</div>`; }
-      card=`<div style="border:1px solid rgba(0,212,255,.35);border-radius:12px;padding:12px 14px;margin-top:10px;background:rgba(0,212,255,.05)">
-        <div style="font-size:15px;font-weight:800;color:#eaf3ff">${esc((c&&c.nome)||('#'+hfSel))}</div>
-        <div class="t-mut" style="font-size:11.5px;margin-top:2px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
-        ${stats}${spark}
-        <div class="t-mut" style="font-size:10px;margin-top:3px">📊 barrinhas = exames/dia nos últimos 21 dias (verde = hoje)</div>
-        ${lista}
-      </div>`;
-    }
-  }
-  return `<div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.4)">
-    <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica (HF)</div>
-    <div class="t-mut" style="font-size:11px;margin:3px 0 8px;line-height:1.5">Busque <b>qualquer clínica do HF</b> e veja o movimento de perto: exames recentes (registro, paciente, 🩺 vet solicitante) + ritmo (média/mediana por dia) e comparação com os dias anteriores.</div>
-    ${box}${card}
+  const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
+  const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
+    : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia. Busque acima pra ver/fixar outra.</div>`:"");
+  return `<div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
+    <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
+    <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar. Se um <b style="color:#ff5a7a">cair</b>, o card <b>pisca em vermelho</b> na hora. Mostra o ritmo (3d/7d, média, dia típico, frequência) e os exames recentes (registro, paciente, 🩺 vet).</div>
+    ${box}${cards}${hint}
   </div>`;
 }
 
@@ -4512,6 +4534,7 @@ function renderTab(){
           </div>`; }).join("")}
         <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 Enquanto a barra é só <b style="color:#9fe6ff">💙 azul</b>, é dinheiro que já entrava (não é mérito). Cada pedaço <b style="color:#7effcf">💚 verde</b> que você abre = recuperação real, e é o que <b>comissiona</b> o vendedor.</div>` : "";
       // 🚨 Card "Fugas recentes" REMOVIDO do topo a pedido do Wal (30/10). O feed diário (CLIN_DIA) fica — a Lupa usa pra média/mediana/gráfico.
+      if(CLIN_DIA && CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }  // Lupa aparece por padrão → carrega o detalhe
       const lupaCard = CLINICAS.length ? lupaHF() : "";
       c.innerHTML=`${subtabsClin}
         ${lupaCard}
