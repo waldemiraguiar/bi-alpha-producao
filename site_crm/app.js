@@ -844,13 +844,16 @@ function hfIsAAA(cod){ return hfAAA().includes(String(cod)); }
 function hfAAAToggle(cod){ cod=String(cod); let a=hfAAA(); if(a.includes(cod)) a=a.filter(x=>x!==cod); else a.unshift(cod); try{ localStorage.setItem("crm_hf_aaa", JSON.stringify(a.slice(0,300))); }catch(e){} if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
 function _hfCard(cod, pinned){
-  const c=clinByCod(cod), st=_hfStats(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
+  const c=clinByCod(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
+  let st=_hfStats(cod); const semDados=!st;   // sem exame nos 90d → card completo igual aos outros, como "parada" (fuga total)
+  if(semDados) st={ by:{}, first:CLIN_DIA_HOJE_IDX, last:CLIN_DIA_HOJE_IDX, tot:0, H:CLIN_DIA_HOJE_IDX, last3:0, prev3:0, base3:null, drop3:null, last7:0, prev7:0, base7:null, drop7:null, mean30:0, medEnvio:0, gapMed:null, daysSince:null, overdue:false, caindo:false };
   const pinBtn=`<button onclick="hfPinToggle('${esc(String(cod))}')" title="${pinned?'desafixar':'fixar pra acompanhar todo dia'}" style="border:1px solid ${pinned?'rgba(255,194,77,.6)':'rgba(255,255,255,.18)'};background:${pinned?'rgba(255,194,77,.16)':'transparent'};color:${pinned?'#ffd27a':'#9fb2cc'};border-radius:9px;padding:4px 11px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">${pinned?'📌 fixada':'📌 fixar'}</button>`;
-  if(!st){ return `<div style="border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px 14px;margin-top:11px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b style="color:#eaf3ff;font-size:14px">${esc(nome)}</b>${pinBtn}</div><div class="t-mut" style="font-size:12px;margin-top:6px">Sem exames nos últimos 90 dias no HF.</div></div>`; }
-  const caindo=st.caindo, pulse=caindo?'qpulse':'';
-  const badge = caindo
-    ? `<span class="qpulse" style="background:#FF2D55;color:#fff;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;white-space:nowrap">🚨 EM QUEDA${st.overdue?` · ${st.daysSince}d parada`:''}</span>`
-    : `<span style="background:rgba(0,229,160,.18);color:#00E5A0;border:1px solid rgba(0,229,160,.5);border-radius:20px;padding:3px 13px;font-size:12px;font-weight:800;white-space:nowrap">🟢 em dia</span>`;
+  const caindo = semDados || st.caindo, pulse=caindo?'qpulse':'';
+  const badge = semDados
+    ? `<span class="qpulse" title="sem nenhum exame nos últimos 90 dias — fuga total" style="background:#FF2D55;color:#fff;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;white-space:nowrap">🚨 PARADA · +90 dias</span>`
+    : (st.caindo
+      ? `<span class="qpulse" title="volume de exames caindo vs o ritmo normal dela (3/7/15 dias), ou parada recente" style="background:#FF2D55;color:#fff;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;white-space:nowrap">🚨 EM QUEDA${st.overdue?` · ${st.daysSince}d parada`:''}</span>`
+      : `<span title="em dia = volume recente de exames no ritmo normal dela (não está caindo)" style="background:rgba(0,229,160,.18);color:#00E5A0;border:1px solid rgba(0,229,160,.5);border-radius:20px;padding:3px 13px;font-size:12px;font-weight:800;white-space:nowrap">🟢 em dia</span>`);
   const t3=_hfTrend(st.last3, st.base3!=null?st.base3:st.prev3), t7=_hfTrend(st.last7, st.base7!=null?st.base7:st.prev7);
   const win=(val,ref,t,lbl,alarm)=>`<div class="${alarm?pulse:''}" style="flex:1;min-width:104px;border-radius:12px;padding:10px 12px;background:linear-gradient(160deg,${t.col}2b,${t.col}0a);border:1.5px solid ${t.col}66"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${val} <span style="font-size:13px;color:${t.col}">${t.seta}${Math.abs(t.pct)}%</span></div><div style="font-size:10px;font-weight:800;color:${t.col};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div><div class="t-mut" style="font-size:9.5px;margin-top:1px">típico ~${ref!=null?ref:'—'}</div></div>`;
   const kpi=(big,lbl,sub,cor)=>`<div style="flex:1;min-width:104px;border-radius:12px;padding:10px 12px;background:linear-gradient(160deg,${cor}22,${cor}08);border:1px solid ${cor}44"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${big}</div><div style="font-size:10px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div>${sub?`<div class="t-mut" style="font-size:9.5px;margin-top:1px">${sub}</div>`:''}</div>`;
@@ -900,7 +903,7 @@ function _hfCard(cod, pinned){
       <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
       <div style="margin-left:auto;display:flex;gap:7px">${aaaBtn}${pinBtn}</div>
     </div>
-    <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
+    <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
     ${obsHtml}
     ${kpis}${rsRow}
     ${lista}
