@@ -889,9 +889,11 @@ function lupaHF(){
   let exemplo=false;
   if(!cods.length){ const sos=CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")&&!/nofaro|plamev/i.test(c.nome||"")) || CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")); if(sos){ cods=[String(sos.cod)]; exemplo=true; } }
   cods=cods.slice(0,8); const pinSet=new Set(pins);
+  // datalist LEVE: só as clínicas com movimento recente (~1k) em vez de 2872 — tira a lentidão no celular. Digitar o nome exato de qualquer outra ainda funciona.
+  const dlNames = CLIN_DIA ? [...new Set(Object.keys(CLIN_DIA).map(cd=>{const c=clinByCod(cd);return c&&c.nome;}).filter(Boolean))] : CLINICAS.slice(0,1200).map(c=>c.nome);
   const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:2px">
-    <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Buscar clínica (todas do HF) e fixar pra acompanhar" value="" style="flex:1;min-width:240px;max-width:470px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
-    <datalist id="hfDL">${CLINICAS.slice(0,4000).map(c=>`<option value="${esc(c.nome)}">`).join("")}</datalist>
+    <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Buscar clínica (nome) e fixar pra acompanhar" value="" style="flex:1;min-width:240px;max-width:470px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
+    <datalist id="hfDL">${dlNames.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
   </div>`;
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
@@ -4567,7 +4569,7 @@ function renderTab(){
           </div>`; }).join("")}
         <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 Enquanto a barra é só <b style="color:#9fe6ff">💙 azul</b>, é dinheiro que já entrava (não é mérito). Cada pedaço <b style="color:#7effcf">💚 verde</b> que você abre = recuperação real, e é o que <b>comissiona</b> o vendedor.</div>` : "";
       // 🚨 Card "Fugas recentes" REMOVIDO do topo a pedido do Wal (30/10). O feed diário (CLIN_DIA) fica — a Lupa usa pra média/mediana/gráfico.
-      if(CLIN_DIA && CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }  // Lupa aparece por padrão → carrega o detalhe
+      if(CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }  // Lupa aparece por padrão → carrega o detalhe (independe do feed diário)
       const lupaCard = CLINICAS.length ? lupaHF() : "";
       c.innerHTML=`${subtabsClin}
         ${lupaCard}
