@@ -842,6 +842,16 @@ function hfObsSave(cod){ const el=document.getElementById("hfObsTxt"); const t=e
 function hfAAA(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_aaa")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
 function hfIsAAA(cod){ return hfAAA().includes(String(cod)); }
 function hfAAAToggle(cod){ cod=String(cod); let a=hfAAA(); if(a.includes(cod)) a=a.filter(x=>x!==cod); else a.unshift(cod); try{ localStorage.setItem("crm_hf_aaa", JSON.stringify(a.slice(0,300))); }catch(e){} if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+// 🏅 SELO AUTOMÁTICO por CURVA (ranking de faturamento 12m): A=Triplo A, B=AA, C=A. O sistema coloca sozinho. (Wal 30/10)
+function tierDe(cod){ cod=String(cod); const a=(typeof AAA!=="undefined"&&AAA)?AAA.find(x=>String(x.cod)===cod):null; return a?(a.curva||"A"):null; }
+function _tierSeal(cod){
+  const t=tierDe(cod); if(!t) return "";
+  const map={ A:{txt:'🏅 TRIPLO A',bg:'linear-gradient(135deg,#ffe88a,#f0a500)',col:'#3a2600',glow:true},
+              B:{txt:'🥈 AA',bg:'linear-gradient(135deg,#eef2f8,#aab8c7)',col:'#26303c',glow:false},
+              C:{txt:'🥉 A',bg:'linear-gradient(135deg,#f0c088,#c07f3a)',col:'#3a2410',glow:false} };
+  const m=map[t]; if(!m) return "";   // curva D: sem selo
+  return `<span class="${m.glow?'aaaseal':''}" title="curva ${t} — ranking por faturamento dos últimos 12 meses (o sistema classifica sozinho)" style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.col};border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;letter-spacing:.5px">${m.txt}</span>`;
+}
 function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
 function _hfCard(cod, pinned){
   const c=clinByCod(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
@@ -895,13 +905,11 @@ function _hfCard(cod, pinned){
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:10px;font-weight:800;color:#ff8fcf;text-transform:uppercase;letter-spacing:.3px">📝 minha anotação</div><span style="font-size:10.5px;color:#ff8fcf">✏️ editar</span></div>
           <div style="font-size:12.5px;color:#ffd7ee;margin-top:3px;white-space:pre-wrap;line-height:1.45">${esc(obs)}</div></div>`
       : `<div style="margin-top:9px"><button onclick="hfObsStart('${esc(String(cod))}')" style="border:1px dashed rgba(255,143,207,.55);background:rgba(255,143,207,.06);color:#ff8fcf;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📝 anotar algo sobre essa clínica (só pra mim)</button></div>`);
-  const isAAA=hfIsAAA(cod);
-  const aaaSeal = isAAA ? `<span class="aaaseal" onclick="hfAAAToggle('${esc(String(cod))}')" title="remover selo Triplo A" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#ffe88a,#f0a500);color:#3a2600;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;letter-spacing:.6px">🏅 TRIPLO A</span>` : '';
-  const aaaBtn = isAAA ? '' : `<button onclick="hfAAAToggle('${esc(String(cod))}')" title="colar selo Triplo A (dourado)" style="border:1px solid rgba(255,200,60,.5);background:rgba(255,200,60,.1);color:#ffd27a;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">🏅 AAA</button>`;
+  const isAAA=(tierDe(cod)==='A'), aaaSeal=_tierSeal(cod);   // selo automático pela curva (A=Triplo A dourado)
   return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:14px 16px;margin-top:12px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
-      <div style="margin-left:auto;display:flex;gap:7px">${aaaBtn}${pinBtn}</div>
+      <div style="margin-left:auto;display:flex;gap:7px">${pinBtn}</div>
     </div>
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
     ${obsHtml}
