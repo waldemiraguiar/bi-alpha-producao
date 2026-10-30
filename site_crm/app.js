@@ -729,6 +729,81 @@ function bairroDe(cod){ return CLIN_BAIRRO[String(cod==null?"":cod)]||""; }   //
 function cepDe(cod){ return CLIN_CEP[String(cod==null?"":cod)]||""; }          // CEP (8 dígitos, só válido) p/ ordenar por proximidade
 function cepFmt(cp){ cp=String(cp||"").replace(/\D/g,""); return cp.length>=8?cp.slice(0,5)+"-"+cp.slice(5,8):""; }
 function marcoLabel(iso){ const s=String(iso||"").slice(0,10); const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:""; }   // 2026-09-09 → 09/09/26
+
+/* ===== 🖨️ RELATÓRIOS PDF do Monitoramento — 2 botões: FINANCEIRO (com R$) e P/ EQUIPE (sem R$, por bairro/proximidade) ===== */
+// card de % tema-claro p/ impressão (verde sobe / vermelho cai / cinza estável)
+function _pcardPct(val,label){ if(val==null) return '';
+  const dn=val<-0.001,up=val>0.001;
+  const col=dn?'#c0263a':(up?'#0a7d55':'#5a6b7d'), bg=dn?'#ffe9ec':(up?'#e3f8ee':'#eef2f6'), bd=dn?'#f0a8b2':(up?'#a7e3c6':'#d3dbe4');
+  return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:0;background:${bg};border:1.3px solid ${bd};border-radius:8px;padding:2px 9px;min-width:54px;margin:1px 4px 1px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact"><b style="font-size:12.5px;line-height:1.1;color:${col}">${(dn?'▼ ':(up?'▲ ':'• '))+Math.abs(Math.round(val*100))+'%'}</b><span style="font-size:7.5px;font-weight:800;letter-spacing:.4px;color:${col}">${label}</span></span>`; }
+function _safraReportShell(titulo,sub,corpo,rodape,fname){
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>
+    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a2430;margin:26px}
+    h1{font-size:17px;margin:0 0 2px}.sub{color:#5a6b7d;font-size:12px;margin-bottom:14px}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #d7dee7;padding:6px 8px;text-align:left;vertical-align:top}
+    th{background:#eef2f6;font-weight:800;font-size:10.5px}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+    .cid{color:#8b97a7;font-size:10px;margin-top:1px}tr.tot td{background:#eafaf2;border-top:2px solid #86d3ae}tr:nth-child(even) td{background:#f8fafc}
+    .blk{border:1px solid #e3b4bd;border-radius:10px;margin:0 0 12px;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .bh{background:#ffeef0;color:#9c2230;font-weight:800;font-size:13px;padding:7px 12px;border-bottom:1px solid #f0c4cc}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 12px;border-top:1px solid #f1f3f6;flex-wrap:wrap}
+    .rn{font-size:12.5px}.mk{color:#b8700a;font-size:10.5px;font-weight:700;margin-left:4px}.cep{color:#5a6b7d;font-size:10px;margin-left:4px}.rc{display:flex;gap:4px;flex-wrap:wrap}
+    .bar{position:sticky;top:0;background:#0A1628;padding:10px 14px;margin:-26px -26px 16px;display:flex;gap:10px;justify-content:flex-end}
+    .bar button{background:#00D4FF;color:#04121f;border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer}.bar button.sec{background:#22344a;color:#e8eef7}
+    .ft{margin-top:14px;color:#8b97a7;font-size:10px;line-height:1.5}
+    @media print{.bar{display:none}body{margin:8px}th,td,tr.tot td,tr:nth-child(even) td,.blk,.bh{-webkit-print-color-adjust:exact;print-color-adjust:exact}tr,.blk{page-break-inside:avoid}}
+  </style></head><body>
+    <div class="bar"><button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button><button class="sec" onclick="baixar()">⬇️ Baixar HTML</button></div>
+    <h1>${titulo}</h1><div class="sub">${sub}</div>
+    ${corpo}
+    <div class="ft">${rodape}</div>
+    <script>function baixar(){var b=new Blob([document.documentElement.outerHTML],{type:'text/html'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='${fname}-'+new Date().toISOString().slice(0,10)+'.html';a.click();setTimeout(function(){URL.revokeObjectURL(u)},2000);}<\/script>
+  </body></html>`;
+  const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para abrir o relatório."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+function relSafraFin(){
+  const S=SAFRA_SNAP; if(!S||!S.rows||!S.rows.length){ alert('Abra o Monitoramento primeiro.'); return; }
+  const dstr=new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR').slice(0,5);
+  const ic={nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'};
+  const tcol=S.mlabs.map(l=>`<th class="n">${l}</th>`).join("")+'<th class="n">Total</th>';
+  const colTot=S.meses.map(()=>0); let grand=0;
+  const body=S.rows.map(r=>{ r.mesVals.forEach((v,j)=>colTot[j]+=(v||0)); grand+=r.tot||0;
+    const cards=_pcardPct(r.mom,'💰 MÊS ANT.')+((r.pior!=null&&r.pior<0)?_pcardPct(r.pior,'📉 '+(r.piorEh==='best'?'VS AUGE':'EXAMES')):'');
+    const meta=[r.bairro?`📍 ${esc(r.bairro)}`:'',r.marco?`📅 ${esc(r.marco)}`:''].filter(Boolean).join(' · ');
+    return `<tr><td><b>${r.pos}. ${ic[r.tipo]||'♻️'} ${esc(r.nome)}</b>${meta?`<div class="cid">${meta}</div>`:''}${cards?`<div style="margin-top:3px">${cards}</div>`:''}</td>${r.mesVals.map(v=>`<td class="n">${v?fmtBRL(v):'–'}</td>`).join("")}<td class="n"><b>${fmtBRL(r.tot)}</b></td></tr>`;
+  }).join("");
+  const foot=`<tr class="tot"><td><b>TOTAL (${S.rows.length})</b></td>${colTot.map(v=>`<td class="n"><b>${fmtBRL(v)}</b></td>`).join("")}<td class="n"><b>${fmtBRL(grand)}</b></td></tr>`;
+  const corpo=`<table><thead><tr><th>Clínica · 📍bairro · 📅marco · %</th>${tcol}</tr></thead><tbody>${body}${foot}</tbody></table>`;
+  _safraReportShell('📊 Monitoramento — clínicas novas, reconquistas e divide material',
+    `<b>Relatório FINANCEIRO</b> (com valores R$) · ${S.rows.length} clínicas · gerado em <b>${dstr}</b> · uso interno · Grupo Alpha`,
+    corpo,
+    `💰 MÊS ANT. = R$ até o dia ${S.diaD} vs o mês anterior no mesmo dia · 📉 queda de movimento (exames) vs mês anterior ou vs o melhor mês (auge). Só entra dinheiro novo desde a entrada de cada clínica.`,
+    'monitoramento-financeiro');
+}
+function relSafraEquipe(){
+  const S=SAFRA_SNAP; if(!S||!S.rows){ alert('Abra o Monitoramento primeiro.'); return; }
+  const dstr=new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR').slice(0,5);
+  const ic={nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'};
+  // EM QUEDA = qualquer percentual negativo de movimento (pedido Wal: "seja o percentual que for")
+  const caem=S.rows.filter(r=>r.pior!=null&&r.pior<0);
+  // PROXIMIDADE: ordena por CEP (vazio por último) → bairro → mais grave primeiro
+  const ck=r=>r.cep?r.cep:'99999999';
+  caem.sort((a,b)=>{ const ca=ck(a),cb=ck(b); if(ca!==cb) return ca<cb?-1:1; const ba=(a.bairro||'~'),bb=(b.bairro||'~'); if(ba!==bb) return ba<bb?-1:1; return a.pior-b.pior; });
+  let sections="", curB=null, buf="", nB=0, nC=0;
+  const flush=()=>{ if(curB!==null){ sections+=`<div class="blk"><div class="bh">📍 ${esc(curB||'(sem bairro)')} <span style="font-weight:600;font-size:11px;color:#b06">· ${nC} clínica(s)</span></div>${buf}</div>`; buf=""; nC=0; } };
+  caem.forEach(r=>{ const b=r.bairro||''; if(b!==curB){ flush(); curB=b; nB++; }
+    nC++;
+    const cards=_pcardPct(r.dRitmo,'📊 MÊS ANT.')+_pcardPct(r.dBest,'📉 VS AUGE');
+    buf+=`<div class="row"><div class="rn"><b>${ic[r.tipo]||'♻️'} ${esc(r.nome)}</b>${r.marco?` <span class="mk">📅 ${esc(r.marco)}</span>`:''}${r.cep?` <span class="cep">CEP ${cepFmt(r.cep)}</span>`:''}</div><div class="rc">${cards||'<span style="color:#8b97a7;font-size:11px">—</span>'}</div></div>`;
+  });
+  flush();
+  if(!caem.length) sections='<div style="color:#5a6b7d;padding:12px">Nenhuma clínica em queda neste mês. 🎉</div>';
+  _safraReportShell('🔴 Clínicas em queda — roteiro por bairro',
+    `<b>Sem valores financeiros</b> · ${caem.length} clínica(s) caindo em ${nB} bairro(s) · ordenado por <b>proximidade (CEP)</b> p/ montar rota de visita · gerado em <b>${dstr}</b> · uso interno CRM`,
+    sections,
+    `📊 MÊS ANT. = exames (até o dia ${S.diaD}) vs o mês anterior no mesmo dia · 📉 VS AUGE = vs o melhor mês da clínica. Bairros na ordem do CEP: vizinhos ficam juntos. 👉 priorize visitar várias do mesmo bairro no mesmo dia.`,
+    'clinicas-em-queda-por-bairro');
+}
 const AUTO_REL_NOTE='<span class="t-mut" style="font-size:11px">· 🔄 automático</span>';
 /* 🧠² CÉREBRO 2 — aprende o RITMO de envio de cada clínica (média/semana + cadência típica) e detecta
    PAROU / CAIU. O alerta é ADAPTATIVO: cada clínica tem seu próprio limiar (~2× a cadência dela) —
@@ -4006,14 +4081,14 @@ function renderTab(){
               const zA=(i%2===1), trBg=zA?'rgba(130,175,230,.16)':'rgba(255,255,255,.015)', scZ=`position:sticky;left:0;background:${zA?'#1b3249':'#0b1a2b'};z-index:1;text-align:left;padding:6px 8px;border-right:1px solid rgba(0,229,160,.25)`;
               return `<tr class="fmrow" style="border-top:1px solid rgba(255,255,255,.06);background:${trBg}${zer?';opacity:.72':''}"><td style="${scZ}${bl}"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> <b style="color:#eaf3ff">${esc(r.nome)}</b> ${baiChip} ${mkChip} ${plus}</div>${pctLinha}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
             const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmShow.length}${_bq?` de ${fmRows.length}`:''})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
-            // 🔴 RADAR DE QUEDA — fixo no topo, vermelho piscante (item 6): impossível não ver
-            const caindo=fmRows.filter(r=>r.q&&r.q.pior!=null&&r.q.pior<=-0.15).sort((a,b)=>a.q.pior-b.q.pior);
-            if(caindo.length){
-              radarQueda=`<div class="qpulse" style="border:2px solid #FF2D55;border-radius:13px;padding:11px 14px;margin:0 0 12px;background:rgba(255,45,85,.12)">
-                <div style="font-size:12.5px;font-weight:900;color:#ff6b81;text-transform:uppercase;letter-spacing:.4px">🔴 Queda de movimento — ${caindo.length} cliente(s) caindo</div>
-                <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${(()=>{ const fD=d=> d==null?'<span class="t-mut">s/ base</span>': (d<0?`<b style="color:#ff6b81">▼ ${Math.abs(Math.round(d*100))}%</b>`:(d>0?`<b style="color:#7effcf">▲ ${Math.round(d*100)}%</b>`:`<b style="color:#9fb2cc">0%</b>`)); return caindo.slice(0,8).map(r=>`<div style="font-size:12px;color:#ffc9d2;border-top:1px solid rgba(255,255,255,.06);padding-top:4px"><div><span style="font-size:15px">${tipoIc[r.tipo]||''}</span> <b>${esc(r.nome)}</b> <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" style="margin-left:2px;border:0;background:rgba(0,212,255,.15);color:#9fe6ff;border-radius:6px;padding:1px 8px;font-weight:800;cursor:pointer">ver +</button></div><div class="t-mut" style="font-size:11px;margin-top:1px">exames (até dia ${diaD}): ${fD(r.q.dRitmo)} <span style="color:#6b7a90">vs mês anterior</span> · ${fD(r.q.dBest)} <span style="color:#6b7a90">vs melhor mês${r.q.bestM?` (${mlab(r.q.bestM.ym)})`:''}</span></div></div>`).join(""); })()}</div>
-                <div style="font-size:10.5px;color:#ff9fb0;margin-top:6px;line-height:1.45">Exames deste mês (até o dia ${diaD}) vs o mesmo ponto do mês passado e vs o melhor mês da clínica. 👉 toque em <b>ver +</b> pra abrir a análise e <b>registrar um contato</b> antes de perder pro concorrente.</div></div>`;
-            }
+            // 🔴 RADAR DE QUEDA (card do topo) — REMOVIDO a pedido do Wal (30/10): a queda agora está nos chips ▼ da própria tabela e no Relatório p/ equipe (sem R$, por bairro). radarQueda fica vazio.
+            // 📸 foto dos dados p/ os relatórios PDF (financeiro e p/ equipe) — ordem = a da tabela (em queda no topo)
+            SAFRA_SNAP={ diaD, meses:meses.slice(), mlabs:meses.map(ym=>mlab(ym)), rows:fmRows.map((r,idx)=>({
+              pos:idx+1, cod:r.cod, nome:r.nome, tipo:r.tipo, bairro:bairroDe(r.cod), cep:cepDe(r.cod),
+              marco: r.marco?marcoLabel(r.marco):((r.arr&&r.arr.length)?('desde '+mlab(r.arr.slice().sort((a,b)=>a.ym<b.ym?-1:1)[0].ym)):''),
+              tot:r.tot, mesVals:meses.map(ym=>fatOf(r.arr,ym)),
+              mom:(r.q&&r.q.dMesR!=null)?r.q.dMesR:null, pior:(r.q&&r.q.pior!=null)?r.q.pior:null, piorEh:r.q?r.q.piorEh:null,
+              dRitmo:(r.q&&r.q.dRitmo!=null)?r.q.dRitmo:null, dBest:(r.q&&r.q.dBest!=null)?r.q.dBest:null })) };
             cohortHtml=`<style>#content .fmrow{transition:background .08s}#content .fmrow:hover td,#content .fmrow:active td{background:rgba(0,212,255,.24)!important}#content .fmrow:hover td:first-child,#content .fmrow:active td:first-child{background:#164a63!important}</style><div class="seclabel" style="margin:0 0 6px">📊 Monitoramento — clínicas novas, reconquistas e divide material <span class="t-mut" style="font-weight:500;font-size:11px">(mês a mês, desde a entrada de cada clínica)</span></div>
               <div class="t-mut" style="font-size:11px;margin:0 0 7px;line-height:1.5">🆕 <b style="color:#00E5A0">nova</b> (cliente novo) · ♻️ <b style="color:#00D4FF">reconquistada</b> (parou e <b>voltou</b>) · 🔀 <b style="color:#9fe6ff">divide material</b> (manda só <b>parte</b> — o resto vai pro concorrente) · 🐾 particular. Toque no <b style="color:#9fe6ff">+</b> pra abrir a análise completa de cada clínica.</div>
               <div style="display:flex;align-items:center;gap:8px;margin:0 0 8px;flex-wrap:wrap">
@@ -4021,6 +4096,10 @@ function renderTab(){
                 ${_bq?`<button id="safraLupaX" style="cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:9px;padding:7px 11px;font-size:12px">✕ limpar</button><span class="t-mut" style="font-size:11.5px">${fmShow.length} resultado(s)</span>`:''}
               </div>
               ${_bq&&!fmShow.length?`<div class="t-mut" style="font-size:12.5px;margin:2px 0 8px">Nada encontrado para <b>"${esc(safraBusca)}"</b>. Tente o nome do cliente ou o bairro.</div>`:''}
+              <div style="display:flex;gap:9px;margin:0 0 10px;flex-wrap:wrap">
+                <button id="relSafraFin" style="cursor:pointer;border:1px solid rgba(0,229,160,.5);background:rgba(0,229,160,.12);color:#7effcf;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório financeiro <span style="font-weight:600;opacity:.85">(PDF · com R$)</span></button>
+                <button id="relSafraEq" style="cursor:pointer;border:1px solid rgba(255,45,85,.5);background:rgba(255,45,85,.12);color:#ff9fb0;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório p/ equipe <span style="font-weight:600;opacity:.85">(PDF · em queda, por bairro, sem R$)</span></button>
+              </div>
               <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,229,160,.25);border-radius:8px">
                 <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
                   <thead><tr style="background:rgba(0,229,160,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#7effcf">Total</th></tr></thead>
@@ -4296,6 +4375,8 @@ function renderTab(){
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       const _sl=document.getElementById("safraLupa"); if(_sl){ _sl.addEventListener("input", e=>{ safraBusca=e.target.value; const pos=_sl.selectionStart; renderTab(); const l2=document.getElementById("safraLupa"); if(l2){ l2.focus(); try{ l2.setSelectionRange(pos,pos); }catch(_){} } }); }
       const _slx=document.getElementById("safraLupaX"); if(_slx) _slx.onclick=()=>{ safraBusca=""; renderTab(); };
+      const _rsf=document.getElementById("relSafraFin"); if(_rsf) _rsf.onclick=()=>relSafraFin();
+      const _rse=document.getElementById("relSafraEq"); if(_rse) _rse.onclick=()=>relSafraEquipe();
       return;
     }
     if(clinView==="aaa"||clinView==="aab"||clinView==="aac"||clinView==="aad"){
