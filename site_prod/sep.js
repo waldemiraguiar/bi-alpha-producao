@@ -414,7 +414,7 @@
     if (!confirm('Marcar \'' + exame + '\' como TERCEIRIZADO?\n\nTodos os exames desse tipo saem da fila de separar e vão pra aba 📦 Terceirizados enquanto estiver marcado.')) return;
     if (!useSupa()) { alert('Requer conexão em nuvem (Supabase).'); return; }
     const chave = 'terc_tipo:' + normAcc(exame);
-    try { await window.SUPA.upsertMark({ chave, req: 'terc', exame, estado: 'terceirizado', por: me() || 'equipe', ts_sep: Date.now() }); touch(); await loadMarks(); render(); }
+    try { await window.SUPA.upsertMark({ chave, req: 0, exame, estado: 'terceirizado', por: me() || 'equipe', ts_sep: Date.now() }); touch(); await loadMarks(); render(); }
     catch (e) { alert('Não foi possível marcar: ' + (e.message || e)); }
   }
   async function destercTipo(exame) {
@@ -423,7 +423,7 @@
     if (!confirm('Tirar \'' + exame + '\' dos terceirizados?\n\nVolta pra fila normal de separar.')) return;
     if (!useSupa()) { alert('Requer conexão em nuvem (Supabase).'); return; }
     const chave = 'terc_tipo:' + normAcc(exame);
-    try { await window.SUPA.upsertMark({ chave, req: 'terc', exame, estado: '', por: me() || 'equipe', ts_sep: Date.now() }); touch(); await loadMarks(); render(); }
+    try { await window.SUPA.upsertMark({ chave, req: 0, exame, estado: '', por: me() || 'equipe', ts_sep: Date.now() }); touch(); await loadMarks(); render(); }
     catch (e) { alert('Não foi possível tirar: ' + (e.message || e)); }
   }
   /* ---- PCR FIV+FELV do MESMO registro = 1 tubo (decisão Wal 30/out): 1 clique separa/recebe/confirma

@@ -172,7 +172,7 @@ async function terceirizarTipo(exame){
   if(!confirm('Marcar \''+exame+'\' como terceirizado?\n\nTodos os exames desse tipo vão para a aba Terceirizados enquanto estiver marcado.')) return;
   if(!(window.SUPA&&window.SUPA.ok)){alert('Requer conexão em nuvem.');return;}
   const chave='terc_tipo:'+normAcc(exame);
-  try{await window.SUPA.upsertMark({chave,req:'terc',exame,estado:'terceirizado',por:'equipe',ts_sep:Date.now()});
+  try{await window.SUPA.upsertMark({chave,req:0,exame,estado:'terceirizado',por:'equipe',ts_sep:Date.now()});
     tercTypes.add(normAcc(exame));buildTabs();renderActive();}
   catch(e){alert('Não foi possível marcar: '+(e.message||e));}
 }
@@ -180,7 +180,7 @@ async function descerceirizarTipo(exame){
   if(!exame||!confirm('Remover \''+exame+'\' dos terceirizados?\n\nVolta para a fila normal.')) return;
   if(!(window.SUPA&&window.SUPA.ok)){alert('Requer conexão em nuvem.');return;}
   const chave='terc_tipo:'+normAcc(exame);
-  try{await window.SUPA.upsertMark({chave,req:'terc',exame,estado:'',por:'equipe',ts_sep:Date.now()});
+  try{await window.SUPA.upsertMark({chave,req:0,exame,estado:'',por:'equipe',ts_sep:Date.now()});
     tercTypes.delete(normAcc(exame));buildTabs();renderActive();}
   catch(e){alert('Não foi possível remover: '+(e.message||e));}
 }
