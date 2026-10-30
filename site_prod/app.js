@@ -33,9 +33,8 @@ function _rascFolha(reg){
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
-    <div class="lin"><b>Méd. Vet.:</b> ${esc(r.vet||'—')} &nbsp;·&nbsp; <b>Clínica:</b> ${esc(r.clinica||'—')} &nbsp;·&nbsp; <b>Entrada:</b> ${_rascDmy(ent)}</div>
     <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exs.map(e=>`<div class="ex">• <b>${esc(e)}</b></div>`).join('')||'<div class="ex">—</div>'}</div></div>
-    <div class="sec">PCR · Alpha</div>
+    <div class="sec">PCR</div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div><div><b>Data de liberação:</b> <u>${_rascDmy(lib)}</u> <span class="ref">(PCR: 4 dias)</span></div></div>
     <div class="amost"><b>Amostras:</b> <span>( ) Sangue</span><span>( ) Swab</span><span>( ) Fezes</span><span>( ) Urina</span><span>( ) Medula</span><span>( ) Linfonodo</span><span>( ) ______</span></div>
     <table class="an"><thead><tr><th style="text-align:left;width:60%">Análises</th><th>DNA</th><th>RNA</th></tr></thead><tbody><tr><td style="height:28px"></td><td></td><td></td></tr><tr><td style="height:28px"></td><td></td><td></td></tr></tbody></table>
