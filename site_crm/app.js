@@ -814,6 +814,19 @@ function _hfStats(cod){
     mean30:sum(H-29,H)/30, medEnvio: act.length?act[Math.floor(act.length/2)]:0, gapMed, daysSince, overdue, caindo };
 }
 function _diaLabel(idx, baseISO){ try{ const b=new Date((baseISO||CLIN_DIA_BASE)+"T12:00:00"); const dt=new Date(b.getTime()+idx*864e5); return String(dt.getDate()).padStart(2,"0")+"/"+String(dt.getMonth()+1).padStart(2,"0"); }catch(e){ return ""; } }
+// 💰 R$ por clínica na Lupa — SÓ diretoria (usa o faturamento mensal cifrado já carregado). null = não mostra.
+function _hfRS(cod){
+  if(!ehDiretoria() || !CLIN_FATMESALL) return null;
+  const s=(CLIN_FATMESALL[String(cod)]||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1); if(!s.length) return null;
+  const cur=s[s.length-1], prev=s.length>1?s[s.length-2]:null;
+  const curYm=(()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");})();
+  const ehCur=cur.ym===curYm;
+  const fdCur = ehCur ? (cur.fd!=null?cur.fd:(cur.fat||0)) : (cur.fat||0);
+  const fdPrev = prev ? (prev.fd!=null?prev.fd:(prev.fat||0)) : null;
+  const mom = (ehCur && fdPrev>0) ? (fdCur/fdPrev-1) : null;
+  const rec=s.slice(-3); const recN=rec.reduce((a,m)=>a+(m.n||0),0), recF=rec.reduce((a,m)=>a+(m.fat||0),0);
+  return { fdCur, mom, ehCur, tot12: (typeof rsVal==="function"?rsVal(cod):null), ticket: recN>0?recF/recN:null };
+}
 // 📌 fixar clínicas na Lupa (persistente no aparelho) — pra olhar os mesmos clientes todo dia
 function hfPins(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_pin")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
 function hfSetPins(a){ try{ localStorage.setItem("crm_hf_pin", JSON.stringify(a.slice(0,12))); }catch(e){} }
@@ -845,6 +858,13 @@ function _hfCard(cod, pinned){
     ${kpi(st.medEnvio,'num dia típico','exames quando ela manda','#7effcf')}
     ${kpi(freq,'frequência','de quanto em quanto manda','#ffc266')}
   </div>`;
+  // 💰 linha de FATURAMENTO — só no login da diretoria (R$)
+  const _rs=_hfRS(cod);
+  const rsRow = _rs ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      ${kpi(`${fmtBRL(_rs.fdCur)}${_rs.mom!=null?` <span style="font-size:12px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>`:''}`,'R$ este mês',_rs.ehCur?'até hoje · vs mês passado no mesmo dia':'último mês','#00E5A0')}
+      ${_rs.ticket!=null?kpi(fmtBRL(_rs.ticket),'ticket médio','R$ por exame','#7effcf'):''}
+      ${_rs.tot12!=null?kpi(fmtBRL(_rs.tot12),'faturamento','últimos 12 meses','#9fe6ff'):''}
+    </div>` : '';
   let lista;
   if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(cod)]||[]);
     lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:12.5px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(21 dias · ${arr.length})</span></div>
@@ -868,14 +888,14 @@ function _hfCard(cod, pinned){
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:10px;font-weight:800;color:#ff8fcf;text-transform:uppercase;letter-spacing:.3px">📝 minha anotação</div><span style="font-size:10.5px;color:#ff8fcf">✏️ editar</span></div>
           <div style="font-size:12.5px;color:#ffd7ee;margin-top:3px;white-space:pre-wrap;line-height:1.45">${esc(obs)}</div></div>`
       : `<div style="margin-top:9px"><button onclick="hfObsStart('${esc(String(cod))}')" style="border:1px dashed rgba(255,143,207,.55);background:rgba(255,143,207,.06);color:#ff8fcf;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📝 anotar algo sobre essa clínica (só pra mim)</button></div>`);
-  return `<div class="${pulse}" style="border:2px solid ${caindo?'#FF2D55':'rgba(0,212,255,.35)'};border-radius:14px;padding:13px 15px;margin-top:11px;background:${caindo?'rgba(255,45,85,.09)':'rgba(0,212,255,.05)'}">
+  return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':'rgba(0,212,255,.3)'};border-left:4px solid ${caindo?'#FF2D55':'#00D4FF'};border-radius:14px;padding:14px 16px;margin-top:12px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':'rgba(13,27,45,.9)'},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge}
       <div style="margin-left:auto">${pinBtn}</div>
     </div>
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${st.tot} exames em 90d</div>
     ${obsHtml}
-    ${kpis}
+    ${kpis}${rsRow}
     ${lista}
   </div>`;
 }
@@ -889,7 +909,10 @@ function ensureHfDatalist(){
 }
 function lupaHF(){
   if(!CLINICAS.length) return "";
-  const pins=hfPins(); let cods=pins.slice();
+  const pins=hfPins();
+  // 📌 cards FIXOS sempre com os EM QUEDA em cima (mais grave primeiro), depois o resto — Wal 30/10
+  const _ddN=s=>s?Math.max((s.drop7!=null?s.drop7:-9),(s.drop3!=null?s.drop3:-9)):-9;
+  let cods=pins.slice().sort((a,b)=>{ const sa=_hfStats(a), sb=_hfStats(b), ca=!!(sa&&sa.caindo), cb=!!(sb&&sb.caindo); if(ca!==cb) return ca?-1:1; return _ddN(sb)-_ddN(sa); });
   if(hfSel && !cods.includes(String(hfSel))) cods.unshift(String(hfSel));
   let exemplo=false;
   if(!cods.length){ const sos=CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")&&!/nofaro|plamev/i.test(c.nome||"")) || CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")); if(sos){ cods=[String(sos.cod)]; exemplo=true; } }
@@ -4574,8 +4597,10 @@ function renderTab(){
       // 🚨 Card "Fugas recentes" REMOVIDO do topo a pedido do Wal (30/10). O feed diário (CLIN_DIA) fica — a Lupa usa pra média/mediana/gráfico.
       if(CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }  // Lupa aparece por padrão → carrega o detalhe (independe do feed diário)
       const lupaCard = CLINICAS.length ? lupaHF() : "";
-      c.innerHTML=`${subtabsClin}
+      const _execCss=`<style>#content .exdiv{border-top:1px solid rgba(255,255,255,.1);margin:26px 2px 20px;position:relative}#content .exdiv::after{content:"";position:absolute;left:0;top:-2px;width:48px;border-top:3px solid #00D4FF;border-radius:3px}#content .exlbl{display:flex;align-items:center;gap:9px;margin:0 0 12px}#content .exlbl .b{width:4px;height:18px;border-radius:3px;background:#00D4FF}#content .exlbl .t{font-size:13.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#eaf3ff}#content .exlbl .s{font-size:11px;color:#8aa2bd;font-weight:500}</style>`;
+      c.innerHTML=`${subtabsClin}${_execCss}
         ${lupaCard}
+        ${lupaCard?'<div class="exdiv"></div>':''}
         ${ehDiretoria()?"":biAquisPublico}
         ${painel}
         ${conquistaHtml}
