@@ -33,10 +33,12 @@
   .seclabel{font-size:12.5px;font-weight:700;letter-spacing:.14em;color:#ccd9e8;margin:28px 0 14px}
   .seclabel::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--cyan);opacity:.9;flex:0 0 auto}
   .monthhead{font-weight:800;letter-spacing:-.005em;color:#e6eef8}
-  .card{box-shadow:0 16px 38px -20px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.04);border-color:rgba(255,255,255,.07);margin-bottom:14px}
-  .kpi{box-shadow:0 11px 26px -16px rgba(0,0,0,.62);border-color:rgba(255,255,255,.08)}
-  .crow{box-shadow:0 9px 22px -16px rgba(0,0,0,.52);border-color:rgba(255,255,255,.07)}
-  .kgrid{gap:14px}
+  /* elevação 3D (Material: sombra ambiente + direcional; luz no topo = relevo) */
+  .card{box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 5px rgba(0,0,0,.35), 0 24px 50px -24px rgba(0,0,0,.9);border-color:rgba(255,255,255,.08);margin-bottom:18px;transition:transform .13s ease, box-shadow .13s ease}
+  .card:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 4px 10px rgba(0,0,0,.4), 0 34px 64px -26px rgba(0,0,0,.95)}
+  .kpi{box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3), 0 16px 32px -18px rgba(0,0,0,.75);border-color:rgba(255,255,255,.09)}
+  .crow{box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 12px 26px -18px rgba(0,0,0,.6);border-color:rgba(255,255,255,.07);margin-bottom:10px}
+  .kgrid{gap:16px;margin:16px 0}
 
   /* hero RADAR DE REATIVAÇÃO */
   .radar{display:flex;align-items:center;gap:22px;border-radius:16px;padding:18px 26px;margin:18px 0 6px;

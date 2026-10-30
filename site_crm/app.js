@@ -818,14 +818,14 @@ function _diaLabel(idx, baseISO){ try{ const b=new Date((baseISO||CLIN_DIA_BASE)
 function _hfRS(cod){
   if(!ehDiretoria() || !CLIN_FATMESALL) return null;
   const s=(CLIN_FATMESALL[String(cod)]||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1); if(!s.length) return null;
-  const cur=s[s.length-1], prev=s.length>1?s[s.length-2]:null;
-  const curYm=(()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");})();
-  const ehCur=cur.ym===curYm;
-  const fdCur = ehCur ? (cur.fd!=null?cur.fd:(cur.fat||0)) : (cur.fat||0);
-  const fdPrev = prev ? (prev.fd!=null?prev.fd:(prev.fat||0)) : null;
-  const mom = (ehCur && fdPrev>0) ? (fdCur/fdPrev-1) : null;
+  const d0=new Date(); const curYm=d0.getFullYear()+"-"+String(d0.getMonth()+1).padStart(2,"0");
+  const dp=new Date(d0); dp.setMonth(dp.getMonth()-1); const prevYm=dp.getFullYear()+"-"+String(dp.getMonth()+1).padStart(2,"0");
+  const curE=s.find(x=>x.ym===curYm), prevE=s.find(x=>x.ym===prevYm);
+  const fdCur = curE ? (curE.fd!=null?curE.fd:(curE.fat||0)) : 0;        // R$ do MÊS ATUAL (0 se não faturou este mês) — corrige o "parada mas com R$"
+  const fdPrev = prevE ? (prevE.fd!=null?prevE.fd:(prevE.fat||0)) : null;
+  const mom = (fdPrev && fdPrev>0) ? (fdCur/fdPrev-1) : null;
   const rec=s.slice(-3); const recN=rec.reduce((a,m)=>a+(m.n||0),0), recF=rec.reduce((a,m)=>a+(m.fat||0),0);
-  return { fdCur, mom, ehCur, tot12: (typeof rsVal==="function"?rsVal(cod):null), ticket: recN>0?recF/recN:null };
+  return { fdCur, mom, ehCur:!!curE, tot12: (typeof rsVal==="function"?rsVal(cod):null), ticket: recN>0?recF/recN:null };
 }
 // 📌 fixar clínicas na Lupa (persistente no aparelho) — pra olhar os mesmos clientes todo dia
 function hfPins(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_pin")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
@@ -865,10 +865,10 @@ function _hfCard(cod, pinned){
       ? `<span class="qpulse" title="volume de exames caindo vs o ritmo normal dela (3/7/15 dias), ou parada recente" style="background:#FF2D55;color:#fff;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;white-space:nowrap">🚨 EM QUEDA${st.overdue?` · ${st.daysSince}d parada`:''}</span>`
       : `<span title="em dia = volume recente de exames no ritmo normal dela (não está caindo)" style="background:rgba(0,229,160,.18);color:#00E5A0;border:1px solid rgba(0,229,160,.5);border-radius:20px;padding:3px 13px;font-size:12px;font-weight:800;white-space:nowrap">🟢 em dia</span>`);
   const t3=_hfTrend(st.last3, st.base3!=null?st.base3:st.prev3), t7=_hfTrend(st.last7, st.base7!=null?st.base7:st.prev7);
-  const win=(val,ref,t,lbl,alarm)=>`<div class="${alarm?pulse:''}" style="flex:1;min-width:104px;border-radius:12px;padding:10px 12px;background:linear-gradient(160deg,${t.col}2b,${t.col}0a);border:1.5px solid ${t.col}66"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${val} <span style="font-size:13px;color:${t.col}">${t.seta}${Math.abs(t.pct)}%</span></div><div style="font-size:10px;font-weight:800;color:${t.col};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div><div class="t-mut" style="font-size:9.5px;margin-top:1px">típico ~${ref!=null?ref:'—'}</div></div>`;
-  const kpi=(big,lbl,sub,cor)=>`<div style="flex:1;min-width:104px;border-radius:12px;padding:10px 12px;background:linear-gradient(160deg,${cor}22,${cor}08);border:1px solid ${cor}44"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${big}</div><div style="font-size:10px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div>${sub?`<div class="t-mut" style="font-size:9.5px;margin-top:1px">${sub}</div>`:''}</div>`;
+  const win=(val,ref,t,lbl,alarm)=>`<div class="${alarm?pulse:''}" style="flex:1;min-width:104px;border-radius:12px;padding:11px 13px;background:linear-gradient(160deg,${t.col}2b,${t.col}0a);border:1.5px solid ${t.col}66;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 12px 24px -13px rgba(0,0,0,.65)"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${val} <span style="font-size:13px;color:${t.col}">${t.seta}${Math.abs(t.pct)}%</span></div><div style="font-size:10px;font-weight:800;color:${t.col};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div><div class="t-mut" style="font-size:9.5px;margin-top:1px">típico ~${ref!=null?ref:'—'}</div></div>`;
+  const kpi=(big,lbl,sub,cor)=>`<div style="flex:1;min-width:104px;border-radius:12px;padding:11px 13px;background:linear-gradient(160deg,${cor}22,${cor}08);border:1px solid ${cor}44;box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 12px 24px -13px rgba(0,0,0,.6)"><div style="font-size:23px;font-weight:900;color:#fff;line-height:1">${big}</div><div style="font-size:10px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.4px;margin-top:4px">${lbl}</div>${sub?`<div class="t-mut" style="font-size:9.5px;margin-top:1px">${sub}</div>`:''}</div>`;
   const freq = st.gapMed==null?'—':(st.gapMed<=1?'quase todo dia':('~'+st.gapMed+'d'));
-  const kpis=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+  const kpis=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:13px">
     ${win(st.last3, st.base3, t3, 'últimos 3 dias', st.drop3>=0.5)}
     ${win(st.last7, st.base7, t7, 'últimos 7 dias', st.drop7>=0.4)}
     ${kpi(st.mean30.toFixed(1),'exames por dia','média dos últimos 30d','#9fe6ff')}
@@ -877,7 +877,7 @@ function _hfCard(cod, pinned){
   </div>`;
   // 💰 linha de FATURAMENTO — só no login da diretoria (R$)
   const _rs=_hfRS(cod);
-  const rsRow = _rs ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+  const rsRow = _rs ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px">
       ${kpi(`${fmtBRL(_rs.fdCur)}${_rs.mom!=null?` <span style="font-size:12px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>`:''}`,'R$ este mês',_rs.ehCur?'até hoje · vs mês passado no mesmo dia':'último mês','#00E5A0')}
       ${_rs.ticket!=null?kpi(fmtBRL(_rs.ticket),'ticket médio','R$ por exame','#7effcf'):''}
       ${_rs.tot12!=null?kpi(fmtBRL(_rs.tot12),'faturamento','últimos 12 meses','#9fe6ff'):''}
@@ -906,7 +906,7 @@ function _hfCard(cod, pinned){
           <div style="font-size:12.5px;color:#ffd7ee;margin-top:3px;white-space:pre-wrap;line-height:1.45">${esc(obs)}</div></div>`
       : `<div style="margin-top:9px"><button onclick="hfObsStart('${esc(String(cod))}')" style="border:1px dashed rgba(255,143,207,.55);background:rgba(255,143,207,.06);color:#ff8fcf;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">📝 anotar algo sobre essa clínica (só pra mim)</button></div>`);
   const isAAA=(tierDe(cod)==='A'), aaaSeal=_tierSeal(cod);   // selo automático pela curva (A=Triplo A dourado)
-  return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:14px 16px;margin-top:12px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
+  return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:16px 18px;margin-top:18px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
       <div style="margin-left:auto;display:flex;gap:7px">${pinBtn}</div>
