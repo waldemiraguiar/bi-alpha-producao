@@ -787,8 +787,9 @@ function relSafraEquipe(){
   // EM QUEDA = qualquer percentual negativo de movimento (pedido Wal: "seja o percentual que for")
   const caem=S.rows.filter(r=>r.pior!=null&&r.pior<0);
   // PROXIMIDADE: ordena por CEP (vazio por último) → bairro → mais grave primeiro
-  const ck=r=>r.cep?r.cep:'99999999';
-  caem.sort((a,b)=>{ const ca=ck(a),cb=ck(b); if(ca!==cb) return ca<cb?-1:1; const ba=(a.bairro||'~'),bb=(b.bairro||'~'); if(ba!==bb) return ba<bb?-1:1; return a.pior-b.pior; });
+  const ck=r=>r.cep?r.cep:'99999999', tr={nova:0,reconquistada:1,divide:2,particular:3};
+  caem.sort((a,b)=>{ const ca=ck(a),cb=ck(b); if(ca!==cb) return ca<cb?-1:1; const ba=(a.bairro||'~'),bb=(b.bairro||'~'); if(ba!==bb) return ba<bb?-1:1;
+    const ta=(tr[a.tipo]!=null?tr[a.tipo]:9),tb=(tr[b.tipo]!=null?tr[b.tipo]:9); if(ta!==tb) return ta-tb; return a.pior-b.pior; });
   let sections="", curB=null, buf="", nB=0, nC=0;
   const flush=()=>{ if(curB!==null){ sections+=`<div class="blk"><div class="bh">📍 ${esc(curB||'(sem bairro)')} <span style="font-weight:600;font-size:11px;color:#b06">· ${nC} clínica(s)</span></div>${buf}</div>`; buf=""; nC=0; } };
   caem.forEach(r=>{ const b=r.bairro||''; if(b!==curB){ flush(); curB=b; nB++; }
@@ -2948,11 +2949,7 @@ function comercialRelatorios(){
   const nOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?(x.n||0):0;};
   const fD=d=> d==null?'<span class="t-mut">s/ base</span>': (d<0?`<b style="color:#ff6b81">▼ ${Math.abs(Math.round(d*100))}%</b>`:(d>0?`<b style="color:#7effcf">▲ ${Math.round(d*100)}%</b>`:`<b style="color:#9fb2cc">0%</b>`));
   const caindo=L.filter(r=>r.q&&r.q.pior!=null&&r.q.pior<=-0.15).sort((a,b)=>a.q.pior-b.q.pior);
-  let radar="";
-  if(caindo.length){ radar=`<div class="qpulse" style="border:2px solid #FF2D55;border-radius:13px;padding:11px 14px;margin:0 0 12px;background:rgba(255,45,85,.12)">
-    <div style="font-size:12.5px;font-weight:900;color:#ff6b81;text-transform:uppercase;letter-spacing:.4px">🔴 Queda de movimento — ${caindo.length} cliente(s) caindo</div>
-    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${caindo.slice(0,8).map(r=>`<div style="font-size:12px;color:#ffc9d2;border-top:1px solid rgba(255,255,255,.06);padding-top:4px"><div><span style="font-size:15px">${tipoIc[r.tipo]||''}</span> <b>${esc(r.nome)}</b> <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" style="margin-left:2px;border:0;background:rgba(0,212,255,.15);color:#9fe6ff;border-radius:6px;padding:1px 8px;font-weight:800;cursor:pointer">ver +</button></div><div class="t-mut" style="font-size:11px;margin-top:1px">exames (até dia ${diaD}): ${fD(r.q.dRitmo)} <span style="color:#6b7a90">vs mês anterior</span> · ${fD(r.q.dBest)} <span style="color:#6b7a90">vs melhor mês${r.q.bestM?` (${mlab(r.q.bestM.ym)})`:''}</span></div></div>`).join("")}</div>
-    <div style="font-size:10.5px;color:#ff9fb0;margin-top:6px;line-height:1.45">👉 toque em <b>ver +</b> pra abrir e <b>anotar o que descobriu</b> com a clínica.</div></div>`; }
+  let radar="";   // 🔴 card "Queda de movimento" REMOVIDO a pedido do Wal (30/10) — a queda já aparece nos chips ▼ da tabela e no Relatório p/ equipe (por bairro)
   const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:6px 8px;border-right:1px solid rgba(0,212,255,.25)";
   const th="padding:5px 8px;text-align:right;color:var(--mut);font-size:10.5px";
   const td="padding:5px 8px;text-align:right";
@@ -4045,9 +4042,14 @@ function renderTab(){
             const dMesR=(prev&&prev.fd>0)?atual.fd/prev.fd-1:null;   // 💰 R$ (até o dia D) vs o mês anterior no mesmo dia
             return {pior,dRitmo,dBest,piorEh,atual,prev,bestM,dMesR}; };
           fmRows.forEach(r=>r.q=quedaDe(r.cod));
-          // item 6d — EM QUEDA sempre no topo (vermelho piscando), depois o resto por total
+          // item 6d — EM QUEDA sempre no topo; dentro, AGRUPADO POR TIPO (🆕 nova · ♻️ reconq · 🔀 divide · 🐾 particular) — pedido Wal 30/10
+          const _trank={nova:0,reconquistada:1,divide:2,particular:3};
           fmRows.sort((a,b)=>{ const ca=!!(a.q&&a.q.pior!=null&&a.q.pior<=-0.05), cb=!!(b.q&&b.q.pior!=null&&b.q.pior<=-0.05);
-            if(ca!==cb) return ca?-1:1; if(ca&&cb) return a.q.pior-b.q.pior; return b.tot-a.tot; });
+            if(ca!==cb) return ca?-1:1;                                        // 1) em queda no topo
+            const ta=(_trank[a.tipo]!=null?_trank[a.tipo]:9), tb=(_trank[b.tipo]!=null?_trank[b.tipo]:9);
+            if(ta!==tb) return ta-tb;                                          // 2) agrupa por tipo
+            if(ca&&cb) return a.q.pior-b.q.pior;                               // 3a) quedas: mais grave primeiro
+            return b.tot-a.tot; });                                            // 3b) resto: maior total primeiro
           if(fmRows.length&&meses.length){
             const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
             const fatOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?x.fat:0;};
