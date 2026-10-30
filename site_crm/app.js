@@ -729,6 +729,7 @@ function bairroDe(cod){ return CLIN_BAIRRO[String(cod==null?"":cod)]||""; }   //
 function cepDe(cod){ return CLIN_CEP[String(cod==null?"":cod)]||""; }          // CEP (8 dígitos, só válido) p/ ordenar por proximidade
 function cepFmt(cp){ cp=String(cp||"").replace(/\D/g,""); return cp.length>=8?cp.slice(0,5)+"-"+cp.slice(5,8):""; }
 function marcoLabel(iso){ const s=String(iso||"").slice(0,10); const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:""; }   // 2026-09-09 → 09/09/26
+function ehDrDra(nome){ return /^\s*dr(a|ª)?\.?\s/i.test(String(nome||"")); }   // vet particular: nome começa com Dr./Dra. — p/ agrupar junto dentro de cada tipo
 
 /* ===== 🖨️ RELATÓRIOS PDF do Monitoramento — 2 botões: FINANCEIRO (com R$) e P/ EQUIPE (sem R$, por bairro/proximidade) ===== */
 // card de % tema-claro p/ impressão (verde sobe / vermelho cai / cinza estável)
@@ -769,8 +770,10 @@ function relSafraFin(){
   const colTot=S.meses.map(()=>0); let grand=0;
   const body=S.rows.map(r=>{ r.mesVals.forEach((v,j)=>colTot[j]+=(v||0)); grand+=r.tot||0;
     const cards=_pcardPct(r.mom,'💰 MÊS ANT.')+((r.pior!=null&&r.pior<0)?_pcardPct(r.pior,'📉 '+(r.piorEh==='best'?'VS AUGE':'EXAMES')):'');
-    const meta=[r.bairro?`📍 ${esc(r.bairro)}`:'',r.marco?`📅 ${esc(r.marco)}`:''].filter(Boolean).join(' · ');
-    return `<tr><td><b>${r.pos}. ${ic[r.tipo]||'♻️'} ${esc(r.nome)}</b>${meta?`<div class="cid">${meta}</div>`:''}${cards?`<div style="margin-top:3px">${cards}</div>`:''}</td>${r.mesVals.map(v=>`<td class="n">${v?fmtBRL(v):'–'}</td>`).join("")}<td class="n"><b>${fmtBRL(r.tot)}</b></td></tr>`;
+    const baiP=r.bairro?`<span style="display:inline-block;background:#ffeef0;color:#9c2230;border:1px solid #f0c4cc;border-radius:11px;padding:1px 9px;font-size:11px;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact">📍 ${esc(r.bairro)}</span>`:'';
+    const mkP=r.marco?`<span style="color:#b8700a;font-size:10.5px;font-weight:700;margin-left:6px">📅 ${esc(r.marco)}</span>`:'';
+    const meta=(baiP||mkP)?`<div style="margin-top:3px">${baiP}${mkP}</div>`:'';
+    return `<tr><td><b>${r.pos}. ${ic[r.tipo]||'♻️'} ${esc(r.nome)}</b>${meta}${cards?`<div style="margin-top:4px">${cards}</div>`:''}</td>${r.mesVals.map(v=>`<td class="n">${v?fmtBRL(v):'–'}</td>`).join("")}<td class="n"><b>${fmtBRL(r.tot)}</b></td></tr>`;
   }).join("");
   const foot=`<tr class="tot"><td><b>TOTAL (${S.rows.length})</b></td>${colTot.map(v=>`<td class="n"><b>${fmtBRL(v)}</b></td>`).join("")}<td class="n"><b>${fmtBRL(grand)}</b></td></tr>`;
   const corpo=`<table><thead><tr><th>Clínica · 📍bairro · 📅marco · %</th>${tcol}</tr></thead><tbody>${body}${foot}</tbody></table>`;
@@ -789,7 +792,8 @@ function relSafraEquipe(){
   // PROXIMIDADE: ordena por CEP (vazio por último) → bairro → mais grave primeiro
   const ck=r=>r.cep?r.cep:'99999999', tr={nova:0,reconquistada:1,divide:2,particular:3};
   caem.sort((a,b)=>{ const ca=ck(a),cb=ck(b); if(ca!==cb) return ca<cb?-1:1; const ba=(a.bairro||'~'),bb=(b.bairro||'~'); if(ba!==bb) return ba<bb?-1:1;
-    const ta=(tr[a.tipo]!=null?tr[a.tipo]:9),tb=(tr[b.tipo]!=null?tr[b.tipo]:9); if(ta!==tb) return ta-tb; return a.pior-b.pior; });
+    const ta=(tr[a.tipo]!=null?tr[a.tipo]:9),tb=(tr[b.tipo]!=null?tr[b.tipo]:9); if(ta!==tb) return ta-tb;
+    const da=ehDrDra(a.nome),db=ehDrDra(b.nome); if(da!==db) return da?1:-1; return a.pior-b.pior; });
   let sections="", curB=null, buf="", nB=0, nC=0;
   const flush=()=>{ if(curB!==null){ sections+=`<div class="blk"><div class="bh">📍 ${esc(curB||'(sem bairro)')} <span style="font-weight:600;font-size:11px;color:#b06">· ${nC} clínica(s)</span></div>${buf}</div>`; buf=""; nC=0; } };
   caem.forEach(r=>{ const b=r.bairro||''; if(b!==curB){ flush(); curB=b; nB++; }
@@ -4048,16 +4052,17 @@ function renderTab(){
             if(ca!==cb) return ca?-1:1;                                        // 1) em queda no topo
             const ta=(_trank[a.tipo]!=null?_trank[a.tipo]:9), tb=(_trank[b.tipo]!=null?_trank[b.tipo]:9);
             if(ta!==tb) return ta-tb;                                          // 2) agrupa por tipo
-            if(ca&&cb) return a.q.pior-b.q.pior;                               // 3a) quedas: mais grave primeiro
-            return b.tot-a.tot; });                                            // 3b) resto: maior total primeiro
+            const da=ehDrDra(a.nome), db=ehDrDra(b.nome); if(da!==db) return da?1:-1;  // 3) dentro do tipo: vets particulares (Dr./Dra.) juntos no fim
+            if(ca&&cb) return a.q.pior-b.q.pior;                               // 4a) quedas: mais grave primeiro
+            return b.tot-a.tot; });                                            // 4b) resto: maior total primeiro
           if(fmRows.length&&meses.length){
             const mlab=ym=>{const p=ym.split("-");return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+p[1])-1]+"/"+p[0].slice(2);};
             const fatOf=(arr,ym)=>{const x=arr.find(a=>a.ym===ym);return x?x.fat:0;};
             const tipoIc={nova:'🆕',reconquistada:'♻️',divide:'🔀',particular:'🐾'}, tipoNm={nova:'nova',reconquistada:'reconquistada (voltou)',divide:'divide material (manda só parte)',particular:'particular'};
             const totCol={}; meses.forEach(ym=>totCol[ym]=0); let grand=0;
-            const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:6px 8px;border-right:1px solid rgba(0,229,160,.25)";
-            const th="padding:5px 8px;text-align:right;color:var(--mut);font-size:10.5px";
-            const td="padding:5px 8px;text-align:right";
+            const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:11px 8px;border-right:1px solid rgba(0,229,160,.25)";
+            const th="padding:7px 8px;text-align:right;color:var(--mut);font-size:10.5px";
+            const td="padding:11px 8px;text-align:right";
             // 🔎 busca por clínica OU bairro (Wal 30/10) — filtra as linhas da tabela
             const _bq=(safraBusca||"").trim().toLowerCase();
             const fmShow=_bq?fmRows.filter(r=>(r.nome||"").toLowerCase().includes(_bq)||(bairroDe(r.cod)||"").toLowerCase().includes(_bq)):fmRows;
@@ -4080,7 +4085,7 @@ function renderTab(){
               const augePill=!cai?'':`<span class="${forte?'qpulse':''}" title="movimento (exames até o dia ${diaD}) ${q.piorEh==='best'?'vs o melhor mês (auge)':'vs o mês passado no mesmo dia'}" style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;background:${forte?'rgba(255,45,85,.24)':'rgba(255,138,0,.2)'};border:1.5px solid ${forte?'rgba(255,45,85,.75)':'rgba(255,138,0,.65)'};border-radius:10px;padding:3px 11px;min-width:62px;white-space:nowrap"><b style="font-size:15px;line-height:1.05;color:${forte?'#ff6b81':'#ffc266'}">▼ ${Math.abs(Math.round(q.pior*100))}%</b><span style="font-size:8px;font-weight:900;letter-spacing:.6px;color:${forte?'#ff9fb0':'#ffd199'}">📉 ${q.piorEh==='best'?'VS AUGE':'EXAMES'}</span></span>`;
               const pctLinha=(momPill||augePill)?`<div style="display:flex;gap:9px;margin-top:5px;flex-wrap:wrap">${momPill}${augePill}</div>`:'';
               // 🦓 zebra: linhas alternadas ganham leve realce p/ não perder a linha na tabela larga (Wal)
-              const zA=(i%2===1), trBg=zA?'rgba(130,175,230,.16)':'rgba(255,255,255,.015)', scZ=`position:sticky;left:0;background:${zA?'#1b3249':'#0b1a2b'};z-index:1;text-align:left;padding:6px 8px;border-right:1px solid rgba(0,229,160,.25)`;
+              const zA=(i%2===1), trBg=zA?'rgba(130,175,230,.16)':'rgba(255,255,255,.015)', scZ=`position:sticky;left:0;background:${zA?'#1b3249':'#0b1a2b'};z-index:1;text-align:left;padding:11px 8px;border-right:1px solid rgba(0,229,160,.25)`;
               return `<tr class="fmrow" style="border-top:1px solid rgba(255,255,255,.06);background:${trBg}${zer?';opacity:.72':''}"><td style="${scZ}${bl}"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> <b style="color:#eaf3ff">${esc(r.nome)}</b> ${baiChip} ${mkChip} ${plus}</div>${pctLinha}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
             const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmShow.length}${_bq?` de ${fmRows.length}`:''})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
             // 🔴 RADAR DE QUEDA (card do topo) — REMOVIDO a pedido do Wal (30/10): a queda agora está nos chips ▼ da própria tabela e no Relatório p/ equipe (sem R$, por bairro). radarQueda fica vazio.
