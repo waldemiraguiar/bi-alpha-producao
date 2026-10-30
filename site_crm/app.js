@@ -879,6 +879,14 @@ function _hfCard(cod, pinned){
     ${lista}
   </div>`;
 }
+// constrói o <datalist> da Lupa UMA vez (todas as clínicas do HF), fora do re-render — pra achar qualquer clínica (inclusive inativa/fugida) sem travar o celular
+function ensureHfDatalist(){
+  try{ if(!CLINICAS.length) return; let dl=document.getElementById("hfDL");
+    if(dl && dl.childElementCount>=CLINICAS.length) return;   // já construído
+    if(!dl){ dl=document.createElement("datalist"); dl.id="hfDL"; document.body.appendChild(dl); }
+    dl.innerHTML=CLINICAS.map(c=>`<option value="${esc(c.nome)}"></option>`).join("");
+  }catch(e){}
+}
 function lupaHF(){
   if(!CLINICAS.length) return "";
   const pins=hfPins(); let cods=pins.slice();
@@ -886,11 +894,9 @@ function lupaHF(){
   let exemplo=false;
   if(!cods.length){ const sos=CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")&&!/nofaro|plamev/i.test(c.nome||"")) || CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")); if(sos){ cods=[String(sos.cod)]; exemplo=true; } }
   cods=cods.slice(0,8); const pinSet=new Set(pins);
-  // datalist LEVE: só as clínicas com movimento recente (~1k) em vez de 2872 — tira a lentidão no celular. Digitar o nome exato de qualquer outra ainda funciona.
-  const dlNames = CLIN_DIA ? [...new Set(Object.keys(CLIN_DIA).map(cd=>{const c=clinByCod(cd);return c&&c.nome;}).filter(Boolean))] : CLINICAS.slice(0,1200).map(c=>c.nome);
+  // o <datalist> com TODAS as clínicas (2872, inclusive inativas/fugidas) é construído UMA vez fora do re-render (ensureHfDatalist) → acha qualquer uma sem pesar.
   const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:2px">
     <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Buscar clínica (nome) e fixar pra acompanhar" value="" style="flex:1;min-width:240px;max-width:470px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
-    <datalist id="hfDL">${dlNames.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
   </div>`;
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
@@ -4583,7 +4589,7 @@ function renderTab(){
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       const _sl=document.getElementById("safraLupa"); if(_sl){ _sl.addEventListener("input", e=>{ safraBusca=e.target.value; const pos=_sl.selectionStart; renderTab(); const l2=document.getElementById("safraLupa"); if(l2){ l2.focus(); try{ l2.setSelectionRange(pos,pos); }catch(_){} } }); }
       const _slx=document.getElementById("safraLupaX"); if(_slx) _slx.onclick=()=>{ safraBusca=""; renderTab(); };
-      const _hf=document.getElementById("hfLupa"); if(_hf) _hf.onchange=()=>{ const v=_hf.value.trim(); const cc=CLINICAS.find(x=>(x.nome||"")===v); if(cc){ hfSel=String(cc.cod); if(!CRM_HF&&!CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); } renderTab(); } };
+      const _hf=document.getElementById("hfLupa"); if(_hf){ ensureHfDatalist(); _hf.onchange=()=>{ const v=_hf.value.trim(); const cc=CLINICAS.find(x=>(x.nome||"")===v); if(cc){ hfSel=String(cc.cod); if(!CRM_HF&&!CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); } renderTab(); } }; }
       const _hfc=document.getElementById("hfClear"); if(_hfc) _hfc.onclick=()=>{ hfSel=""; renderTab(); };
       return;
     }
