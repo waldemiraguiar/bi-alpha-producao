@@ -27,6 +27,7 @@ export default async (req) => {
         cod: String(c.cod == null ? "" : c.cod).slice(0, 30),
         nome: String(c.nome || "").slice(0, 120),
         cidade: String(c.cidade || "").slice(0, 80),
+        bairro: String(c.bairro || "").slice(0, 80),   // bairro do cliente (master HF) — p/ a Safra e a busca. SEM R$
         prod: +c.prod || 0,          // produção (nº de exames na janela) — SEM R$
         prod30: +c.prod30 || 0,      // produção últimos 30 dias (se enviado)
       })).filter((c) => c.cod && c.nome);

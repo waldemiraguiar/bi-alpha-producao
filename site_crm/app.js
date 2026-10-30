@@ -689,9 +689,9 @@ async function openIdentidade(force){
 function pistaFiltrada(){ return repFilter ? PISTA.filter(f=>(f.por||"")===repFilter) : PISTA; }
 /* ---- 🏥 CLÍNICAS: master do HF (autocomplete) + carteira Novas/Reconquistadas ---- */
 const CLIN_API="/api/crm-clinicas", CART_API="/api/crm-carteira";
-let CLINICAS=[], CLIN_TS=0, CARTEIRA=[], clinView="reconquistada", sowFilter="";  // sowFilter: "" | "cheio" | "buraco"
+let CLINICAS=[], CLIN_TS=0, CLIN_BAIRRO={}, CARTEIRA=[], clinView="reconquistada", sowFilter="";  // sowFilter: "" | "cheio" | "buraco" · CLIN_BAIRRO: cod→bairro (master HF)
 const PORTE_PROD_BAIXA=40;   // porte Grande com produção L12 abaixo disso = 🚩 pode estar dividindo exame (heurística até ter categoria)
-function syncClin(o){ CLINICAS=(o&&o.clinicas)||[]; CLIN_TS=(o&&o.ts)||0; }
+function syncClin(o){ CLINICAS=(o&&o.clinicas)||[]; CLIN_TS=(o&&o.ts)||0; CLIN_BAIRRO={}; CLINICAS.forEach(c=>{ if(c&&c.cod!=null&&c.bairro) CLIN_BAIRRO[String(c.cod)]=c.bairro; }); }
 async function loadClin(){ try{ const r=await fetch(CLIN_API, {cache:"no-store"}); if(r.ok) syncClin(await r.json()); }catch(e){} }
 function syncCart(a){ CARTEIRA=(a||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0)); }
 async function loadCart(){ try{ const r=await fetch(CART_API, {cache:"no-store"}); if(r.ok) syncCart((await r.json()).carteira); }catch(e){} }
@@ -724,6 +724,7 @@ function chancela(x, mini){
   return out?`<div style="margin-top:5px">${out}</div>`:"";
 }
 function clinByCod(cod){ return cod?CLINICAS.find(c=>String(c.cod)===String(cod)):null; }
+function bairroDe(cod){ return CLIN_BAIRRO[String(cod==null?"":cod)]||""; }   // bairro do cliente (master HF) p/ a Safra e a busca
 const AUTO_REL_NOTE='<span class="t-mut" style="font-size:11px">· 🔄 automático</span>';
 /* 🧠² CÉREBRO 2 — aprende o RITMO de envio de cada clínica (média/semana + cadência típica) e detecta
    PAROU / CAIU. O alerta é ADAPTATIVO: cada clínica tem seu próprio limiar (~2× a cadência dela) —
@@ -1043,6 +1044,7 @@ let pistaView="feed";   // "feed" | "retornos"
 let pistaBiRange="tudo", pistaBiDe="", pistaBiAte="";   // 📅 filtro de DATA do BI da Pista (pedido da Luciane): hoje/semana/mês/30d/tudo + intervalo de/até
 /* 📈 ABA COMERCIAL (funil de leads — pedido da Luciane): filtros */
 let comRange="tudo", comDe="", comAte="", comOper="", comCanal="", comTipo="", comGran="mes";   // período · operador · canal(origem) · tipo(ativo/receptivo) · granularidade do gráfico
+let safraBusca="";   // 🔎 busca da tabela "Dinheiro por mês" (por clínica ou bairro) — Guarda-Chuva
 function comJanela(){
   if(comDe||comAte){ const ini=comDe?new Date(comDe+"T00:00:00").getTime():0; const fim=comAte?new Date(comAte+"T23:59:59").getTime():Date.now(); return {ini,fim,label:"período escolhido"}; }
   const d=new Date(), d0=new Date(d); d0.setHours(0,0,0,0); const now=Date.now();
@@ -3975,15 +3977,23 @@ function renderTab(){
             const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:6px 8px;border-right:1px solid rgba(0,229,160,.25)";
             const th="padding:5px 8px;text-align:right;color:var(--mut);font-size:10.5px";
             const td="padding:5px 8px;text-align:right";
-            const body=fmRows.map((r,i)=>{const tot=r.tot,zer=tot<=0;grand+=tot;meses.forEach(ym=>totCol[ym]+=fatOf(r.arr,ym));
+            // 🔎 busca por clínica OU bairro (Wal 30/10) — filtra as linhas da tabela
+            const _bq=(safraBusca||"").trim().toLowerCase();
+            const fmShow=_bq?fmRows.filter(r=>(r.nome||"").toLowerCase().includes(_bq)||(bairroDe(r.cod)||"").toLowerCase().includes(_bq)):fmRows;
+            const body=fmShow.map((r,i)=>{const tot=r.tot,zer=tot<=0;grand+=tot;meses.forEach(ym=>totCol[ym]+=fatOf(r.arr,ym));
               const q=r.q||{}, cai=q.pior!=null&&q.pior<=-0.05, forte=q.pior!=null&&q.pior<=-0.15;
               const bl=forte?';border-left:3px solid #FF2D55':(cai?';border-left:3px solid #FF8A00':'');
-              const chip=cai?` <span class="${forte?'qpulse':''}" title="movimento (exames até o dia ${diaD}) ${q.piorEh==='best'?'vs o melhor mês':'vs o mês passado no mesmo dia'}" style="display:inline-block;background:${forte?'rgba(255,45,85,.22)':'rgba(255,138,0,.18)'};color:${forte?'#ff6b81':'#ffc266'};border:1px solid ${forte?'rgba(255,45,85,.6)':'rgba(255,138,0,.5)'};border-radius:12px;padding:0 7px;font-size:10.5px;font-weight:800;white-space:nowrap">▼ ${Math.abs(Math.round(q.pior*100))}%${q.piorEh==='best'?' vs auge':''}</span>`:'';
-              const plus=` <button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" title="Abrir análise completa (mês a mês · benchmark · fuga)" style="margin-left:3px;width:22px;height:22px;border-radius:7px;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.1);color:#9fe6ff;font-weight:800;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle">+</button>`;
+              const plus=`<button class="mplus" data-mesames="${esc(r.cod)}" data-mnome="${esc(r.nome)}" title="Abrir análise completa (mês a mês · benchmark · fuga)" style="width:22px;height:22px;border-radius:7px;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.1);color:#9fe6ff;font-weight:800;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle">+</button>`;
+              // 📍 bairro do cliente (clínica, hospital, Dr./Dra.) — ao lado do nome
+              const bai=bairroDe(r.cod);
+              const baiChip=bai?`<span title="bairro do cliente" style="display:inline-flex;align-items:center;gap:3px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.33);border-radius:11px;padding:1px 8px;font-size:10px;font-weight:700;color:#9fe6ff;white-space:nowrap">📍 ${esc(bai)}</span>`:'';
+              // 💹 os DOIS percentuais em pílulas SEPARADAS e rotuladas (Wal: mês ant. × vs auge não podem colar)
               const mom=(q.dMesR!=null)?q.dMesR:null;
-              const momBadge=mom==null?'':` <span style="font-size:10px;font-weight:800;color:${mom<-0.001?'#ff6b81':(mom>0.001?'#7effcf':'#9fb2cc')};white-space:nowrap" title="R$ até o dia ${diaD} vs o mês anterior no mesmo dia">${mom<0?'▼':(mom>0?'▲':'•')}${Math.abs(Math.round(mom*100))}% vs mês ant.</span>`;
-              return `<tr style="border-top:1px solid rgba(255,255,255,.06)${zer?';opacity:.72':''}"><td style="${sc}${bl}"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> ${esc(r.nome)}${momBadge}${chip}${plus}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
-            const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmRows.length})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
+              const momPill=mom==null?'':`<span title="R$ até o dia ${diaD} vs o mês anterior no mesmo dia" style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:1px 8px;white-space:nowrap"><b style="font-size:11px;color:${mom<-0.001?'#ff6b81':(mom>0.001?'#7effcf':'#9fb2cc')}">${mom<0?'▼':(mom>0?'▲':'•')} ${Math.abs(Math.round(mom*100))}%</b><span class="t-mut" style="font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">mês ant.</span></span>`;
+              const augePill=!cai?'':`<span class="${forte?'qpulse':''}" title="movimento (exames até o dia ${diaD}) ${q.piorEh==='best'?'vs o melhor mês (auge)':'vs o mês passado no mesmo dia'}" style="display:inline-flex;align-items:center;gap:5px;background:${forte?'rgba(255,45,85,.22)':'rgba(255,138,0,.18)'};border:1px solid ${forte?'rgba(255,45,85,.6)':'rgba(255,138,0,.5)'};border-radius:11px;padding:1px 8px;white-space:nowrap"><b style="font-size:11px;color:${forte?'#ff6b81':'#ffc266'}">▼ ${Math.abs(Math.round(q.pior*100))}%</b><span style="font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:${forte?'#ff9fb0':'#ffd199'}">${q.piorEh==='best'?'vs auge':'exames'}</span></span>`;
+              const pctLinha=(momPill||augePill)?`<div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">${momPill}${augePill}</div>`:'';
+              return `<tr style="border-top:1px solid rgba(255,255,255,.06)${zer?';opacity:.72':''}"><td style="${sc}${bl}"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="t-mut" style="font-variant-numeric:tabular-nums">${i+1}.</span> <span style="font-size:17px;vertical-align:-1px" title="${tipoNm[r.tipo]||''}">${tipoIc[r.tipo]||'♻️'}</span> <b style="color:#eaf3ff">${esc(r.nome)}</b> ${baiChip} ${plus}</div>${pctLinha}</td>${meses.map(ym=>{const v=fatOf(r.arr,ym);return `<td style="${td};color:${v?'#7effcf':'var(--mut)'}">${v?fmtBRL(v):'–'}</td>`;}).join("")}<td style="${td};font-weight:800;color:${zer?'#ffc266':'#00E5A0'}">${fmtBRL(tot)}</td></tr>`;}).join("");
+            const foot=`<tr style="border-top:2px solid rgba(0,229,160,.4)"><td style="${sc};font-weight:800">TOTAL (${fmShow.length}${_bq?` de ${fmRows.length}`:''})</td>${meses.map(ym=>`<td style="${td};font-weight:800">${fmtBRL(totCol[ym])}</td>`).join("")}<td style="${td};font-weight:900;color:#00E5A0">${fmtBRL(grand)}</td></tr>`;
             // 🔴 RADAR DE QUEDA — fixo no topo, vermelho piscante (item 6): impossível não ver
             const caindo=fmRows.filter(r=>r.q&&r.q.pior!=null&&r.q.pior<=-0.15).sort((a,b)=>a.q.pior-b.q.pior);
             if(caindo.length){
@@ -3994,6 +4004,11 @@ function renderTab(){
             }
             cohortHtml=`<div class="seclabel" style="margin:0 0 6px">💰 Dinheiro por mês <span class="t-mut" style="font-weight:500;font-size:11px">(safra — desde a entrada de cada clínica)</span></div>
               <div class="t-mut" style="font-size:11px;margin:0 0 7px;line-height:1.5">🆕 <b style="color:#00E5A0">nova</b> (cliente novo) · ♻️ <b style="color:#00D4FF">reconquistada</b> (parou e <b>voltou</b>) · 🔀 <b style="color:#9fe6ff">divide material</b> (manda só <b>parte</b> — o resto vai pro concorrente) · 🐾 particular. Toque no <b style="color:#9fe6ff">+</b> pra abrir a análise completa de cada clínica.</div>
+              <div style="display:flex;align-items:center;gap:8px;margin:0 0 8px;flex-wrap:wrap">
+                <input id="safraLupa" type="search" value="${esc(safraBusca)}" placeholder="🔎 Buscar clínica, hospital, Dr./Dra. ou bairro…" autocomplete="off" style="flex:1;min-width:220px;max-width:380px;padding:8px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.4);background:rgba(0,212,255,.06);color:#eaf3ff;font-size:13px">
+                ${_bq?`<button id="safraLupaX" style="cursor:pointer;border:1px solid var(--mut);color:var(--mut);background:transparent;border-radius:9px;padding:7px 11px;font-size:12px">✕ limpar</button><span class="t-mut" style="font-size:11.5px">${fmShow.length} resultado(s)</span>`:''}
+              </div>
+              ${_bq&&!fmShow.length?`<div class="t-mut" style="font-size:12.5px;margin:2px 0 8px">Nada encontrado para <b>"${esc(safraBusca)}"</b>. Tente o nome do cliente ou o bairro.</div>`:''}
               <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,229,160,.25);border-radius:8px">
                 <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
                   <thead><tr style="background:rgba(0,229,160,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}">${mlab(ym)}</th>`).join("")}<th style="${th};color:#7effcf">Total</th></tr></thead>
@@ -4256,7 +4271,6 @@ function renderTab(){
           </div>`; }).join("")}
         <div class="t-mut" style="font-size:11px;margin:2px 0 4px">💡 Enquanto a barra é só <b style="color:#9fe6ff">💙 azul</b>, é dinheiro que já entrava (não é mérito). Cada pedaço <b style="color:#7effcf">💚 verde</b> que você abre = recuperação real, e é o que <b>comissiona</b> o vendedor.</div>` : "";
       c.innerHTML=`${subtabsClin}
-        <div class="t-mut" style="font-size:12.5px;margin:8px 0 6px;text-align:center;line-height:1.5">${ehDiretoria()?"📊 <b>Faturamento ao vivo</b> da carteira (atualiza sozinho a cada ciclo — você não precisa pedir). E-mail completo toda <b>sexta 9h</b>.":"📊 <b>Evolução da carteira</b> — produção e ritmo de cada clínica (atualiza sozinho a cada ciclo)."}</div>
         ${ehDiretoria()?"":biAquisPublico}
         ${painel}
         ${conquistaHtml}
@@ -4268,6 +4282,8 @@ function renderTab(){
       const vr=document.getElementById("verRSrel"); if(vr) vr.onclick=()=>abrirFinanceiro();
       const _asb=document.getElementById("ativarSafraBtn"); if(_asb) _asb.onclick=()=>ativarSafra();
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
+      const _sl=document.getElementById("safraLupa"); if(_sl){ _sl.addEventListener("input", e=>{ safraBusca=e.target.value; const pos=_sl.selectionStart; renderTab(); const l2=document.getElementById("safraLupa"); if(l2){ l2.focus(); try{ l2.setSelectionRange(pos,pos); }catch(_){} } }); }
+      const _slx=document.getElementById("safraLupaX"); if(_slx) _slx.onclick=()=>{ safraBusca=""; renderTab(); };
       return;
     }
     if(clinView==="aaa"||clinView==="aab"||clinView==="aac"||clinView==="aad"){
