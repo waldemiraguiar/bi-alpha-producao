@@ -24,7 +24,7 @@
   let marks = {};                 // chave -> marcação
   let descartes = new Set();      // chaves apagadas (p/ filtrar do histórico/placar)
   let descartesList = [];         // arquivo COMPLETO dos apagados (histórico do histórico)
-  let selByView = { separar: '', urgente: '', avisar: '', travados: '', hist: '', apagados: '' }; // categoria selecionada por aba
+  let selByView = { separar: '', urgente: '', avisar: '', travados: '', terc: '', hist: '', apagados: '' }; // categoria selecionada por aba
   let histPer = 'dia', histFiltro = 'todos'; // Histórico: período + (todos/separados/nao)
   let busca = '';                 // 🔎 busca global (todas as categorias) por registro/paciente/exame/data
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
@@ -48,6 +48,13 @@
   const naoClass = () => (typeof DATA !== 'undefined' && DATA && Array.isArray(DATA.nao_classificados)) ? DATA.nao_classificados : [];
   const universo = () => { const d = sepData(); return d && d.historico ? d.historico : []; };  // últimos 7 dias (p/ histórico/placar)
   const chaveOf = it => `${it.req}-${it.codex}`;
+  // 📦 TERCEIRIZADOS (Dudu/Fúlvio 27/out) — MESMO estado da aba Produção (app.js): sep_marks
+  // chave 'terc_tipo:<normAcc(exame)>' estado 'terceirizado'. normAcc IGUAL ao do app.js (mantém
+  // espaços, só tira acento+caixa) pra a chave bater entre as duas telas. NÃO é o slug (que tira espaço).
+  const normAcc = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  let TERC = new Set();   // normAcc dos TIPOS de exame marcados como terceirizados (recalculado no ingest)
+  const recalcTerc = () => { const s = new Set(); Object.values(marks).forEach(m => { if (m && m.estado === 'terceirizado' && String(m.chave).startsWith('terc_tipo:') && !descartes.has(String(m.chave))) s.add(String(m.chave).slice('terc_tipo:'.length)); }); TERC = s; };
+  const isTerc = it => TERC.has(normAcc(String(it.exame || '')));
 
   /* ---- quem está marcando: LOGIN DE OPERADOR (2 times) c/ fallback ao seletor antigo ---- */
   const OPK = 'sep_op';
@@ -156,7 +163,7 @@
   const travadoHisto = it => ehHistotecnica(it && it.cat) && !podeReceberHisto();   // este item está travado p/ mim?
 
   /* ---- rede ---- */
-  function ingest(j) { marks = {}; (j.marks || []).forEach(m => marks[m.chave] = { ...m, ts_sep: m.ts_sep != null ? Number(m.ts_sep) : m.ts_sep }); descartesList = (j.descartes || []).map(d => ({ ...d, ts: d.ts != null ? Number(d.ts) : d.ts })); descartes = new Set(descartesList.map(d => d.chave)); }
+  function ingest(j) { marks = {}; (j.marks || []).forEach(m => marks[m.chave] = { ...m, ts_sep: m.ts_sep != null ? Number(m.ts_sep) : m.ts_sep }); descartesList = (j.descartes || []).map(d => ({ ...d, ts: d.ts != null ? Number(d.ts) : d.ts })); descartes = new Set(descartesList.map(d => d.chave)); recalcTerc(); }
   async function loadMarks() {
     try {
       if (useSupa()) { ingest(await window.SUPA.loadSep()); return; }
@@ -398,6 +405,58 @@
     if (!confirm('Confirmar que o CLIENTE FOI AVISADO para enviar nova amostra?')) return;
     if (await post({ acao: 'avisar', chave: k, por: me() })) render();
   }
+  // 📦 Terceirizar / tirar um TIPO de exame — marca o TIPO (vale pros atuais e futuros desse tipo).
+  // Grava o MESMO registro que a aba Produção (sep_marks chave 'terc_tipo:<normAcc>', estado 'terceirizado'),
+  // então marcar aqui aparece lá e vice-versa. SEM SQL.
+  async function tercTipo(exame) {
+    if (!exame) return;
+    if (teamMode && !me()) { openLogin(); return; }
+    if (!confirm('Marcar \'' + exame + '\' como TERCEIRIZADO?\n\nTodos os exames desse tipo saem da fila de separar e vão pra aba 📦 Terceirizados enquanto estiver marcado.')) return;
+    if (!useSupa()) { alert('Requer conexão em nuvem (Supabase).'); return; }
+    const chave = 'terc_tipo:' + normAcc(exame);
+    try { await window.SUPA.upsertMark({ chave, req: 'terc', exame, estado: 'terceirizado', por: me() || 'equipe', ts_sep: Date.now() }); touch(); await loadMarks(); render(); }
+    catch (e) { alert('Não foi possível marcar: ' + (e.message || e)); }
+  }
+  async function destercTipo(exame) {
+    if (!exame) return;
+    if (teamMode && !me()) { openLogin(); return; }
+    if (!confirm('Tirar \'' + exame + '\' dos terceirizados?\n\nVolta pra fila normal de separar.')) return;
+    if (!useSupa()) { alert('Requer conexão em nuvem (Supabase).'); return; }
+    const chave = 'terc_tipo:' + normAcc(exame);
+    try { await window.SUPA.upsertMark({ chave, req: 'terc', exame, estado: '', por: me() || 'equipe', ts_sep: Date.now() }); touch(); await loadMarks(); render(); }
+    catch (e) { alert('Não foi possível tirar: ' + (e.message || e)); }
+  }
+  /* ---- PCR FIV+FELV do MESMO registro = 1 tubo (decisão Wal 30/out): 1 clique separa/recebe/confirma
+     TODOS os exames daquele registro de uma vez. A marcação continua PER exame no banco (cada chave
+     req-codex mantém seu estado) — só a AÇÃO e o CARD são agrupados. ---- */
+  const grpItens = ks => { const set = new Set(String(ks).split('|').filter(Boolean)); return itens().filter(it => set.has(chaveOf(it))); };
+  async function doGrupo(acao, its, confirmMsg) {
+    if (teamMode && !me()) { openLogin(); return; }
+    if (!me()) { alert('Selecione/insira o seu nome no topo (campo "Você") antes de marcar.'); return; }
+    if (acao === 'separar' && !canSep()) { alert('Você entrou como time de RECEBIDOS. Só o time de Separação pode separar — toque em "trocar".'); return; }
+    if (acao === 'receber' && !canRec()) { alert('Você entrou como time de SEPARAÇÃO. Só o time de Recebidos dá o recebido — toque em "trocar".'); return; }
+    if ((acao === 'suficiente' || acao === 'insuf') && !canInsuf()) { alert('Entre com seu login pra confirmar a amostra.'); return; }
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    let okAny = false;
+    for (const it of its) {
+      const k = chaveOf(it), m = marks[k];
+      if (acao === 'separar') { if (m && m.estado) continue; const dl = deadline(it); const noPrazo = !dl || Date.now() <= dl.getTime(); okAny = (await post({ acao: 'separar', chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me(), no_prazo: noPrazo, corte: dl ? dl.getHours() : null })) || okAny; }
+      else if (acao === 'receber') { if (!(m && m.estado) || m.estado === 'recebido') continue; okAny = (await post({ acao: 'receber', chave: k, por: me() })) || okAny; }
+      else if (acao === 'suficiente') { if (!(m && m.estado === 'recebido')) continue; okAny = (await post({ acao: 'suficiente', chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() })) || okAny; }
+      else if (acao === 'insuf') { if (!(m && m.estado === 'recebido')) continue; okAny = (await post({ acao: 'insuf', chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() })) || okAny; }
+      else if (acao === 'voltar') { if (m && m.estado) okAny = (await post({ acao: 'voltar', chave: k })) || okAny; }
+    }
+    if (okAny) render();
+  }
+  async function doTravarGrupo(its) {
+    if (teamMode && !me()) { openLogin(); return; }
+    if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
+    const motivo = prompt('TRAVAR os ' + its.length + ' exames deste registro (mesmo tubo).\n\nMOTIVO (financeiro, cadastro, problema de amostra…):', '');
+    if (motivo === null) return;
+    let okAny = false;
+    for (const it of its) { okAny = (await post({ acao: 'travar', chave: travaKey(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me(), obs: (motivo || '').trim() || null })) || okAny; }
+    if (okAny) render();
+  }
   /* ---- 📝 OBSERVAÇÃO da amostra (motivo da nova amostra / característica) ---- */
   // Grava na coluna sep_marks.obs. Se ainda não existe marca, cria uma "só nota" (estado vazio,
   // não conta como separada) — a nota segue o fluxo separar→receber→avisar e vai pro histórico/apagados.
@@ -459,7 +518,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length, ncN = naoClass().length, travN = aTravar().length;
+    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length, ncN = naoClass().length, travN = aTravar().length, tercN = tercItems().length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -476,6 +535,7 @@
         <div class="septab andon ${urgN ? 'urgpulse' : ''} ${view === 'urgente' ? 'on' : ''}" data-v="urgente">🚨 Última Chamada <span class="c">${urgN}</span></div>
         <div class="septab aviso avisopulse ${view === 'avisar' ? 'on' : ''}" data-v="avisar"><span class="fwt">🎆</span> 📧 Avisar cliente <span class="fwt">🎇</span> <span class="c">${aviN}</span></div>
         <div class="septab trava ${travN ? 'travapulse' : ''} ${view === 'travados' ? 'on' : ''}" data-v="travados">🔒 Travados <span class="c">${travN}</span></div>
+        ${(TERC.size > 0 || view === 'terc') ? `<div class="septab ${view === 'terc' ? 'on' : ''}" data-v="terc" style="border-color:#7d5bd0;color:#c4b5fd">📦 Terceirizados <span class="c" style="background:#7d5bd0;color:#fff">${tercN}</span></div>` : ''}
         <div class="septab ${view === 'placar' ? 'on' : ''}" data-v="placar">🏆 Placar</div>
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
@@ -537,11 +597,74 @@
     const undo = separated ? `<button class="sepbtn undo" data-act="voltar" data-k="${k}" title="desfazer 1 passo">↩</button>` : '';
     // 🔒 TRAVAR: manda o exame pra aba Travados (financeiro/cadastro/problema de amostra…), motivo em texto livre
     const btrava = `<button class="sepbtn trava" data-act="travar" data-k="${k}" title="travar este exame (financeiro, cadastro, problema de amostra…)">🔒 Travar</button>`;
+    // 📦 marcar o TIPO como terceirizado (sai da fila, vai pra aba 📦 Terceirizados) · ↩ tirar (volta) — mesmo estado da Produção
+    const bterc = isTerc(it)
+      ? `<button class="sepbtn" data-act="desterc" data-exm="${esc2(it.exame || '')}" style="background:transparent;border:1px solid #7d5bd0;color:#a78bda" title="tirar este TIPO dos terceirizados — volta pra fila normal">↩ Tirar terc.</button>`
+      : `<button class="sepbtn" data-act="terc" data-exm="${esc2(it.exame || '')}" style="background:transparent;border:1px solid #7d5bd0;color:#a78bda" title="marcar este TIPO de exame como terceirizado (vai pra aba 📦 Terceirizados)">📦</button>`;
     const _rImp = (window._rascInfo ? window._rascInfo(it.req) : null);   // ✅ checklist "rascunho impresso" (Wal 27/10) — mesmo estado da aba Produção
     const bRasc = /MOLECULAR/i.test(it.cat || '') ? ( _rImp
       ? `<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:3px 8px;font-weight:700;font-size:12px;white-space:nowrap" title="rascunho impresso às ${window._rascHmG?window._rascHmG(_rImp):''}">✅ rascunho ${window._rascHmG?window._rascHmG(_rImp):''}</span><button class="sepbtn" style="background:#64748b;border-color:#64748b;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="reimprimir o rascunho do PCR">🖨️</button><button class="sepbtn" style="background:#ef4444;border-color:#ef4444;color:#fff" onclick="_rascDesmarcar('${esc2(String(it.req))}')" title="desmarcar (ainda não impresso)">✕</button>`
       : `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="imprimir o rascunho do PCR deste animal">🖨️</button>` ) : '';
-    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${bRasc}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${undo}</div></div>`;
+    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${bRasc}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${bterc}${undo}</div></div>`;
+  }
+
+  // CARD AGRUPADO: FIV+FELV (e demais PCR) do MESMO registro num card só; 1 clique vale pros dois.
+  function rowSepararGrupo(grp) {
+    const a = grp[0]; const ks = grp.map(chaveOf).join('|');
+    const ms = grp.map(it => marks[chaveOf(it)]);
+    const sepAll = grp.every(it => { const m = marks[chaveOf(it)]; return !!(m && m.estado); });
+    const sepSome = grp.some(it => { const m = marks[chaveOf(it)]; return !!(m && m.estado); });
+    const recAll = grp.every(it => { const m = marks[chaveOf(it)]; return !!(m && m.estado === 'recebido'); });
+    const porSep = (ms.find(m => m && m.por) || {}).por || '';
+    const porRec = (ms.find(m => m && m.por_receb) || {}).por_receb || '';
+    const cl = `<span class="cl ${a.classe}">${a.classe === 'apoio' ? '📦 apoio' : '🏠 interno'}</span>`;
+    const urg = grp.some(it => it.urgente) ? '<span class="urg2">URGENTE</span>' : '';
+    const tut = a.tutor ? ` · tutor <b>${esc2(a.tutor)}</b>` : '';
+    const vet = a.vet ? ` · vet <b>${esc2(a.vet)}</b>` : '';
+    const hent = a.entrada_dt ? String(a.entrada_dt).replace('T', ' ').slice(11, 16) : '';
+    const entrou = a.entrada ? ` · 📅 entrou <b>${ddmm(a.entrada)}${hent ? ' ' + hent : ''}</b>` : '';
+    const nomes = grp.map(it => esc2(it.exame)).join(' + ');
+    const head = `<div class="req">${esc2(a.req)}<span class="y">/${esc2(a.ano)}</span></div>
+      <div><div class="pac">${esc2(a.paciente)}${cl}${urg}</div>
+      <div class="examebig">🔬 ${nomes} <span style="font-size:11px;font-weight:700;color:#7d5bd0">· ${grp.length} PCR do mesmo registro — 1 tubo</span></div>
+      <div class="meta">${(tut + vet + entrou).replace(/^\s*·\s*/, '')}</div>${travHistLineSep(a)}${obsChunk(chaveOf(a))}</div>`;
+    // PASSO 1
+    let b1;
+    if (sepAll) b1 = `<span class="step done" title="por ${esc2(porSep)}">✓ Separado</span>`;
+    else if (canSep()) b1 = `<button class="sepbtn go" data-act="gseparar" data-ks="${ks}" title="separa os ${grp.length} exames deste registro de uma vez">1 · Separar os ${grp.length}</button>`;
+    else b1 = `<span class="step lock" title="entre como time de Separação">🔒 Separar</span>`;
+    // PASSO 2
+    let b2;
+    if (recAll) b2 = `<span class="step done rec" title="por ${esc2(porRec)}">✓ Recebido</span>`;
+    else if (!sepAll) b2 = `<span class="step wait">2 · Receber</span>`;
+    else if (canRec()) b2 = `<button class="sepbtn rec" data-act="greceber" data-ks="${ks}">2 · Receber os ${grp.length}</button>`;
+    else b2 = `<span class="step lock" title="entre como time de Recebidos">🔒 Receber</span>`;
+    // PASSO 3 — tem amostra? (PCR não é histotécnica, tem o passo)
+    let b3;
+    if (recAll && canInsuf()) b3 = `<button class="sepbtn sufi" data-act="gsuficiente" data-ks="${ks}" title="tem amostra nos dois — finaliza o registro"><span>✅ Tem amostra</span><small>suficiente · finaliza</small></button><button class="sepbtn insuf" data-act="ginsuf" data-ks="${ks}" title="sem amostra — avisa o cliente"><span>🚫 Sem amostra</span><small>insuficiente · avisar</small></button>`;
+    else { const why = recAll ? 'Entre com seu login pra confirmar' : 'Libera só depois de Separar e Receber'; b3 = `<button class="sepbtn insuf off" data-act="insufoff" data-why="${esc2(why)}" title="${esc2(why)}"><span>🚫 Tem amostra?</span><small>${recAll ? '👤 faça login' : 'após receber'}</small></button>`; }
+    const dias = Math.max(...grp.map(it => it.dias || 0));
+    let badge = '';
+    if (recAll) badge = `<span class="dl conf">✅ recebido · confirme "tem amostra?"</span>`;
+    else if (!sepAll) badge = dias >= 1 ? `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} parada</span>` : '';
+    else if (dias >= 1) badge = `<span class="dl late">⏱️ ${dias} dia${dias > 1 ? 's' : ''} aguardando receber</span>`;
+    const undo = sepSome ? `<button class="sepbtn undo" data-act="gvoltar" data-ks="${ks}" title="desfazer 1 passo dos exames do registro">↩</button>` : '';
+    const btrava = `<button class="sepbtn trava" data-act="gtravar" data-ks="${ks}" title="travar os exames deste registro (financeiro, cadastro, problema de amostra…)">🔒 Travar</button>`;
+    // 📦 por TIPO (cada exame vira terceirizado separadamente)
+    const bterc = grp.map(it => `<button class="sepbtn" data-act="terc" data-exm="${esc2(it.exame || '')}" style="background:transparent;border:1px solid #7d5bd0;color:#a78bda;font-size:11px" title="marcar ${esc2(it.exame)} como terceirizado">📦 ${esc2((it.exame || '').replace(/^PCR\s+/i, ''))}</button>`).join('');
+    const _rImp = (window._rascInfo ? window._rascInfo(a.req) : null);
+    const bRasc = _rImp
+      ? `<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:3px 8px;font-weight:700;font-size:12px;white-space:nowrap" title="rascunho impresso às ${window._rascHmG ? window._rascHmG(_rImp) : ''}">✅ rascunho ${window._rascHmG ? window._rascHmG(_rImp) : ''}</span><button class="sepbtn" style="background:#64748b;border-color:#64748b;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(a.req))}')" title="reimprimir o rascunho do PCR">🖨️</button><button class="sepbtn" style="background:#ef4444;border-color:#ef4444;color:#fff" onclick="_rascDesmarcar('${esc2(String(a.req))}')" title="desmarcar (ainda não impresso)">✕</button>`
+      : `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(a.req))}')" title="imprimir o rascunho do PCR deste animal">🖨️</button>`;
+    return `<div class="seprow pcrgrp ${recAll ? 'confirmrow' : ''}" style="border-left:3px solid #7d5bd0">${head}<div class="right2">${bRasc}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${bterc}${undo}</div></div>`;
+  }
+  // MOLECULAR: agrupa same-req (FIV+FELV) num card; demais categorias ficam linha-a-linha (zero mudança)
+  function renderSepRows(ordered, selKey) {
+    if (!/MOLECULAR/i.test(selKey || '')) return ordered.map(rowSeparar).join('');
+    const byReq = {}; ordered.forEach(it => { (byReq[String(it.req)] = byReq[String(it.req)] || []).push(it); });
+    const seen = new Set(); let html = '';
+    ordered.forEach(it => { const r = String(it.req); if (seen.has(r)) return; seen.add(r); const grp = byReq[r]; html += (grp.length > 1 ? rowSepararGrupo(grp) : rowSeparar(grp[0])); });
+    return html;
   }
 
   // ordena categorias seguindo a ORDEM da TV (familiaridade); fallback alfabético
@@ -589,7 +712,7 @@
   const estadoDe = it => { const m = marks[chaveOf(it)]; return (m && m.estado) || ''; };
   // fora do fluxo: CONFIRMADA (suficiente = tem amostra, finalizada) OU insuficiente (avisar cliente).
   // RECEBIDO agora NÃO sai — fica aguardando a confirmação "tem amostra?" (suficiente/insuficiente).
-  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado' || travadoAtivo(it); };
+  const foraDoFluxo = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado' || travadoAtivo(it) || isTerc(it); };
   // PENDENTE = item aberto ainda no fluxo (a finalização é o RECEBER). Insuficiente sai do fluxo (vai pra fila de aviso).
   const pendentes = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it));
   const ageItems = (lo, hi) => pendentes().filter(it => (it.dias || 0) >= lo && (hi == null || (it.dias || 0) <= hi));
@@ -612,7 +735,7 @@
     const arr = byCat[selKey] || [];   // pode estar vazia (categoria com 0 exames)
     const ordered = [...arr].sort((a, b) => (b.dias || 0) - (a.dias || 0) || rankSt(statusOf(a).st) - rankSt(statusOf(b).st));
     const bar = opts.bar ? opts.bar(items.length) : '';
-    const listHtml = ordered.length ? ordered.map(rowSeparar).join('') : `<div class="sepwait" style="padding:14px">✓ Nenhum exame em <b>${esc2(selKey)}</b> nesta aba agora.</div>`;
+    const listHtml = ordered.length ? renderSepRows(ordered, selKey) : `<div class="sepwait" style="padding:14px">✓ Nenhum exame em <b>${esc2(selKey)}</b> nesta aba agora.</div>`;
     const _loteBtn = /MOLECULAR/i.test(selKey) ? `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff;margin-left:10px" onclick="imprimirLotePCR()" title="imprimir o rascunho de TODOS os PCR da fila">🖨️ Imprimir lote PCR</button>` : '';
     return search + bar + strip + `<div class="sepcat ${opts.cardClass || ''}"><div class="h"><span>${opts.icon || ''}${esc2(selKey)}</span>
       <span class="cnt">${arr.length} ${opts.noun}</span>${_loteBtn}</div>${listHtml}</div>`;
@@ -621,6 +744,9 @@
   // FILA DE HOJE = entradas de HOJE (dias 0) ainda não confirmadas. Fluxo completo: separar → receber → tem amostra?
   const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) === 0);
   const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber → tem amostra?)', lateFn: it => estadoDe(it) !== 'recebido' && statusOf(it).st === 'atrasado' });
+  // 📦 TERCEIRIZADOS — exames cujo TIPO a equipe marcou como terceirizado (saem da fila normal via foraDoFluxo).
+  const tercItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && isTerc(it));
+  const viewTerc = () => worklistView('terc', tercItems(), { empty: '✓ Nenhum exame terceirizado na fila agora.', noun: 'terceirizado(s)', icon: '📦 ', cardClass: 'terccard' });
   // ÚLTIMA CHAMADA = de ONTEM+ (dias>=1), MESMO fluxo da fila de hoje (separar → receber → tem/sem amostra).
   // Não recebidas = piscam (risco). Recebidas ficam CALMAS aqui mesmo (confirme tem amostra), NÃO piscam.
   const ultChamadaItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) >= 1);
@@ -871,6 +997,7 @@
     urgente: '🚨 Não FINALIZADAS de ontem ou antes (faltou separar OU receber) — última chamada, feche antes de perder!',
     avisar: '📧 Amostras insuficientes — avise o cliente para enviar NOVA amostra e dê o check-in "✓ cliente avisado". Fica piscando até confirmar.',
     travados: '🔒 Exames TRAVADOS por algum motivo (financeiro, cadastro, problema de amostra…). O motivo fica no campo de observação. Resolva e clique "✓ Destravar" pra voltar ao fluxo.',
+    terc: '📦 Exames cujo TIPO foi marcado como terceirizado (vão pra outro laboratório). Saem da fila normal de separar. Clique 📦 numa linha pra marcar o tipo; ↩ Tirar terc. volta pra fila. Vale pros exames atuais e futuros desse tipo — igual à aba Produção.',
     placar: '🏆 Pontualidade de cada setor: quanto foi separado no prazo.',
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
@@ -884,6 +1011,7 @@
     else if (view === 'urgente') body = viewUrgente();
     else if (view === 'avisar') body = viewAvisar();
     else if (view === 'travados') body = viewTravados();
+    else if (view === 'terc') body = viewTerc();
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
     else if (view === 'naoclass') body = viewNaoClass();
@@ -965,6 +1093,14 @@
       else if (act === 'avisar') avisarCliente(k);
       else if (act === 'travar') { const it = itens().find(x => chaveOf(x) === k); if (it) doTravar(it); }
       else if (act === 'destravar') step('destravar', k, 'Destravar este exame? Volta pro fluxo de separar.');
+      else if (act === 'terc') tercTipo(b.dataset.exm);
+      else if (act === 'desterc') destercTipo(b.dataset.exm);
+      else if (act === 'gseparar') doGrupo('separar', grpItens(b.dataset.ks));
+      else if (act === 'greceber') doGrupo('receber', grpItens(b.dataset.ks));
+      else if (act === 'gsuficiente') doGrupo('suficiente', grpItens(b.dataset.ks));
+      else if (act === 'ginsuf') doGrupo('insuf', grpItens(b.dataset.ks), 'Marcar AMOSTRA INSUFICIENTE nos exames deste registro?\n\nEncerra e abre a pendência "📧 Avisar cliente" (nova amostra).');
+      else if (act === 'gtravar') doTravarGrupo(grpItens(b.dataset.ks));
+      else if (act === 'gvoltar') doGrupo('voltar', grpItens(b.dataset.ks), 'Desfazer o último passo destes exames?');
       else if (act === 'enviar') step('enviar', k);
       else if (act === 'receber') step('receber', k);
       else if (act === 'voltar') step('voltar', k, 'Desfazer o último passo desta amostra?');
