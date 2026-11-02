@@ -745,7 +745,11 @@
   const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) === 0);
   const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber → tem amostra?)', lateFn: it => estadoDe(it) !== 'recebido' && statusOf(it).st === 'atrasado' });
   // 📦 TERCEIRIZADOS — exames cujo TIPO a equipe marcou como terceirizado (saem da fila normal via foraDoFluxo).
-  const tercItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && isTerc(it));
+  // ⚠️ Dudu 02/11: ao concluir (receber → tem amostra), o exame DEVE sair da aba e ir pro Histórico.
+  // Faltava excluir os finalizados (como a Produção já faz via !exBaixado) — sem isto o card ficava preso
+  // e, com estado 'suficiente', received virava false e o botão "2 · Receber" reaparecia (= "volta pra Receber").
+  const _tercFinal = it => { const e = estadoDe(it); return e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado'; };
+  const tercItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && isTerc(it) && !_tercFinal(it));
   const viewTerc = () => worklistView('terc', tercItems(), { empty: '✓ Nenhum exame terceirizado na fila agora.', noun: 'terceirizado(s)', icon: '📦 ', cardClass: 'terccard' });
   // ÚLTIMA CHAMADA = de ONTEM+ (dias>=1), MESMO fluxo da fila de hoje (separar → receber → tem/sem amostra).
   // Não recebidas = piscam (risco). Recebidas ficam CALMAS aqui mesmo (confirme tem amostra), NÃO piscam.
