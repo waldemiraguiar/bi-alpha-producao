@@ -1119,6 +1119,67 @@ function _safraReportShell(titulo,sub,corpo,rodape,fname){
   const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para abrir o relatório."); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+/* 📜 HISTÓRICO dos relatórios do Monitoramento — cada relatório puxado vira uma foto datada (servidor, compartilhado, SEM R$).
+   No topo do relatório aparece o DIFF vs o último do mesmo tipo (entraram/saíram/caíram). Wal 03/11: "a tabela sempre atualiza, fico perdido". */
+let SAFRA_HIST=[];
+async function loadSafraHist(){ try{ const r=await fetch("/api/crm-safra-hist",{cache:"no-store"}); if(r.ok){ const j=await r.json(); SAFRA_HIST=(j&&j.hist)||[]; } }catch(e){} }
+function _caiSnap(r){ return (r.pior!=null&&r.pior<0)||(r.mom!=null&&r.mom<0); }   // caindo = exames OU R$ negativo
+function _safraRows(){ const S=SAFRA_SNAP; return ((S&&S.rows)||[]).map(r=>({ c:String(r.cod), n:r.nome, t:r.tipo, b:r.bairro||'', q:_caiSnap(r)?1:0 })); }
+function _safraDiff(tipo){
+  const nowR=_safraRows(); const prev=(SAFRA_HIST||[]).find(s=>s.tipo===tipo)||null;
+  if(!prev) return {prev:null, entraram:[], sairam:[], cair:[], recup:[]};
+  const nowSet=new Set(nowR.map(r=>r.c)), prevById={}; (prev.rows||[]).forEach(r=>prevById[r.c]=r);
+  const prevSet=new Set((prev.rows||[]).map(r=>r.c));
+  const entraram=nowR.filter(r=>!prevSet.has(r.c));
+  const sairam=(prev.rows||[]).filter(r=>!nowSet.has(r.c));
+  const cair=nowR.filter(r=>r.q && prevById[r.c] && !prevById[r.c].q);
+  const recup=(prev.rows||[]).filter(r=>r.q && nowSet.has(r.c) && !((nowR.find(x=>x.c===r.c)||{}).q));
+  return {prev, entraram, sairam, cair, recup};
+}
+function _safraDiffHtml(tipo){
+  const d=_safraDiff(tipo);
+  if(!d.prev) return `<div style="border:1px solid #cfe0ee;background:#eef6fc;border-radius:10px;padding:11px 14px;margin:0 0 16px;color:#234;-webkit-print-color-adjust:exact;print-color-adjust:exact">📋 <b>Primeiro relatório salvo deste tipo.</b> A partir do próximo, aqui aparece o que mudou (🆕 entraram · ❌ saíram · 🔻 começaram a cair) desde o anterior.</div>`;
+  const dt=new Date(d.prev.ts), dstr=dt.toLocaleDateString('pt-BR')+' '+dt.toLocaleTimeString('pt-BR').slice(0,5);
+  const line=(ic,lbl,arr,col)=>arr.length?`<div style="margin-top:5px;line-height:1.5"><b style="color:${col}">${ic} ${lbl} (${arr.length}):</b> ${arr.map(r=>esc(r.n||r.nome)).join(' · ')}</div>`:'';
+  const nada=!d.entraram.length&&!d.sairam.length&&!d.cair.length&&!d.recup.length;
+  return `<div style="border:1px solid #cdd9e6;background:#f4f8fc;border-radius:10px;padding:12px 15px;margin:0 0 16px;color:#1f2d3a;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <div style="font-weight:800;font-size:13px">📋 Mudanças desde o último relatório <span style="font-weight:600;color:#6b7a8a">(${dstr} · por ${esc(d.prev.por||'equipe')})</span></div>
+    ${nada?`<div style="margin-top:5px;color:#5a6b7d">Sem mudanças na lista — as mesmas clínicas do último relatório.</div>`:`${line('🆕','Entraram',d.entraram,'#0a7f3f')}${line('❌','Saíram',d.sairam,'#b02a37')}${line('🔻','Passaram a cair',d.cair,'#c2410c')}${line('🔼','Recuperaram',d.recup,'#0a7f3f')}`}
+  </div>`;
+}
+function _safraSave(tipo){
+  try{
+    const snap={ por:((typeof meuRep==="function"&&meuRep())||(typeof operadorAtual==="function"&&operadorAtual())||'equipe'), tipo, dia:(SAFRA_SNAP&&SAFRA_SNAP.diaD)||0, rows:_safraRows() };
+    fetch("/api/crm-safra-hist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",snap,senha:window.__pwd})}).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.hist) SAFRA_HIST=j.hist; }).catch(()=>{});
+    SAFRA_HIST=[{ts:Date.now(),...snap},...(SAFRA_HIST||[])].slice(0,20);   // otimista: o próximo diff já considera este
+  }catch(e){}
+}
+// 📜 overlay com a lista de relatórios já puxados (histórico navegável)
+function openSafraHist(){
+  const H=SAFRA_HIST||[]; const tn={fin:'💰 Financeiro',equipe:'🔴 Equipe'};
+  const corpo=H.map((s,i)=>{
+    const older=H.slice(i+1).find(x=>x.tipo===s.tipo);
+    let ent=0,sai=0; if(older){ const os=new Set((older.rows||[]).map(r=>r.c)), ns=new Set((s.rows||[]).map(r=>r.c)); ent=(s.rows||[]).filter(r=>!os.has(r.c)).length; sai=(older.rows||[]).filter(r=>!ns.has(r.c)).length; }
+    const dt=new Date(s.ts), dstr=dt.toLocaleDateString('pt-BR')+' '+dt.toLocaleTimeString('pt-BR').slice(0,5);
+    const caiN=(s.rows||[]).filter(r=>r.q).length;
+    return `<div style="border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:rgba(255,255,255,.03)">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+        <div><b>${tn[s.tipo]||s.tipo}</b> <span class="t-mut" style="font-size:11.5px">· ${dstr} · por ${esc(s.por||'equipe')}</span></div>
+        <div style="font-size:11.5px"><b style="color:#7effcf">${(s.rows||[]).length}</b> clín. · <span style="color:#ff9fb0">🔻${caiN}</span> ${older?`· <span style="color:#7effcf">🆕${ent}</span> <span style="color:#ff9fb0">❌${sai}</span>`:'· <span class="t-mut">1º do tipo</span>'}</div>
+      </div>
+      ${older&&(ent||sai)?`<div class="t-mut" style="font-size:10.5px;margin-top:5px;line-height:1.45">${ent?`🆕 ${(s.rows||[]).filter(r=>!new Set((older.rows||[]).map(x=>x.c)).has(r.c)).map(r=>esc(r.n)).join(' · ')}`:''}${ent&&sai?'<br>':''}${sai?`❌ ${(older.rows||[]).filter(r=>!new Set((s.rows||[]).map(x=>x.c)).has(r.c)).map(r=>esc(r.n)).join(' · ')}`:''}</div>`:''}
+    </div>`;
+  }).join('') || '<div class="t-mut" style="padding:12px">Ainda não há relatórios salvos. Puxe um relatório (financeiro ou p/ equipe) pra começar o histórico.</div>';
+  const ov=document.createElement('div'); ov.id='safraHistOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(3,8,14,.8);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:26px 14px;overflow:auto';
+  ov.innerHTML=`<div style="max-width:560px;width:100%;background:#0c1726;border:1px solid rgba(0,212,255,.3);border-radius:14px;padding:16px 18px;box-shadow:0 30px 70px -20px rgba(0,0,0,.9)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:14px;font-weight:800;color:#9fe6ff">📜 Histórico de relatórios</div><button onclick="document.getElementById('safraHistOv').remove()" style="border:1px solid var(--mut);background:transparent;color:var(--mut);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">✕ fechar</button></div>
+    <div class="t-mut" style="font-size:11px;margin-bottom:11px;line-height:1.5">Cada vez que alguém puxa um relatório, fica salvo aqui (compartilhado). 🔻 em queda na hora · 🆕 entraram / ❌ saíram vs o relatório anterior do mesmo tipo.</div>
+    ${corpo}
+  </div>`;
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
 function relSafraFin(){
   const S=SAFRA_SNAP; if(!S||!S.rows||!S.rows.length){ alert('Abra o Monitoramento primeiro.'); return; }
   const dstr=new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR').slice(0,5);
@@ -1133,12 +1194,13 @@ function relSafraFin(){
     return `<tr><td><b>${r.pos}. ${ic[r.tipo]||'♻️'} ${esc(r.nome)}</b>${meta}${cards?`<div style="margin-top:4px">${cards}</div>`:''}</td>${r.mesVals.map(v=>`<td class="n">${v?fmtBRL(v):'–'}</td>`).join("")}<td class="n"><b>${fmtBRL(r.tot)}</b></td></tr>`;
   }).join("");
   const foot=`<tr class="tot"><td><b>TOTAL (${S.rows.length})</b></td>${colTot.map(v=>`<td class="n"><b>${fmtBRL(v)}</b></td>`).join("")}<td class="n"><b>${fmtBRL(grand)}</b></td></tr>`;
-  const corpo=`<table><thead><tr><th>Clínica · 📍bairro · 📅marco · %</th>${tcol}</tr></thead><tbody>${body}${foot}</tbody></table>`;
+  const corpo=_safraDiffHtml('fin')+`<table><thead><tr><th>Clínica · 📍bairro · 📅marco · %</th>${tcol}</tr></thead><tbody>${body}${foot}</tbody></table>`;
   _safraReportShell('📊 Monitoramento — clínicas novas, reconquistas e divide material',
     `<b>Relatório FINANCEIRO</b> (com valores R$) · ${S.rows.length} clínicas · gerado em <b>${dstr}</b> · uso interno · Grupo Alpha`,
     corpo,
     `💰 MÊS ANT. = R$ até o dia ${S.diaD} vs o mês anterior no mesmo dia · 📉 queda de movimento (exames) vs mês anterior ou vs o melhor mês (auge). Só entra dinheiro novo desde a entrada de cada clínica.`,
     'monitoramento-financeiro');
+  _safraSave('fin');
 }
 function relSafraEquipe(){
   const S=SAFRA_SNAP; if(!S||!S.rows){ alert('Abra o Monitoramento primeiro.'); return; }
@@ -1162,9 +1224,10 @@ function relSafraEquipe(){
   if(!caem.length) sections='<div style="color:#5a6b7d;padding:12px">Nenhuma clínica em queda neste mês. 🎉</div>';
   _safraReportShell('🔴 Clínicas em queda — roteiro por bairro',
     `<b>Sem valores financeiros</b> · ${caem.length} clínica(s) caindo em ${nB} bairro(s) · ordenado por <b>proximidade (CEP)</b> p/ montar rota de visita · gerado em <b>${dstr}</b> · uso interno CRM`,
-    sections,
+    _safraDiffHtml('equipe')+sections,
     `📊 MÊS ANT. = exames (até o dia ${S.diaD}) vs o mês anterior no mesmo dia · 📉 VS AUGE = vs o melhor mês da clínica. Bairros na ordem do CEP: vizinhos ficam juntos. 👉 priorize visitar várias do mesmo bairro no mesmo dia.`,
     'clinicas-em-queda-por-bairro');
+  _safraSave('equipe');
 }
 const AUTO_REL_NOTE='<span class="t-mut" style="font-size:11px">· 🔄 automático</span>';
 /* 🧠² CÉREBRO 2 — aprende o RITMO de envio de cada clínica (média/semana + cadência típica) e detecta
@@ -4522,6 +4585,7 @@ function renderTab(){
               <div style="display:flex;gap:9px;margin:0 0 10px;flex-wrap:wrap">
                 <button onclick="relSafraFin()" style="cursor:pointer;border:1px solid rgba(0,229,160,.5);background:rgba(0,229,160,.12);color:#7effcf;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório financeiro <span style="font-weight:600;opacity:.85">(PDF · com R$)</span></button>
                 <button onclick="relSafraEquipe()" style="cursor:pointer;border:1px solid rgba(255,45,85,.5);background:rgba(255,45,85,.12);color:#ff9fb0;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório p/ equipe <span style="font-weight:600;opacity:.85">(PDF · em queda, por bairro, sem R$)</span></button>
+                <button onclick="openSafraHist()" title="relatórios já puxados — o que entrou/saiu desde o anterior" style="cursor:pointer;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.1);color:#9fe6ff;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">📜 Histórico ${SAFRA_HIST&&SAFRA_HIST.length?`<span style="font-weight:600;opacity:.85">(${SAFRA_HIST.length})</span>`:''}</button>
               </div>
               <div class="t-mut" style="font-size:11px;margin:0 0 8px;line-height:1.55">💡 O <b>%</b> em cada mês é a <b style="color:#7effcf">subida</b>/<b style="color:#ff9fb0">queda</b> vs o mês anterior. No <b style="color:#ffd27a">mês atual (parcial)</b> o % compara a <b>mesma janela de dias</b> do mês passado (ex.: 03/11 × 03/10). Use <b style="color:#ffd27a">📌</b> pra fixar no topo, <b>↑↓</b> pra ordenar e <b>🎨</b> pra piscar a linha na cor que quiser.</div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 9px">
@@ -5702,7 +5766,7 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas(), loadDia()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas(), loadDia(), loadSafraHist()]).then(async ()=>{
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       if(veSafra() && !CLIN_FATMES){ const sc=localStorage.getItem("crm_safra_code"); if(sc) await decSafra(sc); }   // Fábio: a Safra reabre sozinha neste aparelho
       pqFlush(); rqFlush(); renderOpBtn(); renderAll();
