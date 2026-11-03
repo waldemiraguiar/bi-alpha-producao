@@ -473,13 +473,17 @@
     if (!useSupa()) { alert('A observação exige a conexão em nuvem (Supabase).'); return false; }
     text = (text || '').trim();
     try {
-      if (marks[k]) await window.SUPA.updateMark(k, { obs: text || null });
+      if (marks[k]) { await window.SUPA.updateMark(k, { obs: text || null }); marks[k].obs = text || null; }
       else {
         const it = itens().find(x => chaveOf(x) === k);
         if (!it) { alert('Não encontrei o item para anotar.'); return false; }
-        await window.SUPA.upsertMark({ chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame || '', cat: it.cat || '', classe: it.classe || '', paciente: it.paciente || '', tutor: it.tutor || '', vet: it.vet || '', estado: '', por: me() || 'equipe', ts_sep: null, no_prazo: null, corte: null, obs: text || null });
+        const novo = { chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame || '', cat: it.cat || '', classe: it.classe || '', paciente: it.paciente || '', tutor: it.tutor || '', vet: it.vet || '', estado: '', por: me() || 'equipe', ts_sep: null, no_prazo: null, corte: null, obs: text || null };
+        await window.SUPA.upsertMark(novo);
+        marks[k] = novo;   // ⚡ otimista: reflete já, sem esperar o refetch
       }
-      touch(); await loadMarks(); return true;
+      // ⚡ Dudu 03/11: a gravação já foi confirmada acima; o refetch de TODAS as marcas era o "delayzinho"
+      // ao informar a quantidade. Agora roda em 2º plano (sem await) — a tela libera na hora.
+      touch(); loadMarks(); return true;
     } catch (e) { alert('Não consegui salvar a forma/quantidade (coluna "obs").'); return false; }
   }
   // 📝 OBSERVAÇÃO LIVRE — coluna PRÓPRIA `nota` (Dudu 19/10): não colide com a forma/quantidade (que fica no `obs`).
@@ -527,7 +531,7 @@
 
   /* ================= RENDER ================= */
   function header() {
-    const sepN = naFilaHoje().length, urgN = ultChamadaPendN(), aviN = aAvisar().length, ncN = naoClass().length, travN = aTravar().length, tercN = tercItems().length;
+    const sepN = naFilaHoje().filter(urgeAgora).length, urgN = ultChamadaPendN(), aviN = aAvisar().length, ncN = naoClass().length, travN = aTravar().length, tercN = tercItems().length;
     const us = users(), cur = me();
     const opts = us.map(u => `<option value="${esc2(u)}"${u === cur ? ' selected' : ''}>${esc2(u)}</option>`).join('');
     const apN = descartesList.length;
@@ -750,9 +754,16 @@
       <span class="cnt">${arr.length} ${opts.noun}</span>${_loteBtn}</div>${listHtml}</div>`;
   }
   // fila de HOJE: abertos + separados + JÁ RECEBIDOS de hoje (recebidos ficam p/ o passo opcional de insuficiente); só exclui os insuf
+  // ⏱️ SEPARAR dá 24h de calma antes de cobrar o recebimento (Dudu 03/11). Um exame recém-separado PARA de
+  // piscar por 24h (janela p/ a outra pessoa receber) e NÃO conta mais como "a separar"; só volta a urgir/piscar
+  // se passarem 24h sem receber. Recebido/finalizado = calmo. Não separado = urge (precisa separar).
+  // "Zerar os separados": as contagens de urgência passam a contar só o que precisa de ação AGORA.
+  const MS_24H = 24 * 60 * 60 * 1000;
+  const sepCalmo = it => { const m = marks[chaveOf(it)]; if (!m || (m.estado !== 'separado' && m.estado !== 'enviado')) return false; const t = Number(m.ts_sep) || 0; return t > 0 && (Date.now() - t) <= MS_24H; };
+  const urgeAgora = it => { const e = estadoDe(it); if (e === 'recebido' || e === 'suficiente' || e === 'insuficiente' || e === 'insuficiente_avisado' || e === 'travado' || e === 'destravado') return false; return !sepCalmo(it); };
   // FILA DE HOJE = entradas de HOJE (dias 0) ainda não confirmadas. Fluxo completo: separar → receber → tem amostra?
   const naFilaHoje = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) === 0);
-  const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber → tem amostra?)', lateFn: it => estadoDe(it) !== 'recebido' && statusOf(it).st === 'atrasado' });
+  const viewSeparar = () => worklistView('separar', naFilaHoje(), { empty: '✓ Nada na fila de hoje. 👍', noun: 'na fila de hoje (separar → receber → tem amostra?)', lateFn: it => urgeAgora(it) && statusOf(it).st === 'atrasado' });
   // 📦 TERCEIRIZADOS — exames cujo TIPO a equipe marcou como terceirizado (saem da fila normal via foraDoFluxo).
   // ⚠️ Dudu 02/11: ao concluir (receber → tem amostra), o exame DEVE sair da aba e ir pro Histórico.
   // Faltava excluir os finalizados (como a Produção já faz via !exBaixado) — sem isto o card ficava preso
@@ -763,9 +774,9 @@
   // ÚLTIMA CHAMADA = de ONTEM+ (dias>=1), MESMO fluxo da fila de hoje (separar → receber → tem/sem amostra).
   // Não recebidas = piscam (risco). Recebidas ficam CALMAS aqui mesmo (confirme tem amostra), NÃO piscam.
   const ultChamadaItems = () => itens().filter(it => (it.entrada || '') >= pisoDay(it.cat) && !descartes.has(chaveOf(it)) && !foraDoFluxo(it) && (it.dias || 0) >= 1);
-  const ultChamadaPendN = () => ultChamadaItems().filter(it => estadoDe(it) !== 'recebido').length;   // só as NÃO recebidas = a urgência
+  const ultChamadaPendN = () => ultChamadaItems().filter(urgeAgora).length;   // urge agora = não separado OU separado há +24h sem receber (separado <24h = calmo)
   const viewUrgente = () => { const pendN = ultChamadaPendN(); return worklistView('urgente', ultChamadaItems(), {
-    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada (separar → receber → tem amostra?)', icon: '🚨 ', cardClass: pendN > 0 ? 'andon urgmax' : 'andon', lateFn: it => estadoDe(it) !== 'recebido',
+    empty: '✓ Tudo certo! Nenhuma amostra na última chamada. 🎉', noun: 'na última chamada (separar → receber → tem amostra?)', icon: '🚨 ', cardClass: pendN > 0 ? 'andon urgmax' : 'andon', lateFn: urgeAgora,
     bar: () => pendN > 0
       ? `<div class="andonbar urg"><span class="fw1">🎆</span><span class="fw2">🎇</span><span class="ico">🚨</span><span class="ttl">ÚLTIMA CHAMADA · ${pendN} AMOSTRA${pendN > 1 ? 'S' : ''} NÃO RECEBIDA${pendN > 1 ? 'S' : ''} (separar/receber) · FECHE ANTES DE PERDER!</span><span class="fw3">🎆</span><span class="fw1">🎇</span></div>`
       : `<div class="sepnote" style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.4);color:#15803d;padding:10px 14px;border-radius:10px;margin-bottom:10px">✓ Nada pendente de receber. Confirme <b>✅ Tem amostra</b> ou <b>🚫 Sem amostra</b> nas recebidas abaixo.</div>`
