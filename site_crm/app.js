@@ -951,7 +951,7 @@ function _hfCard(cod, pinned){
   let lista;
   if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(cod)]||[]);
     lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:12.5px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(21 dias · ${arr.length})</span></div>
-      <div style="display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto">${arr.slice(0,40).map(e=>`<div style="display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding:5px 0;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto">${arr.slice(0,15).map(e=>`<div style="display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding:5px 0;flex-wrap:wrap">
         <span style="font-family:ui-monospace,monospace;font-size:11px;color:#9fe6ff;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.25);border-radius:6px;padding:1px 7px">#${esc(e.r)}</span>
         <span style="font-size:10.5px;color:#c9d4e0">${_diaLabel(e.d,CRM_HF_BASE)}</span>
         <b style="font-size:12.5px;color:#eaf3ff">${esc(e.p||'—')}</b>${e.e?`<span class="t-mut" style="font-size:10.5px">${esc(e.e)}</span>`:''}
@@ -1025,12 +1025,15 @@ function lupaAbrir(){ const el=document.getElementById("hfLupa"); if(!el) return
 function lupaHF(){
   if(!CLINICAS.length) return "";
   const pins=hfPins();
-  // 📌 cards FIXOS na ORDEM MANUAL do Wal (setas ↑/↓) — a lista NÃO re-ordena sozinha (Wal 03/11). O botão "quedas no topo" reagrupa quando ele quiser.
-  let cods=pins.slice();
-  if(hfSel && !cods.includes(String(hfSel))) cods.unshift(String(hfSel));
+  // ⭐ TODAS as Clínicas A (curva A) SEMPRE no topo, automático e em ordem de faturamento; depois as fixadas manuais — Wal 03/11
+  const aCods=(typeof AAA!=="undefined"&&AAA?AAA:[]).filter(x=>(x.curva||"A")==="A").map(x=>String(x.cod));
+  let cods=[]; const _seen=new Set();
+  aCods.forEach(c=>{ if(!_seen.has(c)){ _seen.add(c); cods.push(c); } });
+  pins.forEach(c=>{ c=String(c); if(!_seen.has(c)){ _seen.add(c); cods.push(c); } });
+  if(hfSel && !_seen.has(String(hfSel))){ _seen.add(String(hfSel)); cods.unshift(String(hfSel)); }   // a buscada aparece no topo de tudo
   let exemplo=false;
   if(!cods.length){ const sos=CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")&&!/nofaro|plamev/i.test(c.nome||"")) || CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")); if(sos){ cods=[String(sos.cod)]; exemplo=true; } }
-  cods=cods.slice(0,14); const pinSet=new Set(pins);
+  cods=cods.slice(0, Math.max(14, aCods.length+pins.length+2)); const pinSet=new Set(pins);
   // o <datalist> com TODAS as clínicas (2872, inclusive inativas/fugidas) é construído UMA vez fora do re-render (ensureHfDatalist) → acha qualquer uma sem pesar.
   const ordBtn = pins.length>1 ? `<button onclick="hfPinsSortQuedas()" title="reordena as fixadas pondo as EM QUEDA no topo (mantém mesmo dono junto)" style="border:1px solid rgba(255,90,122,.5);background:rgba(255,90,122,.12);color:#ff9fb2;border-radius:10px;padding:9px 13px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap">⚠️ quedas no topo</button>` : "";
   const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:2px">
@@ -1040,7 +1043,7 @@ function lupaHF(){
   </div>`;
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
-    : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia, <b>na ordem que você deixar</b>. <b>Segure o ⠿ e arraste</b> pra ordenar (ou use ↑/↓), e <b>⚠️ quedas no topo</b> pra reagrupar as que estão caindo. Busque acima pra fixar outra.</div>`:"");
+    : `<div class="t-mut" style="font-size:11px;margin-top:8px">⭐ As <b style="color:#ffd27a">Clínicas A</b> (Curva A — top faturamento) ficam <b>sempre aqui no topo</b>, automático (${aCods.length}).${pins.length?` Depois vêm as suas <b>📌 ${pins.length} fixada(s)</b> — <b>arraste o ⠿</b> (ou ↑/↓) pra ordenar.`:' Fixe (📌) outras clínicas pra acompanhar junto.'} Busque acima pra abrir qualquer uma.</div>`;
   return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}@keyframes blkpulse{0%,100%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 0 0 var(--blk0,transparent)}50%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 18px 2px var(--blk,transparent)}}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
     <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
     <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar. Se um <b style="color:#ff5a7a">cair</b>, o card <b>pisca em vermelho</b> na hora. Mostra o ritmo (3d/7d, média, dia típico, frequência) e os exames recentes (registro, paciente, 🩺 vet).</div>
