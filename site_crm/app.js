@@ -902,6 +902,46 @@ function _aaaSowBlock(a, rank){
   const drill = a.cod?`<div style="margin-top:9px"><button class="exbtn" data-mesames="${esc(a.cod)}" data-mnome="${esc(a.nome)}" type="button" style="background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#7effcf;border-radius:8px;padding:6px 13px;font-size:12px;font-weight:700;cursor:pointer">📅 Análise completa (mês a mês · benchmark)</button></div>`:'';
   return ctx+manda+bloco+drill;
 }
+// 📋 TABELA-RESUMO no topo da aba Clínicas A/B/C/D — clínicas da curva (maior→menor faturamento), mês a mês, % vs mês anterior.
+// metric 'rs' = R$ (só diretoria, de CLIN_FATMESALL) · 'ex' = nº de exames (todos, de CLIN_EXMES público). Mês atual (parcial) compara a MESMA janela de dias (fd×fd / nd×nd). Wal 03/11.
+function _curvaResumoTbl(AA){
+  const dir=ehDiretoria(); const metric = dir ? curvaMetric : "ex";   // comercial nunca vê R$
+  const _MES3=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const _ymLbl=ym=>{const p=ym.split('-');return _MES3[(+p[1])-1]+'/'+p[0].slice(2);};
+  const _now=new Date(); const _curYm=_now.getFullYear()+'-'+String(_now.getMonth()+1).padStart(2,'0');
+  const diaD=(metric==='rs'?CLIN_FATMESALL_DIA:(CLIN_EXMES_DIA||CLIN_FATMESALL_DIA))||_now.getDate();
+  const src = metric==='rs' ? (CLIN_FATMESALL||{}) : (CLIN_EXMES||{});
+  const serieOf=cod=>{ const a=src[String(cod)]||[]; return a.map(m=> metric==='rs' ? ({ym:m.ym, full:(m.fat||0), win:(m.fd!=null?m.fd:(m.fat||0))}) : ({ym:m.ym, full:(m.n||0), win:(m.nd!=null?m.nd:(m.n||0))})); };
+  const rows=AA.map(a=>({cod:String(a.cod), nome:a.nome, s:serieOf(a.cod)})).filter(r=>r.s.length);
+  const fmtV = metric==='rs' ? (v=>fmtBRL(v)) : (v=>String(Math.round(v)));
+  const tgl=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px">
+      <span class="t-mut" style="font-size:11px;font-weight:800">📋 Resumo da curva (maior → menor faturamento):</span>
+      ${dir?`<button onclick="setCurvaMetric('rs')" style="cursor:pointer;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:800;border:1px solid ${metric==='rs'?'#00E5A0':'rgba(255,255,255,.2)'};background:${metric==='rs'?'rgba(0,229,160,.18)':'transparent'};color:${metric==='rs'?'#7effcf':'#9fb2cc'}">💰 Faturamento</button>`:''}
+      <button onclick="setCurvaMetric('ex')" style="cursor:pointer;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:800;border:1px solid ${metric==='ex'?'#00c6e6':'rgba(255,255,255,.2)'};background:${metric==='ex'?'rgba(0,212,255,.18)':'transparent'};color:${metric==='ex'?'#9fe6ff':'#9fb2cc'}">🧪 Nº de exames</button>
+      ${!dir?`<span class="t-mut" style="font-size:10.5px">🔒 R$ só diretoria</span>`:''}
+    </div>`;
+  if(!rows.length) return tgl+`<div class="t-mut" style="font-size:12px;margin-bottom:10px">⏳ Sem histórico mensal ainda ${metric==='rs'?'(abra o faturamento em R$)':''}— aguarde o robô sincronizar.</div>`;
+  const mset={}; rows.forEach(r=>r.s.forEach(m=>mset[m.ym]=1)); const meses=Object.keys(mset).sort().slice(-13);
+  const td="padding:9px 7px;text-align:right;font-variant-numeric:tabular-nums";
+  const th="padding:6px 7px;text-align:right;color:var(--mut);font-size:10px";
+  const sc="position:sticky;left:0;background:#0b1a2b;z-index:1;text-align:left;padding:9px 8px;border-right:1px solid rgba(0,212,255,.25)";
+  const colTot={}; meses.forEach(m=>colTot[m]=0); let grand=0;
+  const body=rows.map((r,i)=>{ const byYm={}; r.s.forEach(m=>byYm[m.ym]=m);
+      const zA=(i%2===1), trBg=zA?'rgba(130,175,230,.13)':'transparent', scZ=`position:sticky;left:0;background:${zA?'#15283b':'#0b1a2b'};z-index:1;text-align:left;padding:9px 8px;border-right:1px solid rgba(0,212,255,.25)`;
+      let tot=0;
+      const cells=meses.map((ym,mi)=>{ const x=byYm[ym], isCur=(ym===_curYm); const v=x?(isCur?x.win:x.full):0; tot+=v; colTot[ym]+=v;
+          const pym=meses[mi-1], pe=pym?byYm[pym]:null; let pct=null;
+          if(isCur){ if(x&&pe&&pe.win>0) pct=x.win/pe.win-1; } else if(x&&pe&&pe.full>0) pct=v/pe.full-1;
+          const pc=pct==null?'':(pct<-0.001?'#ff6b81':(pct>0.001?'#7effcf':'#9fb2cc')), ar=pct==null?'':(pct<0?'▼':(pct>0?'▲':'•'));
+          const ph=pct==null?'':`<div style="font-size:8.5px;font-weight:800;color:${pc}">${ar}${Math.abs(Math.round(pct*100))}%</div>`;
+          return `<td style="${td};color:${v?(metric==='rs'?'#7effcf':'#9fe6ff'):'var(--mut)'}">${v?fmtV(v):'–'}${ph}</td>`; }).join('');
+      grand+=tot;
+      return `<tr style="border-top:1px solid rgba(255,255,255,.05);background:${trBg}"><td style="${scZ}"><span class="t-mut" style="font-size:10.5px">${i+1}.</span> <b style="color:#eaf3ff;font-size:12px">${esc(r.nome)}</b></td>${cells}<td style="${td};font-weight:800;color:${metric==='rs'?'#00E5A0':'#9fe6ff'}">${fmtV(tot)}</td></tr>`; }).join('');
+  const foot=`<tr style="border-top:2px solid rgba(0,212,255,.35)"><td style="${sc};font-weight:800">TOTAL (${rows.length})</td>${meses.map(m=>`<td style="${td};font-weight:800">${fmtV(colTot[m])}</td>`).join('')}<td style="${td};font-weight:900;color:${metric==='rs'?'#00E5A0':'#9fe6ff'}">${fmtV(grand)}</td></tr>`;
+  const head=`<thead><tr style="background:rgba(0,212,255,.07)"><th style="${sc};color:var(--mut);font-size:10px">Clínica</th>${meses.map(ym=>`<th style="${th}${ym===_curYm?';color:#ffd27a':''}">${_ymLbl(ym)}${ym===_curYm?`<div style="font-size:7.5px;font-weight:800;color:#ffd27a">parcial · até ${String(diaD).padStart(2,'0')}/${ym.split('-')[1]}</div>`:''}</th>`).join('')}<th style="${th};color:${metric==='rs'?'#7effcf':'#9fe6ff'}">Total</th></tr></thead>`;
+  const nota=`<div class="t-mut" style="font-size:10.5px;margin-top:5px;line-height:1.5">${metric==='rs'?'💰 Faturamento':'🧪 Nº de exames'} mês a mês · % = subida/queda vs o mês anterior · no <b style="color:#ffd27a">mês atual (parcial)</b> o % compara a <b>mesma janela de dias</b> do mês passado (ex.: 03/11 × 03/10).</div>`;
+  return tgl+`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,212,255,.22);border-radius:8px"><table style="border-collapse:collapse;font-size:11.5px;white-space:nowrap;min-width:100%">${head}<tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>${nota}`;
+}
 function _hfCard(cod, pinned, extra){
   const c=clinByCod(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
   let st=_hfStats(cod); const semDados=!st;   // sem exame nos 90d → card completo igual aos outros, como "parada" (fuga total)
@@ -1570,6 +1610,8 @@ let comRange="tudo", comDe="", comAte="", comOper="", comCanal="", comTipo="", c
 let safraBusca="";   // 🔎 busca da tabela "Dinheiro por mês" (por clínica ou bairro) — Guarda-Chuva
 let safraOrd="rs";   // ordem da tabela Monitoramento: "rs" = maior faturamento no topo (padrão) · "queda" = em queda no topo
 function safraSetOrd(v){ safraOrd=(v==="queda"?"queda":"rs"); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+let curvaMetric="rs";   // tabela-resumo no topo da aba Clínicas A/B/C/D: "rs"=faturamento (diretoria) · "ex"=nº de exames (todos)
+function setCurvaMetric(m){ curvaMetric=(m==="ex"?"ex":"rs"); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function comJanela(){
   if(comDe||comAte){ const ini=comDe?new Date(comDe+"T00:00:00").getTime():0; const fim=comAte?new Date(comAte+"T23:59:59").getTime():Date.now(); return {ini,fim,label:"período escolhido"}; }
   const d=new Date(), d0=new Date(d); d0.setHours(0,0,0,0); const now=Date.now();
@@ -4942,7 +4984,9 @@ function renderTab(){
           ${kpi("", AAA_SETORES.length, "Categorias do lab", "universo de exames")}
           ${kpi("", AAA_TS?"✓":"—", "Sincronizado", AAA_TS?new Date(AAA_TS).toLocaleDateString("pt-BR"):"aguardando robô")}
         </div>
-        <div class="t-mut" style="font-size:11.5px;margin:2px 0 8px;text-align:center">Numeradas por faturamento (maior → menor). ✅ o que manda × <b style="color:#ff8fa3">🎯 o que deixa na mesa</b>. R$ só diretoria (senha + Face ID).</div>
+        <div class="seclabel" style="margin:16px 0 8px">📋 Resumo ${meta.nome} — mês a mês</div>
+        ${_curvaResumoTbl(AA)}
+        <div class="t-mut" style="font-size:11.5px;margin:14px 0 8px;text-align:center">👇 Abaixo, cada clínica em detalhe. Numeradas por faturamento (maior → menor). ✅ o que manda × <b style="color:#ff8fa3">🎯 o que deixa na mesa</b>. R$ só diretoria (senha + Face ID).</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 10px">
           <span style="font-size:11.5px;color:#9fb2cc;font-weight:700">Share-of-wallet:</span>
           <button data-sow="" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${!sowFilter?'#00D4FF':'rgba(255,255,255,.14)'};background:${!sowFilter?'rgba(0,212,255,.18)':'transparent'};color:${!sowFilter?'#00D4FF':'#9fb2cc'}">Todas (${AA.length})</button>
