@@ -949,6 +949,27 @@ function ensureHfDatalist(){
     dl.innerHTML=CLINICAS.map(c=>`<option value="${esc(c.nome)}"></option>`).join("");
   }catch(e){}
 }
+// 🔎 resolve o texto digitado na Lupa → cod da clínica, SEM depender de acento/nome exato (Wal 03/11: "Bicho Centro Veterinario Nova Iguaçu" não abria).
+// Casa por pedaços (tokens) ignorando acento/pontuação e prioriza o cadastro BASE (penaliza "- Nofaro / - Life Pet / - Plamev / NÃO UTILIZAR").
+function lupaResolve(v){
+  const q=_clinNorm(v); if(!q) return "";
+  const toks=q.split(" ").filter(Boolean);
+  const bad=/nofaro|life ?pet|plamev|nao utilizar|usar cadastro|h4p/;
+  let best=null, bestScore=-1e9;
+  for(const c of CLINICAS){
+    const nn=_clinNorm(c.nome||""); if(!nn) continue;
+    let score;
+    if(nn===q) score=1000;
+    else if(nn.includes(q)) score=600 - Math.abs(nn.length-q.length)*0.3;
+    else if(toks.length && toks.every(t=>nn.includes(t))) score=500 - Math.abs(nn.length-q.length)*0.3;
+    else continue;
+    if(bad.test(nn)) score-=250;                               // abre o cadastro base, não a variante de plano
+    score += (c.prod?Math.min(+c.prod||0,50)*0.2:0);           // leve preferência por quem produz
+    if(score>bestScore){ bestScore=score; best=c; }
+  }
+  return best?String(best.cod):"";
+}
+function lupaAbrir(){ const el=document.getElementById("hfLupa"); if(!el) return; const cod=lupaResolve(el.value); if(cod){ hfSel=cod; if(!CRM_HF&&!CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); } renderTab(); } else if(el.value.trim()){ alert("Não achei nenhuma clínica com \""+el.value.trim()+"\". Tente outro pedaço do nome."); } }
 function lupaHF(){
   if(!CLINICAS.length) return "";
   const pins=hfPins();
@@ -961,7 +982,8 @@ function lupaHF(){
   // o <datalist> com TODAS as clínicas (2872, inclusive inativas/fugidas) é construído UMA vez fora do re-render (ensureHfDatalist) → acha qualquer uma sem pesar.
   const ordBtn = pins.length>1 ? `<button onclick="hfPinsSortQuedas()" title="reordena as fixadas pondo as EM QUEDA no topo (mantém mesmo dono junto)" style="border:1px solid rgba(255,90,122,.5);background:rgba(255,90,122,.12);color:#ff9fb2;border-radius:10px;padding:9px 13px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap">⚠️ quedas no topo</button>` : "";
   const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:2px">
-    <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Buscar clínica (nome) e fixar pra acompanhar" value="" style="flex:1;min-width:240px;max-width:470px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
+    <input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Buscar clínica (pode ser só um pedaço do nome)" value="" style="flex:1;min-width:210px;max-width:430px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px">
+    <button id="hfLupaGo" title="abrir o card da clínica digitada" style="border:1px solid #00c6e6;background:linear-gradient(180deg,#0a7f94,#0b6478);color:#eafcff;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap">abrir</button>
     ${ordBtn}
   </div>`;
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
@@ -4657,7 +4679,8 @@ function renderTab(){
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
       const _sl=document.getElementById("safraLupa"); if(_sl){ _sl.addEventListener("input", e=>{ safraBusca=e.target.value; const pos=_sl.selectionStart; renderTab(); const l2=document.getElementById("safraLupa"); if(l2){ l2.focus(); try{ l2.setSelectionRange(pos,pos); }catch(_){} } }); }
       const _slx=document.getElementById("safraLupaX"); if(_slx) _slx.onclick=()=>{ safraBusca=""; renderTab(); };
-      const _hf=document.getElementById("hfLupa"); if(_hf){ ensureHfDatalist(); _hf.onchange=()=>{ const v=_hf.value.trim(); const cc=CLINICAS.find(x=>(x.nome||"")===v); if(cc){ hfSel=String(cc.cod); if(!CRM_HF&&!CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); } renderTab(); } }; }
+      const _hf=document.getElementById("hfLupa"); if(_hf){ ensureHfDatalist(); _hf.onchange=()=>lupaAbrir(); _hf.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); lupaAbrir(); } }); }
+      const _hfGo=document.getElementById("hfLupaGo"); if(_hfGo) _hfGo.onclick=()=>lupaAbrir();
       const _hfc=document.getElementById("hfClear"); if(_hfc) _hfc.onclick=()=>{ hfSel=""; renderTab(); };
       return;
     }
