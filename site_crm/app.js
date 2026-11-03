@@ -922,28 +922,24 @@ function _hfCard(cod, pinned){
   const _ymLbl=ym=>{ const p=String(ym).split('-'); return (_MES3[(+p[1])-1]||'')+'/'+(p[0]||'').slice(2); };
   const _serie=(_rs&&_rs.serie)||[];
   const _pctV=(a,b)=> (b&&b>0)? Math.round((a/b-1)*100) : null;
-  // 💰 UM só card de FATURAMENTO (só diretoria): números-chave + mês a mês juntos, % SEMPRE (Wal 03/11 — mais harmônico)
+  // 💰 FATURAMENTO (só diretoria): 3 cartões LADO A LADO (este mês / ticket / 12 meses) + tira mês a mês embaixo. Wal 03/11: manter lado a lado, NÃO unificar.
   const _mesCells = _serie.map((x,i)=>{ const prev=i>0?_serie[i-1].val:null; const p=_pctV(x.val,prev);
       const up=p!=null&&p>=2, dn=p!=null&&p<=-2; const dc=dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc');
       const pctTxt = p!=null ? `${dn?'▼':(up?'▲':'•')}${Math.abs(p)}%` : '·base';
-      return `<div style="flex:0 0 auto;min-width:76px;text-align:center;border:1px solid ${x.parcial?'rgba(255,210,122,.5)':'rgba(255,255,255,.1)'};border-radius:10px;padding:7px 9px;background:${x.parcial?'rgba(255,210,122,.1)':'rgba(255,255,255,.03)'}">
+      return `<div style="flex:0 0 auto;min-width:76px;text-align:center;border:1px solid ${x.parcial?'rgba(255,210,122,.5)':'rgba(0,229,160,.22)'};border-radius:10px;padding:7px 9px;background:${x.parcial?'rgba(255,210,122,.1)':'rgba(0,229,160,.05)'}">
         <div style="font-size:10px;font-weight:800;color:${x.parcial?'#ffd27a':'#8fb0c9'};text-transform:uppercase;letter-spacing:.3px">${_ymLbl(x.ym)}${x.parcial?' ·p':''}</div>
         <div style="font-size:13px;font-weight:900;color:#eaf3ff;white-space:nowrap;margin-top:4px">${fmtBRL(x.val)}</div>
         <div style="font-size:9.5px;font-weight:800;color:${p!=null?dc:'#8aa2bd'};margin-top:2px">${pctTxt}</div>
       </div>`; }).join('');
-  const _st=(lbl,val,extra,cor)=>`<div style="flex:1;min-width:92px"><div style="font-size:10px;font-weight:800;color:${cor||'#9fe6ff'};text-transform:uppercase;letter-spacing:.4px">${lbl}</div><div style="font-size:20px;font-weight:900;color:#fff;line-height:1.1;margin-top:3px;white-space:nowrap">${val}</div>${extra?`<div class="t-mut" style="font-size:9.5px;margin-top:2px">${extra}</div>`:''}</div>`;
-  const _momTxt = (_rs&&_rs.mom!=null) ? `<span style="font-size:13px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>` : `<span style="font-size:13px;color:#9fb2cc">•</span>`;
-  const rsRow = _rs ? `<div style="margin-top:12px;border:1px solid rgba(0,229,160,.32);border-radius:14px;padding:13px 15px;background:linear-gradient(180deg,rgba(0,229,160,.08),rgba(6,16,26,.6));box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 24px -14px rgba(0,0,0,.7)">
-      <div style="font-size:11px;font-weight:900;color:#00E5A0;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">💰 Faturamento</div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
-        ${_st(_rs.ehCur?'este mês (parcial)':'último mês', `${fmtBRL(_rs.fdCur)} ${_momTxt}`, _rs.ehCur?'vs mês passado no mesmo dia':'', '#00E5A0')}
-        ${_rs.tot12!=null?_st('12 meses', fmtBRL(_rs.tot12), 'acumulado', '#9fe6ff'):''}
-        ${_rs.ticket!=null?_st('ticket médio', fmtBRL(_rs.ticket), 'R$ por exame', '#7effcf'):''}
-      </div>
-      ${_serie.length?`<div style="border-top:1px solid rgba(255,255,255,.09);margin:12px 0 10px"></div>
-      <div style="font-size:10px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">mês a mês <span class="t-mut" style="font-weight:600;text-transform:none">· % vs mês anterior · deslize →</span></div>
-      <div style="display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px">${_mesCells}</div>`:''}
+  const mesStrip = _serie.length ? `<div style="margin-top:11px">
+      <div style="font-size:10px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">💰 faturamento mês a mês <span class="t-mut" style="font-weight:600;text-transform:none">· % vs mês anterior · deslize →</span></div>
+      <div style="display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:5px">${_mesCells}</div>
     </div>` : '';
+  const rsRow = _rs ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px">
+      ${kpi(`${fmtBRL(_rs.fdCur)}${_rs.mom!=null?` <span style="font-size:12px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>`:''}`,'R$ este mês',_rs.ehCur?'até hoje · vs mês passado no mesmo dia':'último mês','#00E5A0')}
+      ${_rs.ticket!=null?kpi(fmtBRL(_rs.ticket),'ticket médio','R$ por exame','#7effcf'):''}
+      ${_rs.tot12!=null?kpi(fmtBRL(_rs.tot12),'faturamento','últimos 12 meses','#9fe6ff'):''}
+    </div>${mesStrip}` : '';
   let lista;
   if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(cod)]||[]);
     lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:12.5px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(21 dias · ${arr.length})</span></div>
