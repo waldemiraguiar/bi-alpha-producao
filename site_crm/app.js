@@ -881,7 +881,28 @@ function _tierSeal(cod){
   return `<span class="${m.glow?'aaaseal':''}" title="curva ${t} por faturamento dos últimos 12 meses — A = Triplo A (top 40 clínicas), B (próximas 60), C (próximas 100). O sistema classifica sozinho." style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.col};border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;letter-spacing:.5px">${m.txt}</span>`;
 }
 function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
-function _hfCard(cod, pinned){
+// animações usadas pelos cards da Lupa (e agora pela aba Clínicas A) — reaproveitado
+const _LUPA_KF='<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}@keyframes blkpulse{0%,100%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 0 0 var(--blk0,transparent)}50%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 18px 2px var(--blk,transparent)}}</style>';
+// 🎯 bloco SHARE-OF-WALLET (manda × deixa na mesa) p/ injetar no card da Clínica A — Wal 03/11
+function _aaaSowBlock(a, rank){
+  const cats=(a.cats||[]).slice(), falta=(a.falta||[]).slice();
+  const n=a.qtd||0, porte=n>=300?'🐘 Grande':n>=100?'🐎 Médio':'🐇 Pequeno';
+  const ctx=`<div class="t-mut" style="font-size:11px;margin-top:11px">${rank?`#${rank} no faturamento 12m · `:''}${porte} · 📊 <b>${n}</b> exames (12m)</div>`;
+  const manda = cats.length?`<div style="font-size:12px;margin-top:7px;color:#7effcf;line-height:1.5">✅ <b>manda:</b> ${cats.slice(0,8).map(c=>esc(c.setor)+` <span style="opacity:.75">(${c.qtd})</span>`).join(" · ")}${cats.length>8?` <span class="t-mut">+${cats.length-8}</span>`:''}</div>`:'';
+  const bloco = falta.length
+    ? `<div style="background:rgba(255,45,85,.13);border:1px solid rgba(255,45,85,.5);border-left:3px solid #FF2D55;border-radius:10px;padding:9px 12px;margin-top:9px">
+        <div style="font-weight:800;color:#ff6b81;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">🎯 Deixando na mesa · ${falta.length} classe(s) indo pro concorrente</div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,12).map(f=>`<span style="background:rgba(255,45,85,.22);color:#ffd0d8;border:1px solid rgba(255,45,85,.5);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}${falta.length>12?`<span style="color:#ff8fa3;font-size:11px;font-weight:700;align-self:center">+${falta.length-12}</span>`:""}</div>
+        <div style="font-size:11px;color:#ffb3c0;margin-top:6px">👉 <b>puxa essas</b> — ela já é grande e confia no lab; falta pedir.</div>
+      </div>`
+    : `<div class="swcheio" style="border:1px solid rgba(0,229,160,.5);border-left:3px solid #00E5A0;border-radius:10px;padding:9px 12px;margin-top:9px">
+        <div style="font-weight:800;color:#00E5A0;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">✅ Share-of-wallet CHEIO · manda TODAS as classes 👏</div>
+        <div style="font-size:11px;color:#7effcf;margin-top:5px">🛡️ cliente redondo — <b>nada indo pro concorrente</b>. Proteja essa: é o modelo do que as outras deveriam mandar.</div>
+      </div>`;
+  const drill = a.cod?`<div style="margin-top:9px"><button class="exbtn" data-mesames="${esc(a.cod)}" data-mnome="${esc(a.nome)}" type="button" style="background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#7effcf;border-radius:8px;padding:6px 13px;font-size:12px;font-weight:700;cursor:pointer">📅 Análise completa (mês a mês · benchmark)</button></div>`:'';
+  return ctx+manda+bloco+drill;
+}
+function _hfCard(cod, pinned, extra){
   const c=clinByCod(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
   let st=_hfStats(cod); const semDados=!st;   // sem exame nos 90d → card completo igual aos outros, como "parada" (fuga total)
   if(semDados) st={ by:{}, first:CLIN_DIA_HOJE_IDX, last:CLIN_DIA_HOJE_IDX, tot:0, H:CLIN_DIA_HOJE_IDX, last3:0, prev3:0, base3:null, drop3:null, last7:0, prev7:0, base7:null, drop7:null, mean30:0, medEnvio:0, gapMed:null, daysSince:null, overdue:false, caindo:false };
@@ -993,6 +1014,7 @@ function _hfCard(cod, pinned){
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
     ${obsHtml}
     ${kpis}${rsRow}
+    ${extra||''}
     ${lista}
   </div>`;
 }
@@ -1028,15 +1050,12 @@ function lupaAbrir(){ const el=document.getElementById("hfLupa"); if(!el) return
 function lupaHF(){
   if(!CLINICAS.length) return "";
   const pins=hfPins();
-  // ⭐ TODAS as Clínicas A (curva A) SEMPRE no topo, automático e em ordem de faturamento; depois as fixadas manuais — Wal 03/11
-  const aCods=(typeof AAA!=="undefined"&&AAA?AAA:[]).filter(x=>(x.curva||"A")==="A").map(x=>String(x.cod));
-  let cods=[]; const _seen=new Set();
-  aCods.forEach(c=>{ if(!_seen.has(c)){ _seen.add(c); cods.push(c); } });
-  pins.forEach(c=>{ c=String(c); if(!_seen.has(c)){ _seen.add(c); cods.push(c); } });
-  if(hfSel && !_seen.has(String(hfSel))){ _seen.add(String(hfSel)); cods.unshift(String(hfSel)); }   // a buscada aparece no topo de tudo
+  // 📌 cards FIXOS na ORDEM MANUAL do Wal (setas ↑/↓ ou arraste) — só as que ele fixar
+  let cods=pins.slice();
+  if(hfSel && !cods.includes(String(hfSel))) cods.unshift(String(hfSel));
   let exemplo=false;
   if(!cods.length){ const sos=CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")&&!/nofaro|plamev/i.test(c.nome||"")) || CLINICAS.find(c=>/sos bichos/i.test(c.nome||"")); if(sos){ cods=[String(sos.cod)]; exemplo=true; } }
-  cods=cods.slice(0, Math.max(14, aCods.length+pins.length+2)); const pinSet=new Set(pins);
+  cods=cods.slice(0,14); const pinSet=new Set(pins);
   // o <datalist> com TODAS as clínicas (2872, inclusive inativas/fugidas) é construído UMA vez fora do re-render (ensureHfDatalist) → acha qualquer uma sem pesar.
   const ordBtn = pins.length>1 ? `<button onclick="hfPinsSortQuedas()" title="reordena as fixadas pondo as EM QUEDA no topo (mantém mesmo dono junto)" style="border:1px solid rgba(255,90,122,.5);background:rgba(255,90,122,.12);color:#ff9fb2;border-radius:10px;padding:9px 13px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap">⚠️ quedas no topo</button>` : "";
   const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:2px">
@@ -1046,8 +1065,8 @@ function lupaHF(){
   </div>`;
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
-    : `<div class="t-mut" style="font-size:11px;margin-top:8px">⭐ As <b style="color:#ffd27a">Clínicas A</b> (Curva A — top faturamento) ficam <b>sempre aqui no topo</b>, automático (${aCods.length}).${pins.length?` Depois vêm as suas <b>📌 ${pins.length} fixada(s)</b> — <b>arraste o ⠿</b> (ou ↑/↓) pra ordenar.`:' Fixe (📌) outras clínicas pra acompanhar junto.'} Busque acima pra abrir qualquer uma.</div>`;
-  return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}@keyframes blkpulse{0%,100%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 0 0 var(--blk0,transparent)}50%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 18px 2px var(--blk,transparent)}}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
+    : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia, <b>na ordem que você deixar</b>. <b>Segure o ⠿ e arraste</b> pra ordenar (ou use ↑/↓), e <b>⚠️ quedas no topo</b> pra reagrupar as que estão caindo. Busque acima pra fixar outra.</div>`:"");
+  return `${_LUPA_KF}<div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
     <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
     <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar. Se um <b style="color:#ff5a7a">cair</b>, o card <b>pisca em vermelho</b> na hora. Mostra o ritmo (3d/7d, média, dia típico, frequência) e os exames recentes (registro, paciente, 🩺 vet).</div>
     ${box}<div id="hfCards">${cards}</div>${hint}
@@ -4896,6 +4915,7 @@ function renderTab(){
       else if(sowFilter==="buraco") aarr=aarr.filter(a=>(a.falta||[]).length);
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
       const comMesa=AA.filter(a=>(a.falta||[]).length).length, cheios=AA.length-comMesa;
+      if(CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }   // card novo mostra exames recentes → carrega o detalhe HF
       const acard=(a,i)=>{ const [pv,pl2]=porteDe(a.qtd||0); const falta=(a.falta||[]).slice(); const cats=(a.cats||[]).slice();
         // 🎯 O QUE NÃO MANDA = bloco vermelho de MUITO destaque (pedido do Wal)
         const mesa = falta.length ? `<div style="background:rgba(255,45,85,.13);border:1px solid rgba(255,45,85,.5);border-left:3px solid #FF2D55;border-radius:8px;padding:7px 10px;margin-top:6px">
@@ -4914,7 +4934,7 @@ function renderTab(){
             ${mesa}
             ${a.cod?`<button class="exbtn" data-mesames="${esc(a.cod)}" data-mnome="${esc(a.nome)}" type="button" style="margin-top:7px;background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#7effcf;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">📅 Mês a mês (exames${ehDiretoria()?" · R$":""})</button>`:""}</div>
           <div class="mid"></div></div>`; };
-      c.innerHTML=`${subtabsClin}
+      c.innerHTML=`${_LUPA_KF}${subtabsClin}
         <div class="proxhint" style="border-color:${meta.bord};color:${meta.cor};margin-bottom:10px;line-height:1.55">${meta.ic} <b>${meta.nome}</b> — ${meta.desc}. Trazidas <b>automaticamente</b> pelo robô (curva ABC), ranqueadas por faturamento. Mesma inteligência das Reconquistadas/Novas: <b>análise de 12 meses</b> do que manda × <b>o que deixa na mesa</b> (vermelho = indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
         <div class="kgrid">
           ${kpi("g", AA.length, meta.nome, "curva "+curva+" · 12m")}
@@ -4931,7 +4951,7 @@ function renderTab(){
           <button id="relSoW" style="margin-left:auto;cursor:pointer;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:800;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.12);color:#00D4FF">🖨️ Relatório completo</button>
         </div>
         <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${meta.ic} Ranking ${meta.nome}${sowFilter?` · ${sowFilter==='cheio'?'✅ SoW cheio':'🎯 com buraco'} (${aarr.length})`:''}</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
-        ${AA.length?(aarr.length?aarr.map(a=>acard(a, AA.indexOf(a))).join(""):`<div class="empty">${sowFilter?`Nenhuma clínica ${sowFilter==='cheio'?'com share-of-wallet cheio':'com buraco'}${q2?' para essa busca':''} nesta curva.`:`Nada encontrado para "${esc(search)}".`}</div>`):`<div class="empty">⏳ As clínicas ${meta.nome} chegam quando o robô sincronizar (traz por faturamento 12m automaticamente).</div>`}`;
+        ${AA.length?(aarr.length?aarr.map(a=>a.cod?_hfCard(String(a.cod), hfPins().includes(String(a.cod)), _aaaSowBlock(a, AA.indexOf(a)+1)):acard(a, AA.indexOf(a))).join(""):`<div class="empty">${sowFilter?`Nenhuma clínica ${sowFilter==='cheio'?'com share-of-wallet cheio':'com buraco'}${q2?' para essa busca':''} nesta curva.`:`Nada encontrado para "${esc(search)}".`}</div>`):`<div class="empty">⏳ As clínicas ${meta.nome} chegam quando o robô sincronizar (traz por faturamento 12m automaticamente).</div>`}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; renderTab(); });
       document.querySelectorAll("#content [data-sow]").forEach(el=>el.onclick=()=>{ sowFilter=el.dataset.sow; renderTab(); });
       const rb=document.getElementById("relSoW"); if(rb) rb.onclick=()=>relatorioSoW(curva);
