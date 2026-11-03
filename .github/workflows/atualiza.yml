@@ -111,6 +111,21 @@ jobs:
           print(f'{mudou} arquivo(s) HTML carimbado(s)')
           EOF
 
+      # ⛔ 03/nov: o carimbo acima mata o cache de ASSET (app.js?v=hash) no PRIMEIRO load,
+      # mas o auto-reload de quem JA esta com a pagina aberta compara /version.json com a var
+      # BUILD do index.html — e NENHUM dos dois era atualizado no deploy (ficaram chumbados em
+      # 27/out). Resultado: pagina aberta nunca recebia o reload e "parecia fora do ar".
+      # Agora o deploy carimba os DOIS com o mesmo numero novo (igual ao bump do BI financeiro).
+      - name: Bump de versao (auto-reload da pagina aberta)
+        if: env.DEPLOY_FULL == 'true'
+        run: |
+          NV=$(TZ=America/Sao_Paulo date +%y%m%d%H%M)
+          echo "{\"v\":\"$NV\"}" > site_prod/version.json
+          perl -0pi -e "s/var BUILD=\"[0-9]+\"/var BUILD=\"$NV\"/" site_prod/index.html
+          echo "BUILD/version.json -> $NV"
+          grep -n 'var BUILD=' site_prod/index.html | head -1
+          echo "version.json: $(cat site_prod/version.json)"
+
       - name: Publicar no Netlify (deploy completo)
         if: env.DEPLOY_FULL == 'true'
         env:
