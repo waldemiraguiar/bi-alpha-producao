@@ -359,6 +359,15 @@
   }
 
   /* ---- ações ---- */
+  // 🔎 Atalho de baixa (Dudu 03/11) — SÓ na aba Terceirizados: quando o exame é concluído e SAI da
+  // lista, limpa a busca por número e devolve o foco p/ digitar o próximo (igual ao atalho da Produção).
+  // Se a ação falhar (ok=false) nem chega aqui → o número fica no campo. Fora da aba terc, render normal.
+  function _renderPosAcao(saiuDaLista) {
+    if (saiuDaLista && view === 'terc' && busca) {
+      busca = ''; render();
+      const sb = document.getElementById('sepbusca'); if (sb) { try { sb.focus(); } catch (e) {} }
+    } else render();
+  }
   async function doSeparar(it) {
     if (teamMode && !me()) { openLogin(); return; }
     if (!me()) { alert('Selecione/insira o seu nome no topo (campo "Você") antes de marcar.'); return; }
@@ -379,7 +388,7 @@
     // insuficiente liberado p/ todo mundo logado (sem permissão granular) — decisão Wal 01/jul
     if (!confirm('Marcar AMOSTRA INSUFICIENTE?\n\nEncerra a amostra (depois de recebida) e abre a pendência "📧 Avisar cliente" (nova amostra), que fica piscando até alguém confirmar.')) return;
     const ok = await post({ acao: 'insuf', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
-    if (ok) render();
+    if (ok) _renderPosAcao(true);
   }
   // 🔒 TRAVAR o exame — sai do fluxo e vai pra aba Travados (motivo em texto livre no campo de observação)
   async function doTravar(it) {
@@ -397,7 +406,7 @@
     if (!me()) { alert('Entre/escolha seu nome antes.'); return; }
     if (travadoHisto(it)) { alert('🔒 Histotécnica: só David e Eduardo confirmam a amostra.'); return; }
     const ok = await post({ acao: 'suficiente', chave: chaveOf(it), req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() });
-    if (ok) render();
+    if (ok) _renderPosAcao(true);
   }
   // check-in: cliente avisado p/ enviar nova amostra (qualquer um logado resolve)
   async function avisarCliente(k) {
@@ -446,7 +455,7 @@
       else if (acao === 'insuf') { if (!(m && m.estado === 'recebido')) continue; okAny = (await post({ acao: 'insuf', chave: k, req: it.req, ano: it.ano, codex: it.codex, exame: it.exame, cat: it.cat, classe: it.classe, paciente: it.paciente, tutor: it.tutor, vet: it.vet, por: me() })) || okAny; }
       else if (acao === 'voltar') { if (m && m.estado) okAny = (await post({ acao: 'voltar', chave: k })) || okAny; }
     }
-    if (okAny) render();
+    if (okAny) _renderPosAcao(acao === 'suficiente' || acao === 'insuf');
   }
   async function doTravarGrupo(its) {
     if (teamMode && !me()) { openLogin(); return; }
