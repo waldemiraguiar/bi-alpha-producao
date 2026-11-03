@@ -832,6 +832,13 @@ function _hfRS(cod){
 // 📌 fixar clínicas na Lupa (persistente no aparelho) — pra olhar os mesmos clientes todo dia
 function hfPins(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_pin")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
 function hfSetPins(a){ try{ localStorage.setItem("crm_hf_pin", JSON.stringify(a.slice(0,12))); }catch(e){} }
+// 🎨 marca MANUAL "piscar numa cor que eu escolho" por clínica (só pra mim, no aparelho) — Wal 03/11: a queda já pisca vermelho sozinha; este é genérico e a COR é minha escolha
+let hfBlinkOpen="";   // cod com a paletinha de cor aberta
+function hfBlinkAll(){ try{ return JSON.parse(localStorage.getItem("crm_hf_blink")||"{}")||{}; }catch(e){ return {}; } }
+function hfBlink(cod){ const o=hfBlinkAll(); return (o&&o[String(cod)])||""; }
+function hfBlinkToggle(cod){ cod=String(cod); hfBlinkOpen=(hfBlinkOpen===cod)?"":cod; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+function hfBlinkSet(cod,key){ cod=String(cod); const o=hfBlinkAll(); if(key) o[cod]=key; else delete o[cod]; try{ localStorage.setItem("crm_hf_blink", JSON.stringify(o)); }catch(e){} hfBlinkOpen=""; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+function _hex2rgba(h,a){ h=String(h||'').replace('#',''); if(h.length===3) h=h.split('').map(x=>x+x).join(''); const n=parseInt(h||'0',16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
 function hfPinToggle(cod){ cod=String(cod); let a=hfPins(); if(a.includes(cod)) a=a.filter(x=>x!==cod); else a.unshift(cod); hfSetPins(a); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 // ↑/↓ reordena a clínica fixada na ORDEM MANUAL do Wal (a lista não re-ordena mais sozinha) — Wal 03/11
 function hfPinMove(cod,dir){ cod=String(cod); let a=hfPins(); const i=a.indexOf(cod); if(i<0) return; const j=i+dir; if(j<0||j>=a.length) return; const t=a[i]; a[i]=a[j]; a[j]=t; hfSetPins(a); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
@@ -883,6 +890,15 @@ function _hfCard(cod, pinned){
   // ⠿ pegador de ARRASTAR (só nas fixadas, quando há 2+) — reordena segurando e puxando
   const canDrag = pinned && hfPins().length>1;
   const grip = canDrag ? `<span class="hfDrag" title="arraste pra ordenar" style="cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;font-size:18px;color:#8aa2bd;padding:2px 6px;margin-right:2px;line-height:1;align-self:center">⠿</span>` : "";
+  // 🎨 PISCAR numa cor escolhida (marca minha) — botão + paletinha; o card inteiro ganha moldura e brilho piscando naquela cor
+  const blinkKey = hfBlink(cod); const blinkHex = blinkKey ? ((PAUTA_CORES[blinkKey]&&PAUTA_CORES[blinkKey].h)||'#FF2D55') : null;
+  const blinkBtn = `<button onclick="hfBlinkToggle('${esc(String(cod))}')" title="piscar o card numa cor que você escolhe (sua marca)" style="border:1px solid ${blinkKey?_hex2rgba(blinkHex,.85):'rgba(255,255,255,.18)'};background:${blinkKey?_hex2rgba(blinkHex,.2):'transparent'};color:${blinkKey?'#fff':'#9fb2cc'};border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">🎨${blinkKey?' piscando':' piscar'}</button>`;
+  const _BLKCORES=['vermelho','laranja','amarelo','verde','azul','roxo','rosa'];
+  const blinkPicker = (hfBlinkOpen===String(cod)) ? `<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.04)">
+      <span style="font-size:11px;font-weight:800;color:#9fb2cc">piscar na cor:</span>
+      ${_BLKCORES.map(k=>{ const h=PAUTA_CORES[k].h, on=(blinkKey===k); return `<button onclick="hfBlinkSet('${esc(String(cod))}','${k}')" title="${PAUTA_CORES[k].lbl}" style="width:27px;height:27px;border-radius:50%;border:2px solid ${on?'#fff':'rgba(255,255,255,.3)'};background:${h};cursor:pointer;box-shadow:0 0 8px ${_hex2rgba(h,.6)}"></button>`; }).join('')}
+      ${blinkKey?`<button onclick="hfBlinkSet('${esc(String(cod))}','')" style="border:1px solid rgba(255,255,255,.2);background:transparent;color:#9fb2cc;border-radius:8px;padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer">apagar</button>`:''}
+    </div>` : '';
   const caindo = semDados || st.caindo, pulse=caindo?'qpulse':'';
   const badge = semDados
     ? `<span class="qpulse" title="sem nenhum exame nos últimos 90 dias — fuga total" style="background:#FF2D55;color:#fff;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;white-space:nowrap">🚨 PARADA · +90 dias</span>`
@@ -905,23 +921,29 @@ function _hfCard(cod, pinned){
   const _MES3=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   const _ymLbl=ym=>{ const p=String(ym).split('-'); return (_MES3[(+p[1])-1]||'')+'/'+(p[0]||'').slice(2); };
   const _serie=(_rs&&_rs.serie)||[];
-  // 💰 tira FATURAMENTO MÊS A MÊS (só diretoria) — valor de cada mês + seta de subida/queda; rola na horizontal. Sem gráfico de barra (Wal 03/11).
-  const mesStrip = _serie.length ? `<div style="margin-top:11px">
-      <div style="font-size:10px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">💰 faturamento mês a mês <span class="t-mut" style="font-weight:600;text-transform:none">· deslize →</span></div>
-      <div style="display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:5px">
-        ${_serie.map((x,i)=>{ const prev=i>0?_serie[i-1].val:null; const up=prev!=null&&prev>0&&x.val>prev*1.02, dn=prev!=null&&prev>0&&x.val<prev*0.98; const dc=dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc');
-          return `<div style="flex:0 0 auto;min-width:74px;text-align:center;border:1px solid ${x.parcial?'rgba(255,210,122,.5)':'rgba(0,229,160,.22)'};border-radius:11px;padding:8px 9px;background:${x.parcial?'rgba(255,210,122,.08)':'rgba(0,229,160,.05)'}">
-            <div style="font-size:10px;font-weight:800;color:${x.parcial?'#ffd27a':'#8fb0c9'};text-transform:uppercase;letter-spacing:.3px">${_ymLbl(x.ym)}${x.parcial?' ·parcial':''}</div>
-            <div style="font-size:13px;font-weight:900;color:#eaf3ff;white-space:nowrap;margin-top:4px">${fmtBRL(x.val)}</div>
-            ${prev!=null?`<div style="font-size:9.5px;font-weight:800;color:${dc};margin-top:2px">${dn?'▼':(up?'▲':'•')}${prev>0?Math.abs(Math.round((x.val/prev-1)*100)):0}%</div>`:'<div style="height:13px"></div>'}
-          </div>`; }).join('')}
+  const _pctV=(a,b)=> (b&&b>0)? Math.round((a/b-1)*100) : null;
+  // 💰 UM só card de FATURAMENTO (só diretoria): números-chave + mês a mês juntos, % SEMPRE (Wal 03/11 — mais harmônico)
+  const _mesCells = _serie.map((x,i)=>{ const prev=i>0?_serie[i-1].val:null; const p=_pctV(x.val,prev);
+      const up=p!=null&&p>=2, dn=p!=null&&p<=-2; const dc=dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc');
+      const pctTxt = p!=null ? `${dn?'▼':(up?'▲':'•')}${Math.abs(p)}%` : '·base';
+      return `<div style="flex:0 0 auto;min-width:76px;text-align:center;border:1px solid ${x.parcial?'rgba(255,210,122,.5)':'rgba(255,255,255,.1)'};border-radius:10px;padding:7px 9px;background:${x.parcial?'rgba(255,210,122,.1)':'rgba(255,255,255,.03)'}">
+        <div style="font-size:10px;font-weight:800;color:${x.parcial?'#ffd27a':'#8fb0c9'};text-transform:uppercase;letter-spacing:.3px">${_ymLbl(x.ym)}${x.parcial?' ·p':''}</div>
+        <div style="font-size:13px;font-weight:900;color:#eaf3ff;white-space:nowrap;margin-top:4px">${fmtBRL(x.val)}</div>
+        <div style="font-size:9.5px;font-weight:800;color:${p!=null?dc:'#8aa2bd'};margin-top:2px">${pctTxt}</div>
+      </div>`; }).join('');
+  const _st=(lbl,val,extra,cor)=>`<div style="flex:1;min-width:92px"><div style="font-size:10px;font-weight:800;color:${cor||'#9fe6ff'};text-transform:uppercase;letter-spacing:.4px">${lbl}</div><div style="font-size:20px;font-weight:900;color:#fff;line-height:1.1;margin-top:3px;white-space:nowrap">${val}</div>${extra?`<div class="t-mut" style="font-size:9.5px;margin-top:2px">${extra}</div>`:''}</div>`;
+  const _momTxt = (_rs&&_rs.mom!=null) ? `<span style="font-size:13px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>` : `<span style="font-size:13px;color:#9fb2cc">•</span>`;
+  const rsRow = _rs ? `<div style="margin-top:12px;border:1px solid rgba(0,229,160,.32);border-radius:14px;padding:13px 15px;background:linear-gradient(180deg,rgba(0,229,160,.08),rgba(6,16,26,.6));box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 24px -14px rgba(0,0,0,.7)">
+      <div style="font-size:11px;font-weight:900;color:#00E5A0;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">💰 Faturamento</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+        ${_st(_rs.ehCur?'este mês (parcial)':'último mês', `${fmtBRL(_rs.fdCur)} ${_momTxt}`, _rs.ehCur?'vs mês passado no mesmo dia':'', '#00E5A0')}
+        ${_rs.tot12!=null?_st('12 meses', fmtBRL(_rs.tot12), 'acumulado', '#9fe6ff'):''}
+        ${_rs.ticket!=null?_st('ticket médio', fmtBRL(_rs.ticket), 'R$ por exame', '#7effcf'):''}
       </div>
+      ${_serie.length?`<div style="border-top:1px solid rgba(255,255,255,.09);margin:12px 0 10px"></div>
+      <div style="font-size:10px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">mês a mês <span class="t-mut" style="font-weight:600;text-transform:none">· % vs mês anterior · deslize →</span></div>
+      <div style="display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px">${_mesCells}</div>`:''}
     </div>` : '';
-  const rsRow = _rs ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px">
-      ${kpi(`${fmtBRL(_rs.fdCur)}${_rs.mom!=null?` <span style="font-size:12px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>`:''}`,'R$ este mês',_rs.ehCur?'até hoje · vs mês passado no mesmo dia':'último mês','#00E5A0')}
-      ${_rs.ticket!=null?kpi(fmtBRL(_rs.ticket),'ticket médio','R$ por exame','#7effcf'):''}
-      ${_rs.tot12!=null?kpi(fmtBRL(_rs.tot12),'faturamento','últimos 12 meses','#9fe6ff'):''}
-    </div>${mesStrip}` : '';
   let lista;
   if(CRM_HF && CRM_HF.det){ const arr=(CRM_HF.det[String(cod)]||[]);
     lista = arr.length ? `<div class="seclabel" style="margin:13px 0 5px;font-size:12.5px">🧾 Exames recentes <span class="t-mut" style="font-weight:500;font-size:11px">(21 dias · ${arr.length})</span></div>
@@ -950,11 +972,17 @@ function _hfCard(cod, pinned){
   const grpBtn = grpVal
     ? `<button onclick="hfGrupoSet('${esc(String(cod))}')" title="dono/grupo: ${esc(grpVal)} — clique p/ editar" style="border:1px solid rgba(155,140,255,.55);background:rgba(155,140,255,.16);color:#c9bcff;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">👥 ${esc(grpVal)}</button>`
     : `<button onclick="hfGrupoSet('${esc(String(cod))}')" title="agrupar com clínicas do mesmo dono" style="border:1px solid rgba(255,255,255,.18);background:transparent;color:#9fb2cc;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">👥 grupo</button>`;
-  return `<div class="${pulse}"${pinned?` data-pc="${esc(String(cod))}"`:''} style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:16px 18px;margin-top:18px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
+  // moldura/brilho: cor MANUAL (blink) tem prioridade; senão queda (vermelho) / curva A (dourado) / normal (ciano)
+  const frameCol = blinkHex || (caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF'));
+  const frameBg = blinkHex ? _hex2rgba(blinkHex,.12) : (caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)'));
+  const rootCls = blinkKey ? '' : pulse;   // com cor manual uso animação inline (qualquer cor); sem, o qpulse (vermelho) da queda
+  const blinkAnim = blinkKey ? `--blk:${_hex2rgba(blinkHex,.65)};--blk0:${_hex2rgba(blinkHex,0)};animation:blkpulse 1.5s ease-in-out infinite;` : '';
+  return `<div class="${rootCls}"${pinned?` data-pc="${esc(String(cod))}"`:''} style="border:1px solid ${_hex2rgba(frameCol,.7)};border-left:4px solid ${frameCol};border-radius:14px;padding:16px 18px;margin-top:18px;background:linear-gradient(180deg,${frameBg},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04);${blinkAnim}">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       ${grip}<b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
-      <div style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;align-items:center">${moveBtns}${grpBtn}${pinBtn}</div>
+      <div style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;align-items:center">${moveBtns}${blinkBtn}${grpBtn}${pinBtn}</div>
     </div>
+    ${blinkPicker}
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
     ${obsHtml}
     ${kpis}${rsRow}
@@ -1009,7 +1037,7 @@ function lupaHF(){
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
     : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia, <b>na ordem que você deixar</b>. <b>Segure o ⠿ e arraste</b> pra ordenar (ou use ↑/↓), e <b>⚠️ quedas no topo</b> pra reagrupar as que estão caindo. Busque acima pra fixar outra.</div>`:"");
-  return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
+  return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}@keyframes blkpulse{0%,100%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 0 0 var(--blk0,transparent)}50%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 18px 2px var(--blk,transparent)}}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
     <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
     <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar. Se um <b style="color:#ff5a7a">cair</b>, o card <b>pisca em vermelho</b> na hora. Mostra o ritmo (3d/7d, média, dia típico, frequência) e os exames recentes (registro, paciente, 🩺 vet).</div>
     ${box}<div id="hfCards">${cards}</div>${hint}
