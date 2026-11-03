@@ -29,7 +29,7 @@ function _rascFolha(reg){
   const up=s=>String(s||'').toUpperCase();
   return `<div class="folha">
     <div class="hf">Nº HF: <b>${esc(String(r.hf||reg))}</b><br><span class="ref">ref. interna: ${ref}</span></div>
-    <div class="h1">ALPHA LABS</div><div class="h2">BIOLOGIA MOLECULAR (PCR)</div>
+    <div class="h1">ALPHA LABS – VETLAB</div><div class="h2">BIOLOGIA MOLECULAR (PCR)</div>
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
