@@ -1477,6 +1477,8 @@ let pistaBiRange="tudo", pistaBiDe="", pistaBiAte="";   // 📅 filtro de DATA d
 /* 📈 ABA COMERCIAL (funil de leads — pedido da Luciane): filtros */
 let comRange="tudo", comDe="", comAte="", comOper="", comCanal="", comTipo="", comGran="mes";   // período · operador · canal(origem) · tipo(ativo/receptivo) · granularidade do gráfico
 let safraBusca="";   // 🔎 busca da tabela "Dinheiro por mês" (por clínica ou bairro) — Guarda-Chuva
+let safraOrd="rs";   // ordem da tabela Monitoramento: "rs" = maior faturamento no topo (padrão) · "queda" = em queda no topo
+function safraSetOrd(v){ safraOrd=(v==="queda"?"queda":"rs"); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function comJanela(){
   if(comDe||comAte){ const ini=comDe?new Date(comDe+"T00:00:00").getTime():0; const fim=comAte?new Date(comAte+"T23:59:59").getTime():Date.now(); return {ini,fim,label:"período escolhido"}; }
   const d=new Date(), d0=new Date(d); d0.setHours(0,0,0,0); const now=Date.now();
@@ -4419,16 +4421,21 @@ function renderTab(){
           // CAINDO = exames OU R$ negativo (qualquer %) — clínicas com R$ caindo sobem junto, mesmo se os exames subiram (ex.: Perto Pet). Wal 30/10
           const _sevN=r=>{ const q=r.q||{}; const v=[]; if(q.pior!=null)v.push(q.pior); if(q.dMesR!=null)v.push(q.dMesR); return v.length?Math.min(...v):1; };
           const _caiN=r=>_sevN(r)<-0.0001;
-          fmRows.sort((a,b)=>{ const ca=_caiN(a), cb=_caiN(b);
-            if(ca!==cb) return ca?-1:1;                                        // 1) caindo (exames OU R$) no topo
-            const ta=(_trank[a.tipo]!=null?_trank[a.tipo]:9), tb=(_trank[b.tipo]!=null?_trank[b.tipo]:9);
-            if(ta!==tb) return ta-tb;                                          // 2) agrupa por tipo
-            const sa=notasDe(a.cod).length, sb=notasDe(b.cod).length;          // 3) ESTRELAS (feedback) agrupadas no topo da categoria — ver se a Lu trabalhou o cliente
-            if((sa>0)!==(sb>0)) return sa>0?-1:1;
-            if(sa!==sb) return sb-sa;                                          // mais feedbacks primeiro
-            const da=ehDrDra(a.nome), db=ehDrDra(b.nome); if(da!==db) return da?1:-1;  // 4) dentro do tipo: Dr./Dra. juntos no fim
-            if(ca&&cb) return _sevN(a)-_sevN(b);                               // 5a) quedas: mais grave primeiro
-            return b.tot-a.tot; });                                            // 5b) resto: maior total primeiro
+          // Wal 03/11: ORDEM escolhível — padrão "maior R$ no topo"; alternativa "em queda no topo" (mantém a lógica antiga)
+          if(safraOrd==="queda"){
+            fmRows.sort((a,b)=>{ const ca=_caiN(a), cb=_caiN(b);
+              if(ca!==cb) return ca?-1:1;                                      // 1) caindo (exames OU R$) no topo
+              const ta=(_trank[a.tipo]!=null?_trank[a.tipo]:9), tb=(_trank[b.tipo]!=null?_trank[b.tipo]:9);
+              if(ta!==tb) return ta-tb;                                        // 2) agrupa por tipo
+              const sa=notasDe(a.cod).length, sb=notasDe(b.cod).length;        // 3) feedback no topo do grupo
+              if((sa>0)!==(sb>0)) return sa>0?-1:1;
+              if(sa!==sb) return sb-sa;
+              const da=ehDrDra(a.nome), db=ehDrDra(b.nome); if(da!==db) return da?1:-1;  // 4) Dr./Dra. no fim
+              if(ca&&cb) return _sevN(a)-_sevN(b);                             // 5a) quedas: mais grave primeiro
+              return b.tot-a.tot; });                                          // 5b) resto: maior total
+          } else {
+            fmRows.sort((a,b)=>b.tot-a.tot);                                   // 💰 padrão: MAIOR FATURAMENTO no topo
+          }
           // 📌 fixadas vão pro TOPO, na ordem do Wal (↑/↓) — sort estável preserva o resto
           const _spins=safraPins();
           if(_spins.length){ const _pix=c=>{ const i=_spins.indexOf(String(c)); return i<0?1e9:i; };
@@ -4508,7 +4515,12 @@ function renderTab(){
                 <button onclick="relSafraEquipe()" style="cursor:pointer;border:1px solid rgba(255,45,85,.5);background:rgba(255,45,85,.12);color:#ff9fb0;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800">🖨️ Relatório p/ equipe <span style="font-weight:600;opacity:.85">(PDF · em queda, por bairro, sem R$)</span></button>
               </div>
               <div class="t-mut" style="font-size:11px;margin:0 0 8px;line-height:1.55">💡 O <b>%</b> em cada mês é a <b style="color:#7effcf">subida</b>/<b style="color:#ff9fb0">queda</b> vs o mês anterior. No <b style="color:#ffd27a">mês atual (parcial)</b> o % compara a <b>mesma janela de dias</b> do mês passado (ex.: 03/11 × 03/10). Use <b style="color:#ffd27a">📌</b> pra fixar no topo, <b>↑↓</b> pra ordenar e <b>🎨</b> pra piscar a linha na cor que quiser.</div>
-              <div class="t-mut" style="font-size:11px;margin:0 0 9px;line-height:1.55;border-left:3px solid rgba(0,212,255,.5);padding-left:9px">🔽 <b>Ordem da tabela:</b> <b style="color:#ffd27a">📌 fixadas</b> no topo → <b style="color:#ff6b81">🔴 em queda</b> (exames OU R$) → por <b>tipo</b> (🆕 nova → ♻️ reconq. → 🔀 divide → 🐾 particular) → com <b style="color:#ff8fcf">⭐ feedback</b> primeiro → maior <b style="color:#7effcf">R$ total</b>. <span style="opacity:.85">Quem está caindo sobe pro topo; dentro de cada bloco, o maior R$ vem antes. Fixe (📌) o que quiser cravar no 1º lugar.</span></div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 9px">
+                <span class="t-mut" style="font-size:11px;font-weight:800">🔽 Ordenar por:</span>
+                <button onclick="safraSetOrd('rs')" style="cursor:pointer;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:800;border:1px solid ${safraOrd==='rs'?'#00c6e6':'rgba(255,255,255,.2)'};background:${safraOrd==='rs'?'linear-gradient(180deg,#0a7f94,#0b6478)':'transparent'};color:${safraOrd==='rs'?'#eafcff':'#9fb2cc'}">💰 Maior R$</button>
+                <button onclick="safraSetOrd('queda')" style="cursor:pointer;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:800;border:1px solid ${safraOrd==='queda'?'rgba(255,45,85,.8)':'rgba(255,255,255,.2)'};background:${safraOrd==='queda'?'rgba(255,45,85,.18)':'transparent'};color:${safraOrd==='queda'?'#ff9fb0':'#9fb2cc'}">🔴 Em queda no topo</button>
+                <span class="t-mut" style="font-size:10.5px;opacity:.9">${safraOrd==='rs'?'📌 fixadas no topo · depois o MAIOR faturamento total':'📌 fixadas no topo · depois 🔴 em queda → tipo → feedback → maior R$'}</span>
+              </div>
               <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(0,229,160,.25);border-radius:8px">
                 <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">
                   <thead><tr style="background:rgba(0,229,160,.08)"><th style="${sc};color:var(--mut);font-size:10.5px">Clínica</th>${meses.map(ym=>`<th style="${th}${ym===_curYmS?';color:#ffd27a':''}">${mlab(ym)}${ym===_curYmS?`<div style="font-size:8px;font-weight:800;color:#ffd27a;letter-spacing:.3px">parcial · até ${String(diaD).padStart(2,'0')}/${ym.split('-')[1]}</div>`:''}</th>`).join("")}<th style="${th};color:#7effcf">Total</th></tr></thead>
