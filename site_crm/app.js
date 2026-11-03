@@ -874,10 +874,13 @@ function _hfCard(cod, pinned){
   const pinBtn = pinned
     ? `<button onclick="hfPinToggle('${esc(String(cod))}')" title="desafixar" style="border:1px solid rgba(255,194,77,.6);background:rgba(255,194,77,.16);color:#ffd27a;border-radius:9px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">📌 fixada</button>`
     : `<button onclick="hfPinToggle('${esc(String(cod))}')" title="fixar pra acompanhar todo dia" style="border:1px solid #00c6e6;background:linear-gradient(180deg,#0a7f94,#0b6478);color:#eafcff;border-radius:9px;padding:5px 13px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;box-shadow:0 3px 8px rgba(0,198,230,.35)">📌 fixar</button>`;
-  // ↑/↓ só nas fixadas — ordem manual
+  // ↑/↓ só nas fixadas — ordem manual (atalho de reserva; o jeito rápido é arrastar pelo ⠿)
   const moveBtns = pinned
     ? `<button onclick="hfPinMove('${esc(String(cod))}',-1)" title="subir" style="border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.05);color:#cfe0f2;border-radius:8px;padding:5px 9px;font-size:13px;font-weight:900;line-height:1;cursor:pointer">↑</button><button onclick="hfPinMove('${esc(String(cod))}',1)" title="descer" style="border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.05);color:#cfe0f2;border-radius:8px;padding:5px 9px;font-size:13px;font-weight:900;line-height:1;cursor:pointer">↓</button>`
     : "";
+  // ⠿ pegador de ARRASTAR (só nas fixadas, quando há 2+) — reordena segurando e puxando
+  const canDrag = pinned && hfPins().length>1;
+  const grip = canDrag ? `<span class="hfDrag" title="arraste pra ordenar" style="cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;font-size:18px;color:#8aa2bd;padding:2px 6px;margin-right:2px;line-height:1;align-self:center">⠿</span>` : "";
   const caindo = semDados || st.caindo, pulse=caindo?'qpulse':'';
   const badge = semDados
     ? `<span class="qpulse" title="sem nenhum exame nos últimos 90 dias — fuga total" style="background:#FF2D55;color:#fff;border-radius:20px;padding:3px 13px;font-size:12px;font-weight:900;white-space:nowrap">🚨 PARADA · +90 dias</span>`
@@ -930,9 +933,9 @@ function _hfCard(cod, pinned){
   const grpBtn = grpVal
     ? `<button onclick="hfGrupoSet('${esc(String(cod))}')" title="dono/grupo: ${esc(grpVal)} — clique p/ editar" style="border:1px solid rgba(155,140,255,.55);background:rgba(155,140,255,.16);color:#c9bcff;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">👥 ${esc(grpVal)}</button>`
     : `<button onclick="hfGrupoSet('${esc(String(cod))}')" title="agrupar com clínicas do mesmo dono" style="border:1px solid rgba(255,255,255,.18);background:transparent;color:#9fb2cc;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">👥 grupo</button>`;
-  return `<div class="${pulse}" style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:16px 18px;margin-top:18px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
+  return `<div class="${pulse}"${pinned?` data-pc="${esc(String(cod))}"`:''} style="border:1px solid ${caindo?'rgba(255,45,85,.7)':(isAAA?'rgba(240,165,0,.6)':'rgba(0,212,255,.3)')};border-left:4px solid ${caindo?'#FF2D55':(isAAA?'#f0a500':'#00D4FF')};border-radius:14px;padding:16px 18px;margin-top:18px;background:linear-gradient(180deg,${caindo?'rgba(255,45,85,.11)':(isAAA?'rgba(240,165,0,.08)':'rgba(13,27,45,.9)')},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-      <b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
+      ${grip}<b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
       <div style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;align-items:center">${moveBtns}${grpBtn}${pinBtn}</div>
     </div>
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
@@ -988,12 +991,46 @@ function lupaHF(){
   </div>`;
   const cards=cods.map(cod=>_hfCard(cod, pinSet.has(String(cod)))).join("");
   const hint = exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
-    : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia, <b>na ordem que você deixar</b>. Use <b>↑/↓</b> pra ordenar e <b>⚠️ quedas no topo</b> pra reagrupar as que estão caindo. Busque acima pra fixar outra.</div>`:"");
+    : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia, <b>na ordem que você deixar</b>. <b>Segure o ⠿ e arraste</b> pra ordenar (ou use ↑/↓), e <b>⚠️ quedas no topo</b> pra reagrupar as que estão caindo. Busque acima pra fixar outra.</div>`:"");
   return `<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}</style><div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
     <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
     <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar. Se um <b style="color:#ff5a7a">cair</b>, o card <b>pisca em vermelho</b> na hora. Mostra o ritmo (3d/7d, média, dia típico, frequência) e os exames recentes (registro, paciente, 🩺 vet).</div>
-    ${box}${cards}${hint}
+    ${box}<div id="hfCards">${cards}</div>${hint}
   </div>`;
+}
+// 🖐️ arrastar-pra-ordenar os cards fixados (toque e mouse) pelo pegador ⠿ — salva a nova ordem e re-renderiza
+function hfWireDrag(){
+  const wrap=document.getElementById("hfCards"); if(!wrap) return;
+  const cardsOf=()=>Array.from(wrap.querySelectorAll('[data-pc]'));
+  wrap.querySelectorAll('.hfDrag').forEach(h=>{
+    h.addEventListener('pointerdown', e=>{
+      const card=h.closest('[data-pc]'); if(!card) return;
+      e.preventDefault(); e.stopPropagation();
+      card.style.opacity='.55'; card.style.transition='none'; card.style.boxShadow='0 0 0 2px #00c6e6, 0 14px 30px -8px rgba(0,0,0,.8)';
+      document.body.style.userSelect='none';
+      const move=ev=>{
+        ev.preventDefault();
+        const y=ev.clientY;
+        const sibs=cardsOf().filter(c=>c!==card);
+        let placed=false;
+        for(const s of sibs){ const r=s.getBoundingClientRect(); if(y < r.top + r.height/2){ wrap.insertBefore(card, s); placed=true; break; } }
+        if(!placed) wrap.appendChild(card);
+      };
+      const up=()=>{
+        window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); window.removeEventListener('pointercancel',up);
+        card.style.opacity=''; card.style.boxShadow=''; document.body.style.userSelect='';
+        const order=cardsOf().map(c=>c.getAttribute('data-pc'));
+        const pins=hfPins();
+        const novo=order.filter(c=>pins.includes(c)); pins.forEach(c=>{ if(!novo.includes(c)) novo.push(c); });
+        const mudou=novo.join(',')!==pins.join(',');
+        hfSetPins(novo);
+        if(mudou && typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab();
+      };
+      window.addEventListener('pointermove',move,{passive:false});
+      window.addEventListener('pointerup',up);
+      window.addEventListener('pointercancel',up);
+    });
+  });
 }
 
 /* ===== 🖨️ RELATÓRIOS PDF do Monitoramento — 2 botões: FINANCEIRO (com R$) e P/ EQUIPE (sem R$, por bairro/proximidade) ===== */
@@ -4681,6 +4718,7 @@ function renderTab(){
       const _slx=document.getElementById("safraLupaX"); if(_slx) _slx.onclick=()=>{ safraBusca=""; renderTab(); };
       const _hf=document.getElementById("hfLupa"); if(_hf){ ensureHfDatalist(); _hf.onchange=()=>lupaAbrir(); _hf.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); lupaAbrir(); } }); }
       const _hfGo=document.getElementById("hfLupaGo"); if(_hfGo) _hfGo.onclick=()=>lupaAbrir();
+      hfWireDrag();
       const _hfc=document.getElementById("hfClear"); if(_hfc) _hfc.onclick=()=>{ hfSel=""; renderTab(); };
       return;
     }
