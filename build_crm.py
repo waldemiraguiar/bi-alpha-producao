@@ -298,7 +298,13 @@ def post_clinicas_rs(D):
     # SAFRA_KEY derivada do FIN_KEY (sha256("safra-v1:"+FIN_KEY)). Quem tem escopo "safra" decifra SÓ isto.
     try:
         safra_key = hashlib.sha256(("safra-v1:" + dir_code).encode()).hexdigest()
-        sdata = json.dumps({"fatmes": fatmes, "conqmes": conqmes, "fatmesall": fatmesall,
+        # 🛡️ BLINDAGEM (Wal 03/11): o pacote do Fábio leva o fatmesall SÓ das clínicas da CARTEIRA (as que ele vê na
+        # tabela "Dinheiro por mês"). Antes ia o universo inteiro (top 400 curvas A/B/C/D) cifrado na chave dele —
+        # a tela escondia, mas o dado estava no navegador. Agora o R$ das demais clínicas NÃO sai no pacote dele.
+        _safra_cods = set(fatmes.keys()) | set(conqmes.keys())
+        fatmesall_safra = {c: v for c, v in (fatmesall or {}).items() if c in _safra_cods}
+        print(f"safra escopo Fábio: fatmesall {len(fatmesall_safra)}/{len(fatmesall or {})} clínicas (só a carteira)")
+        sdata = json.dumps({"fatmes": fatmes, "conqmes": conqmes, "fatmesall": fatmesall_safra,
                             "fatmesall_dia": datetime.date.today().day},
                            ensure_ascii=False, separators=(",", ":")).encode()
         ssalt, siv = os.urandom(16), os.urandom(12)
