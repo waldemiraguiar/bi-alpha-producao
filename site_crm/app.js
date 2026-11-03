@@ -927,6 +927,9 @@ function _hfCard(cod, pinned){
   const _ymLbl=ym=>{ const p=String(ym).split('-'); return (_MES3[(+p[1])-1]||'')+'/'+(p[0]||'').slice(2); };
   const _serie=(_rs&&_rs.serie)||[];
   const _diaD = CLIN_FATMESALL_DIA||(new Date()).getDate();   // dia de corte do mês parcial (ex.: 03)
+  const _parcEl=(_rs&&_rs.serie)?_rs.serie.find(s=>s.parcial):null;
+  const _curMM = _parcEl?_parcEl.ym.split('-')[1]:String((new Date()).getMonth()+1).padStart(2,'0');
+  const _ateDMY = `${String(_diaD).padStart(2,'0')}/${_curMM}`;   // ex.: 03/11
   const _pctV=(a,b)=> (b&&b>0)? Math.round((a/b-1)*100) : null;
   // 💰 FATURAMENTO (só diretoria): 3 cartões LADO A LADO (este mês / ticket / 12 meses) + tira mês a mês embaixo. Wal 03/11: manter lado a lado, NÃO unificar.
   // mês FECHADO = cheio×cheio (val); MÊS ATUAL (parcial) = MTD × mesma janela do mês anterior (fd×fd) — ex. 03/11 × 03/10
@@ -935,7 +938,7 @@ function _hfCard(cod, pinned){
       const up=p!=null&&p>=2, dn=p!=null&&p<=-2; const dc=dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc');
       const pctTxt = p!=null ? `${dn?'▼':(up?'▲':'•')}${Math.abs(p)}%` : '·base';
       return `<div style="flex:0 0 auto;min-width:76px;text-align:center;border:1px solid ${x.parcial?'rgba(255,210,122,.5)':'rgba(0,229,160,.22)'};border-radius:10px;padding:7px 9px;background:${x.parcial?'rgba(255,210,122,.1)':'rgba(0,229,160,.05)'}">
-        <div style="font-size:10px;font-weight:800;color:${x.parcial?'#ffd27a':'#8fb0c9'};text-transform:uppercase;letter-spacing:.3px">${_ymLbl(x.ym)}${x.parcial?`<div style="font-size:7.5px;font-weight:800;color:#ffd27a;letter-spacing:.2px">parcial · até ${String(_diaD).padStart(2,'0')}/${x.ym.split('-')[1]}</div>`:''}</div>
+        <div style="font-size:10px;font-weight:800;color:${x.parcial?'#ffd27a':'#8fb0c9'};text-transform:uppercase;letter-spacing:.3px">${_ymLbl(x.ym)}${x.parcial?`<div style="font-size:8.5px;font-weight:800;color:#ffd27a;letter-spacing:.2px">parcial · até ${String(_diaD).padStart(2,'0')}/${x.ym.split('-')[1]}</div>`:''}</div>
         <div style="font-size:13px;font-weight:900;color:#eaf3ff;white-space:nowrap;margin-top:4px">${fmtBRL(x.val)}</div>
         <div style="font-size:9.5px;font-weight:800;color:${p!=null?dc:'#8aa2bd'};margin-top:2px">${pctTxt}</div>
       </div>`; }).join('');
@@ -944,7 +947,7 @@ function _hfCard(cod, pinned){
       <div style="display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:5px">${_mesCells}</div>
     </div>` : '';
   const rsRow = _rs ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px">
-      ${kpi(`${fmtBRL(_rs.fdCur)}${_rs.mom!=null?` <span style="font-size:12px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>`:''}`,'R$ este mês',_rs.ehCur?'até hoje · vs mês passado no mesmo dia':'último mês','#00E5A0')}
+      ${kpi(`${fmtBRL(_rs.fdCur)}${_rs.mom!=null?` <span style="font-size:12px;color:${_rs.mom<-0.01?'#ff5a7a':(_rs.mom>0.01?'#00E5A0':'#9fb2cc')}">${_rs.mom<0?'▼':(_rs.mom>0?'▲':'•')}${Math.abs(Math.round(_rs.mom*100))}%</span>`:''}`,'R$ este mês',_rs.ehCur?`parcial · até ${_ateDMY} · vs mesmo dia do mês passado`:'último mês','#00E5A0')}
       ${_rs.ticket!=null?kpi(fmtBRL(_rs.ticket),'ticket médio','R$ por exame','#7effcf'):''}
       ${_rs.tot12!=null?kpi(fmtBRL(_rs.tot12),'faturamento','últimos 12 meses','#9fe6ff'):''}
     </div>${mesStrip}` : '';
