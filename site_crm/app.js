@@ -730,14 +730,14 @@ function cepDe(cod){ return CLIN_CEP[String(cod==null?"":cod)]||""; }          /
 function cepFmt(cp){ cp=String(cp||"").replace(/\D/g,""); return cp.length>=8?cp.slice(0,5)+"-"+cp.slice(5,8):""; }
 function marcoLabel(iso){ const s=String(iso||"").slice(0,10); const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:""; }   // 2026-09-09 → 09/09/26
 function ehDrDra(nome){ return /^\s*dr(a|ª)?\.?\s/i.test(String(nome||"")); }   // vet particular: nome começa com Dr./Dra. — p/ agrupar junto dentro de cada tipo
-// ⭐ estrelas de FEEDBACK de contato ao lado do nome: nº de estrelas = nº de feedbacks; ROSA normal, DOURADAS se o último é recente (≤7 dias). Atualiza a cor sozinha com o passar dos dias (Wal 30/10).
+// ⭐ estrelas de FEEDBACK de contato ao lado do nome: nº de estrelas = nº de feedbacks; ROSA quando o último contato é RECENTE (≤7 dias), vira DOURADA depois de 1 semana. Atualiza a cor sozinha com o passar dos dias (Wal 30/10 · regra corrigida 03/11).
 function estrelasFeedback(cod){
   const nt=(typeof notasDe==="function")?notasDe(cod):[]; const n=nt.length; if(!n) return "";
   const latest=nt.reduce((m,x)=>Math.max(m,x.ts||0),0);
   const recente = latest>0 && (Date.now()-latest)<=7*864e5;
-  const cor = recente?'#ffd23b':'#ff8fcf';
+  const cor = recente?'#ff8fcf':'#ffd23b';
   const show=Math.min(n,5), stars='★'.repeat(show), extra=n>5?`<sub style="font-size:9px;color:${cor};font-weight:800">+${n-5}</sub>`:'';
-  return `<span title="${n} feedback(s) de contato · ${recente?'último há ≤7 dias (dourada)':'último há mais de 7 dias (rosa)'}" style="color:${cor};font-size:14px;letter-spacing:-1px;margin-left:3px;vertical-align:-1px${recente?';text-shadow:0 0 6px rgba(255,210,59,.75)':''}">${stars}</span>${extra}`;
+  return `<span title="${n} feedback(s) de contato · ${recente?'último há ≤7 dias (rosa · contato recente)':'último há mais de 7 dias (dourada · esfriou)'}" style="color:${cor};font-size:14px;letter-spacing:-1px;margin-left:3px;vertical-align:-1px${recente?';text-shadow:0 0 6px rgba(255,143,207,.8)':''}">${stars}</span>${extra}`;
 }
 
 /* ===== 🚨 RADAR DE FUGAS RECENTES — lupa sensível: queda grande de exames em janelas curtas (3/7/15d)
