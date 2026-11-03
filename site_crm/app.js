@@ -816,7 +816,7 @@ function _hfStats(cod){
 function _diaLabel(idx, baseISO){ try{ const b=new Date((baseISO||CLIN_DIA_BASE)+"T12:00:00"); const dt=new Date(b.getTime()+idx*864e5); return String(dt.getDate()).padStart(2,"0")+"/"+String(dt.getMonth()+1).padStart(2,"0"); }catch(e){ return ""; } }
 // 💰 R$ por clínica na Lupa — SÓ diretoria (usa o faturamento mensal cifrado já carregado). null = não mostra.
 function _hfRS(cod){
-  if((!ehDiretoria() && !veSafra()) || !CLIN_FATMESALL) return null;   // R$ nos cards: diretoria (Wal) + escopo Safra (Fábio). Nunca comercial. Wal 03/11
+  if(!ehDiretoria() || !CLIN_FATMESALL) return null;   // R$ nos cards: SÓ diretoria (Wal). Fábio NÃO vê R$ por clínica nos cards (Wal 03/11: manter)
   const s=(CLIN_FATMESALL[String(cod)]||[]).slice().sort((a,b)=>a.ym<b.ym?-1:1); if(!s.length) return null;
   const d0=new Date(); const curYm=d0.getFullYear()+"-"+String(d0.getMonth()+1).padStart(2,"0");
   const dp=new Date(d0); dp.setMonth(dp.getMonth()-1); const prevYm=dp.getFullYear()+"-"+String(dp.getMonth()+1).padStart(2,"0");
