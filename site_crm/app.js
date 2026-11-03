@@ -826,7 +826,7 @@ function _hfRS(cod){
   const mom = (fdPrev && fdPrev>0) ? (fdCur/fdPrev-1) : null;
   const rec=s.slice(-3); const recN=rec.reduce((a,m)=>a+(m.n||0),0), recF=rec.reduce((a,m)=>a+(m.fat||0),0);
   // série mensal (até 13 meses) p/ a tira "faturamento mês a mês" no card — valor cheio por mês; mês atual usa o parcial (fd) e vai marcado
-  const serie = s.slice(-13).map(x=>({ ym:x.ym, val:(x.ym===curYm ? (x.fd!=null?x.fd:(x.fat||0)) : (x.fat||0)), n:(x.n||0), parcial:(x.ym===curYm) }));
+  const serie = s.slice(-13).map(x=>({ ym:x.ym, val:(x.ym===curYm ? (x.fd!=null?x.fd:(x.fat||0)) : (x.fat||0)), fd:(x.fd!=null?x.fd:(x.fat||0)), n:(x.n||0), parcial:(x.ym===curYm) }));
   return { fdCur, mom, ehCur:!!curE, tot12: (typeof rsVal==="function"?rsVal(cod):null), ticket: recN>0?recF/recN:null, serie };
 }
 // 📌 fixar clínicas na Lupa (persistente no aparelho) — pra olhar os mesmos clientes todo dia
@@ -926,18 +926,21 @@ function _hfCard(cod, pinned){
   const _MES3=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   const _ymLbl=ym=>{ const p=String(ym).split('-'); return (_MES3[(+p[1])-1]||'')+'/'+(p[0]||'').slice(2); };
   const _serie=(_rs&&_rs.serie)||[];
+  const _diaD = CLIN_FATMESALL_DIA||(new Date()).getDate();   // dia de corte do mês parcial (ex.: 03)
   const _pctV=(a,b)=> (b&&b>0)? Math.round((a/b-1)*100) : null;
   // 💰 FATURAMENTO (só diretoria): 3 cartões LADO A LADO (este mês / ticket / 12 meses) + tira mês a mês embaixo. Wal 03/11: manter lado a lado, NÃO unificar.
-  const _mesCells = _serie.map((x,i)=>{ const prev=i>0?_serie[i-1].val:null; const p=_pctV(x.val,prev);
+  // mês FECHADO = cheio×cheio (val); MÊS ATUAL (parcial) = MTD × mesma janela do mês anterior (fd×fd) — ex. 03/11 × 03/10
+  const _mesCells = _serie.map((x,i)=>{ const prevEl=i>0?_serie[i-1]:null;
+      const p = x.parcial ? (prevEl?_pctV(x.fd, prevEl.fd):null) : (prevEl?_pctV(x.val, prevEl.val):null);
       const up=p!=null&&p>=2, dn=p!=null&&p<=-2; const dc=dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc');
       const pctTxt = p!=null ? `${dn?'▼':(up?'▲':'•')}${Math.abs(p)}%` : '·base';
       return `<div style="flex:0 0 auto;min-width:76px;text-align:center;border:1px solid ${x.parcial?'rgba(255,210,122,.5)':'rgba(0,229,160,.22)'};border-radius:10px;padding:7px 9px;background:${x.parcial?'rgba(255,210,122,.1)':'rgba(0,229,160,.05)'}">
-        <div style="font-size:10px;font-weight:800;color:${x.parcial?'#ffd27a':'#8fb0c9'};text-transform:uppercase;letter-spacing:.3px">${_ymLbl(x.ym)}${x.parcial?' ·p':''}</div>
+        <div style="font-size:10px;font-weight:800;color:${x.parcial?'#ffd27a':'#8fb0c9'};text-transform:uppercase;letter-spacing:.3px">${_ymLbl(x.ym)}${x.parcial?`<div style="font-size:7.5px;font-weight:800;color:#ffd27a;letter-spacing:.2px">parcial · até ${String(_diaD).padStart(2,'0')}/${x.ym.split('-')[1]}</div>`:''}</div>
         <div style="font-size:13px;font-weight:900;color:#eaf3ff;white-space:nowrap;margin-top:4px">${fmtBRL(x.val)}</div>
         <div style="font-size:9.5px;font-weight:800;color:${p!=null?dc:'#8aa2bd'};margin-top:2px">${pctTxt}</div>
       </div>`; }).join('');
   const mesStrip = _serie.length ? `<div style="margin-top:11px">
-      <div style="font-size:10px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">💰 faturamento mês a mês <span class="t-mut" style="font-weight:600;text-transform:none">· % vs mês anterior · deslize →</span></div>
+      <div style="font-size:10px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">💰 faturamento mês a mês <span class="t-mut" style="font-weight:600;text-transform:none">· % vs mês anterior · mês atual (·p) compara a mesma janela de dias · deslize →</span></div>
       <div style="display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:5px">${_mesCells}</div>
     </div>` : '';
   const rsRow = _rs ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px">
