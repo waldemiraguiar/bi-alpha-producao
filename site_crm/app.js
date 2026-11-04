@@ -831,7 +831,7 @@ function _hfRS(cod){
 }
 // 📌 fixar clínicas na Lupa (persistente no aparelho) — pra olhar os mesmos clientes todo dia
 function hfPins(){ try{ const a=JSON.parse(localStorage.getItem("crm_hf_pin")||"[]"); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
-function hfSetPins(a){ try{ localStorage.setItem("crm_hf_pin", JSON.stringify(a.slice(0,12))); }catch(e){} }
+function hfSetPins(a){ const arr=a.slice(0,12); try{ localStorage.setItem("crm_hf_pin", JSON.stringify(arr)); }catch(e){} try{ if(typeof saveLupaPinsServer==="function") saveLupaPinsServer(arr); }catch(e){} }
 // 🎨 marca MANUAL "piscar numa cor que eu escolho" por clínica (só pra mim, no aparelho) — Wal 03/11: a queda já pisca vermelho sozinha; este é genérico e a COR é minha escolha
 let hfBlinkOpen="";   // cod com a paletinha de cor aberta
 function hfBlinkAll(){ try{ return JSON.parse(localStorage.getItem("crm_hf_blink")||"{}")||{}; }catch(e){ return {}; } }
@@ -862,12 +862,17 @@ function hfObs(cod){ return hfObsAll()[String(cod)]||""; }
 function hfObsStart(cod){ hfObsEdit=String(cod); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function hfObsCancel(){ hfObsEdit=""; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function hfObsSave(cod){ const el=document.getElementById("hfObsTxt"); const t=el?String(el.value||"").trim():""; const o=hfObsAll(); if(t) o[String(cod)]=t.slice(0,600); else delete o[String(cod)]; try{ localStorage.setItem("crm_hf_obs", JSON.stringify(o)); }catch(e){} hfObsEdit=""; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
-// 💬 FEEDBACK DE CLIENTE por colaborador (servidor) — Wal 04/11: cada um escreve o SEU; a diretoria (Wal/Fábio) VÊ as de qualquer um pelo seletor.
-let LUPA_NOTAS={}, lupaVendo="", lupaFbEdit="";
-const LUPANOTAS_API="/api/crm-lupa-notas";
+// 💬 FEEDBACK DE CLIENTE + FIXAÇÕES por colaborador (servidor) — Wal 04/11: cada um escreve/fixa o SEU; quem VÊ a equipe (Wal diretoria + Fábio) abre a Lupa COMPLETA de qualquer um pelo seletor.
+let LUPA_NOTAS={}, LUPA_PINS={}, lupaVendo="", lupaFbEdit="";
+const LUPANOTAS_API="/api/crm-lupa-notas", LUPAPINS_API="/api/crm-lupa-pins";
+// quem pode VER a Lupa dos outros: diretoria (Wal, e Fábio em CF) OU escopo safra (Fábio na Matriz)
+function podeVerEquipe(){ return ehDiretoria() || (typeof veSafra==="function" && veSafra()); }
 async function loadLupaNotas(){ try{ const r=await fetch(LUPANOTAS_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); LUPA_NOTAS=(j&&j.notas)||{}; } }catch(e){} }
+async function loadLupaPins(){ try{ const r=await fetch(LUPAPINS_API,{cache:"no-store"}); if(r.ok){ const j=await r.json(); LUPA_PINS=(j&&j.pins)||{}; } }catch(e){} }
+// espelha as MINHAS fixações no servidor (pra a diretoria/Fábio ver a minha Lupa). Os pins seguem no localStorage (rápido); isto é só a cópia.
+function saveLupaPinsServer(cods){ const op=operadorAtual()||""; if(!op) return; try{ LUPA_PINS[op]=(cods||[]).map(String); fetch(LUPAPINS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"set",op,cods:(cods||[]).map(String),senha:window.__pwd})}).catch(()=>{}); }catch(e){} }
 function lupaNotasDe(op, cod){ const o=LUPA_NOTAS&&LUPA_NOTAS[op]; return (o&&o[String(cod)])||[]; }
-function _lupaQuem(){ return (ehDiretoria() && lupaVendo) ? lupaVendo : operadorAtual(); }   // de quem são as notas mostradas
+function _lupaQuem(){ return (podeVerEquipe() && lupaVendo) ? lupaVendo : operadorAtual(); }   // de quem são as notas mostradas
 async function addLupaNota(cod, texto){ const op=operadorAtual()||"equipe"; try{ const r=await fetch(LUPANOTAS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"add",op,cod:String(cod),texto,senha:window.__pwd})}); if(r.status===401){ alert("Sessão sem permissão — saia e entre de novo."); return false; } if(r.ok){ const j=await r.json(); if(j.notas) LUPA_NOTAS=j.notas; return true; } }catch(e){ alert("Sem internet."); } return false; }
 async function removeLupaNota(cod, ts){ const op=operadorAtual()||"equipe"; try{ const r=await fetch(LUPANOTAS_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"remove",op,cod:String(cod),ts,senha:window.__pwd})}); if(r.ok){ const j=await r.json(); if(j.notas) LUPA_NOTAS=j.notas; return true; } }catch(e){} return false; }
 function lupaFbStart(cod){ lupaFbEdit=String(cod); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
@@ -886,7 +891,7 @@ function _lupaFeedbackBlock(cod){
     ? `<div style="margin-top:7px"><textarea id="lupaFbTxt" placeholder="Ex.: liguei pra dona Fulana, pediu retorno do resultado; combinei coleta amanhã…" style="width:100%;min-height:58px;box-sizing:border-box;border:1px solid rgba(0,212,255,.4);border-radius:8px;background:rgba(0,0,0,.22);color:#eaf3ff;font-size:13px;padding:8px;resize:vertical"></textarea><div style="display:flex;gap:7px;margin-top:6px"><button onclick="lupaFbSave('${esc(String(cod))}')" style="border:0;background:#00c6e6;color:#042;border-radius:8px;padding:7px 15px;font-size:12.5px;font-weight:800;cursor:pointer">💾 salvar feedback</button><button onclick="lupaFbCancel()" style="border:1px solid var(--mut);background:transparent;color:var(--mut);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer">cancelar</button></div></div>`
     : `<div style="margin-top:7px"><button onclick="lupaFbStart('${esc(String(cod))}')" style="border:1px dashed rgba(0,212,255,.5);background:rgba(0,212,255,.08);color:#9fe6ff;border-radius:9px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer">💬 anotar feedback de cliente</button></div>`);
   return `<div style="margin-top:11px;border:1px solid rgba(0,212,255,.28);border-radius:12px;padding:10px 12px;background:rgba(0,212,255,.05)">
-    <div style="font-size:10.5px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">💬 Feedback de cliente <span class="t-mut" style="font-weight:600;text-transform:none">· ${souEu?'seu (a equipe não vê; só a diretoria)':'de '+quemLbl}</span></div>
+    <div style="font-size:10.5px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">💬 Feedback de cliente <span class="t-mut" style="font-weight:600;text-transform:none">· ${souEu?'seu (a equipe não vê; só os chefes)':'de '+quemLbl}</span></div>
     ${lista}${acao}
   </div>`;
 }
@@ -1119,12 +1124,16 @@ function lupaAbrir(){ const el=document.getElementById("hfLupa"); if(!el) return
 function lupaHF(){
   if(!CLINICAS.length) return "";
   const pins=hfPins(), pinSet=new Set(pins), eu=operadorAtual();
-  // 👁️ diretoria (Wal/Fábio) pode VER a Lupa de um colaborador (só leitura) — as clínicas que ele anotou feedback. Wal 04/11.
-  const vendo = (ehDiretoria() && lupaVendo && lupaVendo!==eu) ? lupaVendo : "";
+  // 👁️ quem vê a equipe (Wal diretoria + Fábio) pode VER a Lupa COMPLETA de um colaborador (só leitura): as que ela FIXOU + as que ela anotou. Wal 04/11.
+  const vendo = (podeVerEquipe() && lupaVendo && lupaVendo!==eu) ? lupaVendo : "";
   let cods, exemplo=false;
   if(vendo){
-    cods=Object.keys((LUPA_NOTAS&&LUPA_NOTAS[vendo])||{}).filter(c=>lupaNotasDe(vendo,c).length);
-    cods.sort((a,b)=>{ const la=lupaNotasDe(vendo,a), lb=lupaNotasDe(vendo,b); return (lb.length?lb[lb.length-1].ts:0)-(la.length?la[la.length-1].ts:0); });
+    const vpins=(LUPA_PINS&&LUPA_PINS[vendo])||[];
+    const vnotas=Object.keys((LUPA_NOTAS&&LUPA_NOTAS[vendo])||{}).filter(c=>lupaNotasDe(vendo,c).length);
+    vnotas.sort((a,b)=>{ const la=lupaNotasDe(vendo,a), lb=lupaNotasDe(vendo,b); return (lb.length?lb[lb.length-1].ts:0)-(la.length?la[la.length-1].ts:0); });
+    const seen=new Set(); cods=[];
+    vpins.forEach(c=>{ c=String(c); if(!seen.has(c)){ seen.add(c); cods.push(c); } });   // as fixadas dela primeiro (a Lupa dela), na ordem dela
+    vnotas.forEach(c=>{ c=String(c); if(!seen.has(c)){ seen.add(c); cods.push(c); } });   // + as que ela só anotou (sem fixar)
     cods=cods.slice(0,40);
   } else {
     cods=pins.slice();
@@ -1134,17 +1143,17 @@ function lupaHF(){
   }
   // o <datalist> com TODAS as clínicas é construído UMA vez fora do re-render (ensureHfDatalist).
   const ordBtn = (!vendo && pins.length>1) ? `<button onclick="hfPinsSortQuedas()" title="reordena as fixadas pondo as EM QUEDA no topo (mantém mesmo dono junto)" style="border:1px solid rgba(255,90,122,.5);background:rgba(255,90,122,.12);color:#ff9fb2;border-radius:10px;padding:9px 13px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap">⚠️ quedas no topo</button>` : "";
-  const lvSel = ehDiretoria() ? `<select id="lupaVendoSel" onchange="setLupaVendo(this.value)" title="ver o feedback de um colaborador" style="padding:9px 10px;border-radius:10px;border:1px solid rgba(155,140,255,.5);background:rgba(155,140,255,.14);color:#d7ccff;font-size:12.5px;font-weight:700;cursor:pointer"><option value=""${!lupaVendo?' selected':''}>👁️ minha Lupa</option>${(OPERADORES||[]).filter(o=>(o.nome||"")&&(o.nome||"")!==eu).map(o=>`<option value="${esc(o.nome)}"${lupaVendo===o.nome?' selected':''}>👁️ feedback de ${esc(o.nome)}</option>`).join("")}</select>` : "";
+  const lvSel = podeVerEquipe() ? `<select id="lupaVendoSel" onchange="setLupaVendo(this.value)" title="ver a Lupa de um colaborador (fixadas + feedback)" style="padding:9px 10px;border-radius:10px;border:1px solid rgba(155,140,255,.5);background:rgba(155,140,255,.14);color:#d7ccff;font-size:12.5px;font-weight:700;cursor:pointer"><option value=""${!lupaVendo?' selected':''}>👁️ minha Lupa</option>${(OPERADORES||[]).filter(o=>(o.nome||"")&&(o.nome||"")!==eu).map(o=>`<option value="${esc(o.nome)}"${lupaVendo===o.nome?' selected':''}>👁️ feedback de ${esc(o.nome)}</option>`).join("")}</select>` : "";
   const box=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:${vendo?'8px':'2px'}">
     ${vendo?'':`<input id="hfLupa" list="hfDL" autocomplete="off" placeholder="🔎 Buscar clínica (pode ser só um pedaço do nome)" value="" style="flex:1;min-width:200px;max-width:400px;padding:9px 12px;border-radius:10px;border:1px solid rgba(0,212,255,.45);background:rgba(0,212,255,.07);color:#eaf3ff;font-size:13.5px"><button id="hfLupaGo" title="abrir o card da clínica digitada" style="border:1px solid #00c6e6;background:linear-gradient(180deg,#0a7f94,#0b6478);color:#eafcff;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap">abrir</button>${ordBtn}`}${lvSel}
   </div>`;
-  const vendoBanner = vendo ? `<div class="proxhint" style="border-color:rgba(155,140,255,.5);color:#d7ccff;margin:0 0 10px;line-height:1.5">👁️ <b>Vendo o feedback de ${esc(vendo)}</b> <span class="t-mut">(só leitura — as clínicas que ${esc(vendo)} anotou). Volte em “👁️ minha Lupa”.</span></div>` : "";
+  const vendoBanner = vendo ? `<div class="proxhint" style="border-color:rgba(155,140,255,.5);color:#d7ccff;margin:0 0 10px;line-height:1.5">👁️ <b>Vendo a Lupa de ${esc(vendo)}</b> <span class="t-mut">(só leitura — as que ${esc(vendo)} fixou + as que anotou). Volte em “👁️ minha Lupa”.</span></div>` : "";
   const cards=cods.length ? cods.map(cod=>_hfCard(cod, vendo?false:pinSet.has(String(cod)))).join("") : (vendo?`<div class="empty" style="margin-top:12px"><b>${esc(vendo)}</b> ainda não registrou feedback de cliente em nenhuma clínica.</div>`:"");
   const hint = vendo ? "" : (exemplo ? `<div class="t-mut" style="font-size:11px;margin-top:8px">👆 exemplo: <b>SOS Bichos</b>. Toque em <b style="color:#ffd27a">📌 fixar</b> pra ele ficar aqui todo dia, e busque outras clínicas acima.</div>`
     : (pins.length?`<div class="t-mut" style="font-size:11px;margin-top:8px">📌 <b>${pins.length}</b> clínica(s) fixada(s) — ficam aqui todo dia, <b>na ordem que você deixar</b>. <b>Segure o ⠿ e arraste</b> pra ordenar (ou use ↑/↓), e <b>⚠️ quedas no topo</b> pra reagrupar.</div>`:""));
   return `${_LUPA_KF}<div style="border:1px solid rgba(0,212,255,.3);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:rgba(10,20,34,.45)">
     <div style="font-size:13px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">🔎 Lupa — monitorar clínica de perto (HF)</div>
-    <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar e anote o <b style="color:#9fe6ff">💬 feedback de cliente</b> (o seu é só seu; a diretoria vê o de cada um).${ehDiretoria()?' <b style="color:#d7ccff">Diretoria:</b> use o seletor 👁️ pra ver o feedback de um colaborador.':''}</div>
+    <div class="t-mut" style="font-size:11px;margin:3px 0 9px;line-height:1.5">Fixe os clientes que quer vigiar e anote o <b style="color:#9fe6ff">💬 feedback de cliente</b> (o seu é só seu; os chefes veem o de cada um).${podeVerEquipe()?' <b style="color:#d7ccff">Você pode:</b> use o seletor 👁️ pra ver a Lupa COMPLETA de um colaborador (fixadas + feedback).':''}</div>
     ${box}${vendoBanner}<div id="hfCards">${cards}</div>${hint}
   </div>`;
 }
@@ -5866,7 +5875,8 @@ function render(D){
     const modal=document.getElementById("modal");
     if(modal) modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
     window.addEventListener("online", ()=>{ pqFlush(); rqFlush(); });   // voltou o sinal → sincroniza as filas offline
-    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas(), loadDia(), loadSafraHist(), loadLupaNotas()]).then(async ()=>{
+    Promise.all([loadFollowups(), loadInter(), loadHist(), loadEncerr(), loadInat(), loadSens(), loadProsp(), loadPista(), loadReps(), loadExcl(), loadRelatos(), loadOps(), loadClin(), loadCart(), loadListas(), loadClinRS(), loadRel(), loadDet(), loadAAA(), loadPautas(), loadComp(), loadExMes(), loadNotas(), loadDia(), loadSafraHist(), loadLupaNotas(), loadLupaPins()]).then(async ()=>{
+      try{ const _mp=hfPins(); const _me=operadorAtual(); if(_me && _mp.length){ const _sv=(LUPA_PINS[_me]||[]).map(String).join(','); if(_sv!==_mp.map(String).join(',')) saveLupaPinsServer(_mp); } }catch(e){}   // semeia/atualiza as MINHAS fixações no servidor pra os chefes verem
       const fc=dirCodeCache(); if(fc && CLIN_RS_ENV && !CLIN_RS && !localStorage.getItem("crm_bio_id")){ const ok=await decDirRS(fc); if(ok) localStorage.setItem("crm_operador_papel","diretoria"); }   // sem digital: R$ abre sozinho; COM digital: pede a biometria ao tocar
       if(veSafra() && !CLIN_FATMES){ const sc=localStorage.getItem("crm_safra_code"); if(sc) await decSafra(sc); }   // Fábio: a Safra reabre sozinha neste aparelho
       pqFlush(); rqFlush(); renderOpBtn(); renderAll();
