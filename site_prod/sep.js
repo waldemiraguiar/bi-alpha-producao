@@ -618,7 +618,8 @@
     const bRasc = /MOLECULAR/i.test(it.cat || '') ? ( _rImp
       ? `<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:3px 8px;font-weight:700;font-size:12px;white-space:nowrap" title="rascunho impresso às ${window._rascHmG?window._rascHmG(_rImp):''}">✅ rascunho ${window._rascHmG?window._rascHmG(_rImp):''}</span><button class="sepbtn" style="background:#64748b;border-color:#64748b;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="reimprimir o rascunho do PCR">🖨️</button><button class="sepbtn" style="background:#ef4444;border-color:#ef4444;color:#fff" onclick="_rascDesmarcar('${esc2(String(it.req))}')" title="desmarcar (ainda não impresso)">✕</button>`
       : `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(it.req))}')" title="imprimir o rascunho do PCR deste animal">🖨️</button>` ) : '';
-    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${bRasc}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${bterc}${undo}</div></div>`;
+    const bCult = /BACTERIOLOG|CULTURA|PARASITOLOG/i.test(it.cat || '') ? `<button class="sepbtn" style="background:#0d9488;border-color:#0d9488;color:#fff" onclick="imprimirRascunhoCultura('${esc2(String(it.req))}')" title="imprimir o rascunho de cultura deste animal">🧫</button>` : '';
+    return `<div class="seprow ${received ? 'confirmrow' : ''}">${head}<div class="right2">${bRasc}${bCult}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${bterc}${undo}</div></div>`;
   }
 
   // CARD AGRUPADO: FIV+FELV (e demais PCR) do MESMO registro num card só; 1 clique vale pros dois.
@@ -669,7 +670,8 @@
     const bRasc = _rImp
       ? `<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:3px 8px;font-weight:700;font-size:12px;white-space:nowrap" title="rascunho impresso às ${window._rascHmG ? window._rascHmG(_rImp) : ''}">✅ rascunho ${window._rascHmG ? window._rascHmG(_rImp) : ''}</span><button class="sepbtn" style="background:#64748b;border-color:#64748b;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(a.req))}')" title="reimprimir o rascunho do PCR">🖨️</button><button class="sepbtn" style="background:#ef4444;border-color:#ef4444;color:#fff" onclick="_rascDesmarcar('${esc2(String(a.req))}')" title="desmarcar (ainda não impresso)">✕</button>`
       : `<button class="sepbtn" style="background:#0284c7;border-color:#0284c7;color:#fff" onclick="imprimirRascunhoPCR('${esc2(String(a.req))}')" title="imprimir o rascunho do PCR deste animal">🖨️</button>`;
-    return `<div class="seprow pcrgrp ${recAll ? 'confirmrow' : ''}" style="border-left:3px solid #7d5bd0">${head}<div class="right2">${bRasc}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${bterc}${undo}</div></div>`;
+    const bCult = /BACTERIOLOG|CULTURA|PARASITOLOG/i.test(a.cat || '') ? `<button class="sepbtn" style="background:#0d9488;border-color:#0d9488;color:#fff" onclick="imprimirRascunhoCultura('${esc2(String(a.req))}')" title="imprimir o rascunho de cultura deste animal">🧫</button>` : '';
+    return `<div class="seprow pcrgrp ${recAll ? 'confirmrow' : ''}" style="border-left:3px solid #7d5bd0">${head}<div class="right2">${bRasc}${bCult}${badge}${b1}<span class="steparrow">→</span>${b2}${b3}${btrava}${bterc}${undo}</div></div>`;
   }
   // MOLECULAR: agrupa same-req (FIV+FELV) num card; demais categorias ficam linha-a-linha (zero mudança)
   function renderSepRows(ordered, selKey) {
