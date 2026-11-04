@@ -1449,12 +1449,12 @@ function renderMargem(D){
   const prem=ag.premio_pct;
   let html=`<div class="fbanner">
     <div class="b"><div class="v" style="color:${prem>=0?AZUL2:'var(--red)'}">${prem>=0?'+':''}${prem}%</div><div class="l">Pet Love paga vs NOSSA tabela (varejo)</div></div>
-    <div class="b"><div class="v">${brlk(ag.receita_petlove)}</div><div class="l">reembolso Pet Love (exames casados)</div></div>
-    <div class="b"><div class="v" style="color:var(--mut)">${brlk(ag.receita_tabela)}</div><div class="l">se cobrado pela tabela varejo</div></div>
+    <div class="b"><div class="v">${brlk(ag.receita_petlove)}</div><div class="l">reembolso Pet Love/mês (exames casados)</div></div>
+    <div class="b"><div class="v" style="color:var(--mut)">${brlk(ag.receita_tabela)}</div><div class="l">se cobrado pela tabela varejo/mês</div></div>
     <div class="b"><div class="v" style="color:var(--green)">${ag.n_match}</div><div class="l">exames casados (de ${ag.n_total})</div></div></div>`;
   html+=`<div class="alert-card ${prem>=0?'info':'warn'}" style="margin:6px 0 16px"><div class="ai">⚖️</div><div>
     <div class="at">No agregado, a Pet Love nos paga ${prem>=0?'ACIMA':'ABAIXO'} do varejo (${prem>=0?'+':''}${prem}%)</div>
-    <div class="ax">Compara o <b>reembolso</b> que a Pet Love paga por exame com a <b>nossa tabela de varejo (Mar/2026)</b>. Onde paga acima, ganhamos ${brl(ag.ganho_acima)} (${ag.n_acima} exames); onde paga abaixo, abrimos mão de ${brl(ag.perda_abaixo)} (${ag.n_abaixo} exames). <b>Atenção:</b> isto é preço × preço — a margem REAL precisa do custo do exame (pendente do dev). ${esc(M.obs||'')}</div></div></div>`;
+    <div class="ax">Compara o <b>reembolso</b> que a Pet Love paga por exame com a <b>nossa tabela de varejo (Mar/2026)</b>. Onde paga acima, ganhamos ${brl(ag.ganho_acima)} (${ag.n_acima} exames); onde paga abaixo, abrimos mão de ${brl(ag.perda_abaixo)} (${ag.n_abaixo} exames). A coluna <b>Margem*</b> já cruza com o <b>custo do setor</b> (estudo Orthos) — <b>*mas é a média do setor</b>, não o custo exato do exame; onde o exame foge da média (citologia dentro de Patologia, frutosamina dentro de Hormônios), a margem é só direcional. ${esc(M.obs||'')}</div></div></div>`;
   html+=`<div style="display:flex;align-items:center;gap:14px;margin:0 0 16px;flex-wrap:wrap">
     <button class="toolbtn" id="btnReneg" style="background:var(--cyan);color:var(--navy);font-weight:700">📧 Exportar lista de renegociação por e-mail</button>
     <span id="renegStatus" style="color:var(--mut);font-size:13px"></span></div>`;
@@ -1467,8 +1467,10 @@ function renderMargem(D){
     <td class="num">${brl(x.petlove)}</td>
     <td class="num" style="color:var(--mut)">${brl(x.tabela)}</td>
     <td class="num" style="color:${x.delta>=0?AZUL2:'var(--red)'};font-weight:700">${x.delta>=0?'+':''}${x.delta_pct}%</td>
+    <td class="num" style="color:var(--mut)">${x.custo!=null?brl(x.custo):'—'}</td>
+    <td class="num" style="color:${x.margem_custo>=0?'var(--green)':'var(--red)'};font-weight:700">${x.margem_custo!=null?(x.margem_custo>=0?'':'')+x.margem_custo+'%':'—'}</td>
     <td class="num" style="color:${x.impacto>=0?AZUL2:'var(--red)'};font-weight:700">${x.impacto>=0?'+':''}${brl(x.impacto)}</td></tr>`).join('');
-  const thead=`<thead><tr><th>Exame</th><th class="num">Volume</th><th class="num">Pet Love paga</th><th class="num">Nossa tabela</th><th class="num">Δ%</th><th class="num">Impacto (Δ×vol)</th></tr></thead>`;
+  const thead=`<thead><tr><th>Exame</th><th class="num">Vol/mês</th><th class="num">Pet Love paga</th><th class="num">Nossa tabela</th><th class="num">Δ%</th><th class="num">Custo setor*</th><th class="num">Margem*</th><th class="num">Impacto (Δ×vol)</th></tr></thead>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>🟦 Pet Love paga ACIMA do varejo — favorável <span class="cap">${acima.length} exames · ordenado por impacto</span></h3>
     <table class="atab">${thead}<tbody>${rowsT(acima)}</tbody></table></div>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>🟥 Pet Love paga ABAIXO do varejo — desconto que damos <span class="cap">${abaixo.length} exames · maior desconto primeiro</span></h3>
@@ -1477,8 +1479,8 @@ function renderMargem(D){
   const sem=(M.exames||[]).filter(x=>x.tabela==null).sort((a,b)=>b.volume-a.volume);
   if(sem.length){
     html+=`<div class="card"><h3>Sem correspondência direta na tabela <span class="cap">${sem.length} exames — nome Pet Love não bateu com a tabela varejo</span></h3>
-      <table class="atab"><thead><tr><th>Exame (Pet Love)</th><th class="num">Volume</th><th class="num">Pet Love paga</th></tr></thead><tbody>`+
-      sem.slice(0,30).map(x=>`<tr><td>${esc(x.exame)}</td><td class="num">${num(x.volume)}</td><td class="num">${x.petlove?brl(x.petlove):'—'}</td></tr>`).join('')+
+      <table class="atab"><thead><tr><th>Exame (Pet Love)</th><th class="num">Vol/mês</th><th class="num">Pet Love paga</th><th class="num">Custo setor*</th><th class="num">Margem*</th></tr></thead><tbody>`+
+      sem.slice(0,30).map(x=>`<tr><td>${esc(x.exame)}${x.setor?` <span style="color:var(--mut);font-size:10px">${esc(x.setor)}</span>`:''}</td><td class="num">${num(x.volume)}</td><td class="num">${x.petlove?brl(x.petlove):'—'}</td><td class="num" style="color:var(--mut)">${x.custo!=null?brl(x.custo):'—'}</td><td class="num" style="color:${x.margem_custo>=0?'var(--green)':'var(--red)'};font-weight:700">${x.margem_custo!=null?x.margem_custo+'%':'—'}</td></tr>`).join('')+
       `</tbody></table></div>`;
   }
   html+=`<div style="color:var(--mut);font-size:11px;margin-top:10px">${esc(M.fonte||'')}</div>`;
@@ -1492,9 +1494,9 @@ function renegLista(M){
   const EXC=new Set(['sódio','potássio','sodio','potassio']);
   const ab=(M.exames||[]).filter(x=>x.tabela!=null && x.delta<0 && x.volume>=15
       && !EXC.has((x.exame||'').trim().toLowerCase()));
-  ab.forEach(x=>{x._gap=Math.round((-x.delta)*x.volume*1.2);
+  ab.forEach(x=>{x._gap=Math.round((-x.delta)*x.volume*12);
     const alvo=Math.round(0.8*x.tabela*100)/100; x._alvo=alvo>x.petlove?alvo:x.petlove;
-    x._recup=Math.round(Math.max(0,(x._alvo-x.petlove))*x.volume*1.2);});
+    x._recup=Math.round(Math.max(0,(x._alvo-x.petlove))*x.volume*12);});
   ab.sort((a,b)=>b._gap-a._gap);
   return ab;
 }
@@ -1509,17 +1511,17 @@ function renegEmailHTML(M){
     <td ${tdr}><b>${brl(x._gap)}</b></td><td ${tdr}>${brl(x._alvo)}</td><td ${tdr}>${brl(x._recup)}</td></tr>`).join('');
   return `<div style="font-family:Inter,Arial,sans-serif;background:#0A1628;color:#E8EEF6;padding:22px">
    <h2 style="color:#00D4FF;margin:0 0 4px">Renegociação Pet Love — exames subprecificados</h2>
-   <div style="color:#9FB0C8;font-size:12px;margin-bottom:14px">Gerado pelo painel BI Alpha · base relatórios Pet Love jan–nov/2025 × Tabela Mar/2026</div>
+   <div style="color:#9FB0C8;font-size:12px;margin-bottom:14px">Gerado pelo painel BI Alpha · base relatórios transacionais Pet Love set–out/2026 (repasse por exame) × Tabela varejo Mar/2026</div>
    <div style="background:#0E1E36;border:1px solid #1C2F4A;border-radius:8px;padding:14px;margin-bottom:16px">
      <b>Em jogo: até ${brl(teto)}/ano</b> · recuperável ~${brl(recup)}/ano (alvo: desconto máx 20% do varejo) · ${ab.length} exames.<br>
-     <span style="color:#9FB0C8;font-size:12px">No agregado a Pet Love paga +20% acima do varejo (rotina de alto volume). O ajuste é só nos especializados/endócrinos abaixo.</span>
+     <span style="color:#9FB0C8;font-size:12px">No agregado a Pet Love paga +28% acima do varejo (rotina de alto volume). O ajuste é só nos especializados/endócrinos abaixo.</span>
    </div>
    <table style="border-collapse:collapse;width:100%">
      <thead><tr style="background:#13294A;color:#fff">
        <th ${td}>#</th><th ${td} align="left">Exame</th><th ${tdr}>Vol.</th><th ${tdr}>PL paga</th>
        <th ${tdr}>Varejo</th><th ${tdr}>Desc.</th><th ${tdr}>R$/ano em jogo</th><th ${tdr}>Alvo −20%</th><th ${tdr}>Recupera/ano</th></tr></thead>
      <tbody>${rows}</tbody></table>
-   <div style="color:#868E96;font-size:11px;margin-top:14px">Sódio/Potássio excluídos (tabela só vende o par R$23). Margem real precisa do custo do exame (pendente do dev). Volume anualizado ×1,2 (~10 meses observados).</div>
+   <div style="color:#868E96;font-size:11px;margin-top:14px">Sódio/Potássio excluídos (tabela só vende o par R$23). Volume MENSAL (média set–out/26) × 12 = ano. Custo = média do setor (estudo Orthos), não o custo exato do exame.</div>
   </div>`;
 }
 async function enviarRenegociacao(M){

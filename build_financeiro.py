@@ -796,11 +796,12 @@ def build():
                 "perda_abaixo":round(sum(-r["delta"]*r["volume"] for r in abaixo),2)},
             "exames":marg,
             "top_exames":sorted(plex,key=lambda x:-x["volume"])[:40],
-            "fonte":"Relatórios de pagamento Pet Love (Contas Médicas) jan–nov/2025 · "
-                    "Tabela de Preços Alpha Março/2026 · preço unit. PL = mediana de atendimentos avulsos",
+            "fonte":"Relatórios TRANSACIONAIS Pet Love set–out/2026 (Valor_Repasse por exame) · "
+                    "Tabela de Preços Alpha Março/2026 · preço unit. PL = repasse médio por exame (repasse÷qtd) · volume MENSAL (média set–out)",
             "obs":"Compara o REEMBOLSO que a Pet Love nos paga por exame vs nossa TABELA DE VAREJO. "
                   "Δ>0 = Pet Love paga ACIMA do varejo (favorável). Δ<0 = abaixo (desconto que damos). "
-                  "Margem real (com custo do exame) depende do dev liberar custo."}
+                  "A coluna Margem cruza com o CUSTO do exame — usando a MÉDIA DO SETOR (estudo Orthos), "
+                  "não o custo exato: onde o exame foge da média do setor, a margem é só direcional."}
     except Exception as e:
         D["petlove_margem"]={"erro":str(e)}
 
