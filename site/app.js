@@ -2225,7 +2225,8 @@ function drawAnalisesChart(){
    (/api/enc?f=estudo_custos) a partir do Mac do Wal — nunca neste repositório (público).
    A senha do painel NÃO abre. Mostra a data de inclusão em destaque no topo. */
 let _estD=null, _estMsg='', _estFull=false, _estPW=null;
-async function _estFetch(){ const r=await fetch('/api/enc?f=estudo_custos&_='+Date.now()); if(!r.ok) throw new Error('vazio'); return r.json(); }
+async function _estFetch(){ const h=window.__TK?{authorization:'Bearer '+window.__TK}:{};   // 19/set: o GET /api/enc exige sessão de usuário — sem o token dá 401 e o card somia calado
+  const r=await fetch('/api/enc?f=estudo_custos&_='+Date.now(),{headers:h}); if(!r.ok) throw new Error('vazio'); return r.json(); }
 async function renderEstudoCustos(){
   const box=document.getElementById('estudoCustosBox'); if(!box) return;
   if(!_estD && _socPW){ try{ _estD=await decryptEncObj(await _estFetch(), _socPW); _estPW=_socPW; }catch(e){} }   // aberto pela aba Sócios: guarda a senha em memória p/ oferecer a digital
