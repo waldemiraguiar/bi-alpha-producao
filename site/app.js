@@ -1473,16 +1473,16 @@ function renderMargem(D){
     <td class="num" style="color:${x.impacto>=0?AZUL2:'var(--red)'};font-weight:700">${x.impacto>=0?'+':''}${brl(x.impacto)}</td></tr>`).join('');
   const thead=`<thead><tr><th>Exame</th><th class="num">Vol/mês</th><th class="num">Pet Love paga</th><th class="num">Nossa tabela</th><th class="num">Δ%</th><th class="num">Custo setor*</th><th class="num">Margem Pet Love*</th><th class="num">Margem varejo*</th><th class="num">Impacto (Δ×vol)</th></tr></thead>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>🟦 Pet Love paga ACIMA do varejo — favorável <span class="cap">${acima.length} exames · ordenado por impacto</span></h3>
-    <table class="atab">${thead}<tbody>${rowsT(acima)}</tbody></table></div>`;
+    <div style="overflow:auto;max-height:70vh"><table class="atab">${thead}<tbody>${rowsT(acima)}</tbody></table></div></div>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>🟥 Pet Love paga ABAIXO do varejo — desconto que damos <span class="cap">${abaixo.length} exames · maior desconto primeiro</span></h3>
-    <table class="atab">${thead}<tbody>${rowsT(abaixo)}</tbody></table></div>`;
+    <div style="overflow:auto;max-height:70vh"><table class="atab">${thead}<tbody>${rowsT(abaixo)}</tbody></table></div></div>`;
   // sem correspondência
   const sem=(M.exames||[]).filter(x=>x.tabela==null).sort((a,b)=>b.volume-a.volume);
   if(sem.length){
     html+=`<div class="card"><h3>Sem correspondência direta na tabela <span class="cap">${sem.length} exames — nome Pet Love não bateu com a tabela varejo</span></h3>
-      <table class="atab"><thead><tr><th>Exame (Pet Love)</th><th class="num">Vol/mês</th><th class="num">Pet Love paga</th><th class="num">Custo setor*</th><th class="num">Margem Pet Love*</th></tr></thead><tbody>`+
+      <div style="overflow:auto;max-height:70vh"><table class="atab"><thead><tr><th>Exame (Pet Love)</th><th class="num">Vol/mês</th><th class="num">Pet Love paga</th><th class="num">Custo setor*</th><th class="num">Margem Pet Love*</th></tr></thead><tbody>`+
       sem.slice(0,30).map(x=>`<tr><td>${esc(x.exame)}${x.setor?` <span style="color:var(--mut);font-size:10px">${esc(x.setor)}</span>`:''}</td><td class="num">${num(x.volume)}</td><td class="num">${x.petlove?brl(x.petlove):'—'}</td><td class="num" style="color:var(--mut)">${x.custo!=null?brl(x.custo)+(x.custo_fonte==='exato'?' <span style="color:var(--green)">✓</span>':''):'—'}</td><td class="num" style="color:${x.margem_custo>=0?'var(--green)':'var(--red)'};font-weight:700">${x.margem_custo!=null?x.margem_custo+'%':'—'}</td></tr>`).join('')+
-      `</tbody></table></div>`;
+      `</tbody></table></div></div>`;
   }
   html+=`<div style="color:var(--mut);font-size:11px;margin-top:10px">${esc(M.fonte||'')}</div>`;
   wrap.innerHTML=html;
