@@ -24,12 +24,15 @@ function _rascFolha(reg){
   const its=_rascItens().filter(i=>String(i.req)===String(reg)&&/MOLECULAR/i.test(i.cat||''));
   if(!its.length) return null;
   const r=its[0], ent=_rascFdt(r.entrada);
+  // Dudu 04/11: o "– VETLAB" só sai quando o exame é TERCEIRIZADO (vai pro lab de apoio). PCR interno
+  // (não marcado como terceirizado) imprime só "ALPHA LABS". Antes o VETLAB era fixo no cabeçalho.
+  const terc=its.some(i=>exTerceirizado(i));
   const exs=[...new Set(its.map(i=>i.exame).filter(Boolean))];
   const hoje=new Date(), ref='AL-'+String(hoje.getFullYear()).slice(2)+String(hoje.getMonth()+1).padStart(2,'0')+String(hoje.getDate()).padStart(2,'0')+'-ME'+String(reg).slice(-4);
   const up=s=>String(s||'').toUpperCase();
   return `<div class="folha">
     <div class="hf">Nº HF: <b>${esc(String(r.hf||reg))}</b><br><span class="ref">ref. interna: ${ref}</span></div>
-    <div class="h1">ALPHA LABS – VETLAB</div><div class="h2">BIOLOGIA MOLECULAR (PCR)</div>
+    <div class="h1">ALPHA LABS${terc?' – VETLAB':''}</div><div class="h2">BIOLOGIA MOLECULAR (PCR)</div>
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
