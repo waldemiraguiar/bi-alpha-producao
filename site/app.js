@@ -1454,7 +1454,7 @@ function renderMargem(D){
     <div class="b"><div class="v" style="color:var(--green)">${ag.n_match}</div><div class="l">exames casados (de ${ag.n_total})</div></div></div>`;
   html+=`<div class="alert-card ${prem>=0?'info':'warn'}" style="margin:6px 0 16px"><div class="ai">⚖️</div><div>
     <div class="at">No agregado, a Pet Love nos paga ${prem>=0?'ACIMA':'ABAIXO'} do varejo (${prem>=0?'+':''}${prem}%)</div>
-    <div class="ax">Compara o <b>reembolso</b> que a Pet Love paga por exame com a <b>nossa tabela de varejo (Mar/2026)</b>. Onde paga acima, ganhamos ${brl(ag.ganho_acima)} (${ag.n_acima} exames); onde paga abaixo, abrimos mão de ${brl(ag.perda_abaixo)} (${ag.n_abaixo} exames). A coluna <b>Margem*</b> já cruza com o <b>custo do setor</b> (estudo Orthos) — <b>*mas é a média do setor</b>, não o custo exato do exame; onde o exame foge da média (citologia dentro de Patologia, frutosamina dentro de Hormônios), a margem é só direcional. ${esc(M.obs||'')}</div></div></div>`;
+    <div class="ax">Compara o <b>reembolso</b> que a Pet Love paga por exame com a <b>nossa tabela de varejo (Mar/2026)</b>. Onde paga acima, ganhamos ${brl(ag.ganho_acima)} (${ag.n_acima} exames); onde paga abaixo, abrimos mão de ${brl(ag.perda_abaixo)} (${ag.n_abaixo} exames). As colunas <b>Margem plano*</b> (repasse × custo) e <b>Margem varejo*</b> (seu preço de tabela × custo) deixam comparar lado a lado onde rende mais. Ex.: no Hemograma o plano paga melhor que o seu próprio varejo. <b>*Custo = média do setor</b> (estudo Orthos), não o custo exato do exame; onde o exame foge da média (citologia dentro de Patologia, frutosamina dentro de Hormônios), a margem é só direcional. ${esc(M.obs||'')}</div></div></div>`;
   html+=`<div style="display:flex;align-items:center;gap:14px;margin:0 0 16px;flex-wrap:wrap">
     <button class="toolbtn" id="btnReneg" style="background:var(--cyan);color:var(--navy);font-weight:700">📧 Exportar lista de renegociação por e-mail</button>
     <span id="renegStatus" style="color:var(--mut);font-size:13px"></span></div>`;
@@ -1468,9 +1468,10 @@ function renderMargem(D){
     <td class="num" style="color:var(--mut)">${brl(x.tabela)}</td>
     <td class="num" style="color:${x.delta>=0?AZUL2:'var(--red)'};font-weight:700">${x.delta>=0?'+':''}${x.delta_pct}%</td>
     <td class="num" style="color:var(--mut)">${x.custo!=null?brl(x.custo):'—'}</td>
-    <td class="num" style="color:${x.margem_custo>=0?'var(--green)':'var(--red)'};font-weight:700">${x.margem_custo!=null?(x.margem_custo>=0?'':'')+x.margem_custo+'%':'—'}</td>
+    <td class="num" style="color:${x.margem_custo>=0?'var(--green)':'var(--red)'};font-weight:700">${x.margem_custo!=null?x.margem_custo+'%':'—'}</td>
+    <td class="num" style="color:${x.margem_varejo>=0?'var(--green)':'var(--red)'}">${x.margem_varejo!=null?x.margem_varejo+'%':'—'}</td>
     <td class="num" style="color:${x.impacto>=0?AZUL2:'var(--red)'};font-weight:700">${x.impacto>=0?'+':''}${brl(x.impacto)}</td></tr>`).join('');
-  const thead=`<thead><tr><th>Exame</th><th class="num">Vol/mês</th><th class="num">Pet Love paga</th><th class="num">Nossa tabela</th><th class="num">Δ%</th><th class="num">Custo setor*</th><th class="num">Margem*</th><th class="num">Impacto (Δ×vol)</th></tr></thead>`;
+  const thead=`<thead><tr><th>Exame</th><th class="num">Vol/mês</th><th class="num">Pet Love paga</th><th class="num">Nossa tabela</th><th class="num">Δ%</th><th class="num">Custo setor*</th><th class="num">Margem plano*</th><th class="num">Margem varejo*</th><th class="num">Impacto (Δ×vol)</th></tr></thead>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>🟦 Pet Love paga ACIMA do varejo — favorável <span class="cap">${acima.length} exames · ordenado por impacto</span></h3>
     <table class="atab">${thead}<tbody>${rowsT(acima)}</tbody></table></div>`;
   html+=`<div class="card" style="margin-bottom:16px"><h3>🟥 Pet Love paga ABAIXO do varejo — desconto que damos <span class="cap">${abaixo.length} exames · maior desconto primeiro</span></h3>
