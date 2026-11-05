@@ -1048,11 +1048,18 @@
     }
     const nReqs = idn.reduce((s, r) => s + (r.n_reqs || 0), 0);
     const stat = (v, l, c) => `<div style="background:#0c1a2e;border:1px solid #1e3350;border-radius:10px;padding:10px 14px;min-width:120px"><div style="font-size:26px;font-weight:800;color:${c}">${v}</div><div style="font-size:12px;color:#8aa2bd">${l}</div></div>`;
-    const topo = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    let tsMax = 0;
+    cand.forEach(c => { const t = Date.parse(c.atualizado_em) || 0; if (t > tsMax) tsMax = t; });
+    idn.forEach(r => { const t = Date.parse(r.atualizado_em) || 0; if (t > tsMax) tsMax = t; });
+    const horas = tsMax ? (Date.now() - tsMax) / 36e5 : 0;
+    const velho = tsMax && horas > 26; // atualiza 2×/dia; >26h sem atualizar = algo parou
+    const quando = tsMax ? new Date(tsMax).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    const topo = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
       ${stat(idn.length.toLocaleString('pt-BR'), 'prontuários juntados sozinho (AUTO)', '#5eead4')}
       ${stat(nReqs.toLocaleString('pt-BR'), 'requisições já pareadas', '#00D4FF')}
       ${stat(cand.length.toLocaleString('pt-BR'), 'na fila pra conferir (duvidosos)', '#FFB020')}
-    </div>`;
+    </div>
+    <div style="font-size:12px;margin-bottom:10px;color:${velho ? '#FF5470' : '#64748b'}">${velho ? '⚠️' : '🕒'} última conciliação: <b>${quando}</b>${velho ? ` — parada há ${Math.round(horas)}h! avise o Claude` : ' · atualiza sozinho 2×/dia (10h e 15h)'}</div>`;
     const esp = s => esc2(s || '').trim() || '—';
     const logado = !!me();
     const linhas = cand.map(c => {
