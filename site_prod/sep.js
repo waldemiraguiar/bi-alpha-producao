@@ -29,6 +29,7 @@
   let busca = '';                 // 🔎 busca global (todas as categorias) por registro/paciente/exame/data
   let apPer = 'mes';              // Apagados: período (dia/semana/mes/ano/tudo)
   let subSep = null;             // canal Realtime do Supabase
+  let puData = null, puLoad = 'idle'; // 🧬 Prontuário Único (lazy): puData={candidatos,identidades}; puLoad=idle|loading|ok|erro
   const useSupa = () => window.SUPA && window.SUPA.ok;
   let timer = null;
   let idleTimer = null;          // logout automático por inatividade
@@ -553,6 +554,7 @@
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
         ${ncN ? `<div class="septab ${view === 'naoclass' ? 'on' : ''}" data-v="naoclass" style="border-color:#f59e0b;color:#f59e0b">⚠️ A classificar <span class="c" style="background:#f59e0b;color:#fff">${ncN}</span></div>` : ''}
+        <div class="septab ${view === 'prontuario' ? 'on' : ''}" data-v="prontuario" style="border-color:#14b8a6;color:#5eead4">🧬 Prontuário${puData && puData.candidatos.length ? ` <span class="c" style="background:#14b8a6;color:#063">${puData.candidatos.length}</span>` : ''}</div>
         <button class="atualizar-btn" id="sepAtualizar" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>
       </div>
       <div class="sepme">
@@ -1028,7 +1030,45 @@
     hist: '📋 Tudo que foi separado E o que ficou sem separar — filtre por dia, setor e tipo.',
     apagados: '🗑 Não-separados que o admin apagou — ficam guardados aqui, nada se perde.',
     naoclass: '⚠️ Exames que apareceram no HF mas ainda NÃO estão no cofre — o robô não sabe se precisam separar. Peça pro Claude classificar (separa interno/apoio, ou não-separa). Nada some mais em silêncio.',
+    prontuario: '🧬 Prontuário Único: o conciliador cruza TODAS as requisições (HF + farejador, novas e antigas) e junta o mesmo paciente mesmo com o dono escrito diferente (Mel da Maria × Mel da Ana Maria). Aqui está a FILA DE CONFERÊNCIA — os pares DUVIDOSOS, que ele NÃO juntou sozinho. Por enquanto é só pra conferir (leitura); o botão "mesmo paciente? sim/não" entra no próximo passo.',
   };
+  // 🧬 PRONTUÁRIO ÚNICO — fila de conferência (read-only v1). Lazy load: só busca quando a aba abre.
+  function viewProntuario() {
+    if (!useSupa()) return `<div class="sepempty">Prontuário Único precisa da conexão do Supabase (indisponível agora).</div>`;
+    if (puLoad === 'idle') {
+      puLoad = 'loading';
+      window.SUPA.loadPU().then(d => { puData = d; puLoad = 'ok'; render(); }).catch(() => { puLoad = 'erro'; render(); });
+    }
+    if (puLoad === 'loading' && !puData) return `<div class="sepempty">🧬 Carregando a conciliação…</div>`;
+    if (puLoad === 'erro') return `<div class="sepempty">Não consegui ler a conciliação. <button class="opbtn2" id="puRetry">tentar de novo</button></div>`;
+    const cand = (puData && puData.candidatos) || [];
+    const idn = (puData && puData.identidades) || [];
+    if (!cand.length && !idn.length) {
+      return `<div class="sepempty" style="line-height:1.6">🧬 A conciliação ainda não foi gerada.<br><span style="color:#8aa2bd;font-size:13px">O job que cruza HF + farejador roda numa mesa e grava aqui. Assim que rodar a 1ª vez, a fila aparece.</span></div>`;
+    }
+    const nReqs = idn.reduce((s, r) => s + (r.n_reqs || 0), 0);
+    const stat = (v, l, c) => `<div style="background:#0c1a2e;border:1px solid #1e3350;border-radius:10px;padding:10px 14px;min-width:120px"><div style="font-size:26px;font-weight:800;color:${c}">${v}</div><div style="font-size:12px;color:#8aa2bd">${l}</div></div>`;
+    const topo = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      ${stat(idn.length.toLocaleString('pt-BR'), 'prontuários juntados sozinho (AUTO)', '#5eead4')}
+      ${stat(nReqs.toLocaleString('pt-BR'), 'requisições já pareadas', '#00D4FF')}
+      ${stat(cand.length.toLocaleString('pt-BR'), 'na fila pra conferir (duvidosos)', '#FFB020')}
+    </div>`;
+    const esp = s => esc2(s || '').trim() || '—';
+    const linhas = cand.map(c => {
+      const sc = Number(c.score) || 0;
+      const cor = sc >= 0.85 ? '#FFB020' : (sc >= 0.80 ? '#f59e0b' : '#8aa2bd');
+      return `<div style="display:flex;gap:12px;align-items:center;border:1px solid #1e3350;border-left:4px solid ${cor};border-radius:8px;padding:8px 12px;margin:6px 0;background:#0a1424">
+        <div style="min-width:52px;text-align:center"><div style="font-size:18px;font-weight:800;color:${cor}">${Math.round(sc * 100)}%</div><div style="font-size:10px;color:#64748b">parecido</div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;color:#e2e8f0">🐾 <b>${esp(c.a_pet)}</b> · ${esp(c.a_dono)} <span style="color:#475569">·</span> <span style="color:#64748b">${c.a_reqs || 0}×</span></div>
+          <div style="font-size:14px;color:#e2e8f0">🐾 <b>${esp(c.b_pet)}</b> · ${esp(c.b_dono)} <span style="color:#475569">·</span> <span style="color:#64748b">${c.b_reqs || 0}×</span></div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px">clínica ${c.cc} · ${esp(c.esp)} · nome ${Math.round((Number(c.score_pet) || 0) * 100)}% · dono ${Math.round((Number(c.score_dono) || 0) * 100)}%</div>
+        </div>
+      </div>`;
+    }).join('');
+    return topo + `<div style="font-size:13px;color:#8aa2bd;margin:4px 0 8px">Mesmo paciente? São os pares que o robô NÃO teve certeza — ele deixou separado de propósito, em vez de juntar errado. (Conferir com 1 clique entra no próximo passo.)</div>` + (linhas || `<div class="sepempty">✓ Nada na fila de conferência agora.</div>`);
+  }
+
   function render() {
     const el = $('sep'); if (!el) return;
     if (!sepData()) { el.innerHTML = header() + `<div class="sepwait">Aguardando a próxima atualização dos dados (o robô gera a lista de separação a cada 10 min).</div>`; wire(el); return; }
@@ -1041,6 +1081,7 @@
     else if (view === 'placar') body = viewPlacar();
     else if (view === 'apagados') body = viewApagados();
     else if (view === 'naoclass') body = viewNaoClass();
+    else if (view === 'prontuario') body = viewProntuario();
     else body = viewHist();
     const leg = LEGENDS[view] || LEGENDS.hist;
     el.innerHTML = header() + `<div class="seplegend ${view}">${leg}</div>` + `<div class="sepbody">${body}</div>`;
@@ -1058,6 +1099,7 @@
     el.querySelectorAll('[data-selcat]').forEach(p => p.onclick = () => { selByView[p.dataset.selview] = p.dataset.selcat; render(); });
     el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
     el.querySelectorAll('.perbtn[data-hf]').forEach(p => p.onclick = () => { histFiltro = p.dataset.hf; render(); });
+    const pr = $('puRetry'); if (pr) pr.onclick = () => { puLoad = 'idle'; puData = null; render(); };
     const sa = $('sepAtualizar'); if (sa) sa.onclick = () => atualizarAgora(sa);
     const ab = $('adminbtn'); if (ab) ab.onclick = adminUnlock;
     const eb = $('eqbtn'); if (eb) eb.onclick = openTeam;

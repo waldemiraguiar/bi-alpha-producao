@@ -23,6 +23,14 @@
     async loadProd() { if (!SB) return []; try { return await pageAll('prod_baixas'); } catch (e) { return []; } },
     // ---- ESPELHO da Histotécnica (app separado, mesmo Supabase) — RPC read-only ----
     async loadAmostras() { if (!SB) return []; try { const { data, error } = await SB.rpc('amostras_espelho'); if (error) return []; return data || []; } catch (e) { return []; } },
+    // ---- PRONTUÁRIO ÚNICO (Fase 1, read-only): fila de conferência + prontuários (clusters AUTO) ----
+    async loadPU() {
+      if (!SB) return { candidatos: [], identidades: [] };
+      const pend = async () => { let all = [], from = 0; for (let g = 0; g < 50; g++) { const { data, error } = await SB.from('pu_candidatos').select('*').eq('estado', 'pendente').order('score', { ascending: false }).range(from, from + 999); if (error) break; const c = data || []; all = all.concat(c); if (c.length < 1000) break; from += 1000; } return all; };
+      try { const [cand, idn] = await Promise.all([pend(), pageAll('pu_identidades')]); return { candidatos: cand, identidades: idn }; }
+      catch (e) { return { candidatos: [], identidades: [] }; }
+    },
+    async puDecidir(parId, decisao, por, pin) { const { data, error } = await SB.rpc('pu_decidir', { p_par_id: parId, p_decisao: decisao, p_por: por, p_pin: pin }); if (error) throw new Error(error.message || 'erro'); return !!data; },
     async prodBaixar(itens, nome, senha) { const { error } = await SB.rpc('prod_baixar', { p_itens: itens, p_nome: nome, p_senha: senha }); if (error) throw new Error(error.message || 'login'); },
     async prodUnbaixar(chaves, nome, senha) { const { error } = await SB.rpc('prod_unbaixar', { p_chaves: chaves, p_nome: nome, p_senha: senha }); if (error) throw new Error(error.message || 'login'); },
     // ---- escrita: clientes ----
