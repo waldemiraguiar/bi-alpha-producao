@@ -30,7 +30,7 @@
       try { const [cand, idn] = await Promise.all([pend(), pageAll('pu_identidades')]); return { candidatos: cand, identidades: idn }; }
       catch (e) { return { candidatos: [], identidades: [] }; }
     },
-    async puDecidir(parId, decisao, por, pin) { const { data, error } = await SB.rpc('pu_decidir', { p_par_id: parId, p_decisao: decisao, p_por: por, p_pin: pin }); if (error) throw new Error(error.message || 'erro'); return !!data; },
+    async puDecidir(parId, decisao, por) { const { data, error } = await SB.rpc('pu_decidir', { p_par_id: parId, p_decisao: decisao, p_por: por }); if (error) throw new Error(error.message || 'erro'); return !!data; },
     async prodBaixar(itens, nome, senha) { const { error } = await SB.rpc('prod_baixar', { p_itens: itens, p_nome: nome, p_senha: senha }); if (error) throw new Error(error.message || 'login'); },
     async prodUnbaixar(chaves, nome, senha) { const { error } = await SB.rpc('prod_unbaixar', { p_chaves: chaves, p_nome: nome, p_senha: senha }); if (error) throw new Error(error.message || 'login'); },
     // ---- escrita: clientes ----

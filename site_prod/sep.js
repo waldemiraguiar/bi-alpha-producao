@@ -1054,9 +1054,17 @@
       ${stat(cand.length.toLocaleString('pt-BR'), 'na fila pra conferir (duvidosos)', '#FFB020')}
     </div>`;
     const esp = s => esc2(s || '').trim() || '—';
+    const logado = !!me();
     const linhas = cand.map(c => {
       const sc = Number(c.score) || 0;
       const cor = sc >= 0.85 ? '#FFB020' : (sc >= 0.80 ? '#f59e0b' : '#8aa2bd');
+      const par = esc2(String(c.par_id));
+      const acoes = logado
+        ? `<div style="display:flex;flex-direction:column;gap:5px;min-width:122px">
+             <button class="pubtn" data-pu="mesmo" data-par="${par}" style="background:#0d9488;border:0;color:#fff;font-weight:800;border-radius:7px;padding:7px 10px;cursor:pointer;font-size:13px">✓ mesmo paciente</button>
+             <button class="pubtn" data-pu="diferente" data-par="${par}" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;font-weight:700;border-radius:7px;padding:7px 10px;cursor:pointer;font-size:13px">✕ são diferentes</button>
+           </div>`
+        : '';
       return `<div style="display:flex;gap:12px;align-items:center;border:1px solid #1e3350;border-left:4px solid ${cor};border-radius:8px;padding:8px 12px;margin:6px 0;background:#0a1424">
         <div style="min-width:52px;text-align:center"><div style="font-size:18px;font-weight:800;color:${cor}">${Math.round(sc * 100)}%</div><div style="font-size:10px;color:#64748b">parecido</div></div>
         <div style="flex:1;min-width:0">
@@ -1064,9 +1072,21 @@
           <div style="font-size:14px;color:#e2e8f0">🐾 <b>${esp(c.b_pet)}</b> · ${esp(c.b_dono)} <span style="color:#475569">·</span> <span style="color:#64748b">${c.b_reqs || 0}×</span></div>
           <div style="font-size:11px;color:#64748b;margin-top:2px">clínica ${c.cc} · ${esp(c.esp)} · nome ${Math.round((Number(c.score_pet) || 0) * 100)}% · dono ${Math.round((Number(c.score_dono) || 0) * 100)}%</div>
         </div>
+        ${acoes}
       </div>`;
     }).join('');
-    return topo + `<div style="font-size:13px;color:#8aa2bd;margin:4px 0 8px">Mesmo paciente? São os pares que o robô NÃO teve certeza — ele deixou separado de propósito, em vez de juntar errado. (Conferir com 1 clique entra no próximo passo.)</div>` + (linhas || `<div class="sepempty">✓ Nada na fila de conferência agora.</div>`);
+    const aviso = logado
+      ? `<div style="font-size:13px;color:#8aa2bd;margin:4px 0 8px">Mesmo paciente? O robô deixou estes separados de propósito, em vez de juntar errado. <b>✓ mesmo</b> junta o prontuário; <b>✕ diferentes</b> tira da fila. Tudo fica registrado em seu nome e é reversível.</div>`
+      : `<div style="font-size:13px;color:#FFB020;margin:4px 0 8px">👆 Escolha seu nome no topo (“Você”) para poder conferir os pares.</div>`;
+    return topo + aviso + (linhas || `<div class="sepempty">✓ Nada na fila de conferência agora.</div>`);
+  }
+
+  async function puDecide(parId, decisao) {
+    const quem = me(); if (!quem) { alert('Escolha seu nome no topo antes de conferir.'); return; }
+    if (puData && Array.isArray(puData.candidatos)) puData.candidatos = puData.candidatos.filter(c => String(c.par_id) !== String(parId)); // otimista: sai da fila na hora
+    render();
+    try { await window.SUPA.puDecidir(parId, decisao, quem); }
+    catch (e) { alert('Não consegui salvar a decisão — recarregando a fila.'); puLoad = 'idle'; puData = null; render(); }
   }
 
   function render() {
@@ -1100,6 +1120,7 @@
     el.querySelectorAll('.perbtn[data-hper]').forEach(p => p.onclick = () => { histPer = p.dataset.hper; render(); });
     el.querySelectorAll('.perbtn[data-hf]').forEach(p => p.onclick = () => { histFiltro = p.dataset.hf; render(); });
     const pr = $('puRetry'); if (pr) pr.onclick = () => { puLoad = 'idle'; puData = null; render(); };
+    el.querySelectorAll('.pubtn[data-pu]').forEach(b => b.onclick = () => puDecide(b.dataset.par, b.dataset.pu));
     const sa = $('sepAtualizar'); if (sa) sa.onclick = () => atualizarAgora(sa);
     const ab = $('adminbtn'); if (ab) ab.onclick = adminUnlock;
     const eb = $('eqbtn'); if (eb) eb.onclick = openTeam;
