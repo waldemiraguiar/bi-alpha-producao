@@ -23,12 +23,18 @@
     async loadProd() { if (!SB) return []; try { return await pageAll('prod_baixas'); } catch (e) { return []; } },
     // ---- ESPELHO da Histotécnica (app separado, mesmo Supabase) — RPC read-only ----
     async loadAmostras() { if (!SB) return []; try { const { data, error } = await SB.rpc('amostras_espelho'); if (error) return []; return data || []; } catch (e) { return []; } },
-    // ---- PRONTUÁRIO ÚNICO (Fase 1, read-only): fila de conferência + prontuários (clusters AUTO) ----
+    // ---- PRONTUÁRIO ÚNICO v2 (CodAnimal): fila de código duplicado + entradas de hoje + resumo ----
     async loadPU() {
-      if (!SB) return { candidatos: [], identidades: [] };
+      if (!SB) return { fila: [], entradas: [], stats: null };
       const pend = async () => { let all = [], from = 0; for (let g = 0; g < 50; g++) { const { data, error } = await SB.from('pu_candidatos').select('*').eq('estado', 'pendente').order('score', { ascending: false }).range(from, from + 999); if (error) break; const c = data || []; all = all.concat(c); if (c.length < 1000) break; from += 1000; } return all; };
-      try { const [cand, idn] = await Promise.all([pend(), pageAll('pu_identidades')]); return { candidatos: cand, identidades: idn }; }
-      catch (e) { return { candidatos: [], identidades: [] }; }
+      try {
+        const [fila, ent, st] = await Promise.all([
+          pend(),
+          SB.from('pu_entradas').select('*').order('score', { ascending: false }).then(r => (r.data || [])),
+          SB.from('pu_stats').select('*').eq('id', 1).then(r => ((r.data && r.data[0]) || null)),
+        ]);
+        return { fila, entradas: ent, stats: st };
+      } catch (e) { return { fila: [], entradas: [], stats: null }; }
     },
     async puDecidir(parId, decisao, por) { const { data, error } = await SB.rpc('pu_decidir', { p_par_id: parId, p_decisao: decisao, p_por: por }); if (error) throw new Error(error.message || 'erro'); return !!data; },
     async prodBaixar(itens, nome, senha) { const { error } = await SB.rpc('prod_baixar', { p_itens: itens, p_nome: nome, p_senha: senha }); if (error) throw new Error(error.message || 'login'); },

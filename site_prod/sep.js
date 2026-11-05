@@ -554,7 +554,7 @@
         <div class="septab ${view === 'hist' ? 'on' : ''}" data-v="hist">📋 Histórico</div>
         <div class="septab ${view === 'apagados' ? 'on' : ''}" data-v="apagados">🗑 Apagados${apN ? ` <span class="c">${apN}</span>` : ''}</div>
         ${ncN ? `<div class="septab ${view === 'naoclass' ? 'on' : ''}" data-v="naoclass" style="border-color:#f59e0b;color:#f59e0b">⚠️ A classificar <span class="c" style="background:#f59e0b;color:#fff">${ncN}</span></div>` : ''}
-        <div class="septab ${view === 'prontuario' ? 'on' : ''}" data-v="prontuario" style="border-color:#14b8a6;color:#5eead4">🧬 Prontuário${puData && puData.candidatos.length ? ` <span class="c" style="background:#14b8a6;color:#063">${puData.candidatos.length}</span>` : ''}</div>
+        <div class="septab ${view === 'prontuario' ? 'on' : ''}" data-v="prontuario" style="border-color:#14b8a6;color:#5eead4">🧬 Prontuário${puData && puData.entradas && puData.entradas.length ? ` <span class="c" style="background:#FFB020;color:#111">🔔${puData.entradas.length}</span>` : (puData && puData.fila && puData.fila.length ? ` <span class="c" style="background:#14b8a6;color:#063">${puData.fila.length}</span>` : '')}</div>
         <button class="atualizar-btn" id="sepAtualizar" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>
       </div>
       <div class="sepme">
@@ -1041,56 +1041,74 @@
     }
     if (puLoad === 'loading' && !puData) return `<div class="sepempty">🧬 Carregando a conciliação…</div>`;
     if (puLoad === 'erro') return `<div class="sepempty">Não consegui ler a conciliação. <button class="opbtn2" id="puRetry">tentar de novo</button></div>`;
-    const cand = (puData && puData.candidatos) || [];
-    const idn = (puData && puData.identidades) || [];
-    if (!cand.length && !idn.length) {
-      return `<div class="sepempty" style="line-height:1.6">🧬 A conciliação ainda não foi gerada.<br><span style="color:#8aa2bd;font-size:13px">O job que cruza HF + farejador roda numa mesa e grava aqui. Assim que rodar a 1ª vez, a fila aparece.</span></div>`;
+    const fila = (puData && puData.fila) || [];
+    const ent = (puData && puData.entradas) || [];
+    const st = (puData && puData.stats) || null;
+    if (!fila.length && !ent.length && !st) {
+      return `<div class="sepempty" style="line-height:1.6">🧬 A conciliação ainda não foi gerada.<br><span style="color:#8aa2bd;font-size:13px">O job que cruza os cadastros roda numa mesa e grava aqui. Assim que rodar a 1ª vez, aparece.</span></div>`;
     }
-    const nReqs = idn.reduce((s, r) => s + (r.n_reqs || 0), 0);
-    const stat = (v, l, c) => `<div style="background:#0c1a2e;border:1px solid #1e3350;border-radius:10px;padding:10px 14px;min-width:120px"><div style="font-size:26px;font-weight:800;color:${c}">${v}</div><div style="font-size:12px;color:#8aa2bd">${l}</div></div>`;
-    let tsMax = 0;
-    cand.forEach(c => { const t = Date.parse(c.atualizado_em) || 0; if (t > tsMax) tsMax = t; });
-    idn.forEach(r => { const t = Date.parse(r.atualizado_em) || 0; if (t > tsMax) tsMax = t; });
-    const horas = tsMax ? (Date.now() - tsMax) / 36e5 : 0;
-    const velho = tsMax && horas > 26; // atualiza 2×/dia; >26h sem atualizar = algo parou
-    const quando = tsMax ? new Date(tsMax).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-    const topo = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      ${stat(idn.length.toLocaleString('pt-BR'), 'prontuários juntados sozinho (AUTO)', '#5eead4')}
-      ${stat(nReqs.toLocaleString('pt-BR'), 'requisições já pareadas', '#00D4FF')}
-      ${stat(cand.length.toLocaleString('pt-BR'), 'na fila pra conferir (duvidosos)', '#FFB020')}
-    </div>
-    <div style="font-size:12px;margin-bottom:10px;color:${velho ? '#FF5470' : '#64748b'}">${velho ? '⚠️' : '🕒'} última conciliação: <b>${quando}</b>${velho ? ` — parada há ${Math.round(horas)}h! avise o Claude` : ' · atualiza sozinho 2×/dia (10h e 15h)'}</div>`;
     const esp = s => esc2(s || '').trim() || '—';
     const logado = !!me();
-    const linhas = cand.map(c => {
-      const sc = Number(c.score) || 0;
-      const cor = sc >= 0.85 ? '#FFB020' : (sc >= 0.80 ? '#f59e0b' : '#8aa2bd');
-      const par = esc2(String(c.par_id));
-      const acoes = logado
-        ? `<div style="display:flex;flex-direction:column;gap:5px;min-width:122px">
-             <button class="pubtn" data-pu="mesmo" data-par="${par}" style="background:#0d9488;border:0;color:#fff;font-weight:800;border-radius:7px;padding:7px 10px;cursor:pointer;font-size:13px">✓ mesmo paciente</button>
-             <button class="pubtn" data-pu="diferente" data-par="${par}" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;font-weight:700;border-radius:7px;padding:7px 10px;cursor:pointer;font-size:13px">✕ são diferentes</button>
-           </div>`
-        : '';
-      return `<div style="display:flex;gap:12px;align-items:center;border:1px solid #1e3350;border-left:4px solid ${cor};border-radius:8px;padding:8px 12px;margin:6px 0;background:#0a1424">
-        <div style="min-width:52px;text-align:center"><div style="font-size:18px;font-weight:800;color:${cor}">${Math.round(sc * 100)}%</div><div style="font-size:10px;color:#64748b">parecido</div></div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;color:#e2e8f0">🐾 <b>${esp(c.a_pet)}</b> · ${esp(c.a_dono)} <span style="color:#475569">·</span> <span style="color:#64748b">${c.a_reqs || 0}×</span></div>
-          <div style="font-size:14px;color:#e2e8f0">🐾 <b>${esp(c.b_pet)}</b> · ${esp(c.b_dono)} <span style="color:#475569">·</span> <span style="color:#64748b">${c.b_reqs || 0}×</span></div>
-          <div style="font-size:11px;color:#64748b;margin-top:2px">clínica ${c.cc} · ${esp(c.esp)} · nome ${Math.round((Number(c.score_pet) || 0) * 100)}% · dono ${Math.round((Number(c.score_dono) || 0) * 100)}%</div>
+    const nf = n => (Number(n) || 0).toLocaleString('pt-BR');
+    const stat = (v, l, c) => `<div style="background:#0c1a2e;border:1px solid #1e3350;border-radius:10px;padding:10px 14px;min-width:112px"><div style="font-size:24px;font-weight:800;color:${c}">${v}</div><div style="font-size:11px;color:#8aa2bd">${l}</div></div>`;
+    const ts = st && st.atualizado_em ? Date.parse(st.atualizado_em) : 0;
+    const horas = ts ? (Date.now() - ts) / 36e5 : 0;
+    const velho = ts && horas > 1.5; // checa a cada ~20min
+    const quando = ts ? new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    const topo = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      ${stat(nf(st && st.n_pac), 'pacientes (CodAnimal)', '#5eead4')}
+      ${stat(nf(st && st.n_voltam), 'voltaram (2+ req)', '#00D4FF')}
+      ${stat(nf(st && st.n_fila), 'suspeitas de código duplicado', '#FFB020')}
+      ${stat(nf(st && st.n_merges), 'duplicatas já resolvidas', '#34d399')}
+    </div>
+    <div style="font-size:12px;margin-bottom:10px;color:${velho ? '#FF5470' : '#64748b'}">${velho ? '⚠️' : '🕒'} última checagem: <b>${quando}</b>${velho ? ` — parada há ${Math.round(horas)}h! avise o Claude` : ' · checa sozinho a cada ~20 min'}</div>`;
+    const simb = v => (v === '✓' ? '<span style="color:#34d399">✓</span>' : v === '✗' ? '<span style="color:#FF5470">✗</span>' : v === '~' ? '<span style="color:#FFB020">~</span>' : '<span style="color:#475569">?</span>');
+    const pct = v => Math.round((Number(v) || 0) * 100) + '%';
+    const quebra = br => { br = br || {}; return `<div style="font-size:11.5px;color:#94a3b8;margin-top:4px">nome <b>${pct(br.pet)}</b> · dono <b>${pct(br.dono)}</b> · raça ${simb(br.raca)} · sexo ${simb(br.sexo)} · <b>nascimento ${simb(br.nasc)}</b></div>`; };
+    const nascL = n => n ? esc2(String(n).slice(0, 4) + '/' + String(n).slice(4, 6)) : '—';
+    const linhaCod = (cod, pet, dono, raca, sexo, nasc, reqs) => `<div style="font-size:13.5px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:#64748b">cód</span> <b style="color:#93c5fd">${esc2(cod)}</b> · 🐾 <b>${esp(pet)}</b> · ${esp(dono)} <span style="color:#475569">·</span> ${esp(raca)} · ${esp(sexo) || '—'} <span style="color:#475569">·</span> <span style="color:#64748b">nasc ${nascL(nasc)} · ${reqs || 0} req</span></div>`;
+    const botoes = par => logado ? `<div style="display:flex;gap:6px;margin-top:8px">
+        <button class="pubtn" data-pu="mesmo" data-par="${esc2(String(par))}" style="background:#0d9488;border:0;color:#fff;font-weight:800;border-radius:7px;padding:7px 12px;cursor:pointer;font-size:13px">✓ mesmo — juntar os 2 códigos</button>
+        <button class="pubtn" data-pu="diferente" data-par="${esc2(String(par))}" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;font-weight:700;border-radius:7px;padding:7px 12px;cursor:pointer;font-size:13px">✕ são diferentes</button>
+      </div>` : '';
+    const parBloco = c => {
+      const sc = Number(c.score) || 0; const cor = c.quase ? '#FFB020' : '#8aa2bd';
+      return `<div style="border:1px solid #1e3350;border-left:4px solid ${cor};border-radius:8px;padding:10px 12px;margin:6px 0;background:#0a1424">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:16px;font-weight:800;color:${cor}">${Math.round(sc * 100)}% ${c.quase ? '<span style="font-size:10px;background:#FFB020;color:#111;padding:1px 6px;border-radius:5px;vertical-align:middle">QUASE CERTO</span>' : ''}</div>
+          <div style="font-size:11px;color:#64748b">clínica ${c.cc} · ${esp(c.esp)}</div>
         </div>
-        ${acoes}
+        ${linhaCod(c.a_cod, c.a_pet, c.a_dono, c.a_raca, c.a_sexo, c.a_nasc, c.a_reqs)}
+        ${linhaCod(c.b_cod, c.b_pet, c.b_dono, c.b_raca, c.b_sexo, c.b_nasc, c.b_reqs)}
+        ${quebra(c.br)}
+        ${botoes(c.par_id)}
       </div>`;
-    }).join('');
+    };
+    let secEnt = '';
+    if (ent.length) {
+      const blocos = ent.map(e => `<div style="border:1px solid #FFB02055;border-left:4px solid #FFB020;border-radius:8px;padding:9px 12px;margin:6px 0;background:#1a1407">
+        <div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:14px;color:#fde68a"><b>🐾 ${esp(e.pet)}</b> · ${esp(e.dono)}</div><div style="font-size:15px;font-weight:800;color:#FFB020">${Math.round((Number(e.score) || 0) * 100)}%</div></div>
+        <div style="font-size:12.5px;color:#cbd5e1;margin-top:3px">entrou hoje como <b style="color:#93c5fd">cód ${esc2(String(e.novo_cod))}</b> → já existe <b style="color:#93c5fd">cód ${esc2(String(e.match_cod))}</b> (${e.hist_reqs || 0} req) · clínica ${e.cc}</div>
+        ${quebra(e.br)}
+        ${botoes(e.par_id)}
+      </div>`).join('');
+      secEnt = `<div style="margin-bottom:14px">
+        <div style="font-size:14px;font-weight:800;color:#FFB020">🔔 Entraram HOJE e o bicho já tem código (${ent.length})</div>
+        <div style="font-size:12px;color:#8aa2bd;margin:2px 0 6px">Pareie / junte antes de duplicar o paciente.</div>${blocos}</div>`;
+    }
     const aviso = logado
-      ? `<div style="font-size:13px;color:#8aa2bd;margin:4px 0 8px">Mesmo paciente? O robô deixou estes separados de propósito, em vez de juntar errado. <b>✓ mesmo</b> junta o prontuário; <b>✕ diferentes</b> tira da fila. Tudo fica registrado em seu nome e é reversível.</div>`
-      : `<div style="font-size:13px;color:#FFB020;margin:4px 0 8px">👆 Escolha seu nome no topo (“Você”) para poder conferir os pares.</div>`;
-    return topo + aviso + (linhas || `<div class="sepempty">✓ Nada na fila de conferência agora.</div>`);
+      ? `<div style="font-size:13px;color:#8aa2bd;margin:4px 0 8px">É o mesmo bicho com <b>dois códigos</b>? O <b>nascimento</b> é o desempatador. <b>✓ mesmo</b> junta os códigos; <b>✕ diferentes</b> tira da fila. Registrado em seu nome, reversível.</div>`
+      : `<div style="font-size:13px;color:#FFB020;margin:4px 0 8px">👆 Escolha seu nome no topo (“Você”) para poder juntar/separar os códigos.</div>`;
+    const secFila = `<div style="font-size:14px;font-weight:800;color:#e2e8f0;margin:4px 0 2px">Fila — código duplicado (${fila.length})</div>` + aviso + (fila.map(parBloco).join('') || `<div class="sepempty">✓ Nada na fila agora.</div>`);
+    return topo + secEnt + secFila;
   }
 
   async function puDecide(parId, decisao) {
     const quem = me(); if (!quem) { alert('Escolha seu nome no topo antes de conferir.'); return; }
-    if (puData && Array.isArray(puData.candidatos)) puData.candidatos = puData.candidatos.filter(c => String(c.par_id) !== String(parId)); // otimista: sai da fila na hora
+    if (puData) { // otimista: sai da fila E das entradas de hoje na hora
+      if (Array.isArray(puData.fila)) puData.fila = puData.fila.filter(c => String(c.par_id) !== String(parId));
+      if (Array.isArray(puData.entradas)) puData.entradas = puData.entradas.filter(c => String(c.par_id) !== String(parId));
+    }
     render();
     try { await window.SUPA.puDecidir(parId, decisao, quem); }
     catch (e) { alert('Não consegui salvar a decisão — recarregando a fila.'); puLoad = 'idle'; puData = null; render(); }
