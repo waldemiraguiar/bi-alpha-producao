@@ -771,6 +771,7 @@ def build():
     # Gerado offline a partir dos 9 relatórios financeiros Pet Love (16 colunas: atend, exame, plano, vet,
     # repasse, copart, status). Vive cifrado em data_petlove.enc. Se ausente, a aba não quebra.
     D["petlove_consolidado"] = _PLF.get("petlove_consolidado_2026.json", {})
+    D["custo_exame"] = _PLF.get("custo_por_exame.json", {})   # estudo de custo por exame (todos os setores, produção HF)
 
     # ---- Pet Love: MARGEM (reembolso PL vs nossa tabela varejo) + exames ----
     # Dados extraídos OFFLINE dos relatórios "Informações do Pagamento" (Contas Médicas)

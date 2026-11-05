@@ -543,6 +543,7 @@ function render(D){
   renderAlertas(D);
   renderPetlove(D);
   renderMargem(D);
+  renderCustoExame(D);
   renderEstudo(D);
   renderCustos(D);
   wireFTabs();
@@ -624,7 +625,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',socios:'socios',apoio:'apoio',apoiot:'apoiot',voz:'voz',motoboy:'motoboy'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',custoex:'custoex',socios:'socios',apoio:'apoio',apoiot:'apoiot',voz:'voz',motoboy:'motoboy'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -1440,6 +1441,41 @@ function drawPetloveYearChart(){
 }
 
 /* ===================== ABA MARGEM PET LOVE (reembolso vs tabela varejo) ===================== */
+/* ===================== ⚗️ CUSTO POR EXAME (laboratório inteiro, produção HF) ===================== */
+function renderCustoExame(D){
+  const wrap=document.getElementById('custoex'); if(!wrap) return;
+  const CX=D.custo_exame||{}; const ex=(CX.exames||[]);
+  if(!ex.length){ wrap.innerHTML=''; return; }
+  const bs={}; ex.forEach(x=>{ const s=bs[x.setor]||(bs[x.setor]={vol:0,c:0,r:0,m:0}); s.vol+=x.vol; s.c+=x.custo_total*x.vol; if(x.ticket){s.r+=x.ticket*x.vol; s.m+=(x.ticket-x.custo_total)*x.vol;} });
+  const setores=Object.keys(bs).sort((a,b)=>bs[b].vol-bs[a].vol);
+  const mcol=m=>m==null?'var(--mut)':(m<0?'var(--red)':(m<20?'#f1c40f':'var(--green)'));
+  let tr=0,tm=0; setores.forEach(s=>{tr+=bs[s].r;tm+=bs[s].m;});
+  let html=`<div class="card" style="margin-bottom:14px"><h3>⚗️ Custo por exame — laboratório inteiro <span class="cap">produção HF · ${esc(CX.gerado||'')} · ${ex.length} exames com volume (90d)</span></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px">`+setores.map(s=>{const b=bs[s];const mg=b.r?b.m/b.r*100:0;return `<div style="border:1px solid var(--line);border-radius:10px;padding:7px 11px;min-width:118px"><div style="font-size:11px;color:var(--mut)">${esc(s)}</div><div style="font-weight:800;color:${mcol(mg)};font-size:15px">${mg.toFixed(0)}%</div><div style="font-size:10px;color:var(--mut)">${num(b.vol)}/90d · custo R$ ${(b.c/b.vol).toFixed(1)}</div></div>`;}).join('')+`</div>
+    <div class="alert-card ${tm>=0?'info':'warn'}" style="margin:0"><div class="ai">⚗️</div><div><div class="at">Margem média do lab: ${tr?(tm/tr*100).toFixed(0):0}% sobre o preço pago</div>
+      <div class="ax"><b>Custo = material real + serviço.</b> Material: 81% medido (PCR na produção, ELISA, apoio-fatura, reagente de banco) — marcado com ✓; o resto é estimado/flagueado. Serviço (coleta + mão-de-obra + equipamento + overhead) vem do estudo Orthos, repartido por <b>peso de bancada</b> (citologia leve, histo pesado…). ⚠️ Tempo de bancada e mL/teste são ESTIMADOS — a equipe confirma. Preço = média do que foi PAGO (exclui Pet Love, que entra a R$ 0 no HF).</div></div></div></div>`;
+  html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
+    <input id="cx-q" placeholder="buscar exame…" style="flex:1;min-width:200px;padding:9px;border-radius:8px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:14px">
+    <select id="cx-set" style="padding:9px;border-radius:8px;border:1px solid var(--line);background:#0E1E36;color:#E8EEF6;font-size:14px"><option value="">todos os setores</option>${setores.map(s=>`<option>${esc(s)}</option>`).join('')}</select></div>
+    <div class="card" style="padding:10px"><div style="overflow:auto;max-height:68vh"><table class="atab"><thead><tr><th>Exame</th><th>Setor</th><th class="num">Vol/mês</th><th class="num">Preço</th><th class="num">Material</th><th class="num">Serviço</th><th class="num">Custo total</th><th class="num">Margem</th></tr></thead><tbody id="cx-body"></tbody></table></div></div>`;
+  wrap.innerHTML=html;
+  const body=document.getElementById('cx-body');
+  const draw=()=>{ const q=(document.getElementById('cx-q').value||'').toLowerCase(); const fs=document.getElementById('cx-set').value;
+    const rows=ex.filter(x=>(!fs||x.setor===fs)&&(!q||x.exame.toLowerCase().includes(q))).sort((a,b)=>a.setor<b.setor?-1:a.setor>b.setor?1:b.vol-a.vol);
+    body.innerHTML=rows.map(x=>{const real=x.material_fonte&&!/estimado|mL estimado/.test(x.material_fonte);
+      return `<tr><td>${esc(x.exame)}<div style="color:var(--mut);font-size:10px">${esc(x.material_fonte||'')}</div></td>
+      <td style="font-size:11px;color:var(--mut)">${esc(x.setor)}</td><td class="num">${num(x.vol_mes)}</td>
+      <td class="num">${x.ticket?brl(x.ticket):'—'}</td>
+      <td class="num">${brl(x.material)}${real?' <span style="color:var(--green)">✓</span>':''}</td>
+      <td class="num" style="color:var(--mut)">${brl(x.servico)}</td><td class="num"><b>${brl(x.custo_total)}</b></td>
+      <td class="num" style="color:${mcol(x.margem)};font-weight:700">${x.margem==null?'—':x.margem.toFixed(0)+'%'}</td></tr>`;}).join('')
+      ||`<tr><td colspan="8" style="color:var(--mut);text-align:center;padding:14px">nenhum exame</td></tr>`;
+  };
+  draw();
+  document.getElementById('cx-q').addEventListener('input',draw);
+  document.getElementById('cx-set').addEventListener('change',draw);
+}
+
 function renderMargem(D){
   const wrap=document.getElementById('margem'); if(!wrap) return;
   const M=D.petlove_margem||{};
