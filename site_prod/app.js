@@ -20,23 +20,26 @@ const exTerceirizado=e=>tercTypes.has(normAcc(String(e.exame||'')));
 function _rascFdt(s){ if(!s) return null; const m=String(s).slice(0,10).match(/(\d{4})-(\d{2})-(\d{2})/); return m?new Date(+m[1],+m[2]-1,+m[3]):null; }
 function _rascDmy(d){ return d?String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear():'____/____/______'; }
 function _rascItens(){ return (DATA&&DATA.separacao&&DATA.separacao.itens)||[]; }
-function _rascFolha(reg){
-  const its=_rascItens().filter(i=>String(i.req)===String(reg)&&/MOLECULAR/i.test(i.cat||''));
+function _rascFolha(reg, mode){
+  mode = mode || 'full';
+  // Dudu 06/11: MODO. 'terc' = SÓ os exames TERCEIRIZADOS da requisição (aba Terceirizados) → cabeçalho VETLAB.
+  // 'full' (padrão — última chamada/Produção) = TODOS os exames; os terceirizados saem com a observação
+  // «separar amostra p/ terceirizar» (não fazer aqui em duplicidade). VETLAB NUNCA sai no modo full (Dudu 06/11:
+  // exame feito aqui = só ALPHA LABS; VETLAB só em rascunho de terceirizado).
+  let its=_rascItens().filter(i=>String(i.req)===String(reg)&&/MOLECULAR/i.test(i.cat||''));
+  if(mode==='terc') its=its.filter(exTerceirizado);
   if(!its.length) return null;
   const r=its[0], ent=_rascFdt(r.entrada);
-  // Dudu 04/11: o "– VETLAB" só sai quando o exame é TERCEIRIZADO (vai pro lab de apoio). PCR interno
-  // (não marcado como terceirizado) imprime só "ALPHA LABS". Antes o VETLAB era fixo no cabeçalho.
-  const terc=its.some(i=>exTerceirizado(i));
-  const exs=[...new Set(its.map(i=>i.exame).filter(Boolean))];
+  const seenEx=new Set(), exItems=its.filter(i=>{ const k=i.exame; if(!k||seenEx.has(k)) return false; seenEx.add(k); return true; });
   const hoje=new Date(), ref='AL-'+String(hoje.getFullYear()).slice(2)+String(hoje.getMonth()+1).padStart(2,'0')+String(hoje.getDate()).padStart(2,'0')+'-ME'+String(reg).slice(-4);
   const up=s=>String(s||'').toUpperCase();
   return `<div class="folha">
     <div class="hf">Nº HF: <b>${esc(String(r.hf||reg))}</b><br><span class="ref">ref. interna: ${ref}</span></div>
-    <div class="h1">ALPHA LABS${terc?' – VETLAB':''}</div><div class="h2">BIOLOGIA MOLECULAR (PCR)</div>
+    <div class="h1">ALPHA LABS${mode==='terc'?' – VETLAB':''}</div><div class="h2">BIOLOGIA MOLECULAR (PCR)</div>
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
-    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exs.map(e=>`<div class="ex">• <b>${esc(e)}</b></div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${(mode==='full'&&exTerceirizado(i))?' <span class="tercflag">▶ separar amostra p/ terceirizar (VetLab)</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
     <div class="sec">PCR</div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div></div>
     <div class="qtd"><b>Qtd. de exames:</b> <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> &nbsp;&nbsp;·&nbsp;&nbsp; <b>Qtd. de amostras:</b> <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u></div>
@@ -44,10 +47,10 @@ function _rascFolha(reg){
     <table class="an"><thead><tr><th style="text-align:left;width:60%">Análises</th><th>DNA</th><th>RNA</th></tr></thead><tbody><tr><td style="height:28px"></td><td></td><td></td></tr><tr><td style="height:28px"></td><td></td><td></td></tr></tbody></table>
   </div>`;
 }
-const _RASC_CSS="@page{size:A4;margin:12mm} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0} .folha{border:2px solid #111;padding:14px 18px;box-sizing:border-box;min-height:128mm;page-break-inside:avoid} .folha:nth-of-type(2n){page-break-after:always} .folha:nth-of-type(odd){border-bottom:2px dashed #999} .folha:last-child{page-break-after:auto} .h1{font-size:26px;font-weight:800} .h2{font-size:16px;font-weight:800;margin-bottom:10px} .lin{font-size:13.5px;margin:3px 0} .box{border:1.5px solid #111;margin-top:12px} .boxh{background:#eee;font-weight:800;padding:5px 10px;border-bottom:1.5px solid #111;font-size:13px} .boxb{padding:8px 10px} .ex{font-size:14px;margin:3px 0} .sec{font-size:20px;font-weight:800;margin:16px 0 6px} .datas{display:flex;gap:40px;font-size:14px;margin:8px 0} .datas u{padding:0 6px} .qtd{font-size:14px;margin:8px 0} .qtd u{padding:0 10px} .amost{font-size:14px;margin-top:10px} .amost span{margin-right:12px;white-space:nowrap} .hf{float:right;text-align:right;font-size:12px;color:#333} .ref{color:#888} table.an{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px} table.an td,table.an th{border:1px solid #111;padding:5px 8px} .cbanner{background:#111;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:7px;margin:12px 0 8px} .cbanner.one{background:#333;font-size:14px} .cult{border:1.5px solid #111;margin:8px 0;padding:8px 10px} .cultt{font-size:15px;margin-bottom:4px} .cl2{font-size:13px;margin:4px 0} .cl2 u{padding:0 40%} .clam{font-size:15px;font-weight:600;margin:9px 0;padding:5px 0;border-bottom:1px dotted #bbb} .cres{margin-top:4px} .cres div{border-bottom:1px solid #111;height:24px}";
-function _rascImprimir(regs, folhaFn, titulo){
+const _RASC_CSS="@page{size:A4;margin:12mm} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0} .folha{border:2px solid #111;padding:14px 18px;box-sizing:border-box;min-height:128mm;page-break-inside:avoid} .folha:nth-of-type(2n){page-break-after:always} .folha:nth-of-type(odd){border-bottom:2px dashed #999} .folha:last-child{page-break-after:auto} .h1{font-size:26px;font-weight:800} .h2{font-size:16px;font-weight:800;margin-bottom:10px} .lin{font-size:13.5px;margin:3px 0} .box{border:1.5px solid #111;margin-top:12px} .boxh{background:#eee;font-weight:800;padding:5px 10px;border-bottom:1.5px solid #111;font-size:13px} .boxb{padding:8px 10px} .ex{font-size:14px;margin:3px 0} .sec{font-size:20px;font-weight:800;margin:16px 0 6px} .datas{display:flex;gap:40px;font-size:14px;margin:8px 0} .datas u{padding:0 6px} .qtd{font-size:14px;margin:8px 0} .qtd u{padding:0 10px} .amost{font-size:14px;margin-top:10px} .amost span{margin-right:12px;white-space:nowrap} .hf{float:right;text-align:right;font-size:12px;color:#333} .ref{color:#888} table.an{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px} table.an td,table.an th{border:1px solid #111;padding:5px 8px} .cbanner{background:#111;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:7px;margin:12px 0 8px} .cbanner.one{background:#333;font-size:14px} .cult{border:1.5px solid #111;margin:8px 0;padding:8px 10px} .cultt{font-size:15px;margin-bottom:4px} .cl2{font-size:13px;margin:4px 0} .cl2 u{padding:0 40%} .clam{font-size:15px;font-weight:600;margin:9px 0;padding:5px 0;border-bottom:1px dotted #bbb} .cres{margin-top:4px} .cres div{border-bottom:1px solid #111;height:24px} .tercflag{font-weight:700;font-size:11px;border:1px solid #111;border-radius:3px;padding:1px 5px;white-space:nowrap}";
+function _rascImprimir(regs, folhaFn, titulo, mode){
   folhaFn = folhaFn || _rascFolha; titulo = titulo || 'Rascunho PCR';
-  const folhas=regs.map(folhaFn).filter(Boolean);
+  const folhas=regs.map(r=>folhaFn(r, mode)).filter(Boolean);
   if(!folhas.length){ alert('Sem dados para imprimir agora (toque em 🔄 Atualizar e tente de novo).'); return; }
   const w=window.open('','_blank');
   if(!w){ alert('O navegador bloqueou a janela de impressão — libere o pop-up e tente de novo.'); return; }
@@ -84,22 +87,24 @@ async function _rascDesmarcar(reg){
   try{if(window.SEP&&window.SEP.render)window.SEP.render();}catch(e){}
   try{await window.SUPA.upsertMark({chave:'rascpcr:'+String(reg),req:String(reg),estado:'',por:'equipe',ts_sep:Date.now()});}catch(e){}
 }
-function imprimirRascunhoPCR(reg){ _rascImprimir([reg]); _rascMarcarImpresso([String(reg)]); }
+function imprimirRascunhoPCR(reg, mode){ _rascImprimir([reg], _rascFolha, 'Rascunho PCR', mode); _rascMarcarImpresso([String(reg)]); }
 function imprimirLotePCR(){
   // Dudu 03/11: o lote imprime SÓ os marcados como TERCEIRIZADO (o rascunho é a folha VETLAB) — antes varria
   // todo MOLECULAR/PCR, inclusive os não-terceirizados. O botão por-card (imprimirRascunhoPCR) segue avulso.
   // Dudu 06/11: o lote traz SÓ os PENDENTES de baixa (exclui quem já teve baixa) — não reimprimir o que já saiu.
+  // Lote = folha do TERCEIRIZADO → modo 'terc' (cabeçalho VETLAB, só os exames terceirizados).
   const regs=[...new Set(_rascItens().filter(i=>/MOLECULAR/i.test(i.cat||'')&&exTerceirizado(i)&&!exBaixado(i)).map(i=>String(i.req)))];
-  _rascImprimir(regs); _rascMarcarImpresso(regs);
+  _rascImprimir(regs, _rascFolha, 'Rascunho PCR', 'terc'); _rascMarcarImpresso(regs);
 }
 /* ===== 🧫 RASCUNHO DE CULTURA (Dudu 04/11): Bacteriologia-cultura + Parasitologia, modelo do farejador ===== */
 const _nkC=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 const _ehCult=x=>/BACTERIOLOG|CULTURA|PARASITOLOG/i.test(String((x&&(x.cat))||''));
-// classificador portado de _culturas_micro do farejador: cada cultura = 1 amostra
-function _cultClassificar(exames){
-  const out=[], vistos=new Set();
-  for(const raw of exames||[]){
-    const n=_nkC(raw);
+// classificador portado de _culturas_micro do farejador: cada cultura = 1 amostra.
+// Dudu 06/11: recebe ITENS (não só nomes) p/ saber quais culturas são terceirizadas (flag na folha).
+function _cultClassificar(items){
+  const out=[], idx={};
+  for(const it of items||[]){
+    const raw=it&&it.exame, n=_nkC(raw);
     if(!/cultura|urocultura|hemocultura|coprocultura|micolog|fungic/.test(n)) continue;
     let lab, am;
     if(/fungic|micolog/.test(n)){ const anti=/antifungigrama/.test(n); lab='CULTURA FÚNGICA'+(anti?' + ANTIFUNGIGRAMA':''); am=/urina/.test(n)?'Urina':(/pelo|pele|raspado/.test(n)?'Pelos/Pele':''); }
@@ -108,46 +113,50 @@ function _cultClassificar(exames){
     else if(/coprocultura/.test(n)||(/cultura/.test(n)&&/fezes/.test(n))){ lab='COPROCULTURA + ANTIBIOGRAMA'; am='Fezes'; }
     else if(/anaerobi/.test(n)){ lab='CULTURA ANAERÓBIA + ANTIBIOGRAMA'; am=''; }
     else { lab='CULTURA + ANTIBIOGRAMA (AERÓBIA)'; am=''; }
-    const kk=lab+'|'+am; if(vistos.has(kk)) continue; vistos.add(kk);
-    out.push({label:lab, amostra:am});
+    const kk=lab+'|'+am;
+    if(idx[kk]===undefined){ idx[kk]=out.length; out.push({label:lab, amostra:am, terc:false}); }
+    if(exTerceirizado(it)) out[idx[kk]].terc=true;
   }
   return out;
 }
-function _rascCultBloco(c,i){
+function _rascCultBloco(c,i,mode){
   const am=c.amostra||'____________';
   const coleta=/urina/i.test(c.amostra||'')?`<div class="cl2">Coleta: ( ) cistocentese &nbsp; ( ) sonda &nbsp; ( ) espontânea</div>`:'';
+  const tercline=(mode==='full'&&c.terc)?`<div class="cl2"><span class="tercflag">▶ separar amostra p/ terceirizar (VetLab)</span></div>`:'';
   return `<div class="cult"><div class="cultt"><b>${i+1}) ${esc(c.label)}</b></div>
     <div class="clam"><b>Amostra:</b> ${esc(am)} &nbsp;&nbsp; <b>Antibiograma:</b> ( ) sim ( ) não</div>
-    ${coleta}<div class="cl2"><b>Resultado / crescimento:</b></div><div class="cres"><div></div><div></div><div></div><div></div></div></div>`;
+    ${coleta}${tercline}<div class="cl2"><b>Resultado / crescimento:</b></div><div class="cres"><div></div><div></div><div></div><div></div></div></div>`;
 }
-function _rascCultFolha(reg){
-  const its=_rascItens().filter(i=>String(i.req)===String(reg)&&_ehCult(i));
+function _rascCultFolha(reg, mode){
+  mode = mode || 'full';
+  let its=_rascItens().filter(i=>String(i.req)===String(reg)&&_ehCult(i));
+  if(mode==='terc') its=its.filter(exTerceirizado);   // aba Terceirizados: só os terceirizados
   if(!its.length) return null;
-  const r=its[0], ent=_rascFdt(r.entrada), terc=its.some(i=>exTerceirizado(i));
-  const exs=[...new Set(its.map(i=>i.exame).filter(Boolean))];
-  let culturas=_cultClassificar(exs);
-  if(!culturas.length) culturas=exs.map(e=>({label:String(e).toUpperCase(), amostra:''}));   // Parasitologia / não-classificado: bloco genérico
+  const r=its[0], ent=_rascFdt(r.entrada);
+  const seenEx=new Set(), exItems=its.filter(i=>{ const k=i.exame; if(!k||seenEx.has(k)) return false; seenEx.add(k); return true; });
+  let culturas=_cultClassificar(exItems);
+  if(!culturas.length) culturas=exItems.map(i=>({label:String(i.exame).toUpperCase(), amostra:'', terc:exTerceirizado(i)}));   // Parasitologia / não-classificado: bloco genérico
   const ref='AL-'+String(new Date().getFullYear()).slice(2)+String(new Date().getMonth()+1).padStart(2,'0')+String(new Date().getDate()).padStart(2,'0')+'-MI'+String(reg).slice(-4);
   const up=s=>String(s||'').toUpperCase();
   const n=culturas.length;
   const banner=n>1?`<div class="cbanner">⚠️ SÃO ${n} CULTURAS = ${n} AMOSTRAS SEPARADAS</div>`:`<div class="cbanner one">CULTURA A COLETAR</div>`;
   return `<div class="folha">
     <div class="hf">Nº HF: <b>${esc(String(r.hf||reg))}</b><br><span class="ref">ref. interna: ${ref}</span></div>
-    <div class="h1">ALPHA LABS${terc?' – VETLAB':''}</div><div class="h2">MICROBIOLOGIA · CULTURA</div>
+    <div class="h1">ALPHA LABS${mode==='terc'?' – VETLAB':''}</div><div class="h2">MICROBIOLOGIA · CULTURA</div>
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
-    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exs.map(e=>`<div class="ex">• <b>${esc(e)}</b></div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${(mode==='full'&&exTerceirizado(i))?' <span class="tercflag">▶ separar amostra p/ terceirizar (VetLab)</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div></div>
     ${banner}
-    ${culturas.map(_rascCultBloco).join('')}
+    ${culturas.map((c,i)=>_rascCultBloco(c,i,mode)).join('')}
   </div>`;
 }
-function imprimirRascunhoCultura(reg){ _rascImprimir([reg], _rascCultFolha, 'Rascunho Cultura'); }
+function imprimirRascunhoCultura(reg, mode){ _rascImprimir([reg], _rascCultFolha, 'Rascunho Cultura', mode); }
 function imprimirLoteCultura(){
-  // Dudu 06/11: igual ao PCR — lote traz SÓ os terceirizados PENDENTES de baixa (exclui os já baixados).
+  // Dudu 06/11: igual ao PCR — lote traz SÓ os terceirizados PENDENTES de baixa (exclui os já baixados). Folha VETLAB → modo 'terc'.
   const regs=[...new Set(_rascItens().filter(i=>_ehCult(i)&&exTerceirizado(i)&&!exBaixado(i)).map(i=>String(i.req)))];
-  _rascImprimir(regs, _rascCultFolha, 'Rascunho Cultura');
+  _rascImprimir(regs, _rascCultFolha, 'Rascunho Cultura', 'terc');
 }
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
 let prodTravados=[], prodTravadoSet=new Set(), prodTravadosHist=[], prodTravaMap={};
