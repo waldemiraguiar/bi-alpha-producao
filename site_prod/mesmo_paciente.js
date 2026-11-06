@@ -52,7 +52,7 @@
     if (!el('puView')) {
       var v = document.createElement('div'); v.id = 'puView'; v.style.display = 'none';
       v.innerHTML = '<button class="back" onclick="window.goHome&&goHome()">← voltar</button>'
-        + '<div class="pu-hero"><h2>🔗 Mesmo paciente, dois códigos</h2><p>Quando a recepção cadastra o mesmo bicho com <b>código diferente</b>, os resultados não pareiam. Você decide: <b style="color:var(--ok)">✓ mesmo</b> junta · <b>✕ diferentes</b> · <b>🗑 apagar</b>. O <b>nascimento</b> é o desempatador — tudo vai pro Histórico e é reversível.</p><div style="font-size:12.5px;color:var(--mut);margin-top:9px;display:flex;align-items:center;gap:6px">🔄 Atualiza sozinho a cada 5 min · próxima em <b id="puCount" style="font-variant-numeric:tabular-nums;color:var(--brand);font-size:14px">—</b></div></div>'
+        + '<div class="pu-hero"><h2>🔗 Mesmo paciente, dois códigos</h2><p>Quando a recepção cadastra o mesmo paciente com <b>código diferente</b>, os resultados não pareiam. Você decide: <b style="color:var(--ok)">✓ mesmo</b> junta · <b>✕ diferentes</b> · <b>🗑 apagar</b>. O <b>nascimento</b> é o desempatador — tudo vai pro Histórico e é reversível.</p><div style="font-size:12.5px;color:var(--mut);margin-top:9px;display:flex;align-items:center;gap:6px">🔄 Atualiza sozinho a cada 5 min · próxima em <b id="puCount" style="font-variant-numeric:tabular-nums;color:var(--brand);font-size:14px">—</b></div></div>'
         + '<div id="puWho" style="margin-bottom:8px"></div><div id="puTabs" style="margin-bottom:2px"></div><div id="puBody"></div>';
       m.appendChild(v);
     }
@@ -162,12 +162,12 @@
     var topo = st ? '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 12px">'
       + tile(nf(st.n_pac), 'pacientes', '#8b7bff') + tile(nf(st.n_voltam), 'voltaram', '#38bdf8')
       + tile(nf(st.n_fila), 'suspeitas', '#f59e0b') + tile(nf(st.n_merges), 'resolvidas', '#34d399') + '</div>' : '';
-    // ⚠️ CLÍNICAS DIFERENTES — destaque no topo (mesmo bicho atendido em clínicas diferentes)
+    // ⚠️ CLÍNICAS DIFERENTES — destaque no topo (mesmo paciente atendido em clínicas diferentes)
     var cross = Array.isArray(PU.cross) ? PU.cross : [];
     var secCross = '';
     if (cross.length) {
       secCross = '<div style="margin-bottom:16px;border:2px solid var(--bad);border-radius:14px;padding:10px 10px 4px;background:linear-gradient(135deg,#ef444418,transparent 70%)">'
-        + '<div style="font-size:15px;font-weight:900;color:var(--bad);animation:puCrossBlink 1.1s ease-in-out infinite">⚠️ CLÍNICAS DIFERENTES — mesmo bicho, outra clínica (' + cross.length + ')</div>'
+        + '<div style="font-size:15px;font-weight:900;color:var(--bad);animation:puCrossBlink 1.1s ease-in-out infinite">⚠️ CLÍNICAS DIFERENTES — mesmo paciente, outra clínica (' + cross.length + ')</div>'
         + '<div style="font-size:12px;color:var(--mut);margin:2px 0 6px">O mesmo paciente foi atendido em clínicas diferentes em dias diferentes. Confira com atenção — aqui o pareamento cruza unidades.</div>'
         + cross.map(function (c) { return cardFila(c, false); }).join('') + '</div>';
     }
