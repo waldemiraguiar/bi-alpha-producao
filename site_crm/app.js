@@ -990,6 +990,51 @@ function _catDriverHtml(cod){
     ${hist.length?`<div style="margin-top:10px"><div class="t-mut" style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">meses anteriores <span style="font-weight:600;text-transform:none">· % = variação do nº de exames no mês</span></div><div style="max-height:160px;overflow:auto">${hist.join('')}</div></div>`:''}
   </div>`;
 }
+// 🤖 LEITURA AUTOMÁTICA (rodapé do card) — estatística + regras (SEM IA ao vivo, custo R$0). Lê os sinais e escreve análise + sugestão. Wal 06/11.
+function _catCur(cod){   // driver do mês mais recente p/ a leitura
+  const S=(CRM_CATMES&&CRM_CATMES[String(cod)])||null; if(!S) return null;
+  const yms=Object.keys(S).sort(); if(yms.length<2) return null;
+  const _now=new Date(), curYm=_now.getFullYear()+"-"+String(_now.getMonth()+1).padStart(2,"0");
+  const hi=yms[yms.length-1], hp=yms[yms.length-2], fld=(hi===curYm)?'nd':'n';
+  const cats=S[hi]||{}, pcats=S[hp]||{}, all=new Set([...Object.keys(cats),...Object.keys(pcats)]);
+  let tc=0,tp=0; const list=[]; all.forEach(c=>{const a=(cats[c]&&cats[c][fld])||0,b=(pcats[c]&&pcats[c][fld])||0;tc+=a;tp+=b;const d=a-b;if(d!==0)list.push({c,d,nova:(b===0&&a>0)});});
+  list.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d));
+  return {pct:(tp>0?(tc/tp-1):null), top:list[0]||null, novas:list.filter(x=>x.nova&&x.d>0).map(x=>x.c), parcial:(hi===curYm)};
+}
+function _cardInsight(cod){
+  const st=_hfStats(cod); if(!st) return "";
+  const dir=ehDiretoria()||(typeof veSafra==="function"&&veSafra());
+  const t=tierDe(cod), ini=inicioDe(cod), cur=_catCur(cod), sw=_sowDataDe(cod);
+  const falta=(sw&&sw.falta)||[], manda=(sw&&sw.cats)||[], rs=dir?_hfRS(cod):null, an=[];
+  let trend;
+  if(st.overdue) trend=`📉 <b style="color:#ff9fb0">Parada</b> há ${st.daysSince}d (costuma enviar a cada ~${st.gapMed||'?'}d)`;
+  else if(st.caindo){ const q=Math.round(Math.max(st.drop7||0,st.drop3||0)*100); trend=`📉 <b style="color:#ff9fb0">Caindo</b> ${q}% vs o ritmo dela`; }
+  else if(st.drop7!=null&&st.drop7<=-0.12) trend=`📈 <b style="color:#7effcf">Crescendo</b> — últimos 7d acima do ritmo`;
+  else trend=`➡️ <b style="color:#cfe0f2">Estável</b> no ritmo dela (~${st.medEnvio||0}/envio, a cada ~${st.gapMed||'?'}d)`;
+  const ctx=[]; if(t) ctx.push(`curva ${t}`); if(ini) ctx.push(`cliente desde ${_iniLbl(ini)}`);
+  an.push(`${trend}${ctx.length?` · ${ctx.join(' · ')}`:''}.`);
+  if(cur && cur.pct!=null){ const p=Math.round(cur.pct*100);
+    let m=`${cur.parcial?'Este mês (parcial)':'Último mês'}: <b style="color:${p<0?'#ff9fb0':'#7effcf'}">${p>=0?'+':''}${p}%</b> em exames`;
+    if(cur.novas.length) m+=` — puxado por <b style="color:#7effcf">🆕 ${esc(cur.novas[0])}</b> (classe nova — estava na mesa)`;
+    else if(cur.top) m+=` — ${cur.top.d>0?'puxado por':'derrubado por'} <b>${esc(cur.top.c)}</b> (${cur.top.d>0?'+':''}${cur.top.d} exames)`;
+    an.push(m+'.');
+  }
+  if(rs && rs.mom!=null){ const p=Math.round(rs.mom*100); an.push(`💰 R$ este mês <b style="color:${p<0?'#ff9fb0':'#7effcf'}">${p>=0?'+':''}${p}%</b> vs o mesmo dia do mês passado.`); }
+  if(falta.length) an.push(`🎯 Deixa <b>${falta.length}</b> classe(s) na mesa (ex.: <b>${esc(falta[0])}</b>${falta[1]?', '+esc(falta[1]):''}).`);
+  else if(manda.length) an.push(`🛡️ Share-of-wallet cheio — cliente redondo.`);
+  let sug;
+  if(st.overdue) sug=`Ligar HOJE — ${st.daysSince}d sem enviar. Resgatar antes de virar fuga.`;
+  else if(st.caindo) sug=`Contato de retenção${(cur&&cur.top&&cur.top.d<0)?` — a queda veio de <b>${esc(cur.top.c)}</b>`:''}.`;
+  else if(falta.length>=2){ const alvo=falta.find(f=>!(cur&&cur.novas.indexOf(f)>=0))||falta[0]; sug=`Oferecer <b>${esc(alvo)}</b> — ela já confia no lab; falta pedir essa classe.`; }
+  else if(cur&&cur.novas.length) sug=`Reforçar a <b>${esc(cur.novas[0])}</b> que começou este mês e abrir outras classes.`;
+  else if(cur&&cur.pct!=null&&cur.pct>=0.1) sug=`Em alta — aproveitar pra ampliar o mix de exames.`;
+  else sug=`Cliente saudável — manter relacionamento e vigiar o ritmo.`;
+  return `<div style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.14);padding-top:9px">
+    <div style="font-size:9.5px;font-weight:800;color:#c9b6ff;text-transform:uppercase;letter-spacing:.3px">🤖 Leitura automática <span class="t-mut" style="font-weight:600;text-transform:none">· estatística · atualiza sozinha</span></div>
+    <div style="font-size:11.5px;color:#dfeaf5;line-height:1.55;margin-top:4px">${an.join(' ')}</div>
+    <div style="margin-top:7px;background:rgba(161,0,255,.1);border:1px solid rgba(161,0,255,.42);border-radius:9px;padding:7px 10px;font-size:11.5px;color:#eadcff;line-height:1.5">👉 <b>Sugestão:</b> ${sug}</div>
+  </div>`;
+}
 // 📋 TABELA-RESUMO no topo da aba Clínicas A/B/C/D — clínicas da curva (maior→menor faturamento), mês a mês, % vs mês anterior.
 // metric 'rs' = R$ (só diretoria, de CLIN_FATMESALL) · 'ex' = nº de exames (todos, de CLIN_EXMES público). Mês atual (parcial) compara a MESMA janela de dias (fd×fd / nd×nd). Wal 03/11.
 function _curvaResumoTbl(AA){
@@ -1148,6 +1193,7 @@ function _hfCard(cod, pinned, extra){
     ${_sowBlock(cod)}
     ${_catDriverHtml(cod)}
     ${lista}
+    ${_cardInsight(cod)}
   </div>`;
 }
 // constrói o <datalist> da Lupa UMA vez (todas as clínicas do HF), fora do re-render — pra achar qualquer clínica (inclusive inativa/fugida) sem travar o celular
