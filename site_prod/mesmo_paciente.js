@@ -9,7 +9,7 @@
   var KEY = 'sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8';
   var HED = { apikey: KEY, Authorization: 'Bearer ' + KEY };
   var CAP = 150;
-  var PU = { fila: [], entradas: [], stats: null, hist: [], tab: 'fila', sel: {} };
+  var PU = { fila: [], entradas: [], stats: null, hist: [], tab: 'fila', sel: {}, feitos: 0 };
 
   function el(id) { return document.getElementById(id); }
   function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -84,11 +84,11 @@
     ensure(); hideFarejador(); el('puView').style.display = 'block'; PU.tab = 'fila';
     el('puBody').innerHTML = '<div style="color:var(--mut);padding:14px">🔗 Carregando…</div>';
     Promise.all([
-      fetch(URL + '/pu_candidatos?select=*&estado=eq.pendente&order=score.desc&limit=' + CAP, { headers: HED }).then(r => r.json()),
-      fetch(URL + '/pu_entradas?select=*&order=score.desc', { headers: HED }).then(r => r.json()),
+      fetch(URL + '/pu_candidatos?select=*&estado=eq.pendente&hoje=eq.true&order=score.desc', { headers: HED }).then(r => r.json()),
+      fetch(URL + '/pu_candidatos?select=*&estado=eq.pendente&hoje=eq.false&order=score.desc&limit=' + CAP, { headers: HED }).then(r => r.json()),
       fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json())
     ]).then(function (r) {
-      PU.fila = Array.isArray(r[0]) ? r[0] : []; PU.entradas = Array.isArray(r[1]) ? r[1] : []; PU.stats = (Array.isArray(r[2]) && r[2][0]) || null; PU.sel = {};
+      PU.entradas = Array.isArray(r[0]) ? r[0] : []; PU.fila = Array.isArray(r[1]) ? r[1] : []; PU.stats = (Array.isArray(r[2]) && r[2][0]) || null; PU.sel = {};
       render(); badge();
     }).catch(function () { el('puBody').innerHTML = '<div style="color:var(--bad);padding:14px">Não consegui ler agora. <button class="btn ghost sm" onclick="abrirProntuario()">tentar de novo</button></div>'; });
   };
@@ -99,7 +99,13 @@
   }
   window.puTab = function (t) { PU.tab = t; if (t === 'hist') loadHist(); else render(); };
 
-  function quebra(br) { br = br || {}; var sg = function (v) { return v === '✓' ? '<span style="color:var(--ok)">✓</span>' : v === '✗' ? '<span style="color:var(--bad)">✗</span>' : v === '~' ? '<span style="color:var(--warn)">~</span>' : '<span style="color:var(--mut)">?</span>'; }; var pc = function (v) { return Math.round((Number(v) || 0) * 100) + '%'; }; return '<div style="font-size:11.5px;color:var(--mut);margin-top:6px"><span style="opacity:.7">por quê →</span> nome <b>' + pc(br.pet) + '</b> · dono <b>' + pc(br.dono) + '</b> · raça ' + sg(br.raca) + ' · sexo ' + sg(br.sexo) + ' · <b>nascimento ' + sg(br.nasc) + '</b></div>'; }
+  function quebra(br) {
+    br = br || {};
+    var sg = function (v) { return v === '✓' ? '<span style="color:var(--ok);font-weight:800">✓</span>' : v === '✗' ? '<span style="color:var(--bad);font-weight:800">✗</span>' : v === '~' ? '<span style="color:var(--warn);font-weight:700">~</span>' : '<span style="color:var(--mut)">?</span>'; };
+    var pc = function (v) { var n = Math.round((Number(v) || 0) * 100); var c = n >= 90 ? 'var(--ok)' : (n < 70 ? 'var(--bad)' : 'var(--txt)'); return '<b style="color:' + c + '">' + n + '%</b>'; };
+    var nascTxt = br.nasc === '✓' ? '<b style="color:var(--ok)">nascimento BATE ✓</b>' : (br.nasc === '✗' ? '<b style="color:var(--bad)">nascimento DIFERE ✗</b>' : 'nascimento ' + sg(br.nasc));
+    return '<div style="font-size:12px;color:var(--mut);margin-top:6px"><span style="opacity:.7">por quê →</span> nome ' + pc(br.pet) + ' · dono ' + pc(br.dono) + ' · raça ' + sg(br.raca) + ' · sexo ' + sg(br.sexo) + ' · ' + nascTxt + '</div>';
+  }
   function nasc(n) { return n ? esc(String(n).slice(0, 4) + '/' + String(n).slice(4, 6)) : '—'; }
   function linha(cod, pet, dono, raca, sexo, n, reqs) { var E = function (s) { s = esc(s).trim(); return s || '—'; }; return '<div style="font-size:13.5px;color:var(--txt)"><span style="color:var(--mut)">cód</span> <b style="color:var(--brand)">' + esc(cod) + '</b> · 🐾 <b>' + E(pet) + '</b> · ' + E(dono) + ' · ' + E(raca) + ' · ' + E(sexo) + ' <span style="color:var(--mut)">· nasc ' + nasc(n) + ' · ' + (reqs || 0) + ' req</span></div>'; }
 
@@ -113,7 +119,7 @@
       + '<div class="meta"><b>cód HF ' + esc(cod) + '</b> · ' + E(raca) + ' · ' + E(sexo) + ' · nasc ' + nasc(n) + ' · ' + (reqs || 0) + ' req' + (cli ? ' · 🏥 ' + E(cli) : '') + '</div>'
       + '</div>';
   }
-  function cardFila(c) {
+  function cardFila(c, hoje) {
     var sc = Number(c.score) || 0, pct = Math.round(sc * 100), chk = !!PU.sel[c.par_id], P = esc(c.par_id);
     var col, palavra;
     if (pct >= 98) { col = '#10b981'; palavra = 'idêntico'; }
@@ -122,10 +128,11 @@
     else { col = 'var(--mut)'; palavra = 'possível'; }
     var cliN = c.a_cli || c.b_cli;
     var cliLine = cliN ? '🏥 ' + esc(cliN) + ' <span class="n">(#' + esc(c.cc) + ' · ' + esc(c.esp) + ')</span>' : 'clínica #' + esc(c.cc) + ' · ' + esc(c.esp);
-    return '<div class="pu-card' + (pct >= 90 ? ' quase' : '') + '" style="border-left-color:' + col + '">'
+    var hojeBadge = hoje ? '<span style="font-size:11px;font-weight:800;background:var(--warn);color:#111;padding:2px 9px;border-radius:999px;margin-left:8px">🔔 ENTROU HOJE</span>' : '';
+    return '<div class="pu-card' + (pct >= 90 ? ' quase' : '') + (hoje ? ' hoje' : '') + '" style="border-left-color:' + (hoje ? 'var(--warn)' : col) + '">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">'
       + '<label style="display:flex;align-items:center;gap:11px;cursor:pointer;min-width:0"><input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + P + '\')" style="transform:scale(1.35);flex-shrink:0;cursor:pointer">'
-      + '<span class="pu-conf" style="color:' + col + ';border-color:' + col + '"><b>' + pct + '%</b>' + palavra + '</span></label>'
+      + '<span class="pu-conf" style="color:' + col + ';border-color:' + col + '"><b>' + pct + '%</b>' + palavra + '</span>' + hojeBadge + '</label>'
       + '<span class="pu-cli" style="margin:0;flex-shrink:0">' + cliLine + '</span>'
       + '</div>'
       + sub(c.a_cod, c.a_pet, c.a_dono, c.a_raca, c.a_sexo, c.a_nasc, c.a_reqs, c.a_origem, c.a_cli)
@@ -148,9 +155,8 @@
     // entradas de hoje
     var secEnt = '';
     if (ent.length) {
-      secEnt = '<div style="margin-bottom:14px"><div style="font-size:14px;font-weight:800;color:var(--warn)">🔔 Entraram HOJE e já têm código (' + ent.length + ')</div>'
-        + ent.map(function (e) { return '<div class="pu-card quase"><div style="display:flex;justify-content:space-between"><div style="font-size:14px"><b>🐾 ' + esc(e.pet) + '</b> · ' + esc(e.dono) + '</div><div style="font-weight:800;color:var(--warn)">' + Math.round((Number(e.score) || 0) * 100) + '%</div></div><div style="font-size:12.5px;color:var(--txt);margin-top:3px">entrou hoje como <b style="color:var(--brand)">cód ' + esc(e.novo_cod) + '</b> → já existe <b style="color:var(--brand)">cód ' + esc(e.match_cod) + '</b> (' + (e.hist_reqs || 0) + ' req)</div>' + quebra(e.br)
-          + '<div style="display:flex;gap:6px;margin-top:8px"><button class="pu-b sim" onclick="puAct(\'' + esc(e.par_id) + '\',\'mesmo\')">✓ mesmo</button><button class="pu-b nao" onclick="puAct(\'' + esc(e.par_id) + '\',\'diferente\')">✕ diferentes</button><button class="pu-b del" onclick="puAct(\'' + esc(e.par_id) + '\',\'apagado\')">🗑 apagar</button></div></div>'; }).join('') + '</div>';
+      secEnt = '<div style="margin-bottom:16px"><div style="font-size:15px;font-weight:800;color:var(--warn)">🔔 Entraram HOJE e já têm código (' + ent.length + ')</div><div style="font-size:12px;color:var(--mut);margin:2px 0 4px">Pareie / junte antes de duplicar o paciente.</div>'
+        + ent.map(function (c) { return cardFila(c, true); }).join('') + '</div>';
     }
     // barra de lote
     var nsel = Object.keys(PU.sel).length;
@@ -160,8 +166,10 @@
       + '<button class="pu-b" style="background:transparent;color:var(--mut)" onclick="puSelNone()">limpar seleção</button></div>' : '';
     var totFila = st ? nf(st.n_fila) : fila.length;
     var note = (st && st.n_fila > fila.length) ? ' <span style="font-weight:400;color:var(--mut)">· mostrando as ' + fila.length + ' de maior %</span>' : '';
-    var head = '<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 2px"><span style="font-size:14px;font-weight:800">Fila — código duplicado (' + totFila + ')' + note + '</span>'
-      + (fila.length ? '<button class="btn ghost sm" onclick="puSelAll()">selecionar todos (' + fila.length + ')</button>' : '') + '</div>';
+    var prog = PU.feitos ? '<div style="margin:6px 0 2px;font-size:13.5px;color:var(--ok);font-weight:800">✓ você já resolveu ' + PU.feitos + ' hoje 🎉</div>' : '';
+    var head = prog + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 4px"><span style="font-size:14px;font-weight:800">Fila — código duplicado (' + totFila + ')' + note + '</span>'
+      + '<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="puBulkIdenticos()" style="background:#10b981;color:#06281b;font-weight:800">✓ confirmar idênticos (≥98%)</button>'
+      + (fila.length ? '<button class="btn ghost sm" onclick="puSelAll()">selecionar todos</button>' : '') + '</span></div>';
     el('puBody').innerHTML = topo + secEnt + bat + head + (fila.length ? fila.map(cardFila).join('') : '<div style="color:var(--mut);padding:10px">✓ Nada na fila agora.</div>');
     whoBar();
   }
@@ -178,15 +186,28 @@
     var q = quem() || pedirNome(); if (!q) return;
     PU.fila = PU.fila.filter(function (c) { return String(c.par_id) !== String(par); });
     PU.entradas = PU.entradas.filter(function (c) { return String(c.par_id) !== String(par); });
-    delete PU.sel[par]; render();
+    delete PU.sel[par]; PU.feitos++; render();
     rpc(par, dec, q).catch(function () { alert('Não consegui salvar — recarregando.'); abrirProntuario(); });
+  };
+  window.puBulkIdenticos = function () {
+    var q = quem() || pedirNome(); if (!q) return;
+    fetch(URL + '/pu_candidatos?select=par_id&estado=eq.pendente&score=gte.0.98', { headers: HED }).then(r => r.json()).then(function (rows) {
+      rows = Array.isArray(rows) ? rows : [];
+      if (!rows.length) { alert('Nenhum idêntico (≥98%) pendente agora.'); return; }
+      if (!confirmBox('Confirmar ' + rows.length + ' pares IDÊNTICOS (≥98%) como MESMO paciente?\n\nTudo vai pro Histórico e é reversível.')) return;
+      var pars = rows.map(function (x) { return x.par_id; });
+      PU.fila = PU.fila.filter(function (c) { return (Number(c.score) || 0) < 0.98; });
+      PU.entradas = PU.entradas.filter(function (c) { return (Number(c.score) || 0) < 0.98; });
+      PU.feitos += pars.length; render();
+      (function go(i) { if (i >= pars.length) { setTimeout(refreshStats, 1500); return; } rpc(pars[i], 'mesmo', q).then(function () { go(i + 1); }).catch(function () { go(i + 1); }); })(0);
+    }).catch(function () { alert('Não consegui buscar os idênticos.'); });
   };
   window.puBatch = function (dec) {
     var q = quem() || pedirNome(); if (!q) return;
     var pars = Object.keys(PU.sel); if (!pars.length) return;
     if (dec === 'apagado' && !confirmBox(pars.length + ' par(es) vão pra lista de Apagados (reversível). Confirmar?')) return;
     PU.fila = PU.fila.filter(function (c) { return !PU.sel[c.par_id]; });
-    PU.sel = {}; render();
+    PU.sel = {}; PU.feitos += pars.length; render();
     pars.forEach(function (p) { rpc(p, dec, q); });
   };
   function confirmBox(m) { return window.confirm ? window.confirm(m) : true; }
