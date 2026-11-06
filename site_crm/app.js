@@ -959,33 +959,35 @@ function _catDriverHtml(cod){
   const yms=Object.keys(S).sort(); if(yms.length<2) return "";
   const _now=new Date(), curYm=_now.getFullYear()+"-"+String(_now.getMonth()+1).padStart(2,"0");
   const ymLbl=ym=>{const p=ym.split('-');return (_MES3C[(+p[1])-1]||'')+'/'+p[0].slice(2);};
-  // movers de uma transição (ym vs pym) — classe NOVA (era 0) marcada
+  const diaD=CRM_CATMES_DIA||_now.getDate();
+  // movers de uma transição (ym vs pym) — classe NOVA (era 0) marcada + o % TOTAL do mês (nº de exames)
   const moversOf=(ym,pym)=>{ const fld=(ym===curYm)?'nd':'n'; const cats=S[ym]||{}, pcats=S[pym]||{}, all=new Set([...Object.keys(cats),...Object.keys(pcats)]);
-    const list=[]; all.forEach(c=>{ const a=(cats[c]&&cats[c][fld])||0, b=(pcats[c]&&pcats[c][fld])||0, d=a-b; if(d!==0) list.push({c,d,nova:(b===0&&a>0)}); });
-    list.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d)); return list; };
-  // 🎯 HERÓI = o mês mais recente (parcial, se for o atual) com barras por categoria
+    let tc=0,tp=0; const list=[]; all.forEach(c=>{ const a=(cats[c]&&cats[c][fld])||0, b=(pcats[c]&&pcats[c][fld])||0; tc+=a; tp+=b; const d=a-b; if(d!==0) list.push({c,d,nova:(b===0&&a>0)}); });
+    list.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d)); return {list, pct:(tp>0?(tc/tp-1):null), tc, tp}; };
+  const pctTag=(p,big)=>{ if(p==null) return ''; const col=p<-0.001?'#ff6b81':(p>0.001?'#00E5A0':'#9fb2cc'), ar=p<0?'▼':(p>0?'▲':'•'); return `<span style="color:${col};font-weight:900;font-size:${big?'16px':'11px'}">${ar}${Math.abs(Math.round(p*100))}%</span>`; };
+  // 🎯 HERÓI = o mês mais recente (parcial, se for o atual)
   const hi=yms[yms.length-1], hp=yms[yms.length-2]; const H=moversOf(hi,hp);
-  if(!H.length) return "";
-  const maxD=Math.max(...H.map(x=>Math.abs(x.d)))||1;
+  if(!H.list.length) return "";
+  const maxD=Math.max(...H.list.map(x=>Math.abs(x.d)))||1;
   const bar=x=>`<div style="display:flex;align-items:center;gap:7px;margin-top:5px">
       <div style="flex:0 0 44%;font-size:11px;font-weight:700;color:#e3edf7;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.nova?'🆕 ':''}${esc(x.c)}</div>
       <div style="flex:1;display:flex;align-items:center;gap:6px"><div style="height:15px;border-radius:4px;width:${Math.max(6,Math.round(Math.abs(x.d)/maxD*100))}%;background:${x.d>0?'linear-gradient(90deg,#0a7f5e,#00E5A0)':'linear-gradient(90deg,#8a2233,#ff5a7a)'};box-shadow:inset 0 1px 0 rgba(255,255,255,.18)"></div><b style="font-size:11.5px;color:${x.d>0?'#7effcf':'#ff9fb0'};white-space:nowrap">${x.d>0?'+':''}${x.d}</b></div>
     </div>`;
-  const barras=H.slice(0,6).map(bar).join('');
-  const novas=H.filter(x=>x.nova && x.d>0).map(x=>x.c);
+  const barras=H.list.slice(0,6).map(bar).join('');
+  const novas=H.list.filter(x=>x.nova && x.d>0).map(x=>x.c);
   const novaLine=novas.length?`<div style="margin-top:9px;background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.45);border-radius:9px;padding:7px 10px;font-size:11.5px;color:#aef5d6;line-height:1.5">🆕 <b>Classes novas este mês:</b> <b style="color:#7effcf">${novas.map(esc).join(', ')}</b> — eram <b>0</b> e começaram a mandar. 👏 É dinheiro que estava na mesa.</div>`:'';
-  // histórico compacto dos meses fechados (uma linha cada)
+  // histórico compacto dos meses fechados (uma linha cada) — com o % do mês na frente
   const hist=[];
-  for(let i=yms.length-2;i>=1 && hist.length<6;i--){ const L=moversOf(yms[i],yms[i-1]); if(!L.length) continue;
-    const up=L.filter(x=>x.d>0).slice(0,2), dn=L.filter(x=>x.d<0).slice(0,1), parts=[];
+  for(let i=yms.length-2;i>=1 && hist.length<6;i--){ const L=moversOf(yms[i],yms[i-1]); if(!L.list.length) continue;
+    const up=L.list.filter(x=>x.d>0).slice(0,2), dn=L.list.filter(x=>x.d<0).slice(0,1), parts=[];
     if(up.length) parts.push(`<span style="color:#7effcf">🔺 ${up.map(x=>(x.nova?'🆕':'')+esc(x.c)+' +'+x.d).join(', ')}</span>`);
     if(dn.length) parts.push(`<span style="color:#ff9fb0">🔻 ${dn.map(x=>esc(x.c)+' '+x.d).join(', ')}</span>`);
-    hist.push(`<div style="padding:3px 0;border-top:1px solid rgba(255,255,255,.05);font-size:10.5px;line-height:1.5"><b style="color:#9fe6ff">${ymLbl(yms[i])}:</b> ${parts.join(' · ')}</div>`); }
+    hist.push(`<div style="padding:4px 0;border-top:1px solid rgba(255,255,255,.05);font-size:10.5px;line-height:1.5"><b style="color:#9fe6ff">${ymLbl(yms[i])}</b> ${pctTag(L.pct,false)} <span class="t-mut">vs ${ymLbl(yms[i-1])}</span>: ${parts.join(' · ')}</div>`); }
   return `<div style="margin-top:11px;border:1px solid rgba(0,212,255,.3);border-radius:12px;padding:11px 13px;background:rgba(0,212,255,.05)">
-    <div style="font-size:11px;font-weight:900;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">📈 O que está puxando ${hi===curYm?'ESTE MÊS':ymLbl(hi)}</div>
-    <div class="t-mut" style="font-size:10px;margin:1px 0 4px">por categoria de exame vs ${ymLbl(hp)}${hi===curYm?` · mesma janela (até dia ${CRM_CATMES_DIA||_now.getDate()})`:''} · 🟢 cresceu / 🆕 nova · 🔴 caiu</div>
+    <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap"><div style="font-size:11px;font-weight:900;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">📈 O que puxou ${hi===curYm?'ESTE MÊS':ymLbl(hi)}</div>${pctTag(H.pct,true)}</div>
+    <div class="t-mut" style="font-size:10px;margin:2px 0 5px;line-height:1.5">variação em <b style="color:#cfe0f2">Nº DE EXAMES</b> por categoria vs <b>${ymLbl(hp)}</b>${hi===curYm?` · mesma janela (até o dia ${diaD})`:''}. Cada número = exames <b style="color:#7effcf">a mais</b> (🟢 cresceu / 🆕 nova) ou <b style="color:#ff9fb0">a menos</b> (🔴).</div>
     ${barras}${novaLine}
-    ${hist.length?`<div style="margin-top:9px"><div class="t-mut" style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">meses anteriores</div><div style="max-height:150px;overflow:auto">${hist.join('')}</div></div>`:''}
+    ${hist.length?`<div style="margin-top:10px"><div class="t-mut" style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">meses anteriores <span style="font-weight:600;text-transform:none">· % = variação do nº de exames no mês</span></div><div style="max-height:160px;overflow:auto">${hist.join('')}</div></div>`:''}
   </div>`;
 }
 // 📋 TABELA-RESUMO no topo da aba Clínicas A/B/C/D — clínicas da curva (maior→menor faturamento), mês a mês, % vs mês anterior.
