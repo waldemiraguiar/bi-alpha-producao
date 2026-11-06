@@ -381,9 +381,10 @@ def clinic_cat_mensal(cods, meses=13, alias=None, tries=4):
                     print(f"clinic_cat_mensal: lote {i} desistiu ({e})"); rows = []
                 else:
                     time.sleep(2 * (t + 1))
+        NAOEXAME = {"DINHEIRO", "EXAME CANCELADO", "CADASTRO PROVISÓRIO", "CADASTRO PROVISORIO"}   # não são exame (pagamento/cancelado/cadastro) — Wal 06/11
         for x in (rows or []):
             setor = (x["setor"] or "").strip()
-            if not setor:
+            if not setor or setor.upper() in NAOEXAME:
                 continue
             p = prim(str(x["cod"])); mm = acc.setdefault(p, {}); ym = mm.setdefault(x["ym"], {}); cur = ym.setdefault(setor, [0, 0])
             cur[0] += int(x["n"] or 0); cur[1] += int(x["nd"] or 0)
