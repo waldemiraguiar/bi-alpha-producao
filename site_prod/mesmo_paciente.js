@@ -34,7 +34,11 @@
       + '.pu-card.quase{box-shadow:0 0 0 1px rgba(245,158,11,.5),0 0 16px rgba(245,158,11,.20)}'
       + '.pu-b.sim{padding:9px 15px;font-size:14px;box-shadow:0 2px 12px rgba(13,148,136,.4)}.pu-b.sim:hover{filter:brightness(1.08)}'
       + '.pu-tile{border-radius:14px;padding:12px 16px;min-width:120px;border:1px solid var(--line);position:relative;overflow:hidden}.pu-tile b{font-size:26px;font-weight:800;display:block;line-height:1.1}.pu-tile span{font-size:11px;color:var(--mut)}'
-      + '.pu-qzap{font-size:9px;font-weight:800;background:var(--warn);color:#111;padding:2px 6px;border-radius:5px;white-space:nowrap}';
+      + '.pu-qzap{font-size:9px;font-weight:800;background:var(--warn);color:#111;padding:2px 6px;border-radius:5px;white-space:nowrap}'
+      + '.pu-sub{background:linear-gradient(145deg,var(--panel),var(--panel2));border:1px solid var(--line);border-left:5px solid var(--line);border-radius:11px;padding:10px 13px;margin:6px 0;box-shadow:0 3px 9px rgba(0,0,0,.28)}'
+      + '.pu-sub-t{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px}'
+      + '.pu-sub .pet{font-size:17px;font-weight:800;color:var(--txt);line-height:1.2}.pu-sub .dono{font-size:14.5px;color:var(--txt)}.pu-sub .meta{font-size:12px;color:var(--mut);margin-top:4px}.pu-sub .meta b{color:var(--brand)}'
+      + '.pu-cli{font-size:12.5px;color:var(--txt);font-weight:600;text-align:right;margin-bottom:3px}.pu-cli .n{color:var(--mut);font-weight:400}';
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   })();
 
@@ -98,9 +102,21 @@
   function nasc(n) { return n ? esc(String(n).slice(0, 4) + '/' + String(n).slice(4, 6)) : '—'; }
   function linha(cod, pet, dono, raca, sexo, n, reqs) { var E = function (s) { s = esc(s).trim(); return s || '—'; }; return '<div style="font-size:13.5px;color:var(--txt)"><span style="color:var(--mut)">cód</span> <b style="color:var(--brand)">' + esc(cod) + '</b> · 🐾 <b>' + E(pet) + '</b> · ' + E(dono) + ' · ' + E(raca) + ' · ' + E(sexo) + ' <span style="color:var(--mut)">· nasc ' + nasc(n) + ' · ' + (reqs || 0) + ' req</span></div>'; }
 
+  function origemInfo(o) { o = Number(o); if (o === 1) return { lbl: '🔵 FAREJADOR', col: '#3b82f6' }; if (o === 0) return { lbl: '🟠 HF', col: '#f59e0b' }; return { lbl: '', col: 'var(--line)' }; }
+  function sub(cod, pet, dono, raca, sexo, n, reqs, origem, cli) {
+    var oi = origemInfo(origem), E = function (s) { s = esc(s).trim(); return s || '—'; };
+    return '<div class="pu-sub" style="border-left-color:' + oi.col + '">'
+      + (oi.lbl ? '<div class="pu-sub-t" style="color:' + oi.col + '">' + oi.lbl + '</div>' : '')
+      + '<div class="pet">🐾 ' + E(pet) + '</div>'
+      + '<div class="dono">' + E(dono) + '</div>'
+      + '<div class="meta"><b>cód HF ' + esc(cod) + '</b> · ' + E(raca) + ' · ' + E(sexo) + ' · nasc ' + nasc(n) + ' · ' + (reqs || 0) + ' req' + (cli ? ' · 🏥 ' + E(cli) : '') + '</div>'
+      + '</div>';
+  }
   function cardFila(c) {
     var sc = Number(c.score) || 0, pct = Math.round(sc * 100), qc = c.quase, chk = !!PU.sel[c.par_id], P = esc(c.par_id);
     var col = qc ? '#f59e0b' : (pct >= 80 ? '#eab308' : 'var(--mut)');
+    var cliN = c.a_cli || c.b_cli;
+    var cliLine = cliN ? '🏥 ' + esc(cliN) + ' <span class="n">(#' + esc(c.cc) + ' · ' + esc(c.esp) + ')</span>' : 'clínica #' + esc(c.cc) + ' · ' + esc(c.esp);
     return '<div class="pu-card' + (qc ? ' quase' : '') + '" style="display:flex;gap:13px;align-items:flex-start">'
       + '<div style="display:flex;flex-direction:column;align-items:center;gap:6px">'
       + '<input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + P + '\')" style="transform:scale(1.25);cursor:pointer">'
@@ -108,9 +124,9 @@
       + (qc ? '<span class="pu-qzap" style="text-align:center;line-height:1.1">QUASE<br>CERTO</span>' : '')
       + '</div>'
       + '<div style="flex:1;min-width:0">'
-      + '<div style="text-align:right;font-size:11px;color:var(--mut);margin-bottom:3px">clínica ' + esc(c.cc) + ' · ' + esc(c.esp) + '</div>'
-      + linha(c.a_cod, c.a_pet, c.a_dono, c.a_raca, c.a_sexo, c.a_nasc, c.a_reqs)
-      + linha(c.b_cod, c.b_pet, c.b_dono, c.b_raca, c.b_sexo, c.b_nasc, c.b_reqs)
+      + '<div class="pu-cli">' + cliLine + '</div>'
+      + sub(c.a_cod, c.a_pet, c.a_dono, c.a_raca, c.a_sexo, c.a_nasc, c.a_reqs, c.a_origem, c.a_cli)
+      + sub(c.b_cod, c.b_pet, c.b_dono, c.b_raca, c.b_sexo, c.b_nasc, c.b_reqs, c.b_origem, c.b_cli)
       + quebra(c.br)
       + '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">'
       + '<button class="pu-b sim" onclick="puAct(\'' + P + '\',\'mesmo\')">✓ mesmo — juntar</button>'
