@@ -242,23 +242,26 @@
   // ================= BADGE =================
   function badge() {
     var bp = el('btnProntuario'); if (!bp) return;
-    fetch(URL + '/pu_stats?select=n_fila,n_entradas_hoje&id=eq.1', { headers: HED }).then(r => r.json()).then(function (s) {
-      s = (Array.isArray(s) && s[0]) || null; var hoje = s ? Number(s.n_entradas_hoje || 0) : 0, fila = s ? Number(s.n_fila || 0) : 0, n = hoje || fila;
-      if (n > 0) { bp.classList.add('pu-pulse'); bp.innerHTML = '🔗 Mesmo Paciente <span class="pu-badge">' + (hoje > 0 ? '🔔' + hoje : nf(fila)) + '</span>'; }
-      else { bp.classList.remove('pu-pulse'); bp.innerHTML = '🔗 Mesmo Paciente'; }
+    fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json()).then(function (s) {
+      s = (Array.isArray(s) && s[0]) || null; if (s) PU.stats = s;
+      var hoje = s ? Number(s.n_entradas_hoje || 0) : 0, fila = s ? Number(s.n_fila || 0) : 0, n = hoje || fila;
+      var cnt = '<span id="puCountTab" style="margin-left:7px;font-size:11px;font-weight:600;opacity:.9;font-variant-numeric:tabular-nums">⏱</span>';
+      if (n > 0) { bp.classList.add('pu-pulse'); bp.innerHTML = '🔗 Mesmo Paciente <span class="pu-badge">' + (hoje > 0 ? '🔔' + hoje : nf(fila)) + '</span>' + cnt; }
+      else { bp.classList.remove('pu-pulse'); bp.innerHTML = '🔗 Mesmo Paciente' + cnt; }
+      puTick();
     }).catch(function () {});
   }
   var PU_CYCLE = 1200, _puRefreshing = false;
   function fmtMMSS(s) { s = Math.max(0, Math.round(s)); var m = Math.floor(s / 60), ss = s % 60; return (m < 10 ? '0' : '') + m + ':' + (ss < 10 ? '0' : '') + ss; }
+  function refreshStats() { if (_puRefreshing) return; _puRefreshing = true; fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json()).then(function (s) { _puRefreshing = false; s = (Array.isArray(s) && s[0]) || null; if (s) PU.stats = s; }).catch(function () { _puRefreshing = false; }); }
   function puTick() {
-    var e = el('puCount'); if (!e) return; // só quando a aba está aberta
+    var pc = el('puCount'), pt = el('puCountTab'); if (!pc && !pt) return;
     var ts = PU.stats && PU.stats.atualizado_em ? Date.parse(PU.stats.atualizado_em) : 0;
-    if (!ts) { e.textContent = '—'; return; }
-    var rem = (ts + PU_CYCLE * 1000 - Date.now()) / 1000;
-    if (rem > 0) { e.textContent = fmtMMSS(rem); e.style.color = 'var(--brand)'; return; }
-    e.innerHTML = '<span style="color:var(--warn)">checando dados novos…</span>';
-    if (_puRefreshing) return; _puRefreshing = true;
-    fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json()).then(function (s) { _puRefreshing = false; s = (Array.isArray(s) && s[0]) || null; if (s) PU.stats = s; }).catch(function () { _puRefreshing = false; });
+    var rem = ts ? (ts + PU_CYCLE * 1000 - Date.now()) / 1000 : null;
+    var txt = rem == null ? '—' : (rem > 0 ? fmtMMSS(rem) : 'já já');
+    if (pc) { if (rem != null && rem <= 0) pc.innerHTML = '<span style="color:var(--warn)">checando dados novos…</span>'; else { pc.textContent = txt; pc.style.color = 'var(--brand)'; } }
+    if (pt) pt.textContent = '⏱ ' + txt;
+    if (rem != null && rem <= 0) refreshStats();
   }
   setInterval(puTick, 1000);
   function boot() { ensure(); badge(); }
