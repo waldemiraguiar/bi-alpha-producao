@@ -31,6 +31,7 @@ export default async (req) => {
         cep: String(c.cep || "").slice(0, 12),          // CEP do cliente (master HF) — p/ ordenar por proximidade no relatório da equipe. SEM R$
         prod: +c.prod || 0,          // produção (nº de exames na janela) — SEM R$
         prod30: +c.prod30 || 0,      // produção últimos 30 dias (se enviado)
+        inicio: String(c.inicio || "").slice(0, 10),   // 📅 data de início no HF (1ª DataEntrada) — marco zero no card. SEM R$
       })).filter((c) => c.cod && c.nome);
       await store.setJSON("lista", { clinicas: clean, ts: Date.now() });
       return Response.json({ ok: true, n: clean.length }, { headers: cors });

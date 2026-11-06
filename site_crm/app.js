@@ -916,25 +916,40 @@ function _tierSeal(cod){
 function _hfTrend(rec, ref){ const up=ref>0&&rec>ref*1.05, dn=ref>0&&rec<ref*0.95; return {col:dn?'#ff5a7a':(up?'#00E5A0':'#9fb2cc'), seta:dn?'▼':(up?'▲':'•'), pct:ref>0?Math.round((rec/ref-1)*100):(rec>0?100:0)}; }
 // animações usadas pelos cards da Lupa (e agora pela aba Clínicas A) — reaproveitado
 const _LUPA_KF='<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,207,0)}50%{box-shadow:0 0 11px 1px rgba(255,143,207,.5)}}#content .pzpulse{animation:pzp 2.2s ease-in-out infinite}@keyframes agp{0%,100%{box-shadow:0 0 6px rgba(255,200,60,.55)}50%{box-shadow:0 0 16px 2px rgba(255,200,60,.9)}}#content .aaaseal{animation:agp 1.9s ease-in-out infinite}@keyframes blkpulse{0%,100%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 0 0 var(--blk0,transparent)}50%{box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04),0 0 18px 2px var(--blk,transparent)}}</style>';
-// 🎯 bloco SHARE-OF-WALLET (manda × deixa na mesa) p/ injetar no card da Clínica A — Wal 03/11
-function _aaaSowBlock(a, rank){
-  const cats=(a.cats||[]).slice(), falta=(a.falta||[]).slice();
-  const n=a.qtd||0, porte=n>=300?'🐘 Grande':n>=100?'🐎 Médio':'🐇 Pequeno';
-  const ctx=`<div class="t-mut" style="font-size:11px;margin-top:11px">${rank?`#${rank} no faturamento 12m · `:''}${porte} · 📊 <b>${n}</b> exames (12m)</div>`;
-  const manda = cats.length?`<div style="font-size:12px;margin-top:7px;color:#7effcf;line-height:1.5">✅ <b>manda:</b> ${cats.slice(0,8).map(c=>esc(c.setor)+` <span style="opacity:.75">(${c.qtd})</span>`).join(" · ")}${cats.length>8?` <span class="t-mut">+${cats.length-8}</span>`:''}</div>`:'';
+// 🎯 SHARE-OF-WALLET (manda × deixa na mesa) — dado de AAA (curvas) OU CLIN_DET (carteira). Vale em TODO card (Lupa + A/B/C/D). Wal 03/11; Lupa tb 06/11.
+function _sowDataDe(cod){
+  cod=String(cod);
+  const a=(typeof AAA!=="undefined"&&AAA)?AAA.find(x=>String(x.cod)===cod):null;
+  if(a && ((a.cats&&a.cats.length)||(a.falta&&a.falta.length))) return {cats:(a.cats||[]).map(c=>({setor:c.setor,qtd:(c.qtd!=null?c.qtd:(c.n||0))})), falta:(a.falta||[]).slice()};
+  const d=(typeof CLIN_DET!=="undefined"&&CLIN_DET)?CLIN_DET[cod]:null;
+  if(d && ((d.cats&&d.cats.length)||(d.falta&&d.falta.length))) return {cats:(d.cats||[]).map(c=>({setor:c.setor,qtd:(c.qtd!=null?c.qtd:(c.n||0))})), falta:(d.falta||[]).slice()};
+  return null;
+}
+function _sowBlock(cod){
+  const sw=_sowDataDe(cod); if(!sw) return "";
+  const cats=sw.cats, falta=sw.falta;
+  const manda = cats.length?`<div style="font-size:12px;margin-top:11px;color:#7effcf;line-height:1.5">✅ <b>manda:</b> ${cats.slice(0,10).map(c=>esc(c.setor)+` <span style="opacity:.75">(${c.qtd})</span>`).join(" · ")}${cats.length>10?` <span class="t-mut">+${cats.length-10}</span>`:''}</div>`:'';
   const bloco = falta.length
     ? `<div style="background:rgba(255,45,85,.13);border:1px solid rgba(255,45,85,.5);border-left:3px solid #FF2D55;border-radius:10px;padding:9px 12px;margin-top:9px">
         <div style="font-weight:800;color:#ff6b81;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">🎯 Deixando na mesa · ${falta.length} classe(s) indo pro concorrente</div>
         <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${falta.slice(0,12).map(f=>`<span style="background:rgba(255,45,85,.22);color:#ffd0d8;border:1px solid rgba(255,45,85,.5);border-radius:14px;padding:2px 10px;font-size:11px;font-weight:700">${esc(f)}</span>`).join("")}${falta.length>12?`<span style="color:#ff8fa3;font-size:11px;font-weight:700;align-self:center">+${falta.length-12}</span>`:""}</div>
-        <div style="font-size:11px;color:#ffb3c0;margin-top:6px">👉 <b>puxa essas</b> — ela já é grande e confia no lab; falta pedir.</div>
+        <div style="font-size:11px;color:#ffb3c0;margin-top:6px">👉 <b>puxa essas</b> — ela já confia no lab; falta pedir.</div>
       </div>`
-    : `<div class="swcheio" style="border:1px solid rgba(0,229,160,.5);border-left:3px solid #00E5A0;border-radius:10px;padding:9px 12px;margin-top:9px">
+    : (cats.length?`<div class="swcheio" style="border:1px solid rgba(0,229,160,.5);border-left:3px solid #00E5A0;border-radius:10px;padding:9px 12px;margin-top:9px">
         <div style="font-weight:800;color:#00E5A0;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px">✅ Share-of-wallet CHEIO · manda TODAS as classes 👏</div>
         <div style="font-size:11px;color:#7effcf;margin-top:5px">🛡️ cliente redondo — <b>nada indo pro concorrente</b>. Proteja essa: é o modelo do que as outras deveriam mandar.</div>
-      </div>`;
-  const drill = a.cod?`<div style="margin-top:9px"><button class="exbtn" data-mesames="${esc(a.cod)}" data-mnome="${esc(a.nome)}" type="button" style="background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#7effcf;border-radius:8px;padding:6px 13px;font-size:12px;font-weight:700;cursor:pointer">📅 Análise completa (mês a mês · benchmark)</button></div>`:'';
-  return ctx+manda+bloco+drill;
+      </div>`:'');
+  const drill = `<div style="margin-top:9px"><button class="exbtn" data-mesames="${esc(String(cod))}" data-mnome="${esc((clinByCod(cod)||{}).nome||'')}" type="button" style="background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#7effcf;border-radius:8px;padding:6px 13px;font-size:12px;font-weight:700;cursor:pointer">📅 Análise completa (mês a mês · benchmark)</button></div>`;
+  return manda+bloco+drill;
 }
+// contexto #rank/porte só na aba A/B/C/D (o share-of-wallet em si vai pelo _sowBlock no card)
+function _aaaSowBlock(a, rank){
+  const n=a.qtd||0, porte=n>=300?'🐘 Grande':n>=100?'🐎 Médio':'🐇 Pequeno';
+  return `<div class="t-mut" style="font-size:11px;margin-top:11px">${rank?`#${rank} no faturamento 12m · `:''}${porte} · 📊 <b>${n}</b> exames (12m)</div>`;
+}
+// 📅 DATA DE INÍCIO NO HF (marco zero) — primeira ida ao HF; vem do master (campo `inicio`, min DataEntrada no build).
+function inicioDe(cod){ const c=clinByCod(cod); return (c&&c.inicio)?String(c.inicio):""; }
+function _iniLbl(iso){ const m=/^(\d{4})-(\d{2})/.exec(String(iso||"")); if(!m) return ""; const M=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+m[2])-1]||''; return M+'/'+m[1].slice(2); }
 // 📋 TABELA-RESUMO no topo da aba Clínicas A/B/C/D — clínicas da curva (maior→menor faturamento), mês a mês, % vs mês anterior.
 // metric 'rs' = R$ (só diretoria, de CLIN_FATMESALL) · 'ex' = nº de exames (todos, de CLIN_EXMES público). Mês atual (parcial) compara a MESMA janela de dias (fd×fd / nd×nd). Wal 03/11.
 function _curvaResumoTbl(AA){
@@ -1084,11 +1099,13 @@ function _hfCard(cod, pinned, extra){
       <div style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;align-items:center">${moveBtns}${blinkBtn}${grpBtn}${pinBtn}</div>
     </div>
     ${blinkPicker}
+    ${inicioDe(cod)?`<div style="margin-top:6px"><span style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,194,77,.12);border:1px solid rgba(255,194,77,.4);border-radius:11px;padding:2px 11px;font-size:11px;font-weight:800;color:#ffd27a">📅 cliente HF desde ${_iniLbl(inicioDe(cod))} <span class="t-mut" style="font-weight:600">· marco zero</span></span></div>`:''}
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
     ${obsHtml}
     ${_lupaFeedbackBlock(cod)}
     ${kpis}${rsRow}
     ${extra||''}
+    ${_sowBlock(cod)}
     ${lista}
   </div>`;
 }
