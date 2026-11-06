@@ -44,7 +44,7 @@ function _rascFolha(reg){
     <table class="an"><thead><tr><th style="text-align:left;width:60%">Análises</th><th>DNA</th><th>RNA</th></tr></thead><tbody><tr><td style="height:28px"></td><td></td><td></td></tr><tr><td style="height:28px"></td><td></td><td></td></tr></tbody></table>
   </div>`;
 }
-const _RASC_CSS="@page{size:A4;margin:12mm} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0} .folha{border:2px solid #111;padding:14px 18px;box-sizing:border-box;min-height:128mm;page-break-inside:avoid} .folha:nth-of-type(2n){page-break-after:always} .folha:nth-of-type(odd){border-bottom:2px dashed #999} .folha:last-child{page-break-after:auto} .h1{font-size:26px;font-weight:800} .h2{font-size:16px;font-weight:800;margin-bottom:10px} .lin{font-size:13.5px;margin:3px 0} .box{border:1.5px solid #111;margin-top:12px} .boxh{background:#eee;font-weight:800;padding:5px 10px;border-bottom:1.5px solid #111;font-size:13px} .boxb{padding:8px 10px} .ex{font-size:14px;margin:3px 0} .sec{font-size:20px;font-weight:800;margin:16px 0 6px} .datas{display:flex;gap:40px;font-size:14px;margin:8px 0} .datas u{padding:0 6px} .qtd{font-size:14px;margin:8px 0} .qtd u{padding:0 10px} .amost{font-size:14px;margin-top:10px} .amost span{margin-right:12px;white-space:nowrap} .hf{float:right;text-align:right;font-size:12px;color:#333} .ref{color:#888} table.an{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px} table.an td,table.an th{border:1px solid #111;padding:5px 8px} .cbanner{background:#111;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:7px;margin:12px 0 8px} .cbanner.one{background:#333;font-size:14px} .cult{border:1.5px solid #111;margin:8px 0;padding:8px 10px} .cultt{font-size:15px;margin-bottom:4px} .cl2{font-size:13px;margin:4px 0} .cl2 u{padding:0 40%}";
+const _RASC_CSS="@page{size:A4;margin:12mm} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0} .folha{border:2px solid #111;padding:14px 18px;box-sizing:border-box;min-height:128mm;page-break-inside:avoid} .folha:nth-of-type(2n){page-break-after:always} .folha:nth-of-type(odd){border-bottom:2px dashed #999} .folha:last-child{page-break-after:auto} .h1{font-size:26px;font-weight:800} .h2{font-size:16px;font-weight:800;margin-bottom:10px} .lin{font-size:13.5px;margin:3px 0} .box{border:1.5px solid #111;margin-top:12px} .boxh{background:#eee;font-weight:800;padding:5px 10px;border-bottom:1.5px solid #111;font-size:13px} .boxb{padding:8px 10px} .ex{font-size:14px;margin:3px 0} .sec{font-size:20px;font-weight:800;margin:16px 0 6px} .datas{display:flex;gap:40px;font-size:14px;margin:8px 0} .datas u{padding:0 6px} .qtd{font-size:14px;margin:8px 0} .qtd u{padding:0 10px} .amost{font-size:14px;margin-top:10px} .amost span{margin-right:12px;white-space:nowrap} .hf{float:right;text-align:right;font-size:12px;color:#333} .ref{color:#888} table.an{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px} table.an td,table.an th{border:1px solid #111;padding:5px 8px} .cbanner{background:#111;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:7px;margin:12px 0 8px} .cbanner.one{background:#333;font-size:14px} .cult{border:1.5px solid #111;margin:8px 0;padding:8px 10px} .cultt{font-size:15px;margin-bottom:4px} .cl2{font-size:13px;margin:4px 0} .cl2 u{padding:0 40%} .clam{font-size:15px;font-weight:600;margin:9px 0;padding:5px 0;border-bottom:1px dotted #bbb} .cres{margin-top:4px} .cres div{border-bottom:1px solid #111;height:24px}";
 function _rascImprimir(regs, folhaFn, titulo){
   folhaFn = folhaFn || _rascFolha; titulo = titulo || 'Rascunho PCR';
   const folhas=regs.map(folhaFn).filter(Boolean);
@@ -88,7 +88,8 @@ function imprimirRascunhoPCR(reg){ _rascImprimir([reg]); _rascMarcarImpresso([St
 function imprimirLotePCR(){
   // Dudu 03/11: o lote imprime SÓ os marcados como TERCEIRIZADO (o rascunho é a folha VETLAB) — antes varria
   // todo MOLECULAR/PCR, inclusive os não-terceirizados. O botão por-card (imprimirRascunhoPCR) segue avulso.
-  const regs=[...new Set(_rascItens().filter(i=>/MOLECULAR/i.test(i.cat||'')&&exTerceirizado(i)).map(i=>String(i.req)))];
+  // Dudu 06/11: o lote traz SÓ os PENDENTES de baixa (exclui quem já teve baixa) — não reimprimir o que já saiu.
+  const regs=[...new Set(_rascItens().filter(i=>/MOLECULAR/i.test(i.cat||'')&&exTerceirizado(i)&&!exBaixado(i)).map(i=>String(i.req)))];
   _rascImprimir(regs); _rascMarcarImpresso(regs);
 }
 /* ===== 🧫 RASCUNHO DE CULTURA (Dudu 04/11): Bacteriologia-cultura + Parasitologia, modelo do farejador ===== */
@@ -116,8 +117,8 @@ function _rascCultBloco(c,i){
   const am=c.amostra||'____________';
   const coleta=/urina/i.test(c.amostra||'')?`<div class="cl2">Coleta: ( ) cistocentese &nbsp; ( ) sonda &nbsp; ( ) espontânea</div>`:'';
   return `<div class="cult"><div class="cultt"><b>${i+1}) ${esc(c.label)}</b></div>
-    <div class="cl2"><b>Amostra:</b> ${esc(am)} &nbsp;&nbsp; <b>Antibiograma:</b> ( ) sim ( ) não</div>
-    ${coleta}<div class="cl2"><b>Resultado / crescimento:</b> <u>&nbsp;</u></div></div>`;
+    <div class="clam"><b>Amostra:</b> ${esc(am)} &nbsp;&nbsp; <b>Antibiograma:</b> ( ) sim ( ) não</div>
+    ${coleta}<div class="cl2"><b>Resultado / crescimento:</b></div><div class="cres"><div></div><div></div><div></div><div></div></div></div>`;
 }
 function _rascCultFolha(reg){
   const its=_rascItens().filter(i=>String(i.req)===String(reg)&&_ehCult(i));
@@ -144,7 +145,8 @@ function _rascCultFolha(reg){
 }
 function imprimirRascunhoCultura(reg){ _rascImprimir([reg], _rascCultFolha, 'Rascunho Cultura'); }
 function imprimirLoteCultura(){
-  const regs=[...new Set(_rascItens().filter(i=>_ehCult(i)&&exTerceirizado(i)).map(i=>String(i.req)))];
+  // Dudu 06/11: igual ao PCR — lote traz SÓ os terceirizados PENDENTES de baixa (exclui os já baixados).
+  const regs=[...new Set(_rascItens().filter(i=>_ehCult(i)&&exTerceirizado(i)&&!exBaixado(i)).map(i=>String(i.req)))];
   _rascImprimir(regs, _rascCultFolha, 'Rascunho Cultura');
 }
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
