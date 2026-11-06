@@ -585,8 +585,10 @@ def build():
     names={r["cod"]:r for r in q("SELECT CodCliente cod, Cliente nome, Cidade, Uf, Bairro, Cep FROM TabCliente")}
     # MASTER de clínicas p/ o autocomplete do CRM (todas do HF + produção L12; R$ à parte, gated p/ diretoria)
     _prodmap={r["cod"]:r for r in cli}
+    _inicio={str(r["cod"]):str(r["primeira"])[:10] for r in life if r.get("primeira")}   # 📅 data de início no HF (1ª DataEntrada, reusa a query `life`) — "marco zero"
     D["clinicas_full"]=[{"cod":cod,"nome":(info.get("nome") or ""),"cidade":(info.get("Cidade") or ""),"bairro":(info.get("Bairro") or ""),"cep":(info.get("Cep") or ""),
                          "qtd":int(_prodmap.get(cod,{}).get("qtd") or 0),
+                         "inicio":_inicio.get(str(cod),""),
                          "fat":round(_prodmap.get(cod,{}).get("fat") or 0,2)}
                         for cod,info in names.items() if (info.get("nome") or "").strip()]
     # 📅 SÉRIE DIÁRIA por clínica (exames/dia, últimos 90d) — p/ o RADAR DE FUGAS RECENTES (3/7/15d) e a lupa. SEM R$.
