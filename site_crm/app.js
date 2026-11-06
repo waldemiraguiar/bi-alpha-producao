@@ -920,9 +920,9 @@ const _LUPA_KF='<style>@keyframes pzp{0%,100%{box-shadow:0 0 0 0 rgba(255,143,20
 function _sowDataDe(cod){
   cod=String(cod);
   const a=(typeof AAA!=="undefined"&&AAA)?AAA.find(x=>String(x.cod)===cod):null;
-  if(a && ((a.cats&&a.cats.length)||(a.falta&&a.falta.length))) return {cats:(a.cats||[]).map(c=>({setor:c.setor,qtd:(c.qtd!=null?c.qtd:(c.n||0))})), falta:(a.falta||[]).slice()};
+  if(a && ((a.cats&&a.cats.length)||(a.falta&&a.falta.length))) return {cats:(a.cats||[]).filter(c=>_ehExame(c.setor)).map(c=>({setor:c.setor,qtd:(c.qtd!=null?c.qtd:(c.n||0))})), falta:(a.falta||[]).filter(_ehExame)};
   const d=(typeof CLIN_DET!=="undefined"&&CLIN_DET)?CLIN_DET[cod]:null;
-  if(d && ((d.cats&&d.cats.length)||(d.falta&&d.falta.length))) return {cats:(d.cats||[]).map(c=>({setor:c.setor,qtd:(c.qtd!=null?c.qtd:(c.n||0))})), falta:(d.falta||[]).slice()};
+  if(d && ((d.cats&&d.cats.length)||(d.falta&&d.falta.length))) return {cats:(d.cats||[]).filter(c=>_ehExame(c.setor)).map(c=>({setor:c.setor,qtd:(c.qtd!=null?c.qtd:(c.n||0))})), falta:(d.falta||[]).filter(_ehExame)};
   return null;
 }
 function _sowBlock(cod){
@@ -962,7 +962,7 @@ function _catDriverHtml(cod){
   const diaD=CRM_CATMES_DIA||_now.getDate();
   // movers de uma transição (ym vs pym) — classe NOVA (era 0) marcada + o % TOTAL do mês (nº de exames)
   const moversOf=(ym,pym)=>{ const fld=(ym===curYm)?'nd':'n'; const cats=S[ym]||{}, pcats=S[pym]||{}, all=new Set([...Object.keys(cats),...Object.keys(pcats)]);
-    let tc=0,tp=0; const list=[]; all.forEach(c=>{ const a=(cats[c]&&cats[c][fld])||0, b=(pcats[c]&&pcats[c][fld])||0; tc+=a; tp+=b; const d=a-b; if(d!==0) list.push({c,d,nova:(b===0&&a>0)}); });
+    let tc=0,tp=0; const list=[]; all.forEach(c=>{ if(!_ehExame(c)) return; const a=(cats[c]&&cats[c][fld])||0, b=(pcats[c]&&pcats[c][fld])||0; tc+=a; tp+=b; const d=a-b; if(d!==0) list.push({c,d,nova:(b===0&&a>0)}); });
     list.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d)); return {list, pct:(tp>0?(tc/tp-1):null), tc, tp}; };
   const pctTag=(p,big)=>{ if(p==null) return ''; const col=p<-0.001?'#ff6b81':(p>0.001?'#00E5A0':'#9fb2cc'), ar=p<0?'▼':(p>0?'▲':'•'); return `<span style="color:${col};font-weight:900;font-size:${big?'16px':'11px'}">${ar}${Math.abs(Math.round(p*100))}%</span>`; };
   // 🎯 HERÓI = o mês mais recente (parcial, se for o atual)
@@ -991,13 +991,16 @@ function _catDriverHtml(cod){
   </div>`;
 }
 // 🤖 LEITURA AUTOMÁTICA (rodapé do card) — estatística + regras (SEM IA ao vivo, custo R$0). Lê os sinais e escreve análise + sugestão. Wal 06/11.
-function _catCur(cod){   // driver do mês mais recente p/ a leitura
+// ⛔ categorias que NÃO são exame (não entram na análise) — Wal 06/11: "DINHEIRO é pagamento, não classe nova"
+const _NAOEXAME=new Set(['DINHEIRO','EXAME CANCELADO','CADASTRO PROVISÓRIO','CADASTRO PROVISORIO','(SEM CATEGORIA)']);
+function _ehExame(cat){ return !!cat && !_NAOEXAME.has(String(cat).toUpperCase()); }
+function _catCur(cod){   // driver do mês mais recente p/ a leitura (só categorias de EXAME)
   const S=(CRM_CATMES&&CRM_CATMES[String(cod)])||null; if(!S) return null;
   const yms=Object.keys(S).sort(); if(yms.length<2) return null;
   const _now=new Date(), curYm=_now.getFullYear()+"-"+String(_now.getMonth()+1).padStart(2,"0");
   const hi=yms[yms.length-1], hp=yms[yms.length-2], fld=(hi===curYm)?'nd':'n';
   const cats=S[hi]||{}, pcats=S[hp]||{}, all=new Set([...Object.keys(cats),...Object.keys(pcats)]);
-  let tc=0,tp=0; const list=[]; all.forEach(c=>{const a=(cats[c]&&cats[c][fld])||0,b=(pcats[c]&&pcats[c][fld])||0;tc+=a;tp+=b;const d=a-b;if(d!==0)list.push({c,d,nova:(b===0&&a>0)});});
+  let tc=0,tp=0; const list=[]; all.forEach(c=>{ if(!_ehExame(c)) return; const a=(cats[c]&&cats[c][fld])||0,b=(pcats[c]&&pcats[c][fld])||0;tc+=a;tp+=b;const d=a-b;if(d!==0)list.push({c,d,nova:(b===0&&a>0)});});
   list.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d));
   return {pct:(tp>0?(tc/tp-1):null), top:list[0]||null, novas:list.filter(x=>x.nova&&x.d>0).map(x=>x.c), parcial:(hi===curYm)};
 }
@@ -1006,29 +1009,39 @@ function _cardInsight(cod){
   const dir=ehDiretoria()||(typeof veSafra==="function"&&veSafra());
   const t=tierDe(cod), ini=inicioDe(cod), cur=_catCur(cod), sw=_sowDataDe(cod);
   const falta=(sw&&sw.falta)||[], manda=(sw&&sw.cats)||[], rs=dir?_hfRS(cod):null, an=[];
-  let trend;
-  if(st.overdue) trend=`📉 <b style="color:#ff9fb0">Parada</b> há ${st.daysSince}d (costuma enviar a cada ~${st.gapMed||'?'}d)`;
-  else if(st.caindo){ const q=Math.round(Math.max(st.drop7||0,st.drop3||0)*100); trend=`📉 <b style="color:#ff9fb0">Caindo</b> ${q}% vs o ritmo dela`; }
-  else if(st.drop7!=null&&st.drop7<=-0.12) trend=`📈 <b style="color:#7effcf">Crescendo</b> — últimos 7d acima do ritmo`;
-  else trend=`➡️ <b style="color:#cfe0f2">Estável</b> no ritmo dela (~${st.medEnvio||0}/envio, a cada ~${st.gapMed||'?'}d)`;
-  const ctx=[]; if(t) ctx.push(`curva ${t}`); if(ini) ctx.push(`cliente desde ${_iniLbl(ini)}`);
-  an.push(`${trend}${ctx.length?` · ${ctx.join(' · ')}`:''}.`);
-  if(cur && cur.pct!=null){ const p=Math.round(cur.pct*100);
-    let m=`${cur.parcial?'Este mês (parcial)':'Último mês'}: <b style="color:${p<0?'#ff9fb0':'#7effcf'}">${p>=0?'+':''}${p}%</b> em exames`;
-    if(cur.novas.length) m+=` — puxado por <b style="color:#7effcf">🆕 ${esc(cur.novas[0])}</b> (classe nova — estava na mesa)`;
-    else if(cur.top) m+=` — ${cur.top.d>0?'puxado por':'derrubado por'} <b>${esc(cur.top.c)}</b> (${cur.top.d>0?'+':''}${cur.top.d} exames)`;
-    an.push(m+'.');
-  }
+  const anos=ini?Math.max(0,(new Date()).getFullYear()-(+String(ini).slice(0,4))):null;
+  const grande=(t==='A'||t==='B'||(st.tot>=200));
+  const topManda=manda.slice().sort((a,b)=>(b.qtd||0)-(a.qtd||0))[0];
+  // oportunidade por VALOR (CLIN_CATVAL = share de R$ por categoria)
+  const CV=(typeof CLIN_CATVAL!=="undefined"&&CLIN_CATVAL)||{};
+  const faltaVal=falta.slice().filter(f=>!(cur&&cur.novas.indexOf(f)>=0)).sort((a,b)=>(CV[b]||0)-(CV[a]||0));
+  const alvo=faltaVal[0]||falta[0]||null;
+  // 1) PERFIL + lealdade
+  const perfil=[]; if(t) perfil.push(`curva <b>${t}</b>`); if(anos!=null) perfil.push(`cliente há <b>${anos}</b> ano${anos===1?'':'s'} (desde ${_iniLbl(ini)})`);
+  if(perfil.length) an.push(`${perfil.join(' · ')}${anos!=null&&anos>=3?' — relação sólida':''}.`);
+  // 2) MOMENTO com CAUSA
+  const topDrop=(cur&&cur.top&&cur.top.d<0)?cur.top:null, pctM=(cur&&cur.pct!=null)?Math.round(cur.pct*100):null;
+  let mom;
+  if(st.overdue) mom=`📉 <b style="color:#ff9fb0">Parou de enviar</b> há <b>${st.daysSince}d</b> (costuma a cada ~${st.gapMed||'?'}d) — risco de fuga.`;
+  else if(st.caindo){ const q=Math.round(Math.max(st.drop7||0,st.drop3||0)*100);
+    mom=`📉 <b style="color:#ff9fb0">Caindo</b> ${q}% vs o ritmo dela${topDrop?` — a queda vem de <b>${esc(topDrop.c)}</b> (${topDrop.d} exames)${(grande&&topManda&&topDrop.c===topManda.setor)?`, que é a <b>classe principal</b> dela: cheiro de sondagem de preço / dividir material com concorrente`:''}`:''}.`; }
+  else if(cur&&cur.novas.length) mom=`📈 <b style="color:#7effcf">Reagindo</b>: começou a mandar <b style="color:#7effcf">🆕 ${esc(cur.novas[0])}</b> (antes 0) — recuperou classe que ia pro concorrente${pctM!=null?` · ${cur.parcial?'este mês':'último mês'} <b style="color:#7effcf">+${pctM}%</b> em exames`:''}.`;
+  else if(st.drop7!=null&&st.drop7<=-0.12) mom=`📈 <b style="color:#7effcf">Crescendo</b> — últimos 7d acima do ritmo${(cur&&cur.top&&cur.top.d>0)?`, puxado por <b>${esc(cur.top.c)}</b> (+${cur.top.d})`:''}.`;
+  else mom=`➡️ <b style="color:#cfe0f2">Estável</b> no ritmo dela (~${st.medEnvio||0}/envio, a cada ~${st.gapMed||'?'}d)${pctM!=null?` · ${cur.parcial?'este mês':'último mês'} ${pctM>=0?'+':''}${pctM}% em exames`:''}.`;
+  an.push(mom);
+  // 3) R$ (diretoria)
   if(rs && rs.mom!=null){ const p=Math.round(rs.mom*100); an.push(`💰 R$ este mês <b style="color:${p<0?'#ff9fb0':'#7effcf'}">${p>=0?'+':''}${p}%</b> vs o mesmo dia do mês passado.`); }
-  if(falta.length) an.push(`🎯 Deixa <b>${falta.length}</b> classe(s) na mesa (ex.: <b>${esc(falta[0])}</b>${falta[1]?', '+esc(falta[1]):''}).`);
-  else if(manda.length) an.push(`🛡️ Share-of-wallet cheio — cliente redondo.`);
+  // 4) SHARE-OF-WALLET inteligente (por valor)
+  if(falta.length){ const divide=(grande&&topManda);
+    an.push(`🎯 ${divide?`<b>Reparte material</b>: manda forte <b>${esc(topManda.setor)}</b>, mas deixa `:'Deixa '}<b>${falta.length}</b> classe(s) na mesa${alvo?` — a de <b>maior valor</b> é <b style="color:#ffd27a">${esc(alvo)}</b>`:''}.`); }
+  else if(manda.length) an.push(`🛡️ Manda <b>todas</b> as classes — cliente redondo. Foco: <b>proteger</b>.`);
+  // SUGESTÃO afiada
   let sug;
-  if(st.overdue) sug=`Ligar HOJE — ${st.daysSince}d sem enviar. Resgatar antes de virar fuga.`;
-  else if(st.caindo) sug=`Contato de retenção${(cur&&cur.top&&cur.top.d<0)?` — a queda veio de <b>${esc(cur.top.c)}</b>`:''}.`;
-  else if(falta.length>=2){ const alvo=falta.find(f=>!(cur&&cur.novas.indexOf(f)>=0))||falta[0]; sug=`Oferecer <b>${esc(alvo)}</b> — ela já confia no lab; falta pedir essa classe.`; }
-  else if(cur&&cur.novas.length) sug=`Reforçar a <b>${esc(cur.novas[0])}</b> que começou este mês e abrir outras classes.`;
-  else if(cur&&cur.pct!=null&&cur.pct>=0.1) sug=`Em alta — aproveitar pra ampliar o mix de exames.`;
-  else sug=`Cliente saudável — manter relacionamento e vigiar o ritmo.`;
+  if(st.overdue) sug=`<b>Ligar HOJE</b> — ${st.daysSince}d sem enviar. Resgatar antes de virar fuga definitiva.`;
+  else if(st.caindo) sug=topDrop?`<b>Visita de retenção</b> — confirmar por que <b>${esc(topDrop.c)}</b> caiu (preço? concorrente levou?). Segurar antes do resto ir junto.`:`<b>Contato de retenção</b> — entender a queda antes de perder o cliente.`;
+  else if(alvo) sug=`<b>Puxar ${esc(alvo)}</b> — é a classe de <b>maior valor</b> que ela deixa na mesa e ela já confia no lab. Dinheiro novo quase certo.`;
+  else if(cur&&cur.novas.length) sug=`<b>Reforçar ${esc(cur.novas[0])}</b> (começou agora) e usar a abertura pra puxar as outras classes.`;
+  else sug=`Cliente saudável — <b>manter o relacionamento</b> e vigiar o ritmo; subir uma classe de cada vez.`;
   return `<div style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.14);padding-top:9px">
     <div style="font-size:9.5px;font-weight:800;color:#c9b6ff;text-transform:uppercase;letter-spacing:.3px">🤖 Leitura automática <span class="t-mut" style="font-weight:600;text-transform:none">· estatística · atualiza sozinha</span></div>
     <div style="font-size:11.5px;color:#dfeaf5;line-height:1.55;margin-top:4px">${an.join(' ')}</div>
