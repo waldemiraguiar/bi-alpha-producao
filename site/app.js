@@ -625,7 +625,7 @@ function renderClientes(D){
 }
 function wireFTabs(){
   const tabs=[...document.querySelectorAll('.ftab')]; if(!tabs.length||tabs[0].__w) return;
-  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',custoex:'custoex',socios:'socios',apoio:'apoio',apoiot:'apoiot',voz:'voz',motoboy:'motoboy'};
+  const map={geral:'app',alertas:'alertas',projecao:'projecao',clientes:'clientes',novos:'novos',perdidos:'perdidos',analises:'analises',petlove:'petlove',margem:'margem',estudo:'estudo',custos:'custos',ccia:'ccia',financeiro:'financeiro',custoex:'custoex',socios:'socios',apoio:'apoio',apoiot:'apoiot',voz:'voz',motoboy:'motoboy',faturamento:'faturamento'};
   tabs.forEach(t=>{t.__w=1; t.addEventListener('click',()=>{
     tabs.forEach(o=>o.classList.toggle('on',o===t));
     const v=t.dataset.v;
@@ -642,6 +642,7 @@ function wireFTabs(){
     if(v==='voz') renderVoz();
     if(v==='socios') renderSocios();
     if(v==='motoboy') renderMotoboy();
+    if(v==='faturamento') renderFaturamento();
   });});
 }
 
@@ -649,6 +650,46 @@ function wireFTabs(){
 let _MOTO=null;
 const MOTO_SUPA="https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1";
 const MOTO_KEY="sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8";
+
+/* ===================== ABA 💰 MONITORAMENTO FATURAMENTO ===================== */
+let _FAT=null;
+async function renderFaturamento(){
+  const wrap=document.getElementById('faturamento'); if(!wrap) return;
+  wrap.innerHTML='<div class="card"><div class="loading">Carregando auditoria de faturamento…</div></div>';
+  try{
+    const r=await fetch(`${MOTO_SUPA}/faturamento_auditoria?select=*&order=data.desc&limit=60`,{headers:{apikey:MOTO_KEY,authorization:'Bearer '+MOTO_KEY}});
+    if(!r.ok) throw new Error('faturamento_auditoria '+r.status);
+    _FAT=await r.json();
+    wrap.innerHTML=_fatHtml(_FAT);
+  }catch(e){
+    wrap.innerHTML=`<div class="card"><h3>💰 Monitoramento Faturamento</h3><div style="color:#FF5470;font-size:13px">Não consegui carregar a auditoria agora (${esc(String(e.message||e))}).</div></div>`;
+  }
+}
+function _fatHtml(rows){
+  if(!rows||!rows.length) return '<div class="card"><h3>💰 Monitoramento Faturamento</h3><div style="color:var(--mut)">Ainda sem auditoria gravada. O robô roda todo dia às 19h.</div></div>';
+  const tile=(n,l,col)=>`<div style="flex:1;min-width:130px;text-align:center;background:var(--card2,#13294a);border:1px solid var(--line);border-radius:10px;padding:14px"><div style="font-size:32px;font-weight:800;color:${col}">${n}</div><div style="color:var(--mut);font-size:12px">${l}</div></div>`;
+  const d=rows[0];
+  const cob=Number(d.cobertura||0), nc=Number(d.n_casos||0);
+  let casos=d.casos_reais; if(typeof casos==='string'){try{casos=JSON.parse(casos);}catch(e){casos=[];}} if(!Array.isArray(casos)) casos=[];
+  const cobCol=cob>=95?C.green:(cob>=85?C.amber:C.red), ncCol=nc===0?C.green:(nc<=3?C.amber:C.red);
+  let h=`<div class="card"><h3>💰 Monitoramento Faturamento</h3>
+   <div style="color:var(--mut);font-size:12.5px;margin:2px 0 12px">Compara o que o veterinário pediu na requisição (lido pelo farejador) com o que foi lançado e cobrado no HF. Pega <b>pacote/checkup pedido e não faturado</b> = receita que estava escapando sem a gente ver. Roda sozinho todo dia às 19h.</div>
+   <div style="display:flex;gap:12px;flex-wrap:wrap">${tile(cob+'%','cobertura (pacotes faturados)',cobCol)}${tile(nc,'casos a conferir hoje',ncCol)}${tile(d.n_req||0,'requisições c/ pacote',C.cyan)}</div>
+   <div style="font-size:11px;color:var(--mut);margin-top:6px">referente a ${esc(d.data||'')}${d.parcial?(' · '+d.parcial+' parciais'):''}</div>`;
+  if(casos.length){
+    h+=`<div style="margin-top:16px;font-weight:800;color:${C.amber}">⚠️ Casos a conferir no HF (${casos.length}) — pacote pedido que não apareceu faturado</div>
+      <div style="overflow-x:auto"><table class="atab" style="width:100%;margin-top:6px"><thead><tr><th>Requisição</th><th>Clínica</th><th>Pacote pedido</th><th>Exames</th></tr></thead><tbody>`;
+    casos.forEach(c=>{ h+=`<tr><td style="font-weight:700;color:${C.cyan}">${esc(c.req||'')}</td><td>${esc(c.clinica||'')}</td><td>${esc(c.pacote||'')}</td><td style="text-align:center">${esc(String(c.componentes||''))}</td></tr>`; });
+    h+=`</tbody></table></div>`;
+  } else {
+    h+=`<div style="margin-top:16px;color:${C.green};font-weight:700">✅ Nenhum caso a conferir hoje — tudo que foi pedido foi faturado.</div>`;
+  }
+  h+=`</div>`;
+  h+=`<div class="card"><h4 style="margin:0 0 8px">📈 Cobertura por dia</h4><div style="display:flex;gap:4px;align-items:flex-end;height:90px">`;
+  rows.slice(0,21).reverse().forEach(x=>{ const c=Number(x.cobertura||0); const col=c>=95?C.green:(c>=85?C.amber:C.red); h+=`<div title="${esc(String(x.data))}: ${c}% · ${x.n_casos||0} casos" style="flex:1;background:${col};height:${Math.max(4,c)}%;border-radius:3px 3px 0 0;min-width:6px"></div>`; });
+  h+=`</div><div style="color:var(--mut);font-size:11px;margin-top:4px">últimos ${Math.min(21,rows.length)} dias · passe o mouse no dia</div></div>`;
+  return h;
+}
 function _medn(a){ if(!a||!a.length) return null; const s=[...a].sort((x,y)=>x-y),m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; }
 function _hmBRT(iso){ if(!iso) return null; const t=new Date(iso); return ((t.getUTCHours()*60+t.getUTCMinutes())-180+1440)%1440; }
 function _fmtmin(m){ if(m==null) return '—'; m=Math.round(m); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
