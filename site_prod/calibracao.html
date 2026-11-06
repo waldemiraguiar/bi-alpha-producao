@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calibração Mesmo Paciente</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* Dashboard de calibração — slate frio + acento teal; verde→âmbar→vermelho = precisão (semântico, não acento) */
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --line:#dde3ea; --fg:#141b24; --mut:#5b6b7c;
+    --accent:#0d9488; --good:#15a34a; --warn:#d9820a; --bad:#e23b4e;
+    --bar-track:#e7ecf1;
+    --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0c131b; --panel:#131d28; --line:#243241; --fg:#e8eef4; --mut:#8ba0b4;
+    --accent:#2dd4bf; --good:#34d399; --warn:#f0a93b; --bad:#ff6474; --bar-track:#1e2b38; color-scheme:dark;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0c131b; --panel:#131d28; --line:#243241; --fg:#e8eef4; --mut:#8ba0b4;
+    --accent:#2dd4bf; --good:#34d399; --warn:#f0a93b; --bad:#ff6474; --bar-track:#1e2b38; color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.5;
+    padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+    padding-block:28px 40px}
+  .wrap{max-width:860px;margin:0 auto}
+  h1{font-size:23px;font-weight:700;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--mut);font-size:13.5px;margin:4px 0 0;max-width:62ch}
+  .upd{font-size:12px;color:var(--mut);margin-top:6px;font-variant-numeric:tabular-nums}
+  .tiles{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;min-width:140px;flex:1}
+  .tile .n{font-size:26px;font-weight:700;font-family:var(--mono);letter-spacing:-.02em}
+  .tile .l{font-size:12px;color:var(--mut);margin-top:2px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px 8px;margin-top:18px}
+  .card h2{font-size:15px;font-weight:600;margin:0 0 2px}
+  .card p.hint{font-size:12.5px;color:var(--mut);margin:0 0 14px}
+  .band{display:grid;grid-template-columns:86px 1fr 130px;gap:14px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+  .band:first-of-type{border-top:0}
+  .band .rng{font-family:var(--mono);font-weight:600;font-size:14px}
+  .band .rng small{display:block;font-family:var(--sans);font-weight:400;color:var(--mut);font-size:11px}
+  .track{position:relative;height:22px;background:var(--bar-track);border-radius:6px;overflow:hidden;min-width:0}
+  .fill{position:absolute;inset:0 auto 0 0;border-radius:6px;transition:width .4s ease}
+  .track .pct{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+  .split{font-size:12.5px;color:var(--mut);text-align:right;font-variant-numeric:tabular-nums}
+  .split b{color:var(--good)} .split .d{color:var(--bad)}
+  .reco{margin-top:16px;background:color-mix(in srgb,var(--accent) 12%,var(--panel));border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:12px;padding:13px 16px;font-size:14px}
+  .reco b{color:var(--accent)}
+  .empty{color:var(--mut);font-size:14px;padding:18px 2px;line-height:1.6}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:12px}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+  footer{color:var(--mut);font-size:11.5px;margin-top:22px;text-align:center}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Calibração — Mesmo Paciente</h1>
+  <p class="sub">A régua de hoje mostra um par como suspeito a partir de <b>75%</b> de semelhança. Conforme a equipe decide <b>✓ mesmo</b> / <b>✕ diferentes</b>, cada faixa ganha uma precisão medida — e é isso que mostra onde travar o corte.</p>
+  <p class="upd" id="upd">carregando…</p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Precisão por faixa de semelhança</h2>
+    <p class="hint">De tudo que a equipe já decidiu em cada faixa, quanto era mesmo paciente. Faixa com poucos votos ainda é palpite.</p>
+    <div id="bands"></div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--good)"></span>≥90% acerto</span>
+      <span><span class="dot" style="background:var(--warn)"></span>75–90%</span>
+      <span><span class="dot" style="background:var(--bad)"></span>&lt;75%</span>
+      <span style="color:var(--mut)">barra = % que era o mesmo paciente</span>
+    </div>
+    <div id="reco"></div>
+  </div>
+
+  <div class="card">
+    <h2>Fila aguardando decisão — por faixa</h2>
+    <p class="hint">Quantos pares suspeitos ainda não foram decididos, em cada faixa. Os de maior % saem primeiro.</p>
+    <div id="pend"></div>
+  </div>
+
+  <footer>Atualiza sozinho a cada 30s · fonte: conciliador CodAnimal (job na mesa) · só faixas e contagens, sem nome de paciente</footer>
+</div>
+
+<script>
+const URL='https://lrwjcdvporaivxvfuiwt.supabase.co/rest/v1';
+const KEY='sb_publishable_fcodHc3AxR_HQ-aduMGzlg_CTBALng8';
+const H={apikey:KEY,Authorization:'Bearer '+KEY};
+const BANDS=[[95,101],[90,95],[85,90],[80,85],[75,80]]; // alto→baixo
+const nf=n=>(Number(n)||0).toLocaleString('pt-BR');
+const corPrec=p=>p>=0.9?'var(--good)':p>=0.75?'var(--warn)':'var(--bad)';
+
+async function countPend(lo,hi){
+  const q=URL+'/pu_candidatos?select=par_id&estado=eq.pendente&score=gte.'+(lo/100)+'&score=lt.'+(hi/100);
+  const r=await fetch(q,{headers:{...H,Prefer:'count=exact',Range:'0-0'}});
+  const cr=r.headers.get('content-range')||'/0'; return Number(cr.split('/')[1]||0);
+}
+
+async function load(){
+  let decided=[], stats=null, pend=[];
+  try{
+    const [d,s]=await Promise.all([
+      fetch(URL+'/pu_candidatos?select=score,estado&estado=neq.pendente&limit=100000',{headers:H}).then(r=>r.json()),
+      fetch(URL+'/pu_stats?select=*&id=eq.1',{headers:H}).then(r=>r.json())
+    ]);
+    decided=Array.isArray(d)?d:[]; stats=(Array.isArray(s)&&s[0])||null;
+    pend=await Promise.all(BANDS.map(([lo,hi])=>countPend(lo,hi)));
+  }catch(e){ document.getElementById('upd').textContent='Não consegui ler os dados agora — tento de novo em 30s.'; return; }
+
+  // tiles
+  const nMesmo=decided.filter(x=>x.estado==='mesmo').length;
+  const nDif=decided.filter(x=>x.estado==='diferente').length;
+  const nDec=decided.length;
+  const precGeral=nDec?Math.round(100*nMesmo/nDec):0;
+  const tiles=[
+    ['pacientes',stats?nf(stats.n_pac):'—'],
+    ['na fila',stats?nf(stats.n_fila):'—'],
+    ['já decididos',nf(nDec)],
+    ['% que era o mesmo',nDec?precGeral+'%':'—'],
+  ];
+  document.getElementById('tiles').innerHTML=tiles.map(([l,n])=>
+    '<div class="tile"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>').join('');
+
+  // bandas de precisão (decididos)
+  const byBand=BANDS.map(([lo,hi])=>{
+    const inb=decided.filter(x=>{const p=x.score*100;return p>=lo&&p<hi;});
+    const m=inb.filter(x=>x.estado==='mesmo').length, df=inb.filter(x=>x.estado==='diferente').length, t=m+df;
+    return {lo,hi,m,df,t,prec:t?m/t:null};
+  });
+  const bandsEl=document.getElementById('bands');
+  if(!nDec){
+    bandsEl.innerHTML='<div class="empty">Ainda <b>sem decisões</b>.<br>Assim que a equipe marcar os primeiros pares na aba <b>🔗 Mesmo Paciente</b>, a precisão de cada faixa aparece aqui — e eu uso pra travar o corte no ponto certo (alta confiança, sem perder paciente).</div>';
+  }else{
+    bandsEl.innerHTML=byBand.map(b=>{
+      const lbl=(b.hi>100?'≥95%':b.lo+'–'+b.hi+'%');
+      if(!b.t) return '<div class="band"><div class="rng">'+lbl+'<small>sem votos</small></div><div class="track"></div><div class="split">—</div></div>';
+      const p=Math.round(b.prec*100), cor=corPrec(b.prec);
+      return '<div class="band"><div class="rng">'+lbl+'<small>'+b.t+' decidido'+(b.t>1?'s':'')+'</small></div>'
+        +'<div class="track"><div class="fill" style="width:'+Math.max(p,3)+'%;background:'+cor+'"></div><span class="pct">'+p+'%</span></div>'
+        +'<div class="split"><b>'+b.m+' mesmo</b> · <span class="d">'+b.df+' dif.</span></div></div>';
+    }).join('');
+  }
+
+  // recomendação de corte (cumulativo de cima pra baixo; precisa de massa)
+  const recoEl=document.getElementById('reco');
+  if(nDec>=20){
+    let cm=0,ct=0,cut=null;
+    for(const b of byBand){ cm+=b.m; ct+=b.t; if(ct>0 && cm/ct>=0.95) cut=b.lo; }
+    recoEl.innerHTML=cut!=null
+      ? '<div class="reco">Com o que já foi decidido, o corte de <b>≥'+cut+'%</b> acerta <b>95%+</b>. Dá pra confiar mais nessa faixa pra cima e focar a conferência humana abaixo dela.</div>'
+      : '<div class="reco">Ainda não há faixa com 95%+ de acerto medido — continue decidindo que a recomendação aparece.</div>';
+  }else if(nDec>0){
+    recoEl.innerHTML='<div class="reco">Faltam <b>'+(20-nDec)+'</b> decisões pra eu sugerir um corte com confiança (mínimo ~20).</div>';
+  }else recoEl.innerHTML='';
+
+  // fila por faixa (pendentes)
+  document.getElementById('pend').innerHTML=BANDS.map(([lo,hi],i)=>{
+    const lbl=(hi>100?'≥95%':lo+'–'+hi+'%'), n=pend[i]||0;
+    const max=Math.max(1,...pend), w=Math.round(100*n/max);
+    return '<div class="band"><div class="rng">'+lbl+'</div>'
+      +'<div class="track"><div class="fill" style="width:'+Math.max(w,2)+'%;background:var(--accent)"></div><span class="pct">'+nf(n)+'</span></div>'
+      +'<div class="split">aguardando</div></div>';
+  }).join('');
+
+  const d=new Date();
+  document.getElementById('upd').textContent='atualizado '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+load(); setInterval(load,30000);
+</script>
+</body>
+</html>
