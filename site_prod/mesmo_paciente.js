@@ -89,9 +89,12 @@
     Promise.all([
       fetch(URL + '/pu_candidatos?select=*&estado=eq.pendente&hoje=eq.true&order=score.desc', { headers: HED }).then(r => r.json()),
       fetch(URL + '/pu_candidatos?select=*&estado=eq.pendente&hoje=eq.false&order=score.desc&limit=' + CAP, { headers: HED }).then(r => r.json()),
-      fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json())
+      fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json()),
+      fetch(URL + '/pu_candidatos?select=*&estado=eq.pendente&cross_clinica=eq.true&order=score.desc&limit=400', { headers: HED }).then(r => r.json()).catch(function () { return []; })
     ]).then(function (r) {
-      PU.entradas = Array.isArray(r[0]) ? r[0] : []; PU.fila = Array.isArray(r[1]) ? r[1] : []; PU.stats = (Array.isArray(r[2]) && r[2][0]) || null; PU.sel = {};
+      PU.entradas = Array.isArray(r[0]) ? r[0] : []; PU.fila = Array.isArray(r[1]) ? r[1] : []; PU.stats = (Array.isArray(r[2]) && r[2][0]) || null; PU.cross = Array.isArray(r[3]) ? r[3] : []; PU.sel = {};
+      // cruzados não repetem na fila comum (são a seção de destaque no topo)
+      if (PU.cross.length) { var xids = {}; PU.cross.forEach(function (c) { xids[c.par_id] = 1; }); PU.fila = PU.fila.filter(function (c) { return !xids[c.par_id]; }); PU.entradas = PU.entradas.filter(function (c) { return !xids[c.par_id]; }); }
       render(); badge();
     }).catch(function () { el('puBody').innerHTML = '<div style="color:var(--bad);padding:14px">Não consegui ler agora. <button class="btn ghost sm" onclick="abrirProntuario()">tentar de novo</button></div>'; });
   };
@@ -159,6 +162,15 @@
     var topo = st ? '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 12px">'
       + tile(nf(st.n_pac), 'pacientes', '#8b7bff') + tile(nf(st.n_voltam), 'voltaram', '#38bdf8')
       + tile(nf(st.n_fila), 'suspeitas', '#f59e0b') + tile(nf(st.n_merges), 'resolvidas', '#34d399') + '</div>' : '';
+    // ⚠️ CLÍNICAS DIFERENTES — destaque no topo (mesmo bicho atendido em clínicas diferentes)
+    var cross = Array.isArray(PU.cross) ? PU.cross : [];
+    var secCross = '';
+    if (cross.length) {
+      secCross = '<div style="margin-bottom:16px;border:2px solid var(--bad);border-radius:14px;padding:10px 10px 4px;background:linear-gradient(135deg,#ef444418,transparent 70%)">'
+        + '<div style="font-size:15px;font-weight:900;color:var(--bad);animation:puCrossBlink 1.1s ease-in-out infinite">⚠️ CLÍNICAS DIFERENTES — mesmo bicho, outra clínica (' + cross.length + ')</div>'
+        + '<div style="font-size:12px;color:var(--mut);margin:2px 0 6px">O mesmo paciente foi atendido em clínicas diferentes em dias diferentes. Confira com atenção — aqui o pareamento cruza unidades.</div>'
+        + cross.map(function (c) { return cardFila(c, false); }).join('') + '</div>';
+    }
     // entradas de hoje
     var secEnt = '';
     if (ent.length) {
@@ -177,7 +189,7 @@
     var head = prog + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 4px"><span style="font-size:14px;font-weight:800">Fila — código duplicado (' + totFila + ')' + note + '</span>'
       + '<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="puBulkIdenticos()" style="background:#10b981;color:#06281b;font-weight:800">✓ confirmar idênticos (≥98%)</button>'
       + (fila.length ? '<button class="btn ghost sm" onclick="puSelAll()">selecionar todos</button>' : '') + '</span></div>';
-    el('puBody').innerHTML = topo + secEnt + bat + head + (fila.length ? fila.map(cardFila).join('') : '<div style="color:var(--mut);padding:10px">✓ Nada na fila agora.</div>');
+    el('puBody').innerHTML = topo + secCross + secEnt + bat + head + (fila.length ? fila.map(cardFila).join('') : '<div style="color:var(--mut);padding:10px">✓ Nada na fila agora.</div>');
     whoBar();
   }
   function whoBar() { var q = quem(); el('puWho').innerHTML = q ? '<span style="font-size:13px;color:var(--mut)">Conferindo como <b style="color:var(--txt)">' + esc(q) + '</b></span> <button class="btn ghost sm" onclick="puTrocar()">trocar</button>' : '<span style="font-size:12.5px;color:var(--mut)">As decisões ficam registradas no seu nome (pergunto na 1ª vez).</span>'; }
