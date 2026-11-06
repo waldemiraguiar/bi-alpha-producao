@@ -950,6 +950,33 @@ function _aaaSowBlock(a, rank){
 // 📅 DATA DE INÍCIO NO HF (marco zero) — primeira ida ao HF; vem do master (campo `inicio`, min DataEntrada no build).
 function inicioDe(cod){ const c=clinByCod(cod); return (c&&c.inicio)?String(c.inicio):""; }
 function _iniLbl(iso){ const m=/^(\d{4})-(\d{2})/.exec(String(iso||"")); if(!m) return ""; const M=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+m[2])-1]||''; return M+'/'+m[1].slice(2); }
+// 📈 CATEGORIA QUE PUXOU o mês — {cod:{ym:{setor:{n,nd}}}} (PÚBLICO, SEM R$). Carregado SOB DEMANDA. Wal 06/11.
+let CRM_CATMES=null, CRM_CATMES_LOADING=false, CRM_CATMES_DIA=0;
+async function loadCatMes(){ if(CRM_CATMES_LOADING) return; CRM_CATMES_LOADING=true; try{ const r=await fetch("/api/crm-catmes"); if(r.ok){ const j=await r.json(); CRM_CATMES=(j&&j.catmes)||{}; CRM_CATMES_DIA=(j&&j.dia)||0; } }catch(e){ CRM_CATMES={}; } CRM_CATMES_LOADING=false; }
+const _MES3C=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function _catDriverHtml(cod){
+  const S=(CRM_CATMES&&CRM_CATMES[String(cod)])||null; if(!S) return "";
+  const yms=Object.keys(S).sort(); if(yms.length<2) return "";
+  const _now=new Date(), curYm=_now.getFullYear()+"-"+String(_now.getMonth()+1).padStart(2,"0");
+  const ymLbl=ym=>{const p=ym.split('-');return (_MES3C[(+p[1])-1]||'')+'/'+p[0].slice(2);};
+  const lines=[];
+  for(let i=yms.length-1;i>=1 && lines.length<8;i--){
+    const ym=yms[i], pym=yms[i-1], fld=(ym===curYm)?'nd':'n';   // mês atual: janela×janela (nd); fechado: cheio×cheio (n)
+    const cats=S[ym]||{}, pcats=S[pym]||{}, all=new Set([...Object.keys(cats),...Object.keys(pcats)]);
+    const deltas=[]; all.forEach(c=>{ const a=(cats[c]&&cats[c][fld])||0, b=(pcats[c]&&pcats[c][fld])||0, d=a-b; if(d!==0) deltas.push({c,d}); });
+    if(!deltas.length) continue;
+    deltas.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d));
+    const up=deltas.filter(x=>x.d>0).slice(0,3), dn=deltas.filter(x=>x.d<0).slice(0,2), parts=[];
+    if(up.length) parts.push(`<span style="color:#7effcf">🔺 ${up.map(x=>esc(x.c)+' +'+x.d).join(', ')}</span>`);
+    if(dn.length) parts.push(`<span style="color:#ff9fb0">🔻 ${dn.map(x=>esc(x.c)+' '+x.d).join(', ')}</span>`);
+    lines.push(`<div style="padding:4px 0;border-top:1px solid rgba(255,255,255,.05);font-size:11px;line-height:1.5"><b style="color:${ym===curYm?'#ffd27a':'#9fe6ff'}">${ymLbl(ym)}${ym===curYm?' ·parc':''}:</b> ${parts.join(' · ')}</div>`);
+  }
+  if(!lines.length) return "";
+  return `<div style="margin-top:11px;border:1px solid rgba(0,212,255,.22);border-radius:12px;padding:10px 12px;background:rgba(0,212,255,.04)">
+    <div style="font-size:10.5px;font-weight:800;color:#9fe6ff;text-transform:uppercase;letter-spacing:.3px">📈 O que puxou cada mês <span class="t-mut" style="font-weight:600;text-transform:none">· categoria de exame vs mês anterior (🔺 começou/cresceu · 🔻 caiu)</span></div>
+    <div style="max-height:200px;overflow:auto;margin-top:3px">${lines.join('')}</div>
+  </div>`;
+}
 // 📋 TABELA-RESUMO no topo da aba Clínicas A/B/C/D — clínicas da curva (maior→menor faturamento), mês a mês, % vs mês anterior.
 // metric 'rs' = R$ (só diretoria, de CLIN_FATMESALL) · 'ex' = nº de exames (todos, de CLIN_EXMES público). Mês atual (parcial) compara a MESMA janela de dias (fd×fd / nd×nd). Wal 03/11.
 function _curvaResumoTbl(AA){
@@ -992,6 +1019,7 @@ function _curvaResumoTbl(AA){
 }
 function _hfCard(cod, pinned, extra){
   const c=clinByCod(cod), bai=bairroDe(cod), cid=(c&&c.cidade)||"", nome=(c&&c.nome)||('#'+cod);
+  if(CRM_CATMES===null && !CRM_CATMES_LOADING){ loadCatMes().then(()=>{ if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }); }   // 📈 carrega o "o que puxou por categoria" sob demanda
   let st=_hfStats(cod); const semDados=!st;   // sem exame nos 90d → card completo igual aos outros, como "parada" (fuga total)
   if(semDados) st={ by:{}, first:CLIN_DIA_HOJE_IDX, last:CLIN_DIA_HOJE_IDX, tot:0, H:CLIN_DIA_HOJE_IDX, last3:0, prev3:0, base3:null, drop3:null, last7:0, prev7:0, base7:null, drop7:null, mean30:0, medEnvio:0, gapMed:null, daysSince:null, overdue:false, caindo:false };
   const pinBtn = pinned
@@ -1105,6 +1133,7 @@ function _hfCard(cod, pinned, extra){
     ${kpis}${rsRow}
     ${extra||''}
     ${_sowBlock(cod)}
+    ${_catDriverHtml(cod)}
     ${lista}
   </div>`;
 }
