@@ -98,7 +98,7 @@
   }
   window.puTab = function (t) { PU.tab = t; if (t === 'hist') loadHist(); else render(); };
 
-  function quebra(br) { br = br || {}; var sg = function (v) { return v === '✓' ? '<span style="color:var(--ok)">✓</span>' : v === '✗' ? '<span style="color:var(--bad)">✗</span>' : v === '~' ? '<span style="color:var(--warn)">~</span>' : '<span style="color:var(--mut)">?</span>'; }; var pc = function (v) { return Math.round((Number(v) || 0) * 100) + '%'; }; return '<div style="font-size:11.5px;color:var(--mut);margin-top:4px">nome <b>' + pc(br.pet) + '</b> · dono <b>' + pc(br.dono) + '</b> · raça ' + sg(br.raca) + ' · sexo ' + sg(br.sexo) + ' · <b>nascimento ' + sg(br.nasc) + '</b></div>'; }
+  function quebra(br) { br = br || {}; var sg = function (v) { return v === '✓' ? '<span style="color:var(--ok)">✓</span>' : v === '✗' ? '<span style="color:var(--bad)">✗</span>' : v === '~' ? '<span style="color:var(--warn)">~</span>' : '<span style="color:var(--mut)">?</span>'; }; var pc = function (v) { return Math.round((Number(v) || 0) * 100) + '%'; }; return '<div style="font-size:11.5px;color:var(--mut);margin-top:6px"><span style="opacity:.7">por quê →</span> nome <b>' + pc(br.pet) + '</b> · dono <b>' + pc(br.dono) + '</b> · raça ' + sg(br.raca) + ' · sexo ' + sg(br.sexo) + ' · <b>nascimento ' + sg(br.nasc) + '</b></div>'; }
   function nasc(n) { return n ? esc(String(n).slice(0, 4) + '/' + String(n).slice(4, 6)) : '—'; }
   function linha(cod, pet, dono, raca, sexo, n, reqs) { var E = function (s) { s = esc(s).trim(); return s || '—'; }; return '<div style="font-size:13.5px;color:var(--txt)"><span style="color:var(--mut)">cód</span> <b style="color:var(--brand)">' + esc(cod) + '</b> · 🐾 <b>' + E(pet) + '</b> · ' + E(dono) + ' · ' + E(raca) + ' · ' + E(sexo) + ' <span style="color:var(--mut)">· nasc ' + nasc(n) + ' · ' + (reqs || 0) + ' req</span></div>'; }
 
@@ -114,14 +114,16 @@
   }
   function cardFila(c) {
     var sc = Number(c.score) || 0, pct = Math.round(sc * 100), qc = c.quase, chk = !!PU.sel[c.par_id], P = esc(c.par_id);
-    var col = qc ? '#f59e0b' : (pct >= 80 ? '#eab308' : 'var(--mut)');
+    var col = pct >= 98 ? '#10b981' : (qc ? '#f59e0b' : (pct >= 80 ? '#eab308' : 'var(--mut)'));
+    var selo = pct >= 98 ? '<span class="pu-qzap" style="background:#10b981;color:#06281b">IDÊNTICO</span>' : (qc ? '<span class="pu-qzap" style="text-align:center;line-height:1.1">QUASE<br>CERTO</span>' : '');
     var cliN = c.a_cli || c.b_cli;
     var cliLine = cliN ? '🏥 ' + esc(cliN) + ' <span class="n">(#' + esc(c.cc) + ' · ' + esc(c.esp) + ')</span>' : 'clínica #' + esc(c.cc) + ' · ' + esc(c.esp);
     return '<div class="pu-card' + (qc ? ' quase' : '') + '" style="display:flex;gap:13px;align-items:flex-start">'
       + '<div style="display:flex;flex-direction:column;align-items:center;gap:6px">'
       + '<input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + P + '\')" style="transform:scale(1.25);cursor:pointer">'
       + '<div class="pu-pct" style="--c:' + col + '">' + pct + '</div>'
-      + (qc ? '<span class="pu-qzap" style="text-align:center;line-height:1.1">QUASE<br>CERTO</span>' : '')
+      + '<div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:-3px">igual?</div>'
+      + selo
       + '</div>'
       + '<div style="flex:1;min-width:0">'
       + '<div class="pu-cli">' + cliLine + '</div>'
