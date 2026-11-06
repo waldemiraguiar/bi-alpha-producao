@@ -1095,11 +1095,10 @@ function _hfCard(cod, pinned, extra){
   const blinkAnim = blinkKey ? `--blk:${_hex2rgba(blinkHex,.65)};--blk0:${_hex2rgba(blinkHex,0)};animation:blkpulse 1.5s ease-in-out infinite;` : '';
   return `<div class="${rootCls}"${pinned?` data-pc="${esc(String(cod))}"`:''} style="border:1px solid ${_hex2rgba(frameCol,.7)};border-left:4px solid ${frameCol};border-radius:14px;padding:16px 18px;margin-top:18px;background:linear-gradient(180deg,${frameBg},rgba(8,18,30,.7));box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04);${blinkAnim}">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-      ${grip}<b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}
+      ${grip}<b style="font-size:15.5px;color:#eaf3ff">${esc(nome)}</b> ${badge} ${aaaSeal}${inicioDe(cod)?`<span title="marco zero — primeira ida ao HF" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,194,77,.12);border:1px solid rgba(255,194,77,.4);border-radius:11px;padding:2px 10px;font-size:11px;font-weight:800;color:#ffd27a;white-space:nowrap">📅 desde ${_iniLbl(inicioDe(cod))}</span>`:''}
       <div style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;align-items:center">${moveBtns}${blinkBtn}${grpBtn}${pinBtn}</div>
     </div>
     ${blinkPicker}
-    ${inicioDe(cod)?`<div style="margin-top:6px"><span style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,194,77,.12);border:1px solid rgba(255,194,77,.4);border-radius:11px;padding:2px 11px;font-size:11px;font-weight:800;color:#ffd27a">📅 cliente HF desde ${_iniLbl(inicioDe(cod))} <span class="t-mut" style="font-weight:600">· marco zero</span></span></div>`:''}
     <div class="t-mut" style="font-size:11.5px;margin-top:3px">${bai?`📍 ${esc(bai)}`:''}${cid?` · ${esc(cid)}`:''} · ${semDados?'<b style="color:#ff8fa3">sem exames há +90 dias</b>':`${st.tot} exames em 90d`}</div>
     ${obsHtml}
     ${_lupaFeedbackBlock(cod)}
