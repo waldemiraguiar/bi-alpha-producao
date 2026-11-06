@@ -38,7 +38,8 @@
       + '.pu-sub{background:linear-gradient(145deg,var(--panel),var(--panel2));border:1px solid var(--line);border-left:5px solid var(--line);border-radius:11px;padding:10px 13px;margin:6px 0;box-shadow:0 3px 9px rgba(0,0,0,.28)}'
       + '.pu-sub-t{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px}'
       + '.pu-sub .pet{font-size:17px;font-weight:800;color:var(--txt);line-height:1.2}.pu-sub .dono{font-size:14.5px;color:var(--txt)}.pu-sub .meta{font-size:12px;color:var(--mut);margin-top:4px}.pu-sub .meta b{color:var(--brand)}'
-      + '.pu-cli{font-size:12.5px;color:var(--txt);font-weight:600;text-align:right;margin-bottom:3px}.pu-cli .n{color:var(--mut);font-weight:400}';
+      + '.pu-cli{font-size:12.5px;color:var(--txt);font-weight:600;text-align:right;margin-bottom:3px}.pu-cli .n{color:var(--mut);font-weight:400}'
+      + '.pu-conf{display:inline-block;padding:4px 14px;border-radius:999px;border:1.5px solid;font-size:14.5px;white-space:nowrap;line-height:1.3}.pu-conf b{font-size:19px;font-weight:800;margin-right:3px}';
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   })();
 
@@ -113,28 +114,28 @@
       + '</div>';
   }
   function cardFila(c) {
-    var sc = Number(c.score) || 0, pct = Math.round(sc * 100), qc = c.quase, chk = !!PU.sel[c.par_id], P = esc(c.par_id);
-    var col = pct >= 98 ? '#10b981' : (qc ? '#f59e0b' : (pct >= 80 ? '#eab308' : 'var(--mut)'));
-    var selo = pct >= 98 ? '<span class="pu-qzap" style="background:#10b981;color:#06281b">IDÊNTICO</span>' : (qc ? '<span class="pu-qzap" style="text-align:center;line-height:1.1">QUASE<br>CERTO</span>' : '');
+    var sc = Number(c.score) || 0, pct = Math.round(sc * 100), chk = !!PU.sel[c.par_id], P = esc(c.par_id);
+    var col, palavra;
+    if (pct >= 98) { col = '#10b981'; palavra = 'quase certo'; }
+    else if (pct >= 90) { col = '#f59e0b'; palavra = 'muito provável'; }
+    else if (pct >= 82) { col = '#eab308'; palavra = 'provável'; }
+    else { col = 'var(--mut)'; palavra = 'possível'; }
     var cliN = c.a_cli || c.b_cli;
     var cliLine = cliN ? '🏥 ' + esc(cliN) + ' <span class="n">(#' + esc(c.cc) + ' · ' + esc(c.esp) + ')</span>' : 'clínica #' + esc(c.cc) + ' · ' + esc(c.esp);
-    return '<div class="pu-card' + (qc ? ' quase' : '') + '" style="display:flex;gap:13px;align-items:flex-start">'
-      + '<div style="display:flex;flex-direction:column;align-items:center;gap:6px">'
-      + '<input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + P + '\')" style="transform:scale(1.25);cursor:pointer">'
-      + '<div class="pu-pct" style="--c:' + col + '">' + pct + '</div>'
-      + '<div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:-3px">igual?</div>'
-      + selo
+    return '<div class="pu-card' + (pct >= 90 ? ' quase' : '') + '" style="border-left-color:' + col + '">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">'
+      + '<label style="display:flex;align-items:center;gap:11px;cursor:pointer;min-width:0"><input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + P + '\')" style="transform:scale(1.35);flex-shrink:0;cursor:pointer">'
+      + '<span class="pu-conf" style="color:' + col + ';border-color:' + col + '"><b>' + pct + '%</b>' + palavra + '</span></label>'
+      + '<span class="pu-cli" style="margin:0;flex-shrink:0">' + cliLine + '</span>'
       + '</div>'
-      + '<div style="flex:1;min-width:0">'
-      + '<div class="pu-cli">' + cliLine + '</div>'
       + sub(c.a_cod, c.a_pet, c.a_dono, c.a_raca, c.a_sexo, c.a_nasc, c.a_reqs, c.a_origem, c.a_cli)
       + sub(c.b_cod, c.b_pet, c.b_dono, c.b_raca, c.b_sexo, c.b_nasc, c.b_reqs, c.b_origem, c.b_cli)
       + quebra(c.br)
-      + '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">'
+      + '<div style="display:flex;gap:6px;margin-top:11px;flex-wrap:wrap">'
       + '<button class="pu-b sim" onclick="puAct(\'' + P + '\',\'mesmo\')">✓ mesmo — juntar</button>'
       + '<button class="pu-b nao" onclick="puAct(\'' + P + '\',\'diferente\')">✕ são diferentes</button>'
       + '<button class="pu-b del" onclick="puAct(\'' + P + '\',\'apagado\')">🗑 apagar</button>'
-      + '</div></div></div>';
+      + '</div></div>';
   }
 
   function render() {
