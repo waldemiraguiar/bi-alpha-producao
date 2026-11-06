@@ -48,7 +48,7 @@
     if (!el('puView')) {
       var v = document.createElement('div'); v.id = 'puView'; v.style.display = 'none';
       v.innerHTML = '<button class="back" onclick="window.goHome&&goHome()">← voltar</button>'
-        + '<div class="pu-hero"><h2>🔗 Mesmo paciente, dois códigos</h2><p>Quando a recepção cadastra o mesmo bicho com <b>código diferente</b>, os resultados não pareiam. Você decide: <b style="color:var(--ok)">✓ mesmo</b> junta · <b>✕ diferentes</b> · <b>🗑 apagar</b>. O <b>nascimento</b> é o desempatador — tudo vai pro Histórico e é reversível.</p></div>'
+        + '<div class="pu-hero"><h2>🔗 Mesmo paciente, dois códigos</h2><p>Quando a recepção cadastra o mesmo bicho com <b>código diferente</b>, os resultados não pareiam. Você decide: <b style="color:var(--ok)">✓ mesmo</b> junta · <b>✕ diferentes</b> · <b>🗑 apagar</b>. O <b>nascimento</b> é o desempatador — tudo vai pro Histórico e é reversível.</p><div style="font-size:12.5px;color:var(--mut);margin-top:9px;display:flex;align-items:center;gap:6px">🔄 Atualiza sozinho a cada 20 min · próxima em <b id="puCount" style="font-variant-numeric:tabular-nums;color:var(--brand);font-size:14px">—</b></div></div>'
         + '<div id="puWho" style="margin-bottom:8px"></div><div id="puTabs" style="margin-bottom:2px"></div><div id="puBody"></div>';
       m.appendChild(v);
     }
@@ -246,6 +246,19 @@
       else { bp.classList.remove('pu-pulse'); bp.innerHTML = '🔗 Mesmo Paciente'; }
     }).catch(function () {});
   }
+  var PU_CYCLE = 1200, _puRefreshing = false;
+  function fmtMMSS(s) { s = Math.max(0, Math.round(s)); var m = Math.floor(s / 60), ss = s % 60; return (m < 10 ? '0' : '') + m + ':' + (ss < 10 ? '0' : '') + ss; }
+  function puTick() {
+    var e = el('puCount'); if (!e) return; // só quando a aba está aberta
+    var ts = PU.stats && PU.stats.atualizado_em ? Date.parse(PU.stats.atualizado_em) : 0;
+    if (!ts) { e.textContent = '—'; return; }
+    var rem = (ts + PU_CYCLE * 1000 - Date.now()) / 1000;
+    if (rem > 0) { e.textContent = fmtMMSS(rem); e.style.color = 'var(--brand)'; return; }
+    e.innerHTML = '<span style="color:var(--warn)">checando dados novos…</span>';
+    if (_puRefreshing) return; _puRefreshing = true;
+    fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json()).then(function (s) { _puRefreshing = false; s = (Array.isArray(s) && s[0]) || null; if (s) PU.stats = s; }).catch(function () { _puRefreshing = false; });
+  }
+  setInterval(puTick, 1000);
   function boot() { ensure(); badge(); }
   if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(boot, 50); else window.addEventListener('load', boot);
   setInterval(badge, 240000);
