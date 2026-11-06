@@ -347,6 +347,53 @@ def clinic_fat_mensal_full(cods, meses=13, alias=None, tries=4):
             out[p] = serie
     return out
 
+def clinic_cat_mensal(cods, meses=13, alias=None, tries=4):
+    """Mês a mês POR CATEGORIA de exame (só nº de exames, SEM R$) — p/ achar qual classe PUXOU a variação do mês.
+    → {cod_principal: {ym: {categoria: [n, nd]}}}  (n=mês cheio; nd=até o dia de hoje, comparação justa). PÚBLICO.
+    Lotes de 150 cods (query mais pesada por causa da categoria no GROUP BY) + retry. Soma código-extra no principal."""
+    alias = {str(k): str(v) for k, v in (alias or {}).items()}
+    cods = sorted({str(c) for c in (cods or []) if c is not None and str(c).strip()} | set(alias.keys()))
+    if not cods:
+        return {}
+    def prim(cod): return alias.get(str(cod), str(cod))
+    hoje = datetime.date.today(); dia = hoje.day
+    tot = hoje.year * 12 + (hoje.month - 1) - (meses - 1)
+    mn = "%04d-%02d-01" % (tot // 12, tot % 12 + 1); maxd = hoje.isoformat()
+    acc = {}   # {prim: {ym: {setor: [n, nd]}}}
+    for i in range(0, len(cods), 150):
+        lote = cods[i:i + 150]; ph = ",".join(["%s"] * len(lote))
+        sql = (f"SELECT r.CodCliente cod, DATE_FORMAT(r.DataEntrada,'%%Y-%%m') ym, COALESCE(cat.Categoria,'') setor, "
+               f"COUNT(*) n, SUM(CASE WHEN DAY(r.DataEntrada)<=%s THEN 1 ELSE 0 END) nd "
+               f"FROM {EX} s JOIN {RQ} r ON s.CodNumeroSequencialTela=r.CodNumeroSequencialTela "
+               f"LEFT JOIN TabCategoria cat ON s.CodCategoria=cat.CodCategoria "
+               f"WHERE r.CodCliente IN ({ph}) AND r.DataEntrada BETWEEN %s AND %s GROUP BY r.CodCliente, ym, cat.Categoria")
+        rows = None
+        for t in range(tries):
+            try:
+                conn = pymysql.connect(**SRC); c = conn.cursor()
+                try:
+                    c.execute(sql, (dia, *lote, mn, maxd)); rows = c.fetchall()
+                finally:
+                    conn.close()
+                break
+            except Exception as e:
+                if t == tries - 1:
+                    print(f"clinic_cat_mensal: lote {i} desistiu ({e})"); rows = []
+                else:
+                    time.sleep(2 * (t + 1))
+        for x in (rows or []):
+            setor = (x["setor"] or "").strip()
+            if not setor:
+                continue
+            p = prim(str(x["cod"])); mm = acc.setdefault(p, {}); ym = mm.setdefault(x["ym"], {}); cur = ym.setdefault(setor, [0, 0])
+            cur[0] += int(x["n"] or 0); cur[1] += int(x["nd"] or 0)
+    out = {}
+    for p, mm in acc.items():
+        serie = {ym: {s: {"n": v[0], "nd": v[1]} for s, v in cats.items()} for ym, cats in mm.items()}
+        if serie:
+            out[p] = serie
+    return out
+
 def clinic_fat_mtd(cods, alias=None, tries=4):
     """DIA-EXATO p/ o 'Ritmo do mês': faturamento de cada clínica ATÉ O MESMO DIA do mês,
     neste mês (cur) e no mês passado (prev). → {cod_principal: {d, cur, prev}}.

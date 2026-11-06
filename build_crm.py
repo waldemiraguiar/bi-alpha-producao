@@ -220,7 +220,7 @@ def post_clinicas_rs(D):
             for e in (c.get("cods_extra") or []):
                 e = str(e).strip()
                 if e: alias[e] = str(p); extras.append(e)
-        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal, clinic_fat_mensal_full, clinic_fat_mtd, divide_conversion, lab_fat_since, lab_fat_mensal
+        from build_financeiro import clinic_fat_since, clinic_fat_12m, clinic_fat_mensal, clinic_fat_mensal_full, clinic_fat_mtd, clinic_cat_mensal, divide_conversion, lab_fat_since, lab_fat_mensal
         # 📊 DIA-EXATO p/ o "Ritmo do mês": faturamento até o MESMO DIA, mês atual × mês passado (TODA clínica da carteira, com ou sem marco)
         try:
             _allc = [str(c.get("cod")) for c in cart if c.get("cod")]
@@ -329,6 +329,17 @@ def post_clinicas_rs(D):
             print(f"exames mês a mês (público) -> HTTP {re_.status} ({len(exmes)} clínicas)")
     except Exception as e:
         print(f"post exames falhou (ok, tenta no próximo ciclo): {e}")
+    # 📈 EXAMES MÊS A MÊS POR CATEGORIA (PÚBLICO, SEM R$): qual CLASSE de exame puxou a alta/queda do mês (de→para por categoria).
+    try:
+        _catcods = list(fatmesall.keys())
+        catmes = clinic_cat_mensal(_catcods, meses=13, alias=alias) if _catcods else {}
+        if catmes:
+            cpayload = json.dumps({"acao": "set", "catmes": catmes, "dia": datetime.date.today().day, "senha": pwd}, ensure_ascii=False, separators=(",", ":")).encode()
+            rc = urllib.request.urlopen(urllib.request.Request(
+                base + "/api/crm-catmes", data=cpayload, headers={"Content-Type": "application/json"}), timeout=60)
+            print(f"categoria mês a mês (público) -> HTTP {rc.status} ({len(catmes)} clínicas)")
+    except Exception as e:
+        print(f"post catmes falhou (ok, tenta no próximo ciclo): {e}")
 
 def post_clinicas_det():
     """Detalhe (setores/white-space + produção 30d/7d) SÓ das clínicas da carteira → /api/crm-clinicas-det.
