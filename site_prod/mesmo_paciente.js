@@ -116,7 +116,7 @@
   function cardFila(c) {
     var sc = Number(c.score) || 0, pct = Math.round(sc * 100), chk = !!PU.sel[c.par_id], P = esc(c.par_id);
     var col, palavra;
-    if (pct >= 98) { col = '#10b981'; palavra = 'quase certo'; }
+    if (pct >= 98) { col = '#10b981'; palavra = 'idêntico'; }
     else if (pct >= 90) { col = '#f59e0b'; palavra = 'muito provável'; }
     else if (pct >= 82) { col = '#eab308'; palavra = 'provável'; }
     else { col = 'var(--mut)'; palavra = 'possível'; }
