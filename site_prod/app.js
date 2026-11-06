@@ -580,10 +580,41 @@ async function atualizarProd(btn){
     __atualizando=false;
     const b2=document.getElementById('atualizarBtn');
     if(b2){ b2.classList.remove('spin'); b2.disabled=false; b2.classList.add('done'); b2.textContent='✓ atualizado';
-      setTimeout(()=>{ const b3=document.getElementById('atualizarBtn'); if(b3){b3.classList.remove('done');b3.textContent='🔄 Atualizar';} },1800); }
+      setTimeout(()=>{ const b3=document.getElementById('atualizarBtn'); if(b3){b3.classList.remove('done');b3.textContent='🔎 Buscar do HF';} },1800); }
   }
 }
 window.atualizarProd=atualizarProd;
+// 🔎 BUSCAR DO HF (Dudu 06/11): dispara o build+POST (Action) pra puxar o HF AGORA e espera o .enc novo
+// (meta.gerado_em muda). O automático de 10 min continua. Throttle evita rodar a Action à toa.
+let __buscandoHf=false, __ultimoDispatch=0;
+async function buscarHfProd(btn){
+  if(__buscandoHf) return;
+  const b=btn||document.getElementById('atualizarBtn');
+  if(Date.now()-__ultimoDispatch < 25000){ return atualizarProd(b); }   // disparou há pouco → só rebusca o último build
+  __buscandoHf=true;
+  const antes=(DATA&&DATA.meta&&DATA.meta.gerado_em)||'';
+  if(b){ b.classList.add('spin'); b.disabled=true; b.textContent='🔎 buscando no HF…'; }
+  let disparou=false;
+  try{ const r=await fetch('/api/puxar-hf',{method:'POST'}); const j=await r.json().catch(()=>({})); disparou=!!(j&&j.ok); if(disparou)__ultimoDispatch=Date.now(); }catch(e){}
+  if(!disparou){
+    __buscandoHf=false; await atualizarProd(b);
+    const bx=document.getElementById('atualizarBtn'); if(bx){ bx.classList.remove('done'); bx.textContent='⚠️ HF indisponível — puxei o último build'; setTimeout(()=>{ const b3=document.getElementById('atualizarBtn'); if(b3) b3.textContent='🔎 Buscar do HF'; },2800); }
+    return;
+  }
+  let novo=false;
+  for(let i=0;i<20 && !novo;i++){
+    await new Promise(res=>setTimeout(res,5000));
+    try{ const d=await decrypt(window.__pwd); if(d&&d.meta&&d.meta.gerado_em && d.meta.gerado_em!==antes){ DATA=d; novo=true; } }catch(e){}
+    const bp=document.getElementById('atualizarBtn'); if(bp&&!novo) bp.textContent='🔎 buscando no HF… '+((i+1)*5)+'s';
+  }
+  try{ await loadManual(); buildTabs(); renderActive(); }catch(e){}
+  __buscandoHf=false;
+  const b2=document.getElementById('atualizarBtn');
+  if(b2){ b2.classList.remove('spin'); b2.disabled=false; b2.classList.add('done');
+    b2.textContent= novo?'✓ HF atualizado':'✓ pode levar +alguns s';
+    setTimeout(()=>{ const b3=document.getElementById('atualizarBtn'); if(b3){ b3.classList.remove('done'); b3.textContent='🔎 Buscar do HF'; } },2400); }
+}
+window.buscarHfProd=buscarHfProd;
 function buildTabs(){
   const upd=DATA.meta.gerado_em.slice(11,16);
   document.getElementById('upd').textContent='dados '+upd+' · 10 min';
@@ -596,7 +627,7 @@ function buildTabs(){
   tabsEl.style.display=''; contentEl.classList.remove('locked');
   document.getElementById('subtitle').textContent='Fila operacional · prazos de liberação';
   const KT={urg:{t:'urgtab',i:'🚨',b:'urgb'},aviso:{t:'avisotab',i:'📧',b:'avisob'},trava:{t:'travatab',i:'🔒',b:'travab'},histotec:{t:'histotectab',i:'🔬',b:'histotecb'},pet:{t:'pettab',i:'💗',b:'petb'},atras:{t:'atrastab',i:'⏰',b:'atrasb'},terc:{t:'terctab',i:'📦',b:'tercb'}};
-  tabsEl.innerHTML=`<button class="atualizar-btn" id="atualizarBtn" title="Puxar agora os dados do último build (sem esperar os 10 min)">🔄 Atualizar</button>`
+  tabsEl.innerHTML=`<button class="atualizar-btn" id="atualizarBtn" title="Buscar AGORA os exames direto do HF (o automático de 10 min continua)">🔎 Buscar do HF</button>`
     + list.map((x,i)=>{x=adjustCat(x);const k=x.special?KT[x.kind]:null;return `
     <div class="tab ${i===active?'on':''} ${k?k.t:''} ${x.kind==='aviso'?'avisopulse':''} ${x.kind==='trava'&&x.em_processo>0?'travapulse':''}" data-i="${i}">
       <span class="tn">${k&&x.kind==='aviso'?'<span class="fwt">🎆</span> '+k.i+' '+esc(x.categoria)+' <span class="fwt">🎇</span>':(k?k.i+' '+esc(x.categoria):esc(x.categoria))}</span>
@@ -604,7 +635,7 @@ function buildTabs(){
       <span class="prog"></span>
     </div>`;}).join('')
     + `<div class="rotctl ${pinned?'pinned':''}" id="rotctl">${pinned?'⏸ fixado · clique p/ girar':'🔄 girando 15s'}</div>`;
-  { const _ab=document.getElementById('atualizarBtn'); if(_ab) _ab.addEventListener('click',()=>atualizarProd(_ab)); }
+  { const _ab=document.getElementById('atualizarBtn'); if(_ab) _ab.addEventListener('click',()=>buscarHfProd(_ab)); }
   [...tabsEl.querySelectorAll('.tab')].forEach(t=>t.addEventListener('click',()=>{
     active=+t.dataset.i; pinned=true; if(ROT)clearInterval(ROT); buildTabs(); renderActive();}));
   document.getElementById('rotctl').addEventListener('click',()=>{
