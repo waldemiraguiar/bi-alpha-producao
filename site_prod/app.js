@@ -829,8 +829,8 @@ function renderActive(){
   const atrasAlvo=wlItems.filter(e=>e.atrasado);
   window.__limparAlvo=atrasAlvo.map(e=>({chave:exChave(e),registro:String(e.registro),exame:e.exame||'',paciente:e.paciente||'',cat:e.categoria||x.categoria||'',atrasado:true}));
   window.__curCat=special?'':x.categoria;
-  // MOLECULAR (PCR): agrupar exames do mesmo registro num único card (Dudu 27/10)
-  const ISMOL=!special&&/MOLECULAR/i.test(x.categoria||'');
+  // MOLECULAR (PCR) + ESPECIALIZADOS (TSH/T4/Cortisol — Dudu 06/11): agrupar exames do mesmo registro num único card (mesmo paciente, mesmo local, imprime junto)
+  const ISMOL=!special&&/MOLECULAR|ESPECIALIZ/i.test(x.categoria||'');
   const wlRender=ISMOL
     ? [...new Map(wlItems.map(e=>[String(e.registro!=null?e.registro:''),e])).values()].map(e=>{
         const grp=wlItems.filter(i=>String(i.registro)===String(e.registro));
