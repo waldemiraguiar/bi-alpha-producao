@@ -39,11 +39,11 @@ function _rascFolha(reg, mode){
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
-    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${(mode==='full'&&exTerceirizado(i))?' <span class="tercflag">▶ separar amostra p/ terceirizar (VetLab)</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${exTerceirizado(i)?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
     <div class="sec">PCR</div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div></div>
     <div class="qtd"><b>Qtd. de exames:</b> <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> &nbsp;&nbsp;·&nbsp;&nbsp; <b>Qtd. de amostras:</b> <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u></div>
-    <div class="amost"><b>Amostras:</b> <span>( ) Sangue</span><span>( ) Swab</span><span>( ) Fezes</span><span>( ) Urina</span><span>( ) Medula</span><span>( ) Linfonodo</span><span>( ) ______</span></div>
+    <div class="amost"><b>Amostras:</b> <span>( ) Sangue</span><span>( ) Swab</span><span>( ) Fezes</span><span>( ) Urina</span><span>( ) Medula</span><span>( ) ______</span></div>
     <table class="an"><thead><tr><th style="text-align:left;width:60%">Análises</th><th>DNA</th><th>RNA</th></tr></thead><tbody><tr><td style="height:28px"></td><td></td><td></td></tr><tr><td style="height:28px"></td><td></td><td></td></tr></tbody></table>
   </div>`;
 }
@@ -121,10 +121,13 @@ function _cultClassificar(items){
 }
 function _rascCultBloco(c,i,mode){
   const am=c.amostra||'____________';
-  const coleta=/urina/i.test(c.amostra||'')?`<div class="cl2">Coleta: ( ) cistocentese &nbsp; ( ) sonda &nbsp; ( ) espontânea</div>`:'';
-  const tercline=(mode==='full'&&c.terc)?`<div class="cl2"><span class="tercflag">▶ separar amostra p/ terceirizar (VetLab)</span></div>`:'';
+  const ehUrina=/urina/i.test(c.amostra||'');
+  // Dudu 06/11: coleta ganha '( ) não informado'; urina ganha 'Quantidade de bactéria'; Antibiograma sim/não saiu (já está no nome do exame)
+  const coleta=ehUrina?`<div class="cl2">Coleta: ( ) cistocentese &nbsp; ( ) sonda &nbsp; ( ) espontânea &nbsp; ( ) não informado</div><div class="cl2"><b>Quantidade de bactéria:</b> <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u></div>`:'';
+  // Dudu 06/11: '▶ separar para terceirizar' sai SEMPRE que o exame é terceirizado (em qualquer aba) — hemocultura feita aqui não leva
+  const tercline=c.terc?`<div class="cl2"><span class="tercflag">▶ separar para terceirizar</span></div>`:'';
   return `<div class="cult"><div class="cultt"><b>${i+1}) ${esc(c.label)}</b></div>
-    <div class="clam"><b>Amostra:</b> ${esc(am)} &nbsp;&nbsp; <b>Antibiograma:</b> ( ) sim ( ) não</div>
+    <div class="clam"><b>Amostra:</b> ${esc(am)}</div>
     ${coleta}${tercline}<div class="cl2"><b>Resultado / crescimento:</b></div><div class="cres"><div></div><div></div><div></div><div></div></div></div>`;
 }
 function _rascCultFolha(reg, mode){
@@ -146,7 +149,7 @@ function _rascCultFolha(reg, mode){
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
-    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${(mode==='full'&&exTerceirizado(i))?' <span class="tercflag">▶ separar amostra p/ terceirizar (VetLab)</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${exTerceirizado(i)?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div></div>
     ${banner}
     ${culturas.map((c,i)=>_rascCultBloco(c,i,mode)).join('')}
