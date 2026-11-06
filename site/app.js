@@ -678,8 +678,9 @@ function _fatHtml(rows){
    <div style="font-size:11px;color:var(--mut);margin-top:6px">referente a ${esc(d.data||'')}${d.parcial?(' · '+d.parcial+' parciais'):''}</div>`;
   if(casos.length){
     h+=`<div style="margin-top:16px;font-weight:800;color:${C.amber}">⚠️ Casos a conferir no HF (${casos.length}) — pacote pedido que não apareceu faturado</div>
-      <div style="overflow-x:auto"><table class="atab" style="width:100%;margin-top:6px"><thead><tr><th>Requisição</th><th>Clínica</th><th>Pacote pedido</th><th>Exames</th></tr></thead><tbody>`;
-    casos.forEach(c=>{ h+=`<tr><td style="font-weight:700;color:${C.cyan}">${esc(c.req||'')}</td><td>${esc(c.clinica||'')}</td><td>${esc(c.pacote||'')}</td><td style="text-align:center">${esc(String(c.componentes||''))}</td></tr>`; });
+      <div style="overflow-x:auto"><table class="atab" style="width:100%;margin-top:6px"><thead><tr><th>Data</th><th>Requisição</th><th>Clínica</th><th>Pacote pedido</th><th>Exames</th></tr></thead><tbody>`;
+    const _dmy=s=>{ s=String(s||'').slice(0,10).split('-'); return s.length===3?(s[2]+'/'+s[1]+'/'+s[0].slice(2)):'—'; };
+    casos.forEach(c=>{ h+=`<tr><td style="white-space:nowrap">${_dmy(c.dt)}</td><td style="font-weight:700;color:${C.cyan}">${esc(c.req||'')}</td><td>${esc(c.clinica||'')}</td><td>${esc(c.pacote||'')}</td><td style="text-align:center">${esc(String(c.componentes||''))}</td></tr>`; });
     h+=`</tbody></table></div>`;
   } else {
     h+=`<div style="margin-top:16px;color:${C.green};font-weight:700">✅ Nenhum caso a conferir hoje — tudo que foi pedido foi faturado.</div>`;
