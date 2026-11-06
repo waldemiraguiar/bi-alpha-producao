@@ -92,7 +92,7 @@
       fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json()),
       fetch(URL + '/pu_candidatos?select=*&estado=eq.pendente&cross_clinica=eq.true&order=score.desc&limit=400', { headers: HED }).then(r => r.json()).catch(function () { return []; })
     ]).then(function (r) {
-      PU.entradas = Array.isArray(r[0]) ? r[0] : []; PU.fila = Array.isArray(r[1]) ? r[1] : []; PU.stats = (Array.isArray(r[2]) && r[2][0]) || null; PU.cross = Array.isArray(r[3]) ? r[3] : []; PU.sel = {};
+      PU.entradas = Array.isArray(r[0]) ? r[0] : []; PU.fila = Array.isArray(r[1]) ? r[1] : []; PU.stats = (Array.isArray(r[2]) && r[2][0]) || null; PU.cross = Array.isArray(r[3]) ? r[3] : []; PU.sel = {}; PU.loaded = true;
       // cruzados não repetem na fila comum (são a seção de destaque no topo)
       if (PU.cross.length) { var xids = {}; PU.cross.forEach(function (c) { xids[c.par_id] = 1; }); PU.fila = PU.fila.filter(function (c) { return !xids[c.par_id]; }); PU.entradas = PU.entradas.filter(function (c) { return !xids[c.par_id]; }); }
       render(); badge();
@@ -285,7 +285,7 @@
     var bp = el('btnProntuario'); if (!bp) return;
     fetch(URL + '/pu_stats?select=*&id=eq.1', { headers: HED }).then(r => r.json()).then(function (s) {
       s = (Array.isArray(s) && s[0]) || null; if (s) PU.stats = s;
-      var hoje = s ? Number(s.n_entradas_hoje || 0) : 0, fila = s ? Number(s.n_fila || 0) : 0, n = hoje || fila;
+      var hoje = PU.loaded ? PU.entradas.length : (s ? Number(s.n_entradas_hoje || 0) : 0), fila = s ? Number(s.n_fila || 0) : 0, n = hoje || fila;
       var cnt = '<span id="puCountTab" style="margin-left:7px;font-size:11px;font-weight:600;opacity:.9;font-variant-numeric:tabular-nums">⏱</span>';
       if (n > 0) { bp.classList.add('pu-pulse'); bp.innerHTML = '🔗 Mesmo Paciente <span class="pu-badge">' + (hoje > 0 ? '🔔' + hoje : nf(fila)) + '</span>' + cnt; }
       else { bp.classList.remove('pu-pulse'); bp.innerHTML = '🔗 Mesmo Paciente' + cnt; }
