@@ -39,7 +39,10 @@
       + '.pu-sub-t{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px}'
       + '.pu-sub .pet{font-size:17px;font-weight:800;color:var(--txt);line-height:1.2}.pu-sub .dono{font-size:14.5px;color:var(--txt)}.pu-sub .meta{font-size:12px;color:var(--mut);margin-top:4px}.pu-sub .meta b{color:var(--brand)}'
       + '.pu-cli{font-size:12.5px;color:var(--txt);font-weight:600;text-align:right;margin-bottom:3px}.pu-cli .n{color:var(--mut);font-weight:400}'
-      + '.pu-conf{display:inline-block;padding:4px 14px;border-radius:999px;border:1.5px solid;font-size:14.5px;white-space:nowrap;line-height:1.3}.pu-conf b{font-size:19px;font-weight:800;margin-right:3px}';
+      + '.pu-conf{display:inline-block;padding:4px 14px;border-radius:999px;border:1.5px solid;font-size:14.5px;white-space:nowrap;line-height:1.3}.pu-conf b{font-size:19px;font-weight:800;margin-right:3px}'
+      + '@keyframes puCrossBlink{0%,100%{background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.55)}50%{background:#b91c1c;box-shadow:0 0 14px 3px rgba(239,68,68,.9)}}'
+      + '.pu-cross{display:inline-block;padding:3px 11px;border-radius:999px;color:#fff;font-weight:800;font-size:11.5px;animation:puCrossBlink 1s ease-in-out infinite;white-space:nowrap}'
+      + '.pu-same{display:inline-block;padding:3px 11px;border-radius:999px;background:rgba(16,185,129,.16);color:#10b981;border:1px solid #10b981;font-weight:700;font-size:11.5px;white-space:nowrap}';
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   })();
 
@@ -126,14 +129,18 @@
     else if (pct >= 90) { col = '#f59e0b'; palavra = 'muito provável'; }
     else if (pct >= 82) { col = '#eab308'; palavra = 'provável'; }
     else { col = 'var(--mut)'; palavra = 'possível'; }
+    var cross = (c.b_cc != null && String(c.cc) !== String(c.b_cc));
     var cliN = c.a_cli || c.b_cli;
-    var cliLine = cliN ? '🏥 ' + esc(cliN) + ' <span class="n">(#' + esc(c.cc) + ' · ' + esc(c.esp) + ')</span>' : 'clínica #' + esc(c.cc) + ' · ' + esc(c.esp);
+    var cliLine = cross ? esc(c.esp) + ' · <b style="color:var(--bad)">2 clínicas</b>' : (cliN ? '🏥 ' + esc(cliN) + ' <span class="n">(#' + esc(c.cc) + ' · ' + esc(c.esp) + ')</span>' : 'clínica #' + esc(c.cc) + ' · ' + esc(c.esp));
     var hojeBadge = hoje ? '<span style="font-size:11px;font-weight:800;background:var(--warn);color:#111;padding:2px 9px;border-radius:999px;margin-left:8px">🔔 ENTROU HOJE</span>' : '';
+    var clinBadge = cross ? '<span class="pu-cross">⚠️ CLÍNICAS DIFERENTES</span>' : '<span class="pu-same">🟢 mesma clínica</span>';
     return '<div class="pu-card' + (pct >= 90 ? ' quase' : '') + (hoje ? ' hoje' : '') + '" style="border-left-color:' + (hoje ? 'var(--warn)' : col) + '">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0">'
       + '<label style="display:flex;align-items:center;gap:11px;cursor:pointer;min-width:0"><input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + P + '\')" style="transform:scale(1.35);flex-shrink:0;cursor:pointer">'
-      + '<span class="pu-conf" style="color:' + col + ';border-color:' + col + '"><b>' + pct + '%</b>' + palavra + '</span>' + hojeBadge + '</label>'
-      + '<span class="pu-cli" style="margin:0;flex-shrink:0">' + cliLine + '</span>'
+      + '<span class="pu-conf" style="color:' + col + ';border-color:' + col + '"><b>' + pct + '%</b>' + palavra + '</span></label>'
+      + clinBadge + hojeBadge + '</div>'
+      + '<span class="pu-cli" style="margin:0">' + cliLine + '</span>'
       + '</div>'
       + sub(c.a_cod, c.a_pet, c.a_dono, c.a_raca, c.a_sexo, c.a_nasc, c.a_reqs, c.a_origem, c.a_cli)
       + sub(c.b_cod, c.b_pet, c.b_dono, c.b_raca, c.b_sexo, c.b_nasc, c.b_reqs, c.b_origem, c.b_cli)
