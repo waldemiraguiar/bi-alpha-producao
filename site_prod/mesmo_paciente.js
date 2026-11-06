@@ -27,7 +27,14 @@
       + '.pu-b.sim{background:#0d9488;color:#fff}.pu-b.nao{background:#1e293b;color:#cbd5e1;border:1px solid #334155}.pu-b.del{background:transparent;color:var(--mut);border:1px solid var(--line)}'
       + '.pu-tab{display:inline-block;padding:7px 14px;border-radius:9px 9px 0 0;cursor:pointer;font-weight:700;font-size:14px;color:var(--mut)}'
       + '.pu-tab.on{background:var(--panel2);color:var(--txt)}'
-      + '.pu-batbar{position:sticky;top:0;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}';
+      + '.pu-batbar{position:sticky;top:0;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}'
+      + '.pu-hero{background:linear-gradient(135deg,rgba(13,148,136,.22),rgba(124,91,255,.12));border:1px solid var(--line);border-radius:14px;padding:15px 18px;margin:6px 0 14px}'
+      + '.pu-hero h2{margin:0;font-size:19px;font-weight:800;letter-spacing:-.01em}.pu-hero p{margin:5px 0 0;font-size:13px;color:var(--mut);max-width:72ch}'
+      + '.pu-pct{width:52px;height:52px;border-radius:50%;border:2.5px solid var(--c);color:var(--c);font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0}'
+      + '.pu-card.quase{box-shadow:0 0 0 1px rgba(245,158,11,.5),0 0 16px rgba(245,158,11,.20)}'
+      + '.pu-b.sim{padding:9px 15px;font-size:14px;box-shadow:0 2px 12px rgba(13,148,136,.4)}.pu-b.sim:hover{filter:brightness(1.08)}'
+      + '.pu-tile{border-radius:14px;padding:12px 16px;min-width:120px;border:1px solid var(--line);position:relative;overflow:hidden}.pu-tile b{font-size:26px;font-weight:800;display:block;line-height:1.1}.pu-tile span{font-size:11px;color:var(--mut)}'
+      + '.pu-qzap{font-size:9px;font-weight:800;background:var(--warn);color:#111;padding:2px 6px;border-radius:5px;white-space:nowrap}';
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   })();
 
@@ -37,7 +44,7 @@
     if (!el('puView')) {
       var v = document.createElement('div'); v.id = 'puView'; v.style.display = 'none';
       v.innerHTML = '<button class="back" onclick="window.goHome&&goHome()">← voltar</button>'
-        + '<div style="font-size:13px;color:var(--mut);margin:-2px 0 10px;max-width:780px">O mesmo bicho entrou com <b>código diferente</b> (a recepção criou paciente novo). Você decide: <b>✓ mesmo</b> junta, <b>✕ diferentes</b> descarta, <b>🗑 apagar</b> tira sem julgar. O <b>nascimento</b> é o desempatador. Tudo vai pro Histórico e é reversível.</div>'
+        + '<div class="pu-hero"><h2>🔗 Mesmo paciente, dois códigos</h2><p>Quando a recepção cadastra o mesmo bicho com <b>código diferente</b>, os resultados não pareiam. Você decide: <b style="color:var(--ok)">✓ mesmo</b> junta · <b>✕ diferentes</b> · <b>🗑 apagar</b>. O <b>nascimento</b> é o desempatador — tudo vai pro Histórico e é reversível.</p></div>'
         + '<div id="puWho" style="margin-bottom:8px"></div><div id="puTabs" style="margin-bottom:2px"></div><div id="puBody"></div>';
       m.appendChild(v);
     }
@@ -92,28 +99,33 @@
   function linha(cod, pet, dono, raca, sexo, n, reqs) { var E = function (s) { s = esc(s).trim(); return s || '—'; }; return '<div style="font-size:13.5px;color:var(--txt)"><span style="color:var(--mut)">cód</span> <b style="color:var(--brand)">' + esc(cod) + '</b> · 🐾 <b>' + E(pet) + '</b> · ' + E(dono) + ' · ' + E(raca) + ' · ' + E(sexo) + ' <span style="color:var(--mut)">· nasc ' + nasc(n) + ' · ' + (reqs || 0) + ' req</span></div>'; }
 
   function cardFila(c) {
-    var sc = Number(c.score) || 0, qc = c.quase, cls = 'pu-card' + (qc ? ' quase' : ''), chk = !!PU.sel[c.par_id];
-    return '<div class="' + cls + '">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
-      + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + esc(c.par_id) + '\')"><span style="font-size:16px;font-weight:800;color:' + (qc ? 'var(--warn)' : 'var(--mut)') + '">' + Math.round(sc * 100) + '% ' + (qc ? '<span style="font-size:10px;background:var(--warn);color:#111;padding:1px 6px;border-radius:5px">QUASE CERTO</span>' : '') + '</span></label>'
-      + '<span style="font-size:11px;color:var(--mut)">clínica ' + esc(c.cc) + ' · ' + esc(c.esp) + '</span></div>'
+    var sc = Number(c.score) || 0, pct = Math.round(sc * 100), qc = c.quase, chk = !!PU.sel[c.par_id], P = esc(c.par_id);
+    var col = qc ? '#f59e0b' : (pct >= 80 ? '#eab308' : 'var(--mut)');
+    return '<div class="pu-card' + (qc ? ' quase' : '') + '" style="display:flex;gap:13px;align-items:flex-start">'
+      + '<div style="display:flex;flex-direction:column;align-items:center;gap:6px">'
+      + '<input type="checkbox" ' + (chk ? 'checked' : '') + ' onclick="puSel(\'' + P + '\')" style="transform:scale(1.25);cursor:pointer">'
+      + '<div class="pu-pct" style="--c:' + col + '">' + pct + '</div>'
+      + (qc ? '<span class="pu-qzap" style="text-align:center;line-height:1.1">QUASE<br>CERTO</span>' : '')
+      + '</div>'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="text-align:right;font-size:11px;color:var(--mut);margin-bottom:3px">clínica ' + esc(c.cc) + ' · ' + esc(c.esp) + '</div>'
       + linha(c.a_cod, c.a_pet, c.a_dono, c.a_raca, c.a_sexo, c.a_nasc, c.a_reqs)
       + linha(c.b_cod, c.b_pet, c.b_dono, c.b_raca, c.b_sexo, c.b_nasc, c.b_reqs)
       + quebra(c.br)
-      + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
-      + '<button class="pu-b sim" onclick="puAct(\'' + esc(c.par_id) + '\',\'mesmo\')">✓ mesmo — juntar</button>'
-      + '<button class="pu-b nao" onclick="puAct(\'' + esc(c.par_id) + '\',\'diferente\')">✕ são diferentes</button>'
-      + '<button class="pu-b del" onclick="puAct(\'' + esc(c.par_id) + '\',\'apagado\')">🗑 apagar</button>'
-      + '</div></div>';
+      + '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">'
+      + '<button class="pu-b sim" onclick="puAct(\'' + P + '\',\'mesmo\')">✓ mesmo — juntar</button>'
+      + '<button class="pu-b nao" onclick="puAct(\'' + P + '\',\'diferente\')">✕ são diferentes</button>'
+      + '<button class="pu-b del" onclick="puAct(\'' + P + '\',\'apagado\')">🗑 apagar</button>'
+      + '</div></div></div>';
   }
 
   function render() {
     tabs();
     var st = PU.stats, fila = PU.fila, ent = PU.entradas;
-    var tile = function (n, l, c) { return '<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:108px"><div style="font-size:22px;font-weight:800;color:' + (c || 'var(--txt)') + '">' + n + '</div><div style="font-size:11px;color:var(--mut)">' + l + '</div></div>'; };
+    var tile = function (n, l, c) { return '<div class="pu-tile" style="background:linear-gradient(135deg,' + c + '26,transparent 70%)"><b style="color:' + c + '">' + n + '</b><span>' + l + '</span></div>'; };
     var topo = st ? '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 12px">'
-      + tile(nf(st.n_pac), 'pacientes', 'var(--brand)') + tile(nf(st.n_voltam), 'voltaram', '#38bdf8')
-      + tile(nf(st.n_fila), 'suspeitas', 'var(--warn)') + tile(nf(st.n_merges), 'resolvidas', 'var(--ok)') + '</div>' : '';
+      + tile(nf(st.n_pac), 'pacientes', '#8b7bff') + tile(nf(st.n_voltam), 'voltaram', '#38bdf8')
+      + tile(nf(st.n_fila), 'suspeitas', '#f59e0b') + tile(nf(st.n_merges), 'resolvidas', '#34d399') + '</div>' : '';
     // entradas de hoje
     var secEnt = '';
     if (ent.length) {
