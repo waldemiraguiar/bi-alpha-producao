@@ -1061,7 +1061,7 @@ function _clinCV(cod){   // coeficiente de variação do volume mensal (fechados
   const S=(CLIN_EXMES&&CLIN_EXMES[String(cod)])||null; if(!S||S.length<4) return null;
   const _now=new Date(), curYm=_now.getFullYear()+"-"+String(_now.getMonth()+1).padStart(2,"0");
   const vals=S.filter(m=>m.ym!==curYm).map(m=>m.n||0).slice(-6); if(vals.length<3) return null;
-  const mean=vals.reduce((a,b)=>a+b,0)/vals.length; if(mean<=0) return null;
+  const mean=vals.reduce((a,b)=>a+b,0)/vals.length; if(mean<10) return null;   // <10/mês: CV é ruído de número pequeno, não "oscilação" — não entra em Oscila
   const sd=Math.sqrt(vals.reduce((a,b)=>a+(b-mean)*(b-mean),0)/vals.length); return sd/mean;
 }
 function _clinSegment(cod, qtd){
@@ -1071,19 +1071,26 @@ function _clinSegment(cod, qtd){
   const grande=(t==='A'||t==='B'||(qtd||0)>=1200), cv=_clinCV(cod);
   const alvo=falta.slice().sort((a,b)=>(CV[b]||0)-(CV[a]||0))[0]||null;
   let seg,motivo,acao;
-  // 🔻 resgatar = parada DE VERDADE (sem envio 90d, ou gap muito acima do ritmo dela) OU queda FORTE e sustentada (7d), com volume que importa — calibrado p/ não inflar
-  const caiuForte = st && (st.drop7!=null && st.drop7>=0.5) && (st.tot||0)>=12;
-  if(!st){ seg='resgatar'; motivo='sem envio há 90+ dias'; acao='ligar hoje — reativar'; }
-  else if(st.overdue){ seg='resgatar'; motivo=`parada ${st.daysSince}d`; acao='ligar hoje'; }
+  // 🎚️ PISO DE VOLUME (Wal 07/11): clínica de volume ralo (típico em C/D) não entra em grupo de AÇÃO — senão um tranco de 1 semana num cliente pequeno vira "resgatar/oscila" e infla. Pouco volume → observar.
+  const vol12=(qtd||0), vol90=st?(st.tot||0):0;
+  const relevante = vol12>=150 || vol90>=36;   // ~12+/mês; abaixo disso o sinal é ruído estatístico
+  // 🔻 resgatar = parada DE VERDADE (sem envio 90d, ou gap muito acima do ritmo dela) OU queda FORTE e sustentada (7d) — só com volume que importa
+  // "caindo" só vale pra quem manda COM REGULARIDADE (gapMed curto); clínica de lote (gap grande) tem semana zerada por timing, não por queda → só entra em resgatar se estiver parada (overdue)
+  const regular = st && st.gapMed!=null && st.gapMed<=4;
+  const caiuForte = st && (st.drop7!=null && st.drop7>=0.5) && (st.tot||0)>=24 && relevante && regular;
+  if(!st && vol12>=150){ seg='resgatar'; motivo='sem envio há 90+ dias'; acao='ligar hoje — reativar'; }
+  else if(st && st.overdue && relevante){ seg='resgatar'; motivo=`parada ${st.daysSince}d`; acao='ligar hoje'; }
   else if(caiuForte){ seg='resgatar'; motivo=`caindo ${Math.round(st.drop7*100)}% (7d)`; acao='visita de retenção'; }
   else if(falta.length>=1 && grande && manda.length>=1){ seg='reparte'; motivo=`deixa ${esc(alvo||falta[0])} na mesa`; acao=`puxar ${esc(alvo||falta[0])}`; }
-  else if(cv!=null && cv>=0.45){ seg='oscila'; motivo=`oscila ±${Math.round(cv*100)}% mês a mês`; acao='estabilizar — ver o que varia'; }
+  else if(cv!=null && cv>=0.5 && relevante){ seg='oscila'; motivo=`oscila ±${Math.round(cv*100)}% mês a mês`; acao='estabilizar — ver o que varia'; }
   else if(cur && cur.pct!=null && cur.pct>=0.15){ seg='alta'; motivo=cur.novas.length?`+${Math.round(cur.pct*100)}% no mês · começou ${esc(cur.novas[0])}`:`+${Math.round(cur.pct*100)}% no mês`; acao='reforçar o mix'; }
   else if(!falta.length && manda.length){ seg='proteger'; motivo='manda tudo — redonda'; acao='manter/proteger'; }
   else { seg='observar'; motivo='estável'; acao='acompanhar'; }
   const urg={resgatar:5,reparte:4,oscila:3,alta:2,proteger:1,observar:0}[seg];
   return {seg, motivo, acao, score:urg*1e7+(qtd||0), qtd:(qtd||0)};
 }
+let gestorVerTudo=false;   // 🗓️ lista da semana: false = só as 6 prioridades; true = a lista inteira (o corte em 6 era CALADO)
+function setGestorVerTudo(v){ gestorVerTudo=!!v; if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function _gestorPainel(AA, segMap, ready){
   if(!AA||!AA.length) return "";
   const _box=(inner)=>`<div style="border:1px solid rgba(161,0,255,.32);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:linear-gradient(180deg,rgba(161,0,255,.08),rgba(6,16,26,.5))">${inner}</div>`;
@@ -1094,14 +1101,26 @@ function _gestorPainel(AA, segMap, ready){
   const order=['resgatar','reparte','oscila','alta','proteger','observar'];
   const chips=order.filter(k=>segd[k]).map(k=>{ const m=_SEG[k], on=(curvaSeg===k);
     return `<button onclick="setCurvaSeg('${k}')" title="${m.sub}" style="cursor:pointer;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:800;border:1px solid ${on?m.cor:'rgba(255,255,255,.16)'};background:${on?_hex2rgba(m.cor,.2):'transparent'};color:${m.cor}">${m.ic} ${m.nome} <b>${segd[k]}</b></button>`; }).join('');
-  const sem=rows.filter(r=>['resgatar','reparte','oscila','alta'].indexOf(r.s.seg)>=0).sort((x,y)=>y.s.score-x.s.score).slice(0,6);
+  // ⛔ 07/nov (Wal: "fala em 10 clínicas e só aparecem 6") — o `slice(0,6)` cortava a lista SEM AVISAR.
+  //    Medido no laboratório com dado real da curva A: chip "🔻 Resgatar 10" × 6 itens na lista, logo abaixo,
+  //    sem nenhum "e mais 4". E clicar no chip filtrava os CARDS (lá embaixo, fora da tela) sem mexer na lista
+  //    que ele estava olhando — daí "clico e não aparece nada". Os cards sempre bateram (10 chip → 10 cards).
+  //    Agora: grupo selecionado ⇒ a lista é SÓ dele e mostra TODOS; sem grupo ⇒ as 6 prioridades + "e mais N" clicável.
+  const sel = (curvaSeg && segd[curvaSeg]) ? curvaSeg : '';
+  const pool = (sel ? rows.filter(r=>r.s.seg===sel) : rows.filter(r=>['resgatar','reparte','oscila','alta'].indexOf(r.s.seg)>=0)).sort((x,y)=>y.s.score-x.s.score);
+  const TETO_SEM=6, _verTudo=(gestorVerTudo||!!sel);
+  const sem = _verTudo ? pool : pool.slice(0,TETO_SEM);
+  const faltam = pool.length - sem.length;
+  const maisBtn = faltam>0
+    ? `<div style="padding:8px 0 0"><button onclick="setGestorVerTudo(true)" style="cursor:pointer;border-radius:18px;padding:6px 14px;font-size:11.5px;font-weight:800;border:1px dashed rgba(215,196,255,.65);background:transparent;color:#d7c4ff">… e mais ${faltam} — ver todas as ${pool.length}</button></div>`
+    : ((gestorVerTudo && !sel && pool.length>TETO_SEM) ? `<div style="padding:8px 0 0"><button onclick="setGestorVerTudo(false)" style="cursor:pointer;border-radius:18px;padding:6px 14px;font-size:11.5px;font-weight:700;border:1px solid rgba(255,255,255,.18);background:transparent;color:#9fb2cc">▲ mostrar só as ${TETO_SEM} primeiras</button></div>` : '');
   const semHtml=sem.map((r,i)=>{ const m=_SEG[r.s.seg];
     return `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)"><span style="color:${m.cor};font-weight:900;font-size:12px;min-width:14px">${i+1}.</span><div style="flex:1;font-size:11.5px;line-height:1.5"><b style="color:#eaf3ff">${esc(r.a.nome)}</b> <span style="color:${m.cor};font-weight:800;white-space:nowrap">${m.ic} ${m.nome}</span> <span class="t-mut">· ${r.s.motivo}</span> <div style="color:#eadcff">👉 ${r.s.acao}</div></div></div>`; }).join('');
   const melhores=rows.filter(r=>r.s.seg==='proteger').sort((x,y)=>y.s.qtd-x.s.qtd).slice(0,3).map(r=>esc(r.a.nome));
   return `<div style="border:1px solid rgba(161,0,255,.32);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:linear-gradient(180deg,rgba(161,0,255,.08),rgba(6,16,26,.5))">
     <div style="font-size:12.5px;font-weight:900;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🎯 Direção da semana <span class="t-mut" style="font-weight:600;text-transform:none">· clique num grupo p/ filtrar os cards</span></div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin:9px 0 4px">${chips}${curvaSeg?`<button onclick="setCurvaSeg('')" style="cursor:pointer;border-radius:20px;padding:6px 11px;font-size:12px;border:1px solid var(--mut);background:transparent;color:var(--mut)">✕ limpar</button>`:''}</div>
-    <div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🗓️ Trabalhar esta semana <span class="t-mut" style="font-weight:600;text-transform:none">· priorizado por impacto</span></div>${semHtml||'<div class="t-mut" style="font-size:11.5px;padding:6px 0">Nada urgente nesta curva — carteira saudável. 🎉</div>'}</div>
+    <div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🗓️ Trabalhar esta semana <span class="t-mut" style="font-weight:600;text-transform:none">· ${sel?`${_SEG[sel].ic} ${_SEG[sel].nome} · todas as ${pool.length}`:`as ${sem.length} de ${pool.length}, por impacto`}</span></div>${semHtml||'<div class="t-mut" style="font-size:11.5px;padding:6px 0">Nada urgente nesta curva — carteira saudável. 🎉</div>'}${maisBtn}</div>
     ${melhores.length?`<div class="t-mut" style="font-size:10.5px;margin-top:9px;border-top:1px solid rgba(255,255,255,.06);padding-top:7px">⭐ Melhores (proteja): <b style="color:#aef5d6">${melhores.join(' · ')}</b></div>`:''}
   </div>`;
 }
@@ -5188,7 +5207,7 @@ function renderTab(){
       // quando um grupo está filtrado, o TOPO inteiro (resumo + ranking) reflete só ele — senão a tabela cheia de 40 mascarava o filtro
       const viewAA = (curvaSeg && segReady) ? AA.filter(a=>a.cod && segMap[String(a.cod)] && segMap[String(a.cod)].seg===curvaSeg) : AA;
       const _segM = curvaSeg ? _SEG[curvaSeg] : null;
-      const segBanner = (curvaSeg && _segM) ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid ${_segM.cor};border-radius:11px;padding:9px 13px;margin:0 0 12px;background:${_hex2rgba(_segM.cor,.12)}"><span style="font-size:13px;font-weight:900;color:${_segM.cor}">${_segM.ic} ${_segM.nome}</span><span class="t-mut" style="font-size:12px">· ${viewAA.length} clínica(s) · ${esc(_segM.sub)}</span><button onclick="setCurvaSeg('')" style="margin-left:auto;cursor:pointer;border-radius:18px;padding:5px 13px;font-size:12px;font-weight:800;border:1px solid var(--mut);background:transparent;color:var(--mut)">✕ ver todas</button></div>` : "";
+      const segBanner = (curvaSeg && _segM) ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid ${_segM.cor};border-radius:11px;padding:9px 13px;margin:0 0 12px;background:${_hex2rgba(_segM.cor,.12)}"><span style="font-size:13px;font-weight:900;color:${_segM.cor}">${_segM.ic} ${_segM.nome}</span><span class="t-mut" style="font-size:12px">· ${viewAA.length} clínica(s) · ${esc(_segM.sub)}</span><button onclick="setCurvaSeg('')" style="margin-left:auto;cursor:pointer;border-radius:18px;padding:5px 13px;font-size:12px;font-weight:800;border:1px solid var(--mut);background:transparent;color:var(--mut)">✕ limpar filtro · ver as ${AA.length}</button></div>` : "";
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
       const comMesa=AA.filter(a=>(a.falta||[]).length).length, cheios=AA.length-comMesa;
       if(CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }   // card novo mostra exames recentes → carrega o detalhe HF
