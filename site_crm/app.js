@@ -1071,7 +1071,11 @@ function _clinSegment(cod, qtd){
   const grande=(t==='A'||t==='B'||(qtd||0)>=1200), cv=_clinCV(cod);
   const alvo=falta.slice().sort((a,b)=>(CV[b]||0)-(CV[a]||0))[0]||null;
   let seg,motivo,acao;
-  if(st && (st.overdue||st.caindo)){ seg='resgatar'; motivo=st.overdue?`parada ${st.daysSince}d`:`caindo ${Math.round(Math.max(st.drop7||0,st.drop3||0)*100)}%`; acao=st.overdue?'ligar hoje':'visita de retenção'; }
+  // 🔻 resgatar = parada DE VERDADE (sem envio 90d, ou gap muito acima do ritmo dela) OU queda FORTE e sustentada (7d), com volume que importa — calibrado p/ não inflar
+  const caiuForte = st && (st.drop7!=null && st.drop7>=0.5) && (st.tot||0)>=12;
+  if(!st){ seg='resgatar'; motivo='sem envio há 90+ dias'; acao='ligar hoje — reativar'; }
+  else if(st.overdue){ seg='resgatar'; motivo=`parada ${st.daysSince}d`; acao='ligar hoje'; }
+  else if(caiuForte){ seg='resgatar'; motivo=`caindo ${Math.round(st.drop7*100)}% (7d)`; acao='visita de retenção'; }
   else if(falta.length>=1 && grande && manda.length>=1){ seg='reparte'; motivo=`deixa ${esc(alvo||falta[0])} na mesa`; acao=`puxar ${esc(alvo||falta[0])}`; }
   else if(cv!=null && cv>=0.45){ seg='oscila'; motivo=`oscila ±${Math.round(cv*100)}% mês a mês`; acao='estabilizar — ver o que varia'; }
   else if(cur && (cur.novas.length || (cur.pct!=null&&cur.pct>=0.15))){ seg='alta'; motivo=cur.novas.length?`começou ${esc(cur.novas[0])}`:`+${Math.round(cur.pct*100)}% no mês`; acao='reforçar o mix'; }
@@ -1080,9 +1084,12 @@ function _clinSegment(cod, qtd){
   const urg={resgatar:5,reparte:4,oscila:3,alta:2,proteger:1,observar:0}[seg];
   return {seg, motivo, acao, score:urg*1e7+(qtd||0), qtd:(qtd||0)};
 }
-function _gestorPainel(AA){
+function _gestorPainel(AA, segMap, ready){
   if(!AA||!AA.length) return "";
-  const rows=AA.map(a=>({a, s:_clinSegment(String(a.cod), a.qtd||0)})), segd={};
+  const _box=(inner)=>`<div style="border:1px solid rgba(161,0,255,.32);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:linear-gradient(180deg,rgba(161,0,255,.08),rgba(6,16,26,.5))">${inner}</div>`;
+  if(!ready) return _box(`<div style="font-size:12.5px;font-weight:900;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🎯 Direção da semana</div><div class="t-mut" style="font-size:12px;margin-top:8px">⏳ Lendo a carteira (ritmo, categorias e share)…</div>`);
+  // conta E filtra pelo MESMO mapa (segMap) — nunca mais diverge contagem × cards
+  const rows=AA.filter(a=>a.cod&&segMap[String(a.cod)]).map(a=>({a, s:segMap[String(a.cod)]})), segd={};
   rows.forEach(r=>segd[r.s.seg]=(segd[r.s.seg]||0)+1);
   const order=['resgatar','reparte','oscila','alta','proteger','observar'];
   const chips=order.filter(k=>segd[k]).map(k=>{ const m=_SEG[k], on=(curvaSeg===k);
@@ -5169,7 +5176,15 @@ function renderTab(){
       let aarr=q2?AA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AA.slice();
       if(sowFilter==="cheio") aarr=aarr.filter(a=>!(a.falta||[]).length);
       else if(sowFilter==="buraco") aarr=aarr.filter(a=>(a.falta||[]).length);
-      if(curvaSeg) aarr=aarr.filter(a=>_clinSegment(String(a.cod), a.qtd||0).seg===curvaSeg);   // 🎯 filtro do Painel do Gestor
+      // 🎯 Painel do Gestor: os dados da classificação carregam em etapas → garanto que chegaram ANTES de mostrar/filtrar (senão contagem × cards divergiam)
+      if(CLIN_DIA===null) loadDia().then(()=>{ if(ACTIVE==="clinicas") renderTab(); });
+      if(CRM_CATMES===null && !CRM_CATMES_LOADING) loadCatMes().then(()=>{ if(ACTIVE==="clinicas") renderTab(); });
+      if(!CLIN_DET || !Object.keys(CLIN_DET).length) loadDet().then(()=>{ if(ACTIVE==="clinicas") renderTab(); });
+      const segReady = (CLIN_DIA!==null) && (CRM_CATMES!==null) && !!(CLIN_DET&&Object.keys(CLIN_DET).length) && !!(AAA&&AAA.length);
+      if(!segReady) curvaSeg="";   // não deixa filtro ativo com dado incompleto (evitava "clico e some tudo")
+      const segMap={};             // classifica UMA vez; painel e filtro usam o MESMO mapa
+      if(segReady) AA.forEach(a=>{ if(a.cod) segMap[String(a.cod)]=_clinSegment(String(a.cod), a.qtd||0); });
+      if(curvaSeg) aarr=aarr.filter(a=>a.cod && segMap[String(a.cod)] && segMap[String(a.cod)].seg===curvaSeg);
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
       const comMesa=AA.filter(a=>(a.falta||[]).length).length, cheios=AA.length-comMesa;
       if(CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }   // card novo mostra exames recentes → carrega o detalhe HF
@@ -5193,7 +5208,7 @@ function renderTab(){
           <div class="mid"></div></div>`; };
       c.innerHTML=`${_LUPA_KF}${subtabsClin}
         <div class="proxhint" style="border-color:${meta.bord};color:${meta.cor};margin-bottom:10px;line-height:1.55">${meta.ic} <b>${meta.nome}</b> — ${meta.desc}. Trazidas <b>automaticamente</b> pelo robô (curva ABC), ranqueadas por faturamento. Mesma inteligência das Reconquistadas/Novas: <b>análise de 12 meses</b> do que manda × <b>o que deixa na mesa</b> (vermelho = indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
-        ${_gestorPainel(AA)}
+        ${_gestorPainel(AA, segMap, segReady)}
         <div class="kgrid">
           ${kpi("g", AA.length, meta.nome, "curva "+curva+" · 12m")}
           ${kpi(comMesa?"a":"", comMesa, "Deixando na mesa", "classes indo pro concorrente")}
