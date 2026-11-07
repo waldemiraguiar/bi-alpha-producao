@@ -1078,12 +1078,12 @@ function _clinSegment(cod, qtd){
   // "caindo" só vale pra quem manda COM REGULARIDADE (gapMed curto); clínica de lote (gap grande) tem semana zerada por timing, não por queda → só entra em resgatar se estiver parada (overdue)
   const regular = st && st.gapMed!=null && st.gapMed<=4;
   const caiuForte = st && (st.drop7!=null && st.drop7>=0.5) && (st.tot||0)>=24 && relevante && regular;
-  if(!st && vol12>=150){ seg='resgatar'; motivo='sem envio há 90+ dias'; acao='ligar hoje — reativar'; }
+  if(!st && vol12>=150){ seg='resgatar'; motivo='sem envio há 90+ dias'; acao='reativar'; }
   else if(st && st.overdue && relevante){ seg='resgatar'; motivo=`parada ${st.daysSince}d`; acao='ligar hoje'; }
-  else if(caiuForte){ seg='resgatar'; motivo=`caindo ${Math.round(st.drop7*100)}% (7d)`; acao='visita de retenção'; }
-  else if(falta.length>=1 && grande && manda.length>=1){ seg='reparte'; motivo=`deixa ${esc(alvo||falta[0])} na mesa`; acao=`puxar ${esc(alvo||falta[0])}`; }
-  else if(cv!=null && cv>=0.5 && relevante){ seg='oscila'; motivo=`oscila ±${Math.round(cv*100)}% mês a mês`; acao='estabilizar — ver o que varia'; }
-  else if(cur && cur.pct!=null && cur.pct>=0.15){ seg='alta'; motivo=cur.novas.length?`+${Math.round(cur.pct*100)}% no mês · começou ${esc(cur.novas[0])}`:`+${Math.round(cur.pct*100)}% no mês`; acao='reforçar o mix'; }
+  else if(caiuForte){ seg='resgatar'; motivo=`caindo ${Math.round(st.drop7*100)}% (7d)`; acao='visitar'; }
+  else if(falta.length>=1 && grande && manda.length>=1){ seg='reparte'; motivo=`deixa ${esc(alvo||falta[0])} na mesa`; acao='puxar'; }
+  else if(cv!=null && cv>=0.5 && relevante){ seg='oscila'; motivo=`oscila ±${Math.round(cv*100)}% mês`; acao='estabilizar'; }
+  else if(cur && cur.pct!=null && cur.pct>=0.15){ seg='alta'; motivo=cur.novas.length?`+${Math.round(cur.pct*100)}% · começou ${esc(cur.novas[0])}`:`+${Math.round(cur.pct*100)}% no mês`; acao='reforçar'; }
   else if(!falta.length && manda.length){ seg='proteger'; motivo='manda tudo — redonda'; acao='manter/proteger'; }
   else { seg='observar'; motivo='estável'; acao='acompanhar'; }
   const urg={resgatar:5,reparte:4,oscila:3,alta:2,proteger:1,observar:0}[seg];
@@ -1099,8 +1099,11 @@ function _gestorPainel(AA, segMap, ready){
   const rows=AA.filter(a=>a.cod&&segMap[String(a.cod)]).map(a=>({a, s:segMap[String(a.cod)]})), segd={};
   rows.forEach(r=>segd[r.s.seg]=(segd[r.s.seg]||0)+1);
   const order=['resgatar','reparte','oscila','alta','proteger','observar'];
+  // 🎛️ TILES (placar): cada grupo é um bloco com NÚMERO grande + ícone/nome, borda-topo na cor, clicável (selecionado brilha)
   const chips=order.filter(k=>segd[k]).map(k=>{ const m=_SEG[k], on=(curvaSeg===k);
-    return `<button onclick="setCurvaSeg('${k}')" title="${m.sub}" style="cursor:pointer;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:800;border:1px solid ${on?m.cor:'rgba(255,255,255,.16)'};background:${on?_hex2rgba(m.cor,.2):'transparent'};color:${m.cor}">${m.ic} ${m.nome} <b>${segd[k]}</b></button>`; }).join('');
+    return `<button onclick="setCurvaSeg('${k}')" title="${m.sub}" style="flex:0 0 auto;min-width:72px;cursor:pointer;text-align:left;border:1px solid ${on?m.cor:'rgba(255,255,255,.1)'};border-top:3px solid ${m.cor};border-radius:11px;padding:7px 10px 8px;background:${on?_hex2rgba(m.cor,.16):'rgba(255,255,255,.025)'};box-shadow:${on?`0 0 0 1px ${m.cor}, 0 4px 14px ${_hex2rgba(m.cor,.3)}`:'none'};transition:all .12s">
+      <div style="font-size:23px;font-weight:900;color:${m.cor};line-height:1">${segd[k]}</div>
+      <div style="font-size:10.5px;font-weight:800;color:${m.cor};margin-top:3px;white-space:nowrap">${m.ic} ${m.nome}</div></button>`; }).join('');
   // ⛔ 07/nov (Wal: "fala em 10 clínicas e só aparecem 6") — o `slice(0,6)` cortava a lista SEM AVISAR.
   //    Medido no laboratório com dado real da curva A: chip "🔻 Resgatar 10" × 6 itens na lista, logo abaixo,
   //    sem nenhum "e mais 4". E clicar no chip filtrava os CARDS (lá embaixo, fora da tela) sem mexer na lista
@@ -1114,14 +1117,18 @@ function _gestorPainel(AA, segMap, ready){
   const maisBtn = faltam>0
     ? `<div style="padding:8px 0 0"><button onclick="setGestorVerTudo(true)" style="cursor:pointer;border-radius:18px;padding:6px 14px;font-size:11.5px;font-weight:800;border:1px dashed rgba(215,196,255,.65);background:transparent;color:#d7c4ff">… e mais ${faltam} — ver todas as ${pool.length}</button></div>`
     : ((gestorVerTudo && !sel && pool.length>TETO_SEM) ? `<div style="padding:8px 0 0"><button onclick="setGestorVerTudo(false)" style="cursor:pointer;border-radius:18px;padding:6px 14px;font-size:11.5px;font-weight:700;border:1px solid rgba(255,255,255,.18);background:transparent;color:#9fb2cc">▲ mostrar só as ${TETO_SEM} primeiras</button></div>` : '');
+  // 🗂️ LISTA = cartõezinhos: medalha colorida + nome + (grupo · motivo) + pílula de AÇÃO destacada na cor do grupo
   const semHtml=sem.map((r,i)=>{ const m=_SEG[r.s.seg];
-    return `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)"><span style="color:${m.cor};font-weight:900;font-size:12px;min-width:14px">${i+1}.</span><div style="flex:1;font-size:11.5px;line-height:1.5"><b style="color:#eaf3ff">${esc(r.a.nome)}</b> <span style="color:${m.cor};font-weight:800;white-space:nowrap">${m.ic} ${m.nome}</span> <span class="t-mut">· ${r.s.motivo}</span> <div style="color:#eadcff">👉 ${r.s.acao}</div></div></div>`; }).join('');
+    return `<div style="background:${_hex2rgba(m.cor,.07)};border:1px solid ${_hex2rgba(m.cor,.22)};border-left:3px solid ${m.cor};border-radius:10px;padding:8px 10px;margin-top:7px">
+      <div style="display:flex;align-items:center;gap:9px"><div style="flex:0 0 auto;width:21px;height:21px;border-radius:50%;background:${m.cor};color:#06121c;font-weight:900;font-size:11.5px;display:flex;align-items:center;justify-content:center">${i+1}</div><div style="flex:1;min-width:0;font-size:13px;font-weight:800;color:#eaf3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.a.nome)}</div></div>
+      <div style="display:flex;align-items:center;gap:7px;margin:5px 0 0 30px"><span style="flex:0 0 auto;font-size:10px;font-weight:800;color:${m.cor};background:${_hex2rgba(m.cor,.13)};border-radius:11px;padding:2px 8px;white-space:nowrap">${m.ic} ${m.nome}</span><span class="t-mut" style="flex:1;min-width:0;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.s.motivo}</span><span style="flex:0 0 auto;max-width:44%;font-size:10.5px;font-weight:800;color:${m.cor};background:${_hex2rgba(m.cor,.14)};border:1px solid ${_hex2rgba(m.cor,.4)};border-radius:13px;padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">👉 ${r.s.acao}</span></div></div>`; }).join('');
   const melhores=rows.filter(r=>r.s.seg==='proteger').sort((x,y)=>y.s.qtd-x.s.qtd).slice(0,3).map(r=>esc(r.a.nome));
-  return `<div style="border:1px solid rgba(161,0,255,.32);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:linear-gradient(180deg,rgba(161,0,255,.08),rgba(6,16,26,.5))">
-    <div style="font-size:12.5px;font-weight:900;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🎯 Direção da semana <span class="t-mut" style="font-weight:600;text-transform:none">· clique num grupo p/ filtrar os cards</span></div>
-    <div style="display:flex;gap:7px;flex-wrap:wrap;margin:9px 0 4px">${chips}${curvaSeg?`<button onclick="setCurvaSeg('')" style="cursor:pointer;border-radius:20px;padding:6px 11px;font-size:12px;border:1px solid var(--mut);background:transparent;color:var(--mut)">✕ limpar</button>`:''}</div>
-    <div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🗓️ Trabalhar esta semana <span class="t-mut" style="font-weight:600;text-transform:none">· ${sel?`${_SEG[sel].ic} ${_SEG[sel].nome} · ${pool.length===1?'1 clínica':`todas as ${pool.length}`}`:`as ${sem.length} de ${pool.length}, por impacto`}</span></div>${semHtml||'<div class="t-mut" style="font-size:11.5px;padding:6px 0">Nada urgente nesta curva — carteira saudável. 🎉</div>'}${maisBtn}</div>
-    ${melhores.length?`<div class="t-mut" style="font-size:10.5px;margin-top:9px;border-top:1px solid rgba(255,255,255,.06);padding-top:7px">⭐ Melhores (proteja): <b style="color:#aef5d6">${melhores.join(' · ')}</b></div>`:''}
+  const pm=_SEG.proteger;
+  return `<div style="border:1px solid rgba(161,0,255,.32);border-radius:14px;padding:13px 14px;margin:0 0 14px;background:linear-gradient(165deg,rgba(161,0,255,.13),rgba(6,16,26,.55))">
+    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:14px;font-weight:900;color:#eadcff;letter-spacing:.2px">🎯 Direção da semana</span><span class="t-mut" style="font-size:11px">toque num grupo pra focar nele</span>${curvaSeg?`<button onclick="setCurvaSeg('')" style="margin-left:auto;cursor:pointer;border-radius:16px;padding:4px 11px;font-size:11px;font-weight:700;border:1px solid var(--mut);background:transparent;color:var(--mut)">✕ limpar</button>`:''}</div>
+    <div style="display:flex;gap:7px;overflow-x:auto;padding:1px 0 5px;-webkit-overflow-scrolling:touch;scrollbar-width:none">${chips}</div>
+    <div style="margin-top:10px"><div style="font-size:11px;font-weight:900;color:#d7c4ff;text-transform:uppercase;letter-spacing:.4px">🗓️ Trabalhar esta semana <span class="t-mut" style="font-weight:600;text-transform:none;letter-spacing:0">· ${sel?`${_SEG[sel].ic} ${_SEG[sel].nome} · ${pool.length===1?'1 clínica':`todas as ${pool.length}`}`:`as ${sem.length} de ${pool.length}, por impacto`}</span></div>${semHtml||'<div class="t-mut" style="font-size:11.5px;padding:8px 0">Nada urgente nesta curva — carteira saudável. 🎉</div>'}${maisBtn}</div>
+    ${melhores.length?`<div style="margin-top:11px;border-top:1px solid rgba(255,255,255,.08);padding-top:9px"><span style="font-size:10.5px;font-weight:800;color:#aef5d6;text-transform:uppercase;letter-spacing:.3px">⭐ Melhores — proteja</span><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${melhores.map(n=>`<span style="font-size:11px;font-weight:700;color:#aef5d6;background:${_hex2rgba(pm.cor,.1)};border:1px solid ${_hex2rgba(pm.cor,.32)};border-radius:13px;padding:3px 10px">🛡️ ${n}</span>`).join('')}</div></div>`:''}
   </div>`;
 }
 // 📋 TABELA-RESUMO no topo da aba Clínicas A/B/C/D — clínicas da curva (maior→menor faturamento), mês a mês, % vs mês anterior.
