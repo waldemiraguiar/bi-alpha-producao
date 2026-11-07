@@ -1048,6 +1048,56 @@ function _cardInsight(cod){
     <div style="margin-top:7px;background:rgba(161,0,255,.1);border:1px solid rgba(161,0,255,.42);border-radius:9px;padding:7px 10px;font-size:11.5px;color:#eadcff;line-height:1.5">👉 <b>Sugestão:</b> ${sug}</div>
   </div>`;
 }
+// 🎯 PAINEL DO GESTOR — segmenta a curva em grupos ACIONÁVEIS + prioridade da semana (determinístico, R$0). Wal 06/11: "enxugar, saber o que trabalhar".
+const _SEG={
+  resgatar:{ic:'🔻',cor:'#ff6b81',nome:'Resgatar',sub:'caindo/parada'},
+  reparte:{ic:'💰',cor:'#ffd27a',nome:'Reparte',sub:'deixa valor na mesa'},
+  oscila:{ic:'📊',cor:'#9fb0ff',nome:'Oscila',sub:'volume instável'},
+  alta:{ic:'📈',cor:'#7effcf',nome:'Em alta',sub:'classe nova/crescendo'},
+  proteger:{ic:'🛡️',cor:'#00E5A0',nome:'Proteger',sub:'fiel e redonda'},
+  observar:{ic:'👀',cor:'#9fb2cc',nome:'Observar',sub:'estável'}
+};
+function _clinCV(cod){   // coeficiente de variação do volume mensal (fechados) → "oscila"
+  const S=(CLIN_EXMES&&CLIN_EXMES[String(cod)])||null; if(!S||S.length<4) return null;
+  const _now=new Date(), curYm=_now.getFullYear()+"-"+String(_now.getMonth()+1).padStart(2,"0");
+  const vals=S.filter(m=>m.ym!==curYm).map(m=>m.n||0).slice(-6); if(vals.length<3) return null;
+  const mean=vals.reduce((a,b)=>a+b,0)/vals.length; if(mean<=0) return null;
+  const sd=Math.sqrt(vals.reduce((a,b)=>a+(b-mean)*(b-mean),0)/vals.length); return sd/mean;
+}
+function _clinSegment(cod, qtd){
+  const st=_hfStats(cod), sw=_sowDataDe(cod), cur=_catCur(cod);
+  const falta=(sw&&sw.falta)||[], manda=(sw&&sw.cats)||[];
+  const CV=(typeof CLIN_CATVAL!=="undefined"&&CLIN_CATVAL)||{}, t=tierDe(cod);
+  const grande=(t==='A'||t==='B'||(qtd||0)>=1200), cv=_clinCV(cod);
+  const alvo=falta.slice().sort((a,b)=>(CV[b]||0)-(CV[a]||0))[0]||null;
+  let seg,motivo,acao;
+  if(st && (st.overdue||st.caindo)){ seg='resgatar'; motivo=st.overdue?`parada ${st.daysSince}d`:`caindo ${Math.round(Math.max(st.drop7||0,st.drop3||0)*100)}%`; acao=st.overdue?'ligar hoje':'visita de retenção'; }
+  else if(falta.length>=1 && grande && manda.length>=1){ seg='reparte'; motivo=`deixa ${esc(alvo||falta[0])} na mesa`; acao=`puxar ${esc(alvo||falta[0])}`; }
+  else if(cv!=null && cv>=0.45){ seg='oscila'; motivo=`oscila ±${Math.round(cv*100)}% mês a mês`; acao='estabilizar — ver o que varia'; }
+  else if(cur && (cur.novas.length || (cur.pct!=null&&cur.pct>=0.15))){ seg='alta'; motivo=cur.novas.length?`começou ${esc(cur.novas[0])}`:`+${Math.round(cur.pct*100)}% no mês`; acao='reforçar o mix'; }
+  else if(!falta.length && manda.length){ seg='proteger'; motivo='manda tudo — redonda'; acao='manter/proteger'; }
+  else { seg='observar'; motivo='estável'; acao='acompanhar'; }
+  const urg={resgatar:5,reparte:4,oscila:3,alta:2,proteger:1,observar:0}[seg];
+  return {seg, motivo, acao, score:urg*1e7+(qtd||0), qtd:(qtd||0)};
+}
+function _gestorPainel(AA){
+  if(!AA||!AA.length) return "";
+  const rows=AA.map(a=>({a, s:_clinSegment(String(a.cod), a.qtd||0)})), segd={};
+  rows.forEach(r=>segd[r.s.seg]=(segd[r.s.seg]||0)+1);
+  const order=['resgatar','reparte','oscila','alta','proteger','observar'];
+  const chips=order.filter(k=>segd[k]).map(k=>{ const m=_SEG[k], on=(curvaSeg===k);
+    return `<button onclick="setCurvaSeg('${k}')" title="${m.sub}" style="cursor:pointer;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:800;border:1px solid ${on?m.cor:'rgba(255,255,255,.16)'};background:${on?_hex2rgba(m.cor,.2):'transparent'};color:${m.cor}">${m.ic} ${m.nome} <b>${segd[k]}</b></button>`; }).join('');
+  const sem=rows.filter(r=>['resgatar','reparte','oscila','alta'].indexOf(r.s.seg)>=0).sort((x,y)=>y.s.score-x.s.score).slice(0,6);
+  const semHtml=sem.map((r,i)=>{ const m=_SEG[r.s.seg];
+    return `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)"><span style="color:${m.cor};font-weight:900;font-size:12px;min-width:14px">${i+1}.</span><div style="flex:1;font-size:11.5px;line-height:1.5"><b style="color:#eaf3ff">${esc(r.a.nome)}</b> <span style="color:${m.cor};font-weight:800;white-space:nowrap">${m.ic} ${m.nome}</span> <span class="t-mut">· ${r.s.motivo}</span> <div style="color:#eadcff">👉 ${r.s.acao}</div></div></div>`; }).join('');
+  const melhores=rows.filter(r=>r.s.seg==='proteger').sort((x,y)=>y.s.qtd-x.s.qtd).slice(0,3).map(r=>esc(r.a.nome));
+  return `<div style="border:1px solid rgba(161,0,255,.32);border-radius:13px;padding:12px 14px;margin:0 0 14px;background:linear-gradient(180deg,rgba(161,0,255,.08),rgba(6,16,26,.5))">
+    <div style="font-size:12.5px;font-weight:900;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🎯 Direção da semana <span class="t-mut" style="font-weight:600;text-transform:none">· clique num grupo p/ filtrar os cards</span></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin:9px 0 4px">${chips}${curvaSeg?`<button onclick="setCurvaSeg('')" style="cursor:pointer;border-radius:20px;padding:6px 11px;font-size:12px;border:1px solid var(--mut);background:transparent;color:var(--mut)">✕ limpar</button>`:''}</div>
+    <div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:#d7c4ff;text-transform:uppercase;letter-spacing:.3px">🗓️ Trabalhar esta semana <span class="t-mut" style="font-weight:600;text-transform:none">· priorizado por impacto</span></div>${semHtml||'<div class="t-mut" style="font-size:11.5px;padding:6px 0">Nada urgente nesta curva — carteira saudável. 🎉</div>'}</div>
+    ${melhores.length?`<div class="t-mut" style="font-size:10.5px;margin-top:9px;border-top:1px solid rgba(255,255,255,.06);padding-top:7px">⭐ Melhores (proteja): <b style="color:#aef5d6">${melhores.join(' · ')}</b></div>`:''}
+  </div>`;
+}
 // 📋 TABELA-RESUMO no topo da aba Clínicas A/B/C/D — clínicas da curva (maior→menor faturamento), mês a mês, % vs mês anterior.
 // metric 'rs' = R$ (só diretoria, de CLIN_FATMESALL) · 'ex' = nº de exames (todos, de CLIN_EXMES público). Mês atual (parcial) compara a MESMA janela de dias (fd×fd / nd×nd). Wal 03/11.
 function _curvaResumoTbl(AA){
@@ -1774,6 +1824,8 @@ let safraOrd="rs";   // ordem da tabela Monitoramento: "rs" = maior faturamento 
 function safraSetOrd(v){ safraOrd=(v==="queda"?"queda":"rs"); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 let curvaMetric="rs";   // tabela-resumo no topo da aba Clínicas A/B/C/D: "rs"=faturamento (diretoria) · "ex"=nº de exames (todos)
 function setCurvaMetric(m){ curvaMetric=(m==="ex"?"ex":"rs"); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
+let curvaSeg="";   // 🎯 filtro do Painel do Gestor: segmento acionável selecionado (resgatar/reparte/oscila/alta/proteger/observar)
+function setCurvaSeg(s){ curvaSeg=(curvaSeg===s?"":s); if(typeof ACTIVE!=="undefined"&&ACTIVE==="clinicas") renderTab(); }
 function comJanela(){
   if(comDe||comAte){ const ini=comDe?new Date(comDe+"T00:00:00").getTime():0; const fim=comAte?new Date(comAte+"T23:59:59").getTime():Date.now(); return {ini,fim,label:"período escolhido"}; }
   const d=new Date(), d0=new Date(d); d0.setHours(0,0,0,0); const now=Date.now();
@@ -5117,6 +5169,7 @@ function renderTab(){
       let aarr=q2?AA.filter(a=>((a.nome||"")+" "+(a.cidade||"")).toLowerCase().includes(q2)):AA.slice();
       if(sowFilter==="cheio") aarr=aarr.filter(a=>!(a.falta||[]).length);
       else if(sowFilter==="buraco") aarr=aarr.filter(a=>(a.falta||[]).length);
+      if(curvaSeg) aarr=aarr.filter(a=>_clinSegment(String(a.cod), a.qtd||0).seg===curvaSeg);   // 🎯 filtro do Painel do Gestor
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
       const comMesa=AA.filter(a=>(a.falta||[]).length).length, cheios=AA.length-comMesa;
       if(CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }   // card novo mostra exames recentes → carrega o detalhe HF
@@ -5140,6 +5193,7 @@ function renderTab(){
           <div class="mid"></div></div>`; };
       c.innerHTML=`${_LUPA_KF}${subtabsClin}
         <div class="proxhint" style="border-color:${meta.bord};color:${meta.cor};margin-bottom:10px;line-height:1.55">${meta.ic} <b>${meta.nome}</b> — ${meta.desc}. Trazidas <b>automaticamente</b> pelo robô (curva ABC), ranqueadas por faturamento. Mesma inteligência das Reconquistadas/Novas: <b>análise de 12 meses</b> do que manda × <b>o que deixa na mesa</b> (vermelho = indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
+        ${_gestorPainel(AA)}
         <div class="kgrid">
           ${kpi("g", AA.length, meta.nome, "curva "+curva+" · 12m")}
           ${kpi(comMesa?"a":"", comMesa, "Deixando na mesa", "classes indo pro concorrente")}
@@ -5158,7 +5212,7 @@ function renderTab(){
         </div>
         <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${meta.ic} Ranking ${meta.nome}${sowFilter?` · ${sowFilter==='cheio'?'✅ SoW cheio':'🎯 com buraco'} (${aarr.length})`:''}</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
         ${AA.length?(aarr.length?aarr.map(a=>a.cod?_hfCard(String(a.cod), hfPins().includes(String(a.cod)), _aaaSowBlock(a, AA.indexOf(a)+1)):acard(a, AA.indexOf(a))).join(""):`<div class="empty">${sowFilter?`Nenhuma clínica ${sowFilter==='cheio'?'com share-of-wallet cheio':'com buraco'}${q2?' para essa busca':''} nesta curva.`:`Nada encontrado para "${esc(search)}".`}</div>`):`<div class="empty">⏳ As clínicas ${meta.nome} chegam quando o robô sincronizar (traz por faturamento 12m automaticamente).</div>`}`;
-      document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; renderTab(); });
+      document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; curvaSeg=""; renderTab(); });
       document.querySelectorAll("#content [data-sow]").forEach(el=>el.onclick=()=>{ sowFilter=el.dataset.sow; renderTab(); });
       const rb=document.getElementById("relSoW"); if(rb) rb.onclick=()=>relatorioSoW(curva);
       document.querySelectorAll("#content [data-mesames]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openMesAMes(el.dataset.mesames, el.dataset.mnome); });
