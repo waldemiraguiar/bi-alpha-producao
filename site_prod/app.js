@@ -39,7 +39,7 @@ function _rascFolha(reg, mode){
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
-    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${exTerceirizado(i)?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${(exTerceirizado(i)&&its.some(x=>!exTerceirizado(x)))?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
     <div class="sec">PCR</div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div></div>
     <div class="qtd"><b>Qtd. de exames:</b> <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> &nbsp;&nbsp;·&nbsp;&nbsp; <b>Qtd. de amostras:</b> <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u></div>
@@ -93,7 +93,7 @@ function imprimirLotePCR(){
   // todo MOLECULAR/PCR, inclusive os não-terceirizados. O botão por-card (imprimirRascunhoPCR) segue avulso.
   // Dudu 06/11: o lote traz SÓ os PENDENTES de baixa (exclui quem já teve baixa) — não reimprimir o que já saiu.
   // Lote = folha do TERCEIRIZADO → modo 'terc' (cabeçalho VETLAB, só os exames terceirizados).
-  const regs=[...new Set(_rascItens().filter(i=>/MOLECULAR/i.test(i.cat||'')&&exTerceirizado(i)&&!exBaixado(i)).map(i=>String(i.req)))];
+  const regs=[...new Set(_rascItens().filter(i=>/MOLECULAR/i.test(i.cat||'')&&exTerceirizado(i)&&!exBaixado(i)&&!rascImpressoMap[String(i.req)]).map(i=>String(i.req)))];
   _rascImprimir(regs, _rascFolha, 'Rascunho PCR', 'terc'); _rascMarcarImpresso(regs);
 }
 /* ===== 🧫 RASCUNHO DE CULTURA (Dudu 04/11): Bacteriologia-cultura + Parasitologia, modelo do farejador ===== */
@@ -119,13 +119,14 @@ function _cultClassificar(items){
   }
   return out;
 }
-function _rascCultBloco(c,i,mode){
+function _rascCultBloco(c,i,mode,temInterno){
   const am=c.amostra||'____________';
   const ehUrina=/urina/i.test(c.amostra||'');
   // Dudu 06/11: coleta ganha '( ) não informado'; urina ganha 'Quantidade de bactéria'; Antibiograma sim/não saiu (já está no nome do exame)
   const coleta=ehUrina?`<div class="cl2">Coleta: ( ) cistocentese &nbsp; ( ) sonda &nbsp; ( ) espontânea &nbsp; ( ) não informado</div><div class="cl2"><b>Quantidade de bactéria:</b> <span class="esc"></span> <span class="unit">UFC/mL</span></div>`:'';
   // Dudu 06/11: '▶ separar para terceirizar' sai SEMPRE que o exame é terceirizado (em qualquer aba) — hemocultura feita aqui não leva
-  const tercline=c.terc?`<div class="cl2"><span class="tercflag">▶ separar para terceirizar</span></div>`:'';
+  // Dudu+Fúlvio 06/11: '▶ separar para terceirizar' SÓ quando o terceirizado vem junto de um exame interno (mesma amostra) — não em terceirizado sozinho
+  const tercline=(c.terc&&temInterno)?`<div class="cl2"><span class="tercflag">▶ separar para terceirizar</span></div>`:'';
   return `<div class="cult"><div class="cultt"><b>${i+1}) ${esc(c.label)}</b></div>
     <div class="clam"><b>Amostra:</b> ${esc(am)}</div>
     ${coleta}${tercline}<div class="cl2"><b>Resultado / crescimento:</b></div><div class="cres"><div></div><div></div><div></div><div></div></div></div>`;
@@ -149,16 +150,16 @@ function _rascCultFolha(reg, mode){
     <div class="lin"><b>Paciente:</b> ${esc(up(r.paciente)||'—')} &nbsp;·&nbsp; <b>Raça:</b> ${esc(r.raca||'—')}</div>
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
-    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${exTerceirizado(i)?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${(exTerceirizado(i)&&its.some(x=>!exTerceirizado(x)))?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div></div>
     ${banner}
-    ${culturas.map((c,i)=>_rascCultBloco(c,i,mode)).join('')}
+    ${culturas.map((c,i)=>_rascCultBloco(c,i,mode,its.some(x=>!exTerceirizado(x)))).join('')}
   </div>`;
 }
 function imprimirRascunhoCultura(reg, mode){ _rascImprimir([reg], _rascCultFolha, 'Rascunho Cultura', mode); }
 function imprimirLoteCultura(){
   // Dudu 06/11: igual ao PCR — lote traz SÓ os terceirizados PENDENTES de baixa (exclui os já baixados). Folha VETLAB → modo 'terc'.
-  const regs=[...new Set(_rascItens().filter(i=>_ehCult(i)&&exTerceirizado(i)&&!exBaixado(i)).map(i=>String(i.req)))];
+  const regs=[...new Set(_rascItens().filter(i=>_ehCult(i)&&exTerceirizado(i)&&!exBaixado(i)&&!rascImpressoMap[String(i.req)]).map(i=>String(i.req)))];
   _rascImprimir(regs, _rascCultFolha, 'Rascunho Cultura', 'terc');
 }
 /* ===== ⚗️ RASCUNHO EXAMES ESPECIALIZADOS (Dudu 06/11): cat 34 (Cortisol/T4/TSH — RIE), modelo cortisol.
@@ -180,14 +181,14 @@ function _rascEspFolha(reg, mode){
     <div class="lin"><b>Idade:</b> ${esc(r.idade||'—')} &nbsp;·&nbsp; <b>Espécie:</b> ${esc(up(r.especie)||'—')}</div>
     <div class="lin"><b>Proprietário:</b> ${esc(r.tutor||'—')}</div>
     <div class="datas"><div><b>Data de entrada:</b> <u>${_rascDmy(ent)}</u></div></div>
-    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${exTerceirizado(i)?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
+    <div class="box"><div class="boxh">EXAMES SOLICITADOS</div><div class="boxb">${exItems.map(i=>`<div class="ex">• <b>${esc(i.exame)}</b>${(exTerceirizado(i)&&its.some(x=>!exTerceirizado(x)))?' <span class="tercflag">▶ separar para terceirizar</span>':''}</div>`).join('')||'<div class="ex">—</div>'}</div></div>
     <div class="tubo"><b>Tubo:</b> <span>( ) com gel</span><span>( ) sem gel</span><span>( ) transporte (eppendorf)</span></div>
     <div class="qa"><b>Amostra:</b> <span>Hemólise ( )</span><span>Lipemia ( )</span><span>Icterícia ( )</span></div>
   </div>`;
 }
 function imprimirRascunhoEsp(reg, mode){ _rascImprimir([reg], _rascEspFolha, 'Rascunho Especializados', mode); }
 function imprimirLoteEsp(){
-  const regs=[...new Set(_rascItens().filter(i=>_ehEsp(i)&&exTerceirizado(i)&&!exBaixado(i)).map(i=>String(i.req)))];
+  const regs=[...new Set(_rascItens().filter(i=>_ehEsp(i)&&exTerceirizado(i)&&!exBaixado(i)&&!rascImpressoMap[String(i.req)]).map(i=>String(i.req)))];
   _rascImprimir(regs, _rascEspFolha, 'Rascunho Especializados', 'terc');
 }
 // 🔒 TRAVADOS na Produção (reusa sep_marks com chave 'prod:registro|exame'; motivo em texto livre = obs)
