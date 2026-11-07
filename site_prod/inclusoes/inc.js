@@ -1446,10 +1446,8 @@
         <b class="can-clin">${esc(c.clinica || 'clínica não identificada')}</b>
         <span class="can-t">${c.status === 'aberto' ? `pedido há ${idade}` : `${d ? d.rot : esc(c.status)} · ${esc(c.resolvido_por || '')}`}</span>
       </div>
+      <div class="can-caminho-topo" style="margin:4px 0;padding:5px 9px;border-radius:6px;font-weight:700;font-size:12.5px;display:inline-block;${c.caminho === 'sem_amostra' ? 'background:rgba(224,149,60,.16);color:var(--granulo,#e0953c);border:1px solid var(--granulo,#e0953c)' : 'background:rgba(37,211,102,.14);color:var(--ok,#25d366);border:1px solid var(--ok,#25d366)'}">${c.caminho === 'sem_amostra' ? '📦 AMOSTRA A CAMINHO — ainda não chegou ao laboratório' : '📋 AMOSTRA NO LABORATÓRIO' + ((c.req || c.req_nova) ? ' · requisição ' + esc(c.req || c.req_nova) : '')}</div>
       <div class="can-alvo">${c.pet ? `<b>${esc(c.pet)}</b>` : '<span class="mudo">pet não informado</span>'}${c.tutor ? ` <span class="mudo">(tutor: ${esc(c.tutor)})</span>` : ''}${c.req ? ` <span class="req">${esc(c.req)}</span>` : ''} — quer cancelar: ${cancelAlvoTxt(c)}${c.exame_digitado ? ' <span class="can-sel-feito">já estava digitado</span>' : ''}</div>
-      ${c.caminho === 'sem_amostra'
-        ? '<div class="can-hf">📦 a amostra ainda não chegou ao laboratório</div>'
-        : `<div class="can-hf">📋 a amostra já está no laboratório${(c.req || c.req_nova) ? ' — requisição <b>' + esc(c.req || c.req_nova) + '</b>' : ''}</div>`}
       ${c.colaborador ? `<div class="can-txt mudo">🧭 triagem por ${esc(c.colaborador)}</div>` : ''}
       ${c.texto ? `<div class="can-txt">💬 ${esc(c.texto)}${c.autor ? ` <span class="mudo">— ${esc(c.autor)}</span>` : ''}</div>` : ''}
       ${c.hf_estado ? `<div class="can-hf">🔎 ${esc(c.hf_estado)}</div>` : ''}
@@ -1623,15 +1621,14 @@
       const rel = `<div class="can-relogio ${estourou ? 'ruim' : ''}">esperando ciente há ${fmt(esperando)}${estourou ? ` — passou dos ${PRAZO_CANCEL_MIN} min` : ` de ${PRAZO_CANCEL_MIN} min`}</div>`
       const lado = (feito, quem, quando, dono, rot, lad) => {
         if (feito) return `<div class="can-lado ok">✅ ${rot} · ${esc(quem || '')} ${quando ? 'às ' + hm(quando) : ''}</div>`
-        // ⭐ Fúlvio 12/out (fluxograma): o ciente fica SOMBREADO até o cancelamento AVISAR esse setor.
-        //    Só depois do "📣 Avisei …" (que seta avisei_tri_em/avisei_esc_em) o ciente habilita.
-        const avisadoEm = lad === 'tri' ? c.avisei_tri_em : c.avisei_esc_em
-        if (!avisadoEm) return `<div class="can-lado"><button class="ciente-sombra" disabled style="opacity:.45;cursor:not-allowed" title="O ciente só abre depois que o cancelamento avisar ${rot}.">Ciente — ${rot} <span class="mudo">(aguardando o aviso)</span></button></div>`
-        // ⭐ Fúlvio 13/out (padrão ouro): cada setor marca o SEU ciente, e SÓ DENTRO da aba dele. No cancelamento
-        //    (ou em qualquer outra aba) o botão mostra só o ESTADO — não dá pra clicar o ciente do outro setor.
+        // 🔴 Fúlvio 07/nov: o próprio setor, NA ABA DELE, dá o ciente DIRETO — não fica preso esperando o
+        //    Atendimento clicar "Avisei". Antes o ciente ficava SOMBRA "aguardando o aviso" (Fúlvio 12/out) e o
+        //    Escritório não conseguia dar ciente ("o escritório não recebe o aviso"). Fere a regra "nunca bloquear".
+        //    Agora: dentro da aba do dono, botão clicável; FORA da aba dele (acompanhamento) segue sombra.
         if (setor === dono && podeAgir(dono)) return `<div class="can-lado"><button data-cciente="${lad}" data-cid="${c.id}">Ciente — ${rot}</button></div>`
-        // ⭐ Fúlvio 26/out: mantém o mesmo botão cinza escuro (mesma aparência de "aguardando o aviso"),
-        //    mas agora diz "aguardando o aceite" — deixa claro que o aviso já foi, falta o ciente.
+        // fora da aba do dono: só o ESTADO (acompanhamento). Antes/depois do aviso muda só o texto.
+        const avisadoEm = lad === 'tri' ? c.avisei_tri_em : c.avisei_esc_em
+        if (!avisadoEm) return `<div class="can-lado"><button class="ciente-sombra" disabled style="opacity:.45;cursor:not-allowed" title="O ciente abre na aba de ${rot}.">Ciente — ${rot} <span class="mudo">(abre na aba de ${rot})</span></button></div>`
         return `<div class="can-lado"><button class="ciente-sombra" disabled style="opacity:.45;cursor:not-allowed">Ciente — ${rot} <span class="mudo">(aguardando o aceite)</span></button></div>`
       }
       const cobranca = estourou && podeAgir('cc') && !c.cobrado_em
