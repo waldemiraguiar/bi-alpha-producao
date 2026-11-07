@@ -1078,7 +1078,7 @@ function _clinSegment(cod, qtd){
   else if(caiuForte){ seg='resgatar'; motivo=`caindo ${Math.round(st.drop7*100)}% (7d)`; acao='visita de retenção'; }
   else if(falta.length>=1 && grande && manda.length>=1){ seg='reparte'; motivo=`deixa ${esc(alvo||falta[0])} na mesa`; acao=`puxar ${esc(alvo||falta[0])}`; }
   else if(cv!=null && cv>=0.45){ seg='oscila'; motivo=`oscila ±${Math.round(cv*100)}% mês a mês`; acao='estabilizar — ver o que varia'; }
-  else if(cur && (cur.novas.length || (cur.pct!=null&&cur.pct>=0.15))){ seg='alta'; motivo=cur.novas.length?`começou ${esc(cur.novas[0])}`:`+${Math.round(cur.pct*100)}% no mês`; acao='reforçar o mix'; }
+  else if(cur && cur.pct!=null && cur.pct>=0.15){ seg='alta'; motivo=cur.novas.length?`+${Math.round(cur.pct*100)}% no mês · começou ${esc(cur.novas[0])}`:`+${Math.round(cur.pct*100)}% no mês`; acao='reforçar o mix'; }
   else if(!falta.length && manda.length){ seg='proteger'; motivo='manda tudo — redonda'; acao='manter/proteger'; }
   else { seg='observar'; motivo='estável'; acao='acompanhar'; }
   const urg={resgatar:5,reparte:4,oscila:3,alta:2,proteger:1,observar:0}[seg];
@@ -5185,6 +5185,10 @@ function renderTab(){
       const segMap={};             // classifica UMA vez; painel e filtro usam o MESMO mapa
       if(segReady) AA.forEach(a=>{ if(a.cod) segMap[String(a.cod)]=_clinSegment(String(a.cod), a.qtd||0); });
       if(curvaSeg) aarr=aarr.filter(a=>a.cod && segMap[String(a.cod)] && segMap[String(a.cod)].seg===curvaSeg);
+      // quando um grupo está filtrado, o TOPO inteiro (resumo + ranking) reflete só ele — senão a tabela cheia de 40 mascarava o filtro
+      const viewAA = (curvaSeg && segReady) ? AA.filter(a=>a.cod && segMap[String(a.cod)] && segMap[String(a.cod)].seg===curvaSeg) : AA;
+      const _segM = curvaSeg ? _SEG[curvaSeg] : null;
+      const segBanner = (curvaSeg && _segM) ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid ${_segM.cor};border-radius:11px;padding:9px 13px;margin:0 0 12px;background:${_hex2rgba(_segM.cor,.12)}"><span style="font-size:13px;font-weight:900;color:${_segM.cor}">${_segM.ic} ${_segM.nome}</span><span class="t-mut" style="font-size:12px">· ${viewAA.length} clínica(s) · ${esc(_segM.sub)}</span><button onclick="setCurvaSeg('')" style="margin-left:auto;cursor:pointer;border-radius:18px;padding:5px 13px;font-size:12px;font-weight:800;border:1px solid var(--mut);background:transparent;color:var(--mut)">✕ ver todas</button></div>` : "";
       const porteDe=n=>n>=300?["G","🐘 Grande"]:n>=100?["M","🐎 Médio"]:["P","🐇 Pequeno"];
       const comMesa=AA.filter(a=>(a.falta||[]).length).length, cheios=AA.length-comMesa;
       if(CRM_HF===null && !CRM_HF_LOADING){ loadHF().then(()=>{ if(ACTIVE==="clinicas") renderTab(); }); }   // card novo mostra exames recentes → carrega o detalhe HF
@@ -5209,14 +5213,15 @@ function renderTab(){
       c.innerHTML=`${_LUPA_KF}${subtabsClin}
         <div class="proxhint" style="border-color:${meta.bord};color:${meta.cor};margin-bottom:10px;line-height:1.55">${meta.ic} <b>${meta.nome}</b> — ${meta.desc}. Trazidas <b>automaticamente</b> pelo robô (curva ABC), ranqueadas por faturamento. Mesma inteligência das Reconquistadas/Novas: <b>análise de 12 meses</b> do que manda × <b>o que deixa na mesa</b> (vermelho = indo pro concorrente).${ehDiretoria()?`<div style="margin-top:5px;color:#c9d4e0">🔒 Os <b>valores em R$</b> são <b>só seus</b> — cifrados, abrem só com sua senha financeira${bioAtivo()?" + Face ID":""}.</div>`:`<div style="margin-top:5px;color:#9fe6ff">🔒 Aqui você vê exames e categorias. O <b>faturamento</b> é exclusivo da diretoria.</div>`}${bioLinha()}</div>
         ${_gestorPainel(AA, segMap, segReady)}
+        ${segBanner}
         <div class="kgrid">
           ${kpi("g", AA.length, meta.nome, "curva "+curva+" · 12m")}
           ${kpi(comMesa?"a":"", comMesa, "Deixando na mesa", "classes indo pro concorrente")}
           ${kpi("", AAA_SETORES.length, "Categorias do lab", "universo de exames")}
           ${kpi("", AAA_TS?"✓":"—", "Sincronizado", AAA_TS?new Date(AAA_TS).toLocaleDateString("pt-BR"):"aguardando robô")}
         </div>
-        <div class="seclabel" style="margin:16px 0 8px">📋 Resumo ${meta.nome} — mês a mês</div>
-        ${_curvaResumoTbl(AA)}
+        <div class="seclabel" style="margin:16px 0 8px">📋 Resumo ${meta.nome}${curvaSeg&&_segM?` · ${_segM.ic} ${_segM.nome}`:''} — mês a mês</div>
+        ${_curvaResumoTbl(viewAA)}
         <div class="t-mut" style="font-size:11.5px;margin:14px 0 8px;text-align:center">👇 Abaixo, cada clínica em detalhe. Numeradas por faturamento (maior → menor). ✅ o que manda × <b style="color:#ff8fa3">🎯 o que deixa na mesa</b>. R$ só diretoria (senha + Face ID).</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 10px">
           <span style="font-size:11.5px;color:#9fb2cc;font-weight:700">Share-of-wallet:</span>
@@ -5225,7 +5230,7 @@ function renderTab(){
           <button data-sow="buraco" style="cursor:pointer;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:800;border:1px solid ${sowFilter==='buraco'?'#FF6B81':'rgba(255,107,129,.35)'};background:${sowFilter==='buraco'?'rgba(255,107,129,.2)':'transparent'};color:#FF6B81">🎯 Com buraco (${comMesa})</button>
           <button id="relSoW" style="margin-left:auto;cursor:pointer;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:800;border:1px solid rgba(0,212,255,.5);background:rgba(0,212,255,.12);color:#00D4FF">🖨️ Relatório completo</button>
         </div>
-        <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${meta.ic} Ranking ${meta.nome}${sowFilter?` · ${sowFilter==='cheio'?'✅ SoW cheio':'🎯 com buraco'} (${aarr.length})`:''}</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
+        <div class="tabsbar" style="margin:10px 0 8px"><div class="seclabel" style="margin:0">${meta.ic} Ranking ${meta.nome}${curvaSeg&&_segM?` · ${_segM.ic} ${_segM.nome} (${aarr.length})`:(sowFilter?` · ${sowFilter==='cheio'?'✅ SoW cheio':'🎯 com buraco'} (${aarr.length})`:'')}</div><input class="wlsearch" id="lupaAAA" placeholder="🔍 clínica ou cidade…" value="${esc(search)}"></div>
         ${AA.length?(aarr.length?aarr.map(a=>a.cod?_hfCard(String(a.cod), hfPins().includes(String(a.cod)), _aaaSowBlock(a, AA.indexOf(a)+1)):acard(a, AA.indexOf(a))).join(""):`<div class="empty">${sowFilter?`Nenhuma clínica ${sowFilter==='cheio'?'com share-of-wallet cheio':'com buraco'}${q2?' para essa busca':''} nesta curva.`:`Nada encontrado para "${esc(search)}".`}</div>`):`<div class="empty">⏳ As clínicas ${meta.nome} chegam quando o robô sincronizar (traz por faturamento 12m automaticamente).</div>`}`;
       document.querySelectorAll("#content [data-cv]").forEach(el=>el.onclick=()=>{ clinView=el.dataset.cv; search=""; sowFilter=""; curvaSeg=""; renderTab(); });
       document.querySelectorAll("#content [data-sow]").forEach(el=>el.onclick=()=>{ sowFilter=el.dataset.sow; renderTab(); });
